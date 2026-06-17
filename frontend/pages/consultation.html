@@ -340,7 +340,7 @@
           <p style="margin-top:8px">Patient has received the prescription on WhatsApp.</p>
           <div style="display:flex;justify-content:center;gap:12px;margin-top:32px">
             <button class="btn btn-outline" onclick="goBack()">← Back to Patient</button>
-            <button class="btn btn-primary" onclick="window.location.href='dashboard.html'">Go to Dashboard</button>
+            <button class="btn btn-primary" onclick="window.location.href='/pages/dashboard.html'">Go to Dashboard</button>
           </div>
         </div>
       </div>
@@ -357,7 +357,7 @@
 
     const params = new URLSearchParams(location.search);
     const patientId = params.get("patient_id");
-    if (!patientId) window.location.href = "dashboard.html";
+    if (!patientId) window.location.href = "/pages/dashboard.html";
 
     document.getElementById("sidebar-patient-link").href = `patient.html?id=${patientId}`;
 
@@ -745,7 +745,7 @@
     }
 
     function goBack() {
-      window.location.href = `patient.html?id=${patientId}`;
+      window.location.href = `/pages/patient.html?id=${patientId}`;
     }
 
     // ── Helpers ───────────────────────────────────────────

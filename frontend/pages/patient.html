@@ -300,7 +300,7 @@
 
     const params = new URLSearchParams(location.search);
     const patientId = params.get("id");
-    if (!patientId) window.location.href = "dashboard.html";
+    if (!patientId) window.location.href = "/pages/dashboard.html";
 
     async function loadPatient() {
       try {
@@ -406,7 +406,7 @@
     }
 
     function startConsultation() {
-      window.location.href = `consultation.html?patient_id=${patientId}`;
+      window.location.href = `/pages/consultation.html?patient_id=${patientId}`;
     }
 
     function openAddPatientFromSidebar() {
