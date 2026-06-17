@@ -10,3 +10,11 @@ groq
 reportlab
 twilio
 httpx
+pydantic-settings
+email-validator
+pytz
+slowapi
+alembic
+qrcode[pil]
+websockets
+bcrypt==4.0.1
