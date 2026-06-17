@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedScribe — Consultation</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .section-block {
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--slate);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 8px;
+    }
+
+    .tests-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .test-tag {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.82rem;
+      color: #1d4ed8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+
+    .test-tag button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #93c5fd;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0;
+      transition: color 0.1s;
+    }
+
+    .test-tag button:hover {
+      color: var(--danger);
+    }
+
+    .wa-result {
+      border-radius: var(--radius);
+      padding: 13px 16px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-top: 14px;
+    }
+
+    .wa-result.success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #6ee7b7;
+    }
+
+    .wa-result.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+
+    /* Success panel */
+    .success-panel {
+      text-align: center;
+      padding: 32px 20px;
+    }
+
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #d1fae5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      margin: 0 auto 16px;
+    }
+
+    .token-box {
+      display: inline-block;
+      background: var(--smoke);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 32px;
+      margin: 20px auto;
+    }
+
+    .token-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--slate);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 6px;
+    }
+
+    .token-value {
+      font-family: 'DM Mono', monospace;
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--navy);
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <header class="topbar">
+      <div class="topbar-brand">Med<span>Scribe</span></div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn-logout" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+
+    <!-- Sidebar — consistent nav, New Consultation active -->
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Navigation</div>
+      <a class="nav-item" href="dashboard.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Dashboard
+      </a>
+      <a class="nav-item" id="sidebar-patient-link" href="#">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+        Patient Profile
+      </a>
+      <a class="nav-item active" href="#">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+        </svg>
+        New Consultation
+      </a>
+    </nav>
+
+    <main class="main-content">
+
+      <!-- Steps -->
+      <div class="steps" id="steps">
+        <div class="step active" id="step-1">
+          <div class="step-num">1</div> Record
+        </div>
+        <div class="step-line" id="line-1"></div>
+        <div class="step" id="step-2">
+          <div class="step-num">2</div> Review
+        </div>
+        <div class="step-line" id="line-2"></div>
+        <div class="step" id="step-3">
+          <div class="step-num">3</div> Confirm
+        </div>
+        <div class="step-line" id="line-3"></div>
+        <div class="step" id="step-4">
+          <div class="step-num">4</div> Send
+        </div>
+      </div>
+
+      <!-- STEP 1: Record -->
+      <div id="panel-1" class="card">
+        <div class="card-header">
+          <div>
+            <h2>Record Consultation</h2>
+            <p id="patient-label" style="margin-top:4px">Loading patient…</p>
+          </div>
+        </div>
+
+        <!-- Last visit summary -->
+        <div id="last-visit-wrap"
+          style="display:none;margin-bottom:16px;background:var(--smoke);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span
+              style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em">Last
+              Visit</span>
+            <span id="last-visit-date" style="font-size:0.78rem;color:var(--slate)"></span>
+          </div>
+          <div style="font-size:0.85rem;color:var(--navy)">
+            <div style="margin-bottom:4px"><strong>Diagnosis:</strong> <span id="lv-diagnosis">—</span></div>
+            <div style="margin-bottom:4px"><strong>Medicines:</strong> <span id="lv-medicines">—</span></div>
+            <div><strong>Advice:</strong> <span id="lv-advice">—</span></div>
+          </div>
+        </div>
+
+        <div class="recorder-wrap" id="recorder-wrap">
+          <button class="record-btn idle" id="record-btn" onclick="toggleRecording()">🎙</button>
+          <div class="timer" id="timer">00:00</div>
+          <p id="record-hint" class="record-status">Click to start recording</p>
+        </div>
+
+        <div style="margin-top:20px">
+          <label class="form-label">Transcript <span style="font-weight:400;color:var(--slate-light)">(editable after
+              recording)</span></label>
+          <textarea class="transcript-box" id="transcript" placeholder="Transcript will appear here after recording…"
+            rows="5"></textarea>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;gap:10px">
+          <button class="btn btn-outline" id="btn-retranscribe" style="display:none"
+            onclick="retranscribe()">Re-transcribe</button>
+          <button class="btn btn-primary" id="btn-structure" disabled onclick="doStructure()">
+            Analyse with AI →
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 2: Review structured data -->
+      <div id="panel-2" class="card" style="display:none">
+        <div class="card-header">
+          <h2>Review & Edit Prescription</h2>
+          <span class="badge badge-teal">AI Structured</span>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title">Vitals <span style="font-weight:400;color:var(--slate)">(if recorded)</span></div>
+          <div class="form-row-3">
+            <div class="form-group">
+              <label class="form-label">Blood Pressure</label>
+              <input class="form-control" id="v-bp" placeholder="e.g. 120/80 mmHg" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Temperature</label>
+              <input class="form-control" id="v-temp" placeholder="e.g. 99°F" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pulse</label>
+              <input class="form-control" id="v-pulse" placeholder="e.g. 78 bpm" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Weight</label>
+              <input class="form-control" id="v-weight" placeholder="e.g. 65 kg" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">SpO2</label>
+              <input class="form-control" id="v-spo2" placeholder="e.g. 98%" />
+            </div>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title">Chief Complaint / Symptoms</div>
+          <textarea class="form-control" id="f-complaint" rows="2"></textarea>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title">Diagnosis</div>
+          <textarea class="form-control" id="f-diagnosis" rows="2"
+            placeholder="Leave blank if not determined"></textarea>
+        </div>
+
+        <!-- Medicines -->
+        <div class="section-block">
+          <div class="section-title">Medicines</div>
+          <div id="med-rows"></div>
+          <button class="btn btn-outline btn-sm" onclick="addMedRow()">+ Add Medicine</button>
+        </div>
+
+        <!-- Tests -->
+        <div class="section-block">
+          <div class="section-title">Tests / Investigations</div>
+          <div class="tests-wrap" id="tests-wrap">
+            <input class="form-control" id="test-input" placeholder="Type test name and press Enter"
+              style="max-width:280px" onkeydown="addTest(event)" />
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title">Doctor's Advice</div>
+          <textarea class="form-control" id="f-advice" rows="2" placeholder="General advice to patient"></textarea>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title">Follow-up Instructions</div>
+          <textarea class="form-control" id="f-followup" rows="2" placeholder="e.g. Review after 5 days"></textarea>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;margin-top:8px">
+          <button class="btn btn-outline" onclick="goStep(1)">← Back</button>
+          <button class="btn btn-navy btn-lg" onclick="doConfirm()">
+            Confirm & Generate PDF →
+          </button>
+        </div>
+      </div>
+
+      <!-- STEP 3: Confirmed -->
+      <div id="panel-3" class="card" style="display:none">
+        <div class="success-panel">
+          <div class="success-icon">✅</div>
+          <h2>Prescription Generated</h2>
+          <p style="margin-top:8px">Token number assigned and PDF ready.</p>
+          <div class="token-box">
+            <div class="token-label">Token Number</div>
+            <div class="token-value" id="token-display">—</div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:12px;margin-top:4px;flex-wrap:wrap">
+            <button class="btn btn-outline" onclick="goStep(2)">← Edit</button>
+            <button class="btn btn-primary btn-lg" id="btn-send-sms" onclick="doSendSMS()">
+              📩 Send PDF Link via SMS
+            </button>
+            <button class="btn btn-outline btn-lg" onclick="copyPdfLink()">
+              🔗 Copy PDF Link
+            </button>
+            <button class="btn btn-navy btn-lg" onclick="goBack()">
+              ✓ Done — Back to Patient
+            </button>
+          </div>
+          <div id="wa-result"></div>
+        </div>
+      </div>
+
+      <!-- STEP 4: Done -->
+      <div id="panel-4" class="card" style="display:none">
+        <div class="success-panel">
+          <div class="success-icon">🎉</div>
+          <h2>Prescription Sent!</h2>
+          <p style="margin-top:8px">Patient has received the prescription on WhatsApp.</p>
+          <div style="display:flex;justify-content:center;gap:12px;margin-top:32px">
+            <button class="btn btn-outline" onclick="goBack()">← Back to Patient</button>
+            <button class="btn btn-primary" onclick="window.location.href='dashboard.html'">Go to Dashboard</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error();
+    fillTopbar();
+
+    const params = new URLSearchParams(location.search);
+    const patientId = params.get("patient_id");
+    if (!patientId) window.location.href = "dashboard.html";
+
+    document.getElementById("sidebar-patient-link").href = `patient.html?id=${patientId}`;
+
+    let consultationId = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let timerInterval = null;
+    let seconds = 0;
+    let isRecording = false;
+    let tests = [];
+    let chunkTranscripts = [];
+    let chunkNumber = 0;
+    const MAX_CHUNK_SECONDS = 25;
+    let currentStream = null;
+
+    // Load patient name
+    async function loadPatient() {
+      try {
+        const p = await api("GET", `/patients/${patientId}`);
+        if (!p) return;
+        document.getElementById("patient-label").textContent = `Patient: ${p.name} · ${p.patient_uid}`;
+      } catch (e) { }
+    }
+
+    async function loadLastVisit() {
+      try {
+        const visits = await api("GET", `/consultations/history/${patientId}`);
+        if (!visits || visits.length === 0) return;
+        const last = visits[0];
+        const meds = safeJSON(last.medicines, []);
+        const medText = meds.length ? meds.map(m => `${m.name} ${m.dosage}`).join(", ") : "—";
+        document.getElementById("last-visit-date").textContent = formatDate(last.created_at);
+        document.getElementById("lv-diagnosis").textContent = last.diagnosis || "—";
+        document.getElementById("lv-medicines").textContent = medText;
+        document.getElementById("lv-advice").textContent = last.advice || "—";
+        document.getElementById("last-visit-wrap").style.display = "block";
+      } catch (e) { }
+    }
+
+    // ── Recording ──────────────────────────────────────
+    let wsConnection = null;
+    let mediaProcessor = null;
+
+    async function toggleRecording() {
+      if (!isRecording) await startRecording();
+      else await stopRecording();
+    }
+
+    async function startRecording() {
+      try {
+        currentStream = await navigator.mediaDevices.getUserMedia({
+          audio: { sampleRate: 16000, channelCount: 1 }
+        });
+        isRecording = true;
+        seconds = 0;
+
+        // Clear previous transcript
+        document.getElementById("transcript").value = "";
+
+        // Connect WebSocket
+        const token = getToken();
+        const wsUrl = `ws://localhost:8000/consultations/ws/transcribe/${patientId}?token=${token}`;
+        wsConnection = new WebSocket(wsUrl);
+
+        wsConnection.onopen = () => {
+          document.getElementById("record-btn").className = "record-btn active";
+          document.getElementById("record-btn").textContent = "⏹";
+          document.getElementById("record-hint").textContent = "Recording… click to stop";
+          document.getElementById("recorder-wrap").classList.add("recording");
+
+          // Start timer
+          timerInterval = setInterval(() => {
+            seconds++;
+            const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+            const s = String(seconds % 60).padStart(2, "0");
+            document.getElementById("timer").textContent = `${m}:${s}`;
+          }, 1000);
+
+          // Stream audio via AudioWorklet/ScriptProcessor
+          startAudioStreaming();
+        };
+
+        wsConnection.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === "transcript") {
+            document.getElementById("transcript").value = data.full;
+          } else if (data.type === "done") {
+            consultationId = data.consultation_id;
+            document.getElementById("transcript").value = data.transcript;
+            document.getElementById("record-hint").textContent = "Done. Review transcript below.";
+            document.getElementById("record-btn").disabled = false;
+            document.getElementById("btn-structure").disabled = false;
+            document.getElementById("btn-retranscribe").style.display = "inline-flex";
+            toast("Transcription complete", "success");
+            if (wsConnection) wsConnection.close();
+          } else if (data.type === "error") {
+            toast("Transcription error: " + data.message, "error");
+            document.getElementById("record-hint").textContent = "Error. Try again.";
+            document.getElementById("record-btn").disabled = false;
+            if (wsConnection) wsConnection.close();
+          }
+        };
+
+        wsConnection.onerror = () => {
+          toast("WebSocket connection failed. Falling back to REST API.", "error");
+          isRecording = false;
+          fallbackToRest();
+        };
+
+      } catch (e) {
+        toast("Microphone access denied.", "error");
+      }
+    }
+
+    function startAudioStreaming() {
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      const source = audioContext.createMediaStreamSource(currentStream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+      processor.onaudioprocess = (e) => {
+        if (!isRecording || !wsConnection || wsConnection.readyState !== WebSocket.OPEN) return;
+
+        const float32 = e.inputBuffer.getChannelData(0);
+        // Convert to 16-bit PCM
+        const int16 = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          int16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
+        }
+        wsConnection.send(int16.buffer);
+      };
+
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+      mediaProcessor = { audioContext, processor, source };
+    }
+
+    async function stopRecording() {
+      clearInterval(timerInterval);
+      isRecording = false;
+
+      document.getElementById("record-btn").className = "record-btn idle";
+      document.getElementById("record-btn").textContent = "🎙";
+      document.getElementById("record-hint").textContent = "Processing…";
+      document.getElementById("recorder-wrap").classList.remove("recording");
+      document.getElementById("record-btn").disabled = true;
+
+      if (mediaProcessor) {
+        mediaProcessor.processor.disconnect();
+        mediaProcessor.source.disconnect();
+        mediaProcessor.audioContext.close();
+        mediaProcessor = null;
+      }
+
+      if (currentStream) {
+        currentStream.getTracks().forEach(t => t.stop());
+        currentStream = null;
+      }
+
+      // Signal end-of-audio but keep the socket open so the server can
+      // still send back the final transcript + "done" message.
+      if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "stop" }));
+      }
+    }
+
+    async function fallbackToRest() {
+      // Falls back to existing REST API approach if WebSocket fails
+      document.getElementById("record-hint").textContent = "Click to start recording";
+      document.getElementById("record-btn").disabled = false;
+      document.getElementById("record-btn").className = "record-btn idle";
+      document.getElementById("record-btn").textContent = "🎙";
+      document.getElementById("recorder-wrap").classList.remove("recording");
+    }
+
+    async function retranscribe() {
+      toast("Edit the transcript above manually, then click Analyse with AI.", "info");
+    }
+
+    // ── AI Structure ────────────────────────────────────
+    async function doStructure() {
+      const btn = document.getElementById("btn-structure");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Analysing…';
+
+      try {
+        const data = await api("POST", `/consultations/structure/${consultationId}`);
+        const s = data.structured;
+
+        document.getElementById("f-complaint").value = s.chief_complaint || "";
+        document.getElementById("f-diagnosis").value = s.diagnosis || "";
+        document.getElementById("f-advice").value = s.advice || "";
+        document.getElementById("f-followup").value = s.followup || "";
+
+        const v = s.vitals || {};
+        document.getElementById("v-bp").value = v.bp || "";
+        document.getElementById("v-temp").value = v.temperature || "";
+        document.getElementById("v-pulse").value = v.pulse || "";
+        document.getElementById("v-weight").value = v.weight || "";
+        document.getElementById("v-spo2").value = v.spo2 || "";
+
+        renderMedRows(s.medicines || []);
+        tests = s.tests || [];
+        renderTests();
+
+        goStep(2);
+        toast("AI structuring complete — review and edit before confirming.", "success");
+      } catch (e) {
+        toast(e.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Analyse with AI →";
+      }
+    }
+
+    // ── Medicine rows ───────────────────────────────────
+    function renderMedRows(meds) {
+      const wrap = document.getElementById("med-rows");
+      wrap.innerHTML = "";
+      (meds.length ? meds : [{}]).forEach(m => addMedRow(m));
+    }
+
+    function addMedRow(m = {}) {
+      const wrap = document.getElementById("med-rows");
+      const div = document.createElement("div");
+      div.className = "med-row";
+      const schedule = m.schedule || "controlled";
+      div.innerHTML = `
+            <div class="form-group" style="margin:0">
+                <label class="form-label">Medicine</label>
+                <input class="form-control med-name" value="${m.name || ""}" placeholder="Paracetamol" />
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">Dosage</label>
+                <input class="form-control med-dosage" value="${m.dosage || ""}" placeholder="500mg" />
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">Frequency</label>
+                <input class="form-control med-freq" value="${m.frequency || ""}" placeholder="Twice daily" />
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">Duration</label>
+                <input class="form-control med-dur" value="${m.duration || ""}" placeholder="5 days" />
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">Schedule</label>
+                <select class="form-control med-schedule">
+                    <option value="otc" ${schedule === "otc" ? "selected" : ""}>OTC</option>
+                    <option value="controlled" ${schedule === "controlled" ? "selected" : ""}>Controlled</option>
+                </select>
+            </div>
+            <button class="btn-remove-med" onclick="this.parentElement.remove()" title="Remove">✕</button>
+        `;
+      wrap.appendChild(div);
+    }
+
+    function getMedicines() {
+      return [...document.querySelectorAll(".med-row")].map(row => ({
+        name: row.querySelector(".med-name").value.trim(),
+        dosage: row.querySelector(".med-dosage").value.trim(),
+        frequency: row.querySelector(".med-freq").value.trim(),
+        duration: row.querySelector(".med-dur").value.trim(),
+        schedule: row.querySelector(".med-schedule").value
+      })).filter(m => m.name);
+    }
+
+    // ── Tests ───────────────────────────────────────────
+    function addTest(e) {
+      if (e.key !== "Enter") return;
+      const val = document.getElementById("test-input").value.trim();
+      if (!val) return;
+      tests.push(val);
+      document.getElementById("test-input").value = "";
+      renderTests();
+    }
+
+    function renderTests() {
+      const wrap = document.getElementById("tests-wrap");
+      const input = document.getElementById("test-input");
+      wrap.innerHTML = "";
+      tests.forEach((t, i) => {
+        const tag = document.createElement("div");
+        tag.className = "test-tag";
+        tag.innerHTML = `${t} <button onclick="removeTest(${i})">×</button>`;
+        wrap.appendChild(tag);
+      });
+      wrap.appendChild(input);
+    }
+
+    function removeTest(i) {
+      tests.splice(i, 1);
+      renderTests();
+    }
+
+    // ── Confirm ─────────────────────────────────────────
+    async function doConfirm() {
+      const editedData = {
+        chief_complaint: document.getElementById("f-complaint").value.trim(),
+        diagnosis: document.getElementById("f-diagnosis").value.trim(),
+        vitals: {
+          bp: document.getElementById("v-bp").value.trim(),
+          temperature: document.getElementById("v-temp").value.trim(),
+          pulse: document.getElementById("v-pulse").value.trim(),
+          weight: document.getElementById("v-weight").value.trim(),
+          spo2: document.getElementById("v-spo2").value.trim()
+        },
+        medicines: getMedicines(),
+        tests: tests,
+        advice: document.getElementById("f-advice").value.trim(),
+        followup: document.getElementById("f-followup").value.trim()
+      };
+
+      try {
+        await api("PATCH", `/consultations/update/${consultationId}`, editedData);
+        window._lastEditedData = editedData;
+
+        if (window._tokenNumber) {
+          document.getElementById("token-display").textContent = window._tokenNumber;
+          goStep(3);
+          return;
+        }
+
+        const data = await api("POST", `/consultations/confirm/${consultationId}`);
+        window._tokenNumber = data.token_number;
+        document.getElementById("token-display").textContent = window._tokenNumber;
+        goStep(3);
+        toast("Prescription confirmed. Token: " + window._tokenNumber, "success");
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    }
+
+    // ── SMS + Copy ────────────────────────────────────────
+    async function doSendSMS() {
+      const btn = document.getElementById("btn-send-sms");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Sending…';
+
+      try {
+        await api("POST", `/consultations/send-sms/${consultationId}`);
+        document.getElementById("wa-result").innerHTML = `<div class="wa-result success">✅ SMS sent with prescription link to patient.</div>`;
+        setTimeout(() => goStep(4), 1200);
+      } catch (e) {
+        document.getElementById("wa-result").innerHTML = `<div class="wa-result error">⚠️ ${e.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = "📩 Retry SMS";
+      }
+    }
+
+    function copyPdfLink() {
+      const pdfUrl = `${BASE}/prescriptions/${document.getElementById("token-display").textContent}.pdf`;
+      navigator.clipboard.writeText(pdfUrl);
+      toast("PDF link copied to clipboard", "success");
+    }
+
+    // ── Step nav ─────────────────────────────────────────
+    function goStep(n) {
+      [1, 2, 3, 4].forEach(i => {
+        document.getElementById(`panel-${i}`).style.display = i === n ? "block" : "none";
+        const stepEl = document.getElementById(`step-${i}`);
+        stepEl.className = "step" + (i === n ? " active" : i < n ? " done" : "");
+        if (i < 4) {
+          const line = document.getElementById(`line-${i}`);
+          if (line) line.className = "step-line" + (i < n ? " done" : "");
+        }
+      });
+
+      if (n === 2 && window._lastEditedData) {
+        const d = window._lastEditedData;
+        document.getElementById("f-complaint").value = d.chief_complaint || "";
+        document.getElementById("f-diagnosis").value = d.diagnosis || "";
+        document.getElementById("f-advice").value = d.advice || "";
+        document.getElementById("f-followup").value = d.followup || "";
+        renderMedRows(d.medicines || []);
+        tests = d.tests || [];
+        renderTests();
+        const v = d.vitals || {};
+        document.getElementById("v-bp").value = v.bp || "";
+        document.getElementById("v-temp").value = v.temperature || "";
+        document.getElementById("v-pulse").value = v.pulse || "";
+        document.getElementById("v-weight").value = v.weight || "";
+        document.getElementById("v-spo2").value = v.spo2 || "";
+      }
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function goBack() {
+      window.location.href = `patient.html?id=${patientId}`;
+    }
+
+    // ── Helpers ───────────────────────────────────────────
+    function safeJSON(str, fallback) {
+      try { return JSON.parse(str); } catch { return fallback; }
+    }
+
+    function formatDate(iso) {
+      const utc = iso.endsWith("Z") ? iso : iso + "Z";
+      return new Date(utc).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit", hour12: true
+      });
+    }
+
+    loadPatient();
+    loadLastVisit();
+  </script>
+</body>
+
+</html>

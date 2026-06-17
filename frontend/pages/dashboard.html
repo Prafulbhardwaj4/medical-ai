@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedScribe — Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar-brand">Med<span>Scribe</span></div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn-logout" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+
+    <!-- Sidebar — BUG FIX: Add Patient uses onclick only, no href navigation -->
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Navigation</div>
+      <a class="nav-item active" href="dashboard.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Dashboard
+      </a>
+      <div class="nav-divider"></div>
+      <div class="sidebar-section-label">Quick Actions</div>
+      <div class="nav-item" onclick="openAddPatient()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+        </svg>
+        Add Patient
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <main class="main-content">
+
+      <!-- Stats -->
+      <div class="stats-row" id="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Total Patients</div>
+          <div class="stat-value" id="stat-patients">—</div>
+          <div class="stat-sub">registered</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Today's Consultations</div>
+          <div class="stat-value" id="stat-today">—</div>
+          <div class="stat-sub">prescriptions generated</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">WhatsApp Sent</div>
+          <div class="stat-value" id="stat-wa">—</div>
+          <div class="stat-sub">this session</div>
+        </div>
+      </div>
+
+      <!-- Patient list -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Patients</h2>
+          <div style="display:flex;gap:12px;align-items:center">
+            <div class="search-wrap">
+              <svg class="search-icon" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                stroke-width="2">
+                <circle cx="11" cy="11" r="8" />
+                <path stroke-linecap="round" d="M21 21l-4.35-4.35" />
+              </svg>
+              <input class="form-control" id="search-input" placeholder="Search name, phone, ID…"
+                oninput="searchPatients(this.value)" />
+            </div>
+            <button class="btn btn-primary" onclick="openAddPatient()">+ Add Patient</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="patient-table">
+            <thead>
+              <tr>
+                <th>Patient</th>
+                <th>ID</th>
+                <th>Phone</th>
+                <th>Age / Gender</th>
+                <th>Last Visit</th>
+                <th>Last Token</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="patient-tbody">
+              <tr>
+                <td colspan="7">
+                  <div class="empty-state">
+                    <p>Loading patients…</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Add Patient Modal -->
+  <div class="modal-overlay" id="modal-add">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Add New Patient</h2>
+        <button class="modal-close" onclick="closeAddPatient()">×</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input class="form-control" id="p-name" placeholder="Ramesh Kumar" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Phone (with country code)</label>
+          <div style="display:flex;gap:0;align-items:stretch">
+            <span
+              style="padding:9px 12px;background:var(--smoke-mid);border:1.5px solid var(--border);border-right:none;border-radius:var(--radius) 0 0 var(--radius);font-size:0.9rem;color:var(--slate);white-space:nowrap;font-weight:500;display:flex;align-items:center">+91</span>
+            <input class="form-control" id="p-phone" type="tel" placeholder="9876543210" maxlength="10"
+              style="border-radius:0 var(--radius) var(--radius) 0" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Age</label>
+          <input class="form-control" id="p-age" type="number" placeholder="35" min="0" max="120" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Blood Group (optional)</label>
+        <select class="form-control" id="p-blood-group">
+          <option value="">Unknown</option>
+          <option value="A+">A+</option>
+          <option value="A-">A-</option>
+          <option value="B+">B+</option>
+          <option value="B-">B-</option>
+          <option value="AB+">AB+</option>
+          <option value="AB-">AB-</option>
+          <option value="O+">O+</option>
+          <option value="O-">O-</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Gender</label>
+        <select class="form-control" id="p-gender">
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="closeAddPatient()">Cancel</button>
+        <button class="btn btn-primary" id="btn-save-patient" onclick="savePatient()">Save Patient</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error("Not authenticated");
+    fillTopbar();
+
+    let allPatients = [];
+
+    async function loadPatients(search = "") {
+      try {
+        const data = await api("GET", `/patients/?search=${encodeURIComponent(search)}`);
+        allPatients = data;
+        renderTable(data);
+        document.getElementById("stat-patients").textContent = data.length;
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    }
+
+    function renderTable(patients) {
+      const tbody = document.getElementById("patient-tbody");
+      if (!patients.length) {
+        tbody.innerHTML = `<tr><td colspan="7">
+          <div class="empty-state">
+            <div class="empty-state-icon">
+              <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/>
+              </svg>
+            </div>
+            <h3>No patients yet</h3>
+            <p>Click "Add Patient" to register your first patient.</p>
+          </div>
+        </td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = patients.map(p => `
+        <tr style="cursor:pointer" onclick="goToPatient(${p.id})">
+          <td><strong>${p.name}</strong></td>
+          <td><span class="badge badge-navy">${p.patient_uid}</span></td>
+          <td style="color:var(--slate)">${p.phone}</td>
+          <td>${p.age}y / ${capitalize(p.gender)}</td>
+          <td>${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
+          <td>${p.last_token ? `<span class="badge badge-teal">${p.last_token}</span>` : '<span style="color:var(--slate-light)">—</span>'}</td>
+          <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();goToPatient(${p.id})">Open →</button></td>
+        </tr>
+      `).join("");
+    }
+
+    let searchTimer;
+    function searchPatients(val) {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => loadPatients(val), 300);
+    }
+
+    function goToPatient(id) {
+      window.location.href = `patient.html?id=${id}`;
+    }
+
+    function openAddPatient() { document.getElementById("modal-add").classList.add("open"); }
+    function closeAddPatient() { document.getElementById("modal-add").classList.remove("open"); }
+
+    async function savePatient() {
+      const btn = document.getElementById("btn-save-patient");
+      btn.disabled = true;
+      const verr = validatePatient(
+        document.getElementById("p-name").value,
+        "+91" + document.getElementById("p-phone").value.trim(),
+        document.getElementById("p-age").value
+      );
+      if (verr) { toast(verr, "error"); btn.disabled = false; btn.textContent = "Save Patient"; return; }
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        await api("POST", "/patients/", {
+          name: document.getElementById("p-name").value.trim(),
+          phone: "+91" + document.getElementById("p-phone").value.trim(),
+          age: parseInt(document.getElementById("p-age").value),
+          blood_group: document.getElementById("p-blood-group").value || null,
+          gender: document.getElementById("p-gender").value
+        });
+        toast("Patient added successfully", "success");
+        closeAddPatient();
+        loadPatients();
+      } catch (e) {
+        toast(e.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Save Patient";
+      }
+    }
+
+    function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+    function formatDate(iso) {
+      return new Date(iso).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      });
+    }
+
+    // Close modal on overlay click
+    document.getElementById("modal-add").addEventListener("click", function (e) {
+      if (e.target === this) closeAddPatient();
+    });
+
+    loadPatients();
+
+  </script>
+</body>
+
+</html>

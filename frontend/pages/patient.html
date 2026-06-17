@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedScribe — Patient</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .patient-header {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px 28px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .patient-header::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--teal), var(--teal-light));
+    }
+
+    .patient-label-small {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--teal);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .patient-header h1 {
+      color: var(--navy);
+      font-size: 1.55rem;
+      margin-bottom: 14px;
+    }
+
+    .patient-meta {
+      display: flex;
+      gap: 28px;
+      flex-wrap: wrap;
+    }
+
+    .patient-meta-item {
+      font-size: 0.82rem;
+      color: var(--slate);
+    }
+
+    .patient-meta-item strong {
+      color: var(--navy);
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 600;
+      margin-bottom: 1px;
+    }
+
+    .visit-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 10px;
+      overflow: hidden;
+      transition: box-shadow 0.15s;
+    }
+
+    .visit-card:hover {
+      box-shadow: var(--shadow-sm);
+    }
+
+    .visit-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 18px;
+      background: var(--smoke);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+
+    .visit-header:hover {
+      background: var(--smoke-mid);
+    }
+
+    .visit-body {
+      display: none;
+      padding: 18px;
+      border-top: 1px solid var(--border);
+      background: var(--white);
+    }
+
+    .visit-body.open {
+      display: block;
+    }
+
+    .detail-section {
+      margin-bottom: 14px;
+    }
+
+    .detail-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--slate);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 5px;
+    }
+
+    .detail-value {
+      font-size: 0.9rem;
+      color: var(--navy);
+      line-height: 1.6;
+    }
+
+    .med-pill {
+      display: inline-flex;
+      align-items: center;
+      background: var(--teal-subtle);
+      border: 1px solid #99f6e4;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      color: #0f766e;
+      margin: 3px 4px 3px 0;
+      font-weight: 500;
+    }
+
+    .test-pill {
+      display: inline-flex;
+      align-items: center;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      color: #1d4ed8;
+      margin: 3px 4px 3px 0;
+      font-weight: 500;
+    }
+
+    .chevron {
+      color: var(--slate-light);
+      font-size: 1rem;
+      transition: transform 0.2s;
+      display: inline-block;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <header class="topbar">
+      <div class="topbar-brand">Med<span>Scribe</span></div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn-logout" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+
+    <!-- Sidebar — consistent nav, Patient Profile marked active -->
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Navigation</div>
+      <a class="nav-item" href="dashboard.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Dashboard
+      </a>
+      <a class="nav-item active" href="#">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+        Patient Profile
+      </a>
+      <div class="nav-divider"></div>
+      <div class="sidebar-section-label">Quick Actions</div>
+      <a class="nav-item" href="dashboard.html" onclick="openAddPatientFromSidebar()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+        </svg>
+        Add Patient
+      </a>
+    </nav>
+
+    <main class="main-content">
+
+      <!-- Patient header -->
+      <div class="patient-header" id="patient-header">
+        <div>
+          <div class="patient-label-small">Patient Profile</div>
+          <h1 id="p-name">Loading…</h1>
+          <div class="patient-meta">
+            <div class="patient-meta-item"><strong id="p-uid">—</strong>Patient ID</div>
+            <div class="patient-meta-item"><strong id="p-age">—</strong>Age</div>
+            <div class="patient-meta-item"><strong id="p-gender">—</strong>Gender</div>
+            <div class="patient-meta-item"><strong id="p-phone">—</strong>Phone</div>
+          </div>
+        </div>
+        <button class="btn btn-outline btn-lg" onclick="openEditPatient()" style="margin-right:10px">
+          ✏️ Edit Details
+        </button>
+        <button class="btn btn-primary btn-lg" id="btn-new-consult" onclick="startConsultation()">
+          + New Consultation
+        </button>
+      </div>
+
+      <!-- Visit history -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Visit History</h2>
+          <span class="badge badge-navy" id="visit-count">0 visits</span>
+        </div>
+        <div id="visit-list">
+          <div class="empty-state">
+            <p>Loading history…</p>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="modal-edit-patient">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Edit Patient Details</h2>
+        <button class="modal-close" onclick="closeEditPatient()">×</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input class="form-control" id="ep-name" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span
+              style="padding:9px 13px;background:var(--smoke);border:1.5px solid var(--border);border-radius:var(--radius);font-size:0.9rem;color:var(--navy)">+91</span>
+            <input class="form-control" id="ep-phone" maxlength="10" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Age</label>
+          <input class="form-control" id="ep-age" type="number" min="0" max="120" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Gender</label>
+          <select class="form-control" id="ep-gender">
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Blood Group</label>
+          <select class="form-control" id="ep-blood-group">
+            <option value="">Unknown</option>
+            <option value="A+">A+</option>
+            <option value="A-">A-</option>
+            <option value="B+">B+</option>
+            <option value="B-">B-</option>
+            <option value="AB+">AB+</option>
+            <option value="AB-">AB-</option>
+            <option value="O+">O+</option>
+            <option value="O-">O-</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="closeEditPatient()">Cancel</button>
+        <button class="btn btn-primary" id="btn-save-edit" onclick="savePatientEdit()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error();
+    fillTopbar();
+
+    const params = new URLSearchParams(location.search);
+    const patientId = params.get("id");
+    if (!patientId) window.location.href = "dashboard.html";
+
+    async function loadPatient() {
+      try {
+        const p = await api("GET", `/patients/${patientId}`);
+        if (!p) return;
+        document.title = `MedScribe — ${p.name}`;
+        document.getElementById("p-name").textContent = p.name;
+        document.getElementById("p-uid").textContent = p.patient_uid;
+        document.getElementById("p-age").textContent = p.age + " yrs";
+        document.getElementById("p-gender").textContent = capitalize(p.gender);
+        document.getElementById("p-phone").textContent = p.phone;
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    }
+
+    async function loadHistory() {
+      try {
+        const visits = await api("GET", `/consultations/history/${patientId}`);
+        if (!visits) return;
+        document.getElementById("visit-count").textContent = `${visits.length} visit${visits.length !== 1 ? "s" : ""}`;
+
+        const el = document.getElementById("visit-list");
+        if (!visits.length) {
+          el.innerHTML = `<div class="empty-state">
+            <div class="empty-state-icon">
+              <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+            </div>
+            <h3>No visits yet</h3>
+            <p>Start a new consultation to record the first visit.</p>
+          </div>`;
+          return;
+        }
+
+        el.innerHTML = visits.map((v, i) => {
+          const meds = v.medicines ? safeJSON(v.medicines, []) : [];
+          const tests = v.tests ? safeJSON(v.tests, []) : [];
+          const waClass = v.whatsapp_status === "sent" ? "badge-green" : v.whatsapp_status === "failed" ? "badge-red" : "badge-grey";
+          const vitals = v.vitals ? safeJSON(v.vitals, {}) : {};
+          const vitalItems = [
+            ["BP", vitals.bp], ["Temp", vitals.temperature],
+            ["Pulse", vitals.pulse], ["Weight", vitals.weight], ["SpO2", vitals.spo2]
+          ].filter(([k, val]) => val);
+
+          return `
+        <div class="visit-card">
+          <div class="visit-header" onclick="toggleVisit(${i})">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span class="badge badge-navy">${v.token_number || "Draft"}</span>
+              <span style="font-size:0.875rem;font-weight:600;color:var(--navy)">${formatDate(v.created_at)}</span>
+              <span style="font-size:0.82rem;color:var(--slate)">${v.chief_complaint || "—"}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="badge ${waClass}">WhatsApp: ${v.whatsapp_status}</span>
+              <button class="btn btn-outline btn-sm" onclick="event.stopPropagation(); voidConsultation(${v.id})" style="color:var(--danger);border-color:var(--danger)">Void</button>
+              <span class="chevron" id="chevron-${i}">▾</span>
+            </div>
+          </div>
+          <div class="visit-body" id="visit-body-${i}">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">
+              <div class="detail-section">
+                <div class="detail-label">Chief Complaint</div>
+                <div class="detail-value">${v.chief_complaint || "—"}</div>
+              </div>
+              <div class="detail-section">
+                <div class="detail-label">Diagnosis</div>
+                <div class="detail-value">${v.diagnosis || "—"}</div>
+              </div>
+            </div>
+            ${vitalItems.length ? `
+            <div class="detail-section">
+              <div class="detail-label">Vitals</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                ${vitalItems.map(([k, val]) => `<span style="background:var(--smoke);padding:3px 10px;border-radius:6px;font-size:0.82rem"><strong>${k}:</strong> ${val}</span>`).join("")}
+              </div>
+            </div>` : ""}
+            <div class="detail-section">
+              <div class="detail-label">Medicines</div>
+              <div>${meds.length ? meds.map(m => `<span class="med-pill">${m.name} ${m.dosage} — ${m.frequency}${m.duration ? " × " + m.duration : ""}</span>`).join("") : "—"}</div>
+            </div>
+            ${tests.length ? `<div class="detail-section">
+              <div class="detail-label">Tests</div>
+              <div>${tests.map(t => `<span class="test-pill">${t}</span>`).join("")}</div>
+            </div>` : ""}
+            ${v.advice ? `<div class="detail-section"><div class="detail-label">Advice</div><div class="detail-value">${v.advice}</div></div>` : ""}
+            ${v.followup ? `<div class="detail-section"><div class="detail-label">Follow-up</div><div class="detail-value">${v.followup}</div></div>` : ""}
+          </div>
+        </div>`;
+        }).join("");
+
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    }
+
+    function toggleVisit(i) {
+      const body = document.getElementById(`visit-body-${i}`);
+      const chev = document.getElementById(`chevron-${i}`);
+      body.classList.toggle("open");
+      chev.style.transform = body.classList.contains("open") ? "rotate(180deg)" : "";
+    }
+
+    function startConsultation() {
+      window.location.href = `consultation.html?patient_id=${patientId}`;
+    }
+
+    function openAddPatientFromSidebar() {
+      // Navigate to dashboard; handled there
+    }
+
+    function safeJSON(str, fallback) {
+      try { return JSON.parse(str); } catch { return fallback; }
+    }
+
+    function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+    function formatDate(iso) {
+      const utc = iso.endsWith("Z") ? iso : iso + "Z";
+      return new Date(utc).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+      });
+    }
+
+    loadPatient();
+    loadHistory();
+
+    function openEditPatient() {
+      api("GET", `/patients/${patientId}`).then(p => {
+        if (!p) return;
+        document.getElementById("ep-name").value = p.name;
+        document.getElementById("ep-phone").value = p.phone.replace("+91", "");
+        document.getElementById("ep-age").value = p.age;
+        document.getElementById("ep-gender").value = p.gender;
+        document.getElementById("ep-blood-group").value = p.blood_group || "";
+        document.getElementById("modal-edit-patient").classList.add("open");
+      });
+    }
+
+    function closeEditPatient() {
+      document.getElementById("modal-edit-patient").classList.remove("open");
+    }
+
+    async function savePatientEdit() {
+      const btn = document.getElementById("btn-save-edit");
+      const phone = "+91" + document.getElementById("ep-phone").value.trim();
+      const verr = validatePatient(
+        document.getElementById("ep-name").value,
+        phone,
+        document.getElementById("ep-age").value
+      );
+      if (verr) { toast(verr, "error"); return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+
+      try {
+        await api("PUT", `/patients/${patientId}`, {
+          name: document.getElementById("ep-name").value.trim(),
+          phone: phone,
+          age: parseInt(document.getElementById("ep-age").value),
+          gender: document.getElementById("ep-gender").value,
+          blood_group: document.getElementById("ep-blood-group").value || null
+        });
+        toast("Patient details updated", "success");
+        closeEditPatient();
+        loadPatient();
+      } catch (e) {
+        toast(e.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Save Changes";
+      }
+    }
+
+    async function voidConsultation(id) {
+      if (!confirm("Void this consultation? It will be hidden from history.")) return;
+      try {
+        await api("POST", `/consultations/void/${id}`);
+        toast("Consultation voided", "success");
+        loadHistory();
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    }
+  </script>
+</body>
+
+</html>

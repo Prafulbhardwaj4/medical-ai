@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.Python
+venv/
+.venv/
+
+# Environment
+.env
+
+# DB
+*.db
+*.sqlite3
+
+# Prescriptions (generated at runtime)
+backend/prescriptions/
+
+# Uploads / temp audio
+backend/uploads/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

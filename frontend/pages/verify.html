@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MedScribe — Verify Prescription</title>
+    <link rel="stylesheet" href="../css/style.css" />
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .verify-card {
+            max-width: 480px;
+            width: 100%;
+        }
+
+        .status-banner {
+            padding: 16px 20px;
+            border-radius: var(--radius-lg);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 600;
+        }
+
+        .status-valid {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+
+        .status-invalid {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+
+        .status-dispensed {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+        }
+
+        .med-list {
+            margin-top: 12px;
+        }
+
+        .med-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 8px;
+            font-size: 0.88rem;
+        }
+
+        .rx-badge {
+            font-weight: 700;
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .rx-controlled {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .rx-otc {
+            background: #d1fae5;
+            color: #16a34a;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="verify-card card" id="verify-card">
+        <div style="text-align:center;margin-bottom:16px">
+            <div class="topbar-brand" style="color:var(--navy);font-size:1.3rem">Med<span
+                    style="color:var(--teal)">Scribe</span></div>
+            <p style="margin-top:4px;font-size:0.8rem">Prescription Verification</p>
+        </div>
+        <div id="content">
+            <div class="empty-state">
+                <p>Verifying...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        const params = new URLSearchParams(location.search);
+        const token = params.get("token");
+        const hash = params.get("hash");
+
+        async function loadVerification() {
+            const content = document.getElementById("content");
+            if (!token || !hash) {
+                content.innerHTML = `<div class="status-banner status-invalid">⚠ Invalid verification link</div>`;
+                return;
+            }
+
+            try {
+                const res = await fetch(`http://localhost:8000/consultations/verify/${token}?hash=${hash}`);
+                const data = await res.json();
+
+                if (!data.valid) {
+                    content.innerHTML = `
+          <div class="status-banner status-invalid">⚠ ${data.reason}</div>
+          <p style="text-align:center;color:var(--slate);font-size:0.85rem">This prescription could not be verified. Do not dispense controlled medicines based on this document.</p>
+        `;
+                    return;
+                }
+
+                let medsHtml = data.medicines.map(m => `
+        <div class="med-item">
+          <div>
+            <strong>${m.name}</strong> — ${m.dosage}, ${m.frequency}, ${m.duration}
+          </div>
+          <span class="rx-badge ${m.schedule === 'controlled' ? 'rx-controlled' : 'rx-otc'}">
+            ${m.schedule === 'controlled' ? 'Rx' : 'OTC'}
+          </span>
+        </div>
+      `).join("");
+
+                const dispensedBanner = data.is_dispensed
+                    ? `<div class="status-banner status-dispensed">⚠ Already Dispensed on ${formatDate(data.dispensed_at)}</div>`
+                    : `<div class="status-banner status-valid">✅ Valid Prescription</div>`;
+
+                content.innerHTML = `
+        ${dispensedBanner}
+        <div style="font-size:0.85rem;margin-bottom:12px">
+          <div><strong>Token:</strong> ${data.token_number}</div>
+          <div><strong>Doctor:</strong> ${data.doctor_name} (${data.specialization})</div>
+          <div><strong>Clinic:</strong> ${data.clinic_name}</div>
+          <div><strong>Patient:</strong> ${data.patient_name}</div>
+          <div><strong>Date:</strong> ${formatDate(data.date)}</div>
+        </div>
+        <div class="section-title" style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:8px">Medicines</div>
+        <div class="med-list">${medsHtml}</div>
+        ${!data.is_dispensed ? `
+          <button class="btn btn-primary" style="width:100%;margin-top:16px" onclick="markDispensed()">
+            Mark as Dispensed
+          </button>
+        ` : ""}
+        <p style="text-align:center;color:var(--slate);font-size:0.75rem;margin-top:16px">
+          Only valid at medscribe.in — do not trust other domains.
+        </p>
+      `;
+            } catch (e) {
+                content.innerHTML = `<div class="status-banner status-invalid">⚠ Could not connect to verification server</div>`;
+            }
+        }
+
+        async function markDispensed() {
+            try {
+                const res = await fetch(`http://localhost:8000/consultations/verify/${token}/dispense?hash=${hash}`, { method: "POST" });
+                const data = await res.json();
+                if (res.ok) {
+                    toast("Marked as dispensed", "success");
+                    loadVerification();
+                } else {
+                    toast(data.detail, "error");
+                }
+            } catch (e) {
+                toast("Failed to update", "error");
+            }
+        }
+
+        function formatDate(iso) {
+            const utc = iso.endsWith("Z") ? iso : iso + "Z";
+            return new Date(utc).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
+        }
+
+        loadVerification();
+    </script>
+</body>
+
+</html>

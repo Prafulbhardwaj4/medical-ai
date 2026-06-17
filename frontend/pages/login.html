@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedScribe — Login</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+
+<body>
+  <div class="auth-page">
+
+    <!-- Left panel -->
+    <div class="auth-left">
+      <div class="auth-left-inner">
+        <div class="auth-logo">Med<span>Scribe</span></div>
+        <div class="auth-tagline">Your clinic's <em>AI scribe</em>, always ready.</div>
+        <p class="auth-sub">Record consultations in Hindi or English. MedScribe transcribes, structures, and sends the
+          prescription — in seconds.</p>
+        <div class="auth-features">
+          <div class="auth-feature">
+            <div class="auth-feature-dot"></div>Voice-to-prescription in under 30 seconds
+          </div>
+          <div class="auth-feature">
+            <div class="auth-feature-dot"></div>Hindi + English code-switching supported
+          </div>
+          <div class="auth-feature">
+            <div class="auth-feature-dot"></div>PDF sent to patient via WhatsApp instantly
+          </div>
+          <div class="auth-feature">
+            <div class="auth-feature-dot"></div>Full patient history at a glance
+          </div>
+        </div>
+        <div class="auth-badge">
+          <div class="auth-badge-dot"></div>
+          Trusted by doctors across Haryana
+        </div>
+      </div>
+    </div>
+
+    <!-- Right panel -->
+    <div class="auth-right">
+      <div class="auth-box">
+        <div class="auth-tabs">
+          <div class="auth-tab active" id="tab-login" onclick="switchTab('login')">Sign In</div>
+          <div class="auth-tab" id="tab-signup" onclick="switchTab('signup')">Create Account</div>
+        </div>
+
+        <!-- LOGIN FORM -->
+        <div id="form-login">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input class="form-control" id="login-email" type="email" placeholder="doctor@clinic.com" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input class="form-control" id="login-password" type="password" placeholder="••••••••" />
+          </div>
+          <div class="err-msg" id="login-err"></div>
+          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-login" onclick="doLogin()">
+            Sign In
+          </button>
+        </div>
+
+        <!-- SIGNUP FORM -->
+        <div id="form-signup" style="display:none">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Title</label>
+              <select class="form-control" id="su-title">
+                <option value="Dr.">Dr.</option>
+                <option value="Mr.">Mr.</option>
+                <option value="Mrs.">Mrs.</option>
+                <option value="Miss">Miss</option>
+                <option value="Prof.">Prof.</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input class="form-control" id="su-name" type="text" placeholder="Arjun Sharma" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input class="form-control" id="su-email" type="email" placeholder="doctor@clinic.com" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <span
+                  style="padding:9px 12px;background:var(--smoke-mid);border:1.5px solid var(--border);border-radius:var(--radius);font-size:0.9rem;color:var(--slate);white-space:nowrap;font-weight:500">+91</span>
+                <input class="form-control" id="su-phone" type="tel" placeholder="9876543210" maxlength="10" />
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Specialization</label>
+            <input class="form-control" id="su-spec" type="text" placeholder="General Physician" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Medical Registration Number</label>
+            <input class="form-control" id="su-reg" type="text" placeholder="e.g. MCI-12345 or State Council No." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Clinic Name</label>
+            <input class="form-control" id="su-clinic" type="text" placeholder="Sharma Clinic" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input class="form-control" id="su-password" type="password" placeholder="Min. 8 characters" />
+          </div>
+          <div class="err-msg" id="signup-err"></div>
+          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-signup" onclick="doSignup()">
+            Create Account
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    // Redirect if already logged in
+    if (getToken()) window.location.href = "dashboard.html";
+
+    function switchTab(tab) {
+      document.getElementById("form-login").style.display = tab === "login" ? "block" : "none";
+      document.getElementById("form-signup").style.display = tab === "signup" ? "block" : "none";
+      document.getElementById("tab-login").classList.toggle("active", tab === "login");
+      document.getElementById("tab-signup").classList.toggle("active", tab === "signup");
+    }
+
+    async function doLogin() {
+      const btn = document.getElementById("btn-login");
+      const err = document.getElementById("login-err");
+      err.textContent = "";
+      const verr = validateLogin(
+        document.getElementById("login-email").value,
+        document.getElementById("login-password").value
+      );
+      if (verr) { err.textContent = verr; btn.disabled = false; btn.textContent = "Sign In"; return; }
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+
+      try {
+        const data = await fetch("http://127.0.0.1:8000/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: document.getElementById("login-email").value.trim(),
+            password: document.getElementById("login-password").value
+          })
+        });
+        const json = await data.json();
+        if (!data.ok) throw new Error(json.detail || "Login failed");
+        saveSession(json.access_token, json.doctor);
+        window.location.href = "dashboard.html";
+      } catch (e) {
+        err.textContent = e.message;
+        btn.disabled = false;
+        btn.textContent = "Sign In";
+      }
+    }
+
+    async function doSignup() {
+      const btn = document.getElementById("btn-signup");
+      const err = document.getElementById("signup-err");
+      err.textContent = "";
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+
+      try {
+        const data = await fetch("http://127.0.0.1:8000/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: document.getElementById("su-title").value,
+            name: document.getElementById("su-name").value.trim(),
+            email: document.getElementById("su-email").value.trim(),
+            phone: "+91" + document.getElementById("su-phone").value.trim(),
+            specialization: document.getElementById("su-spec").value.trim(),
+            registration_number: document.getElementById("su-reg").value.trim(),
+            clinic_name: document.getElementById("su-clinic").value.trim(),
+            password: document.getElementById("su-password").value
+          })
+        });
+        const json = await data.json();
+        if (!data.ok) throw new Error(json.detail || "Signup failed");
+        toast("Account created! Please sign in.", "success");
+        switchTab("login");
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Create Account";
+      }
+    }
+
+    // Enter key support
+    document.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        if (document.getElementById("form-login").style.display !== "none") doLogin();
+        else doSignup();
+      }
+    });
+  </script>
+</body>
+
+</html>
