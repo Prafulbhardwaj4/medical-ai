@@ -11,6 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from app.config import settings
 import warnings
 from fastapi.staticfiles import StaticFiles
+import os
 
 if settings.SECRET_KEY == "changeme":
     warnings.warn("WARNING: SECRET_KEY is default. Set a strong key in .env before deploying.")
@@ -47,8 +48,8 @@ app.include_router(auth_router.router)
 app.include_router(patients_router.router)
 app.include_router(consultations_router.router)
 
+os.makedirs("prescriptions", exist_ok=True)
 app.mount("/prescriptions", StaticFiles(directory="prescriptions"), name="prescriptions")
-
 @app.get("/")
 def root():
     return {"status": "MedScribe API running"}
