@@ -146,7 +146,7 @@
       btn.innerHTML = '<span class="spinner"></span>';
 
       try {
-        const data = await fetch("http://127.0.0.1:8000/auth/login", {
+        const data = await fetch(`${BASE}/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -173,7 +173,7 @@
       btn.innerHTML = '<span class="spinner"></span>';
 
       try {
-        const data = await fetch("http://127.0.0.1:8000/auth/signup", {
+        const data = await fetch(`${BASE}/auth/signup`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
