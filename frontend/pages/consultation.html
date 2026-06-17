@@ -419,7 +419,7 @@
 
         // Connect WebSocket
         const token = getToken();
-        const wsUrl = `ws://localhost:8000/consultations/ws/transcribe/${patientId}?token=${token}`;
+        const wsUrl = `wss://medical-ai-mvv1.onrender.com/consultations/ws/transcribe/${patientId}?token=${token}`;
         wsConnection = new WebSocket(wsUrl);
 
         wsConnection.onopen = () => {

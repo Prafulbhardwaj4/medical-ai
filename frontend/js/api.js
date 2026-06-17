@@ -1,4 +1,4 @@
-const BASE = "http://localhost:8000";
+const BASE = "https://medical-ai-mvv1.onrender.com";
 
 function getToken() {
   return localStorage.getItem("ms_token");
