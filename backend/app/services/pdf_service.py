@@ -227,8 +227,7 @@ def generate_prescription_pdf(
         elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
         elements.append(Spacer(1, 3*mm))
 
-        # verify_url = f"https://medscribe.in/verify/{token_number}?hash={verify_hash}"
-        verify_url = f"http://localhost:5500/pages/verify.html?token={token_number}&hash={verify_hash}"
+        verify_url = f"https://medical-s-ai.netlify.app/pages/verify.html?token={token_number}&hash={verify_hash}"
 
         # Generate QR code image in memory
         qr = qrcode.QRCode(version=1, box_size=4, border=1)
