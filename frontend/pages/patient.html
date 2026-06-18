@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Patient</title>
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=2" />
   <style>
     .patient-header {
       background: var(--white);
@@ -44,6 +44,13 @@
       color: var(--navy);
       font-size: 1.55rem;
       margin-bottom: 14px;
+    }
+
+    .patient-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
     }
 
     .patient-meta {
@@ -154,6 +161,18 @@
       transition: transform 0.2s;
       display: inline-block;
     }
+
+    @media (max-width: 600px) {
+      .patient-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+        padding: 20px;
+      }
+      .patient-header-actions { width: 100%; }
+      .patient-header-actions .btn { flex: 1; }
+      .patient-meta { gap: 16px; }
+    }
   </style>
 </head>
 
@@ -198,7 +217,11 @@
       </a>
     </nav>
 
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
     <main class="main-content">
+
+      <a href="dashboard.html" class="mobile-back-link">← Back to Dashboard</a>
 
       <!-- Patient header -->
       <div class="patient-header" id="patient-header">
@@ -212,12 +235,14 @@
             <div class="patient-meta-item"><strong id="p-phone">—</strong>Phone</div>
           </div>
         </div>
-        <button class="btn btn-outline btn-lg" onclick="openEditPatient()" style="margin-right:10px">
-          ✏️ Edit Details
-        </button>
-        <button class="btn btn-primary btn-lg" id="btn-new-consult" onclick="startConsultation()">
-          + New Consultation
-        </button>
+        <div class="patient-header-actions">
+          <button class="btn btn-outline btn-lg" onclick="openEditPatient()">
+            ✏️ Edit Details
+          </button>
+          <button class="btn btn-primary btn-lg" id="btn-new-consult" onclick="startConsultation()">
+            + New Consultation
+          </button>
+        </div>
       </div>
 
       <!-- Visit history -->
@@ -293,7 +318,7 @@
 
   <div id="toast"></div>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=2"></script>
   <script>
     if (!requireAuth()) throw new Error();
     fillTopbar();

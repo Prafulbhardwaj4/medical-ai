@@ -76,6 +76,21 @@ function fillTopbar() {
   const cl = document.getElementById("topbar-clinic");
   if (cl) cl.textContent = doc.clinic_name;
 }
+// Mobile sidebar drawer
+function toggleSidebar() {
+  document.querySelector(".sidebar")?.classList.toggle("open");
+  document.getElementById("sidebar-backdrop")?.classList.toggle("open");
+}
+function closeSidebar() {
+  document.querySelector(".sidebar")?.classList.remove("open");
+  document.getElementById("sidebar-backdrop")?.classList.remove("open");
+}
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".sidebar .nav-item").forEach(item => {
+    item.addEventListener("click", closeSidebar);
+  });
+});
+
 
 async function logout() {
   try {

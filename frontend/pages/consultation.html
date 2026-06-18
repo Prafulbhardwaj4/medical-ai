@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Consultation</title>
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=2" />
   <style>
     .section-block {
       margin-bottom: 20px;
@@ -125,7 +125,14 @@
   <div class="app-shell">
 
     <header class="topbar">
-      <div class="topbar-brand">Med<span>Scribe</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="topbar-brand">Med<span>Scribe</span></div>
+      </div>
       <div class="topbar-doctor">
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
@@ -160,7 +167,11 @@
       </a>
     </nav>
 
+     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
     <main class="main-content">
+
+      <a href="dashboard.html" class="mobile-back-link" id="mobile-back-link">← Back to Patient</a>
 
       <!-- Steps -->
       <div class="steps" id="steps">
@@ -219,7 +230,7 @@
             rows="5"></textarea>
         </div>
 
-        <div style="display:flex;justify-content:flex-end;margin-top:16px;gap:10px">
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;gap:10px;flex-wrap:wrap">
           <button class="btn btn-outline" id="btn-retranscribe" style="display:none"
             onclick="retranscribe()">Re-transcribe</button>
           <button class="btn btn-primary" id="btn-structure" disabled onclick="doStructure()">
@@ -298,7 +309,7 @@
           <textarea class="form-control" id="f-followup" rows="2" placeholder="e.g. Review after 5 days"></textarea>
         </div>
 
-        <div style="display:flex;justify-content:space-between;margin-top:8px">
+        <div style="display:flex;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:10px">
           <button class="btn btn-outline" onclick="goStep(1)">← Back</button>
           <button class="btn btn-navy btn-lg" onclick="doConfirm()">
             Confirm & Generate PDF →
@@ -338,9 +349,10 @@
           <div class="success-icon">🎉</div>
           <h2>Prescription Sent!</h2>
           <p style="margin-top:8px">Patient has received the prescription on WhatsApp.</p>
-          <div style="display:flex;justify-content:center;gap:12px;margin-top:32px">
+          <div style="display:flex;justify-content:center;gap:12px;margin-top:32px;flex-wrap:wrap">
             <button class="btn btn-outline" onclick="goBack()">← Back to Patient</button>
-            <button class="btn btn-primary" onclick="window.location.href='/pages/dashboard.html'">Go to Dashboard</button>
+            <button class="btn btn-primary" onclick="window.location.href='/pages/dashboard.html'">Go to
+              Dashboard</button>
           </div>
         </div>
       </div>
@@ -350,7 +362,7 @@
 
   <div id="toast"></div>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=2"></script>
   <script>
     if (!requireAuth()) throw new Error();
     fillTopbar();
@@ -360,6 +372,7 @@
     if (!patientId) window.location.href = "/pages/dashboard.html";
 
     document.getElementById("sidebar-patient-link").href = `patient.html?id=${patientId}`;
+    document.getElementById("mobile-back-link").href = `patient.html?id=${patientId}`;
 
     let consultationId = null;
     let mediaRecorder = null;

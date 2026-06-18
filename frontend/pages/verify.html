@@ -110,7 +110,7 @@
             }
 
             try {
-                const res = await fetch(`http://localhost:8000/consultations/verify/${token}?hash=${hash}`);
+                const res = await fetch(`${BASE}/consultations/verify/${token}?hash=${hash}`);
                 const data = await res.json();
 
                 if (!data.valid) {
@@ -163,7 +163,7 @@
 
         async function markDispensed() {
             try {
-                const res = await fetch(`http://localhost:8000/consultations/verify/${token}/dispense?hash=${hash}`, { method: "POST" });
+                const res = await fetch(`${BASE}/consultations/verify/${token}/dispense?hash=${hash}`, { method: "POST" });
                 const data = await res.json();
                 if (res.ok) {
                     toast("Marked as dispensed", "success");

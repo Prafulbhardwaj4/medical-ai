@@ -13,7 +13,14 @@
 
     <!-- Topbar -->
     <header class="topbar">
-      <div class="topbar-brand">Med<span>Scribe</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="topbar-brand">Med<span>Scribe</span></div>
+      </div>
       <div class="topbar-doctor">
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
@@ -42,6 +49,8 @@
         Add Patient
       </div>
     </nav>
+
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <!-- Main -->
     <main class="main-content">

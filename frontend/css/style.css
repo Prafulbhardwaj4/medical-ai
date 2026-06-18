@@ -952,19 +952,100 @@ tbody tr:hover { background: var(--smoke); }
   border-radius: 0 var(--radius) var(--radius) 0;
 }
 
+/* ── Hamburger menu (mobile sidebar toggle) ── */
+.hamburger-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--navy);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.hamburger-btn:hover { background: var(--smoke-mid); border-color: var(--border-mid); }
+
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15,31,61,0.45);
+  z-index: 150;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.sidebar-backdrop.open { display: block; opacity: 1; }
+
+.mobile-back-link {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--teal);
+  text-decoration: none;
+  margin-bottom: 16px;
+}
+.mobile-back-link:hover { text-decoration: underline; }
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .auth-page { grid-template-columns: 1fr; }
-  .auth-left  { display: none; }
+  .auth-left {
+    padding: 32px 24px 28px;
+    min-height: auto;
+  }
+  .auth-sub, .auth-features, .auth-badge { display: none; }
+  .auth-logo { margin-bottom: 12px; font-size: 1.1rem; }
+  .auth-tagline { font-size: 1.25rem; margin-bottom: 0; }
+  .auth-right { padding: 28px 20px 40px; }
+  .auth-box { padding: 24px; }
   .app-shell  { grid-template-columns: 1fr; }
-  .sidebar    { display: none; }
+
+  .hamburger-btn { display: flex; }
+  .mobile-back-link { display: inline-flex; }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    width: 260px;
+    height: calc(100vh - 56px);
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 200;
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.open { transform: translateX(0); }
+
   .form-row, .form-row-3 { grid-template-columns: 1fr; }
   .stats-row  { grid-template-columns: 1fr 1fr; }
   .med-row    { grid-template-columns: 1fr 1fr; }
   .main-content { padding: 20px 16px; }
+
+  .steps { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .step, .step-line { flex-shrink: 0; }
 }
 
 @media (max-width: 600px) {
   .stats-row { grid-template-columns: 1fr; }
-  .steps { overflow-x: auto; padding: 12px 16px; }
+  .steps { padding: 12px 16px; }
+  .med-row { grid-template-columns: 1fr; }
+  .med-row .btn-remove-med { width: 100%; }
+
+  .topbar { padding: 0 14px; }
+  .topbar-brand { font-size: 0.95rem; }
+  #topbar-doctor-name, #topbar-clinic, .topbar-divider { display: none; }
+
+  .card-header { flex-wrap: wrap; gap: 10px; }
+  .card-header > div:last-child { width: 100%; flex-wrap: wrap; }
+  .search-wrap { flex: 1 1 100%; }
+  .search-wrap input { width: 100%; min-width: 0; }
+  .card-header > div:last-child > .btn { width: 100%; }
 }
