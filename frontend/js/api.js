@@ -1,7 +1,8 @@
 const BASE = "https://medical-ai-mvv1.onrender.com";
 
 function getToken() {
-  return localStorage.getItem("ms_token");
+  try { return localStorage.getItem("ms_token"); }
+  catch { return null; }
 }
 
 function getDoctor() {
@@ -10,21 +11,32 @@ function getDoctor() {
 }
 
 function saveSession(token, doctor) {
-  localStorage.setItem("ms_token", token);
-  localStorage.setItem("ms_doctor", JSON.stringify(doctor));
+  try {
+    localStorage.setItem("ms_token", token);
+    localStorage.setItem("ms_doctor", JSON.stringify(doctor));
+  } catch(e) {
+    toast("Storage blocked. Please enable cookies in browser settings.", "error");
+  }
 }
 
 function clearSession() {
-  localStorage.removeItem("ms_token");
-  localStorage.removeItem("ms_doctor");
+  try {
+    localStorage.removeItem("ms_token");
+    localStorage.removeItem("ms_doctor");
+  } catch(e) {}
 }
 
 function requireAuth() {
-  if (!getToken()) {
+  try {
+    if (!localStorage.getItem("ms_token")) {
+      window.location.href = "/pages/login.html";
+      return false;
+    }
+    return true;
+  } catch(e) {
     window.location.href = "/pages/login.html";
     return false;
   }
-  return true;
 }
 
 async function api(method, path, body = null, isFormData = false) {
