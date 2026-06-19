@@ -53,3 +53,7 @@ app.mount("/prescriptions", StaticFiles(directory="prescriptions"), name="prescr
 @app.get("/")
 def root():
     return {"status": "MedScribe API running"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
