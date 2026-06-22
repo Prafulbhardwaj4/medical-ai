@@ -18,13 +18,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/signup", response_model=DoctorOut, status_code=201)
 def signup(payload: DoctorCreate, db: Session = Depends(get_db)):
-    existing = db.query(Doctor).filter(Doctor.email == payload.email).first()
+    email = payload.email.lower().strip()
+    existing = db.query(Doctor).filter(Doctor.email == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     doctor = Doctor(
         title=payload.title,
         name=payload.name,
-        email=payload.email,
+        email=email,
         phone=payload.phone,
         specialization=payload.specialization,
         registration_number=payload.registration_number,
@@ -39,7 +40,8 @@ def signup(payload: DoctorCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 @limiter.limit("5/minute")
 def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db)):
-    doctor = db.query(Doctor).filter(Doctor.email == payload.email).first()
+    email = payload.email.lower().strip()
+    doctor = db.query(Doctor).filter(Doctor.email == email).first()
     if not doctor or not verify_password(payload.password, doctor.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_access_token({"sub": str(doctor.id)})
@@ -57,4 +59,3 @@ def logout(
 ):
     blacklist_token(credentials.credentials)
     return {"message": "Logged out successfully"}
-
