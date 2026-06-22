@@ -169,6 +169,21 @@
       const btn = document.getElementById("btn-signup");
       const err = document.getElementById("signup-err");
       err.textContent = "";
+
+      // Client-side validation
+      const email = document.getElementById("su-email").value.trim();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        err.textContent = "Please enter a valid email address.";
+        return;
+      }
+
+      const phone = document.getElementById("su-phone").value.trim();
+      if (phone.length !== 10 || !/^\d{10}$/.test(phone)) {
+        err.textContent = "Please enter a valid 10-digit phone number.";
+        return;
+      }
+
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
 
@@ -179,8 +194,8 @@
           body: JSON.stringify({
             title: document.getElementById("su-title").value,
             name: document.getElementById("su-name").value.trim(),
-            email: document.getElementById("su-email").value.trim(),
-            phone: "+91" + document.getElementById("su-phone").value.trim(),
+            email: email,
+            phone: "+91" + phone,
             specialization: document.getElementById("su-spec").value.trim(),
             registration_number: document.getElementById("su-reg").value.trim(),
             clinic_name: document.getElementById("su-clinic").value.trim(),
@@ -188,11 +203,18 @@
           })
         });
         const json = await data.json();
-        if (!data.ok) throw new Error(json.detail || "Signup failed");
+        if (!data.ok) {
+          if (json.detail === "Email already registered") {
+            err.textContent = "This email is already registered. Please sign in.";
+          } else {
+            err.textContent = "Something went wrong. Please try again.";
+          }
+          return;
+        }
         toast("Account created! Please sign in.", "success");
         switchTab("login");
       } catch (e) {
-        err.textContent = e.message;
+        err.textContent = "Something went wrong. Please try again.";
       } finally {
         btn.disabled = false;
         btn.textContent = "Create Account";
