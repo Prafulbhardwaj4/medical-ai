@@ -36,7 +36,7 @@ app.add_middleware(
     allow_origins=[
     "http://localhost:5500",
     "http://127.0.0.1:5500",
-    "https://medical-s-ai.netlify.app",
+    "https://medical-s-ai.vercel.app",
     "https://medical-ai-mvv1.onrender.com",
 ],
     allow_credentials=True,
