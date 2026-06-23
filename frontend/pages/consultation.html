@@ -761,8 +761,8 @@
     }
 
     function viewPdf() {
-      const url = `${BASE}/prescriptions/${currentTokenNumber}.pdf`;
-      window.open(url, "_blank");
+      const pdfUrl = `${BASE}/prescriptions/${document.getElementById("token-display").textContent}.pdf`;
+      window.open(pdfUrl, "_blank");
     }
 
     function goBack() {
