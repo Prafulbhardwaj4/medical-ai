@@ -18,7 +18,6 @@ def ensure_dir():
     os.makedirs(PRESCRIPTIONS_DIR, exist_ok=True)
 
 def cap_sentence(text: str) -> str:
-    """Capitalize first letter of each sentence."""
     if not text:
         return text
     import re
@@ -70,6 +69,7 @@ def generate_prescription_pdf(
     elements.append(Spacer(1, 3*mm))
 
     bg = f" | Blood Group: {patient.blood_group}" if patient.blood_group else ""
+
     # ── Token + Date ──
     meta_data = [
         [
@@ -91,15 +91,16 @@ def generate_prescription_pdf(
     elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
     elements.append(Spacer(1, 4*mm))
 
-    # ── Symptoms / Diagnosis ──
+    # ── Section styles ──
     section_style = ParagraphStyle("section", fontSize=11, fontName="Helvetica-Bold", textColor=colors.HexColor("#1a237e"), spaceAfter=2*mm)
     body_style = ParagraphStyle("body", fontSize=10, fontName="Helvetica", leading=14)
 
+    # ── Chief Complaint ──
     if consultation.chief_complaint:
         elements.append(Paragraph("Chief Complaint / Symptoms", section_style))
         elements.append(Paragraph(cap_sentence(consultation.chief_complaint), body_style))
         elements.append(Spacer(1, 3*mm))
-    
+
     # ── Vitals ──
     vitals = json.loads(consultation.vitals or "{}")
     vital_items = [
@@ -109,7 +110,7 @@ def generate_prescription_pdf(
         ("Weight", vitals.get("weight", "")),
         ("SpO2", vitals.get("spo2", "")),
     ]
-    vital_items = [(k, v) for k, v in vital_items if v]  # only show if value exists
+    vital_items = [(k, v) for k, v in vital_items if v]
 
     if vital_items:
         elements.append(Paragraph("Vitals", section_style))
@@ -128,6 +129,7 @@ def generate_prescription_pdf(
         elements.append(vital_table)
         elements.append(Spacer(1, 4*mm))
 
+    # ── Diagnosis ──
     if consultation.diagnosis:
         elements.append(Paragraph("Diagnosis", section_style))
         elements.append(Paragraph(cap_sentence(consultation.diagnosis), body_style))
@@ -151,40 +153,41 @@ def generate_prescription_pdf(
                 m.get("duration", "-"),
                 type_label
             ])
-        med_table = Table(med_data, colWidths=[60*mm, 28*mm, 42*mm, 25*mm, 15*mm])
+
         med_table_style = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a237e")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f5f5")]),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6),
-        ("FONTNAME", (4, 1), (4, -1), "Helvetica-Bold"),
-        ("ALIGN", (4, 0), (4, -1), "CENTER"),
-    ]
-    # Color the "Type" cell red for controlled, green for OTC
-    for idx, m in enumerate(medicines, start=1):
-        schedule = m.get("schedule", "controlled")
-        color = colors.HexColor("#dc2626") if schedule == "controlled" else colors.HexColor("#16a34a")
-        med_table_style.append(("TEXTCOLOR", (4, idx), (4, idx), color))
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a237e")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f5f5")]),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("FONTNAME", (4, 1), (4, -1), "Helvetica-Bold"),
+            ("ALIGN", (4, 0), (4, -1), "CENTER"),
+        ]
 
-    med_table.setStyle(TableStyle(med_table_style))
-    elements.append(med_table)
-    elements.append(Spacer(1, 2*mm))
+        for idx, m in enumerate(medicines, start=1):
+            schedule = m.get("schedule", "controlled")
+            color = colors.HexColor("#dc2626") if schedule == "controlled" else colors.HexColor("#16a34a")
+            med_table_style.append(("TEXTCOLOR", (4, idx), (4, idx), color))
 
-    if has_controlled:
-        warning_style = ParagraphStyle("warning", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.HexColor("#dc2626"))
-        elements.append(Paragraph(
-            "⚠ Rx (Red) medicines are prescription-controlled. Pharmacies not affiliated with this clinic must verify via QR code or verification code below before dispensing.",
-            warning_style
-        ))
-        elements.append(Spacer(1, 3*mm))
-    else:
+        med_table = Table(med_data, colWidths=[60*mm, 28*mm, 42*mm, 25*mm, 15*mm])
+        med_table.setStyle(TableStyle(med_table_style))
+        elements.append(med_table)
         elements.append(Spacer(1, 2*mm))
+
+        if has_controlled:
+            warning_style = ParagraphStyle("warning", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.HexColor("#dc2626"))
+            elements.append(Paragraph(
+                "⚠ Rx (Red) medicines are prescription-controlled. Pharmacies must verify via QR code or verification code below before dispensing.",
+                warning_style
+            ))
+            elements.append(Spacer(1, 3*mm))
+        else:
+            elements.append(Spacer(1, 2*mm))
 
     # ── Tests ──
     tests = json.loads(consultation.tests or "[]")
@@ -209,17 +212,17 @@ def generate_prescription_pdf(
         elements.append(test_table)
         elements.append(Spacer(1, 4*mm))
 
-    # ── Advice + Follow-up ──
+    # ── Advice ──
     if consultation.advice:
         elements.append(Paragraph("Doctor's Advice", section_style))
         elements.append(Paragraph(cap_sentence(consultation.advice), body_style))
         elements.append(Spacer(1, 3*mm))
 
+    # ── Follow-up ──
     if consultation.followup:
         elements.append(Paragraph("Follow-up", section_style))
         elements.append(Paragraph(cap_sentence(consultation.followup), body_style))
         elements.append(Spacer(1, 3*mm))
-
 
     # ── QR Code + Verification ──
     if verify_hash:
@@ -228,8 +231,8 @@ def generate_prescription_pdf(
         elements.append(Spacer(1, 3*mm))
 
         verify_url = f"https://medical-s-ai.vercel.app/pages/verify.html?token={token_number}&hash={verify_hash}"
+        verify_url_display = verify_url.replace("&", "&amp;")
 
-        # Generate QR code image in memory
         qr = qrcode.QRCode(version=1, box_size=4, border=1)
         qr.add_data(verify_url)
         qr.make(fit=True)
@@ -240,17 +243,16 @@ def generate_prescription_pdf(
         qr_image = Image(qr_buffer, width=22*mm, height=22*mm)
 
         verify_text_style = ParagraphStyle("verifytext", fontSize=8, fontName="Helvetica", leading=12, textColor=colors.HexColor("#334155"))
-        verify_label_style = ParagraphStyle("verifylabel", fontSize=8, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"))
 
         verify_block = [
             [
                 qr_image,
                 Paragraph(
                     f"<b>Verify this prescription</b><br/>"
-                    f"Scan QR or open the link below:<br/>"
-                    f"{verify_url}<br/>"
+                    f"Scan QR code to verify.<br/>"
                     f"Token: <b>{token_number}</b><br/>"
-                    f"Verification Code: <b>{verify_hash}</b>",
+                    f"Verification Code: <b>{verify_hash}</b><br/>"
+                    f"Link: {verify_url_display}",
                     verify_text_style
                 )
             ]
