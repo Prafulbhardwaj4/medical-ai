@@ -18,8 +18,25 @@ from app.config import settings
 from sqlalchemy import exists
 import json
 import asyncio
+from datetime import datetime
+import pytz
+
+
 
 router = APIRouter(prefix="/consultations", tags=["consultations"])
+
+
+@router.get("/today")
+def today_consultations(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    ist = pytz.timezone("Asia/Kolkata")
+    now_ist = datetime.now(ist)
+    start_of_day = now_ist.replace(hour=0, minute=0, second=0, microsecond=0)
+    count = db.query(Consultation).filter(
+        Consultation.doctor_id == current_doctor.id,
+        Consultation.created_at >= start_of_day,
+        Consultation.is_voided == False
+    ).count()
+    return {"count": count}
 
 
 @router.post("/transcribe/{patient_id}")
