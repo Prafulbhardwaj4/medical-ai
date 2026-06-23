@@ -248,10 +248,9 @@ def generate_prescription_pdf(
                 Paragraph(
                     f"<b>Verify this prescription</b><br/>"
                     f"Scan QR or open the link below:<br/>"
+                    f"{verify_url}<br/>"
                     f"Token: <b>{token_number}</b><br/>"
-                    f"Verification Code: <b>{verify_hash}</b><br/>"
-                    f"<font color='#0d9488'>{verify_url}</font>",
-                    f"<font color='#dc2626'>Only valid at medscribe.in — do not trust other domains.</font>",
+                    f"Verification Code: <b>{verify_hash}</b>",
                     verify_text_style
                 )
             ]
