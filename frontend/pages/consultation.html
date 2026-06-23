@@ -167,7 +167,7 @@
       </a>
     </nav>
 
-     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <main class="main-content">
 
@@ -334,6 +334,9 @@
             </button> -->
             <button class="btn btn-outline btn-lg" onclick="copyPdfLink()">
               🔗 Copy PDF Link
+            </button>
+            <button class="btn btn-outline btn-lg" onclick="viewPdf()">
+              📄 View PDF
             </button>
             <button class="btn btn-navy btn-lg" onclick="goBack()">
               ✓ Done — Back to Patient
@@ -755,6 +758,11 @@
       }
 
       window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function viewPdf() {
+      const url = `${BASE}/prescriptions/${currentTokenNumber}.pdf`;
+      window.open(url, "_blank");
     }
 
     function goBack() {
