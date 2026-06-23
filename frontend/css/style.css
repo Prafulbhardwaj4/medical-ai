@@ -363,7 +363,7 @@ tbody tr:hover { background: var(--smoke); }
 /* ── Toast ── */
 #toast {
   position: fixed;
-  bottom: 24px;
+  top: 72px;
   right: 24px;
   padding: 12px 18px;
   border-radius: var(--radius);

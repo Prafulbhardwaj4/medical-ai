@@ -7,116 +7,45 @@
   <title>MedScribe — Consultation</title>
   <link rel="stylesheet" href="../css/style.css?v=2" />
   <style>
-    .section-block {
-      margin-bottom: 20px;
-    }
-
+    .section-block { margin-bottom: 20px; }
     .section-title {
-      font-size: 0.72rem;
-      font-weight: 700;
-      color: var(--slate);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      margin-bottom: 8px;
+      font-size: 0.72rem; font-weight: 700; color: var(--slate);
+      text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px;
     }
-
-    .tests-wrap {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-    }
-
+    .tests-wrap { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .test-tag {
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      border-radius: 6px;
-      padding: 4px 10px;
-      font-size: 0.82rem;
-      color: #1d4ed8;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-weight: 500;
+      background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;
+      padding: 4px 10px; font-size: 0.82rem; color: #1d4ed8;
+      display: flex; align-items: center; gap: 6px; font-weight: 500;
     }
-
     .test-tag button {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: #93c5fd;
-      font-size: 1rem;
-      line-height: 1;
-      padding: 0;
-      transition: color 0.1s;
+      background: none; border: none; cursor: pointer; color: #93c5fd;
+      font-size: 1rem; line-height: 1; padding: 0; transition: color 0.1s;
     }
-
-    .test-tag button:hover {
-      color: var(--danger);
-    }
-
+    .test-tag button:hover { color: var(--danger); }
     .wa-result {
-      border-radius: var(--radius);
-      padding: 13px 16px;
-      font-size: 0.875rem;
-      font-weight: 500;
-      margin-top: 14px;
+      border-radius: var(--radius); padding: 13px 16px;
+      font-size: 0.875rem; font-weight: 500; margin-top: 14px;
     }
-
-    .wa-result.success {
-      background: #d1fae5;
-      color: #065f46;
-      border: 1px solid #6ee7b7;
-    }
-
-    .wa-result.error {
-      background: #fee2e2;
-      color: #991b1b;
-      border: 1px solid #fca5a5;
-    }
-
-    /* Success panel */
-    .success-panel {
-      text-align: center;
-      padding: 32px 20px;
-    }
-
+    .wa-result.success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+    .wa-result.error { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .success-panel { text-align: center; padding: 32px 20px; }
     .success-icon {
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      background: #d1fae5;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.8rem;
-      margin: 0 auto 16px;
+      width: 64px; height: 64px; border-radius: 50%; background: #d1fae5;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; margin: 0 auto 16px;
     }
-
     .token-box {
-      display: inline-block;
-      background: var(--smoke);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 18px 32px;
-      margin: 20px auto;
+      display: inline-block; background: var(--smoke); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 18px 32px; margin: 20px auto;
     }
-
     .token-label {
-      font-size: 0.72rem;
-      font-weight: 700;
-      color: var(--slate);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      margin-bottom: 6px;
+      font-size: 0.72rem; font-weight: 700; color: var(--slate);
+      text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px;
     }
-
     .token-value {
-      font-family: 'DM Mono', monospace;
-      font-size: 2rem;
-      font-weight: 600;
-      color: var(--navy);
-      letter-spacing: 0.05em;
+      font-family: 'DM Mono', monospace; font-size: 2rem;
+      font-weight: 600; color: var(--navy); letter-spacing: 0.05em;
     }
   </style>
 </head>
@@ -141,7 +70,6 @@
       </div>
     </header>
 
-    <!-- Sidebar — consistent nav, New Consultation active -->
     <nav class="sidebar">
       <div class="sidebar-section-label">Navigation</div>
       <a class="nav-item" href="dashboard.html">
@@ -175,21 +103,13 @@
 
       <!-- Steps -->
       <div class="steps" id="steps">
-        <div class="step active" id="step-1">
-          <div class="step-num">1</div> Record
-        </div>
+        <div class="step active" id="step-1"><div class="step-num">1</div> Record</div>
         <div class="step-line" id="line-1"></div>
-        <div class="step" id="step-2">
-          <div class="step-num">2</div> Review
-        </div>
+        <div class="step" id="step-2"><div class="step-num">2</div> Review</div>
         <div class="step-line" id="line-2"></div>
-        <div class="step" id="step-3">
-          <div class="step-num">3</div> Confirm
-        </div>
+        <div class="step" id="step-3"><div class="step-num">3</div> Confirm</div>
         <div class="step-line" id="line-3"></div>
-        <div class="step" id="step-4">
-          <div class="step-num">4</div> Send
-        </div>
+        <div class="step" id="step-4"><div class="step-num">4</div> Send</div>
       </div>
 
       <!-- STEP 1: Record -->
@@ -201,13 +121,10 @@
           </div>
         </div>
 
-        <!-- Last visit summary -->
         <div id="last-visit-wrap"
           style="display:none;margin-bottom:16px;background:var(--smoke);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <span
-              style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em">Last
-              Visit</span>
+            <span style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em">Last Visit</span>
             <span id="last-visit-date" style="font-size:0.78rem;color:var(--slate)"></span>
           </div>
           <div style="font-size:0.85rem;color:var(--navy)">
@@ -224,22 +141,19 @@
         </div>
 
         <div style="margin-top:20px">
-          <label class="form-label">Transcript <span style="font-weight:400;color:var(--slate-light)">(editable after
-              recording)</span></label>
-          <textarea class="transcript-box" id="transcript" placeholder="Transcript will appear here after recording…"
-            rows="5"></textarea>
+          <label class="form-label">Transcript <span style="font-weight:400;color:var(--slate-light)">(editable after recording)</span></label>
+          <textarea class="transcript-box" id="transcript" placeholder="Transcript will appear here after recording…" rows="5"></textarea>
         </div>
 
         <div style="display:flex;justify-content:flex-end;margin-top:16px;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-outline" id="btn-retranscribe" style="display:none"
-            onclick="retranscribe()">Re-transcribe</button>
+          <button class="btn btn-outline" id="btn-retranscribe" style="display:none" onclick="retranscribe()">Re-transcribe</button>
           <button class="btn btn-primary" id="btn-structure" disabled onclick="doStructure()">
             Analyse with AI →
           </button>
         </div>
       </div>
 
-      <!-- STEP 2: Review structured data -->
+      <!-- STEP 2: Review -->
       <div id="panel-2" class="card" style="display:none">
         <div class="card-header">
           <h2>Review & Edit Prescription</h2>
@@ -279,18 +193,15 @@
 
         <div class="section-block">
           <div class="section-title">Diagnosis</div>
-          <textarea class="form-control" id="f-diagnosis" rows="2"
-            placeholder="Leave blank if not determined"></textarea>
+          <textarea class="form-control" id="f-diagnosis" rows="2" placeholder="Leave blank if not determined"></textarea>
         </div>
 
-        <!-- Medicines -->
         <div class="section-block">
           <div class="section-title">Medicines</div>
           <div id="med-rows"></div>
           <button class="btn btn-outline btn-sm" onclick="addMedRow()">+ Add Medicine</button>
         </div>
 
-        <!-- Tests -->
         <div class="section-block">
           <div class="section-title">Tests / Investigations</div>
           <div class="tests-wrap" id="tests-wrap">
@@ -311,9 +222,7 @@
 
         <div style="display:flex;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:10px">
           <button class="btn btn-outline" onclick="goStep(1)">← Back</button>
-          <button class="btn btn-navy btn-lg" onclick="doConfirm()">
-            Confirm & Generate PDF →
-          </button>
+          <button class="btn btn-navy btn-lg" onclick="doConfirm()">Confirm & Generate PDF →</button>
         </div>
       </div>
 
@@ -327,20 +236,18 @@
             <div class="token-label">Token Number</div>
             <div class="token-value" id="token-display">—</div>
           </div>
-          <div style="display:flex;justify-content:center;gap:12px;margin-top:4px;flex-wrap:wrap">
+
+          <div style="margin:12px auto 0;max-width:480px;background:var(--smoke);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;text-align:left">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Verify Link</div>
+            <a id="verify-link-display" href="#" target="_blank"
+              style="font-size:0.82rem;color:var(--teal);word-break:break-all;text-decoration:underline">—</a>
+          </div>
+
+          <div style="display:flex;justify-content:center;gap:12px;margin-top:16px;flex-wrap:wrap">
             <button class="btn btn-outline" onclick="goStep(2)">← Edit</button>
-            <!-- <button class="btn btn-primary btn-lg" id="btn-send-sms" onclick="doSendSMS()">
-              📩 Send PDF Link via SMS
-            </button> -->
-            <button class="btn btn-outline btn-lg" onclick="copyPdfLink()">
-              🔗 Copy PDF Link
-            </button>
-            <button class="btn btn-outline btn-lg" onclick="viewPdf()">
-              📄 View PDF
-            </button>
-            <button class="btn btn-navy btn-lg" onclick="goBack()">
-              ✓ Done — Back to Patient
-            </button>
+            <button class="btn btn-outline btn-lg" onclick="copyPdfLink()">🔗 Copy PDF Link</button>
+            <button class="btn btn-outline btn-lg" onclick="viewPdf()">📄 View PDF</button>
+            <button class="btn btn-navy btn-lg" onclick="goBack()">✓ Done — Back to Patient</button>
           </div>
           <div id="wa-result"></div>
         </div>
@@ -354,8 +261,7 @@
           <p style="margin-top:8px">Patient has received the prescription on WhatsApp.</p>
           <div style="display:flex;justify-content:center;gap:12px;margin-top:32px;flex-wrap:wrap">
             <button class="btn btn-outline" onclick="goBack()">← Back to Patient</button>
-            <button class="btn btn-primary" onclick="window.location.href='/pages/dashboard.html'">Go to
-              Dashboard</button>
+            <button class="btn btn-primary" onclick="window.location.href='/pages/dashboard.html'">Go to Dashboard</button>
           </div>
         </div>
       </div>
@@ -384,12 +290,8 @@
     let seconds = 0;
     let isRecording = false;
     let tests = [];
-    let chunkTranscripts = [];
-    let chunkNumber = 0;
-    const MAX_CHUNK_SECONDS = 25;
     let currentStream = null;
 
-    // Load patient name
     async function loadPatient() {
       try {
         const p = await api("GET", `/patients/${patientId}`);
@@ -424,16 +326,11 @@
 
     async function startRecording() {
       try {
-        currentStream = await navigator.mediaDevices.getUserMedia({
-          audio: { sampleRate: 16000, channelCount: 1 }
-        });
+        currentStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
         isRecording = true;
         seconds = 0;
-
-        // Clear previous transcript
         document.getElementById("transcript").value = "";
 
-        // Connect WebSocket
         const token = getToken();
         const wsUrl = `wss://medical-ai-mvv1.onrender.com/consultations/ws/transcribe/${patientId}?token=${token}`;
         wsConnection = new WebSocket(wsUrl);
@@ -444,7 +341,6 @@
           document.getElementById("record-hint").textContent = "Recording… click to stop";
           document.getElementById("recorder-wrap").classList.add("recording");
 
-          // Start timer
           timerInterval = setInterval(() => {
             seconds++;
             const m = String(Math.floor(seconds / 60)).padStart(2, "0");
@@ -452,7 +348,6 @@
             document.getElementById("timer").textContent = `${m}:${s}`;
           }, 1000);
 
-          // Stream audio via AudioWorklet/ScriptProcessor
           startAudioStreaming();
         };
 
@@ -478,7 +373,7 @@
         };
 
         wsConnection.onerror = () => {
-          toast("WebSocket connection failed. Falling back to REST API.", "error");
+          toast("WebSocket connection failed.", "error");
           isRecording = false;
           fallbackToRest();
         };
@@ -495,9 +390,7 @@
 
       processor.onaudioprocess = (e) => {
         if (!isRecording || !wsConnection || wsConnection.readyState !== WebSocket.OPEN) return;
-
         const float32 = e.inputBuffer.getChannelData(0);
-        // Convert to 16-bit PCM
         const int16 = new Int16Array(float32.length);
         for (let i = 0; i < float32.length; i++) {
           int16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
@@ -532,15 +425,12 @@
         currentStream = null;
       }
 
-      // Signal end-of-audio but keep the socket open so the server can
-      // still send back the final transcript + "done" message.
       if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
         wsConnection.send(JSON.stringify({ type: "stop" }));
       }
     }
 
     async function fallbackToRest() {
-      // Falls back to existing REST API approach if WebSocket fails
       document.getElementById("record-hint").textContent = "Click to start recording";
       document.getElementById("record-btn").disabled = false;
       document.getElementById("record-btn").className = "record-btn idle";
@@ -601,31 +491,31 @@
       div.className = "med-row";
       const schedule = m.schedule || "controlled";
       div.innerHTML = `
-            <div class="form-group" style="margin:0">
-                <label class="form-label">Medicine</label>
-                <input class="form-control med-name" value="${m.name || ""}" placeholder="Paracetamol" />
-            </div>
-            <div class="form-group" style="margin:0">
-                <label class="form-label">Dosage</label>
-                <input class="form-control med-dosage" value="${m.dosage || ""}" placeholder="500mg" />
-            </div>
-            <div class="form-group" style="margin:0">
-                <label class="form-label">Frequency</label>
-                <input class="form-control med-freq" value="${m.frequency || ""}" placeholder="Twice daily" />
-            </div>
-            <div class="form-group" style="margin:0">
-                <label class="form-label">Duration</label>
-                <input class="form-control med-dur" value="${m.duration || ""}" placeholder="5 days" />
-            </div>
-            <div class="form-group" style="margin:0">
-                <label class="form-label">Schedule</label>
-                <select class="form-control med-schedule">
-                    <option value="otc" ${schedule === "otc" ? "selected" : ""}>OTC</option>
-                    <option value="controlled" ${schedule === "controlled" ? "selected" : ""}>Controlled</option>
-                </select>
-            </div>
-            <button class="btn-remove-med" onclick="this.parentElement.remove()" title="Remove">✕</button>
-        `;
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Medicine</label>
+          <input class="form-control med-name" value="${m.name || ""}" placeholder="Paracetamol" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Dosage</label>
+          <input class="form-control med-dosage" value="${m.dosage || ""}" placeholder="500mg" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Frequency</label>
+          <input class="form-control med-freq" value="${m.frequency || ""}" placeholder="Twice daily" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Duration</label>
+          <input class="form-control med-dur" value="${m.duration || ""}" placeholder="5 days" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Schedule</label>
+          <select class="form-control med-schedule">
+            <option value="otc" ${schedule === "otc" ? "selected" : ""}>OTC</option>
+            <option value="controlled" ${schedule === "controlled" ? "selected" : ""}>Controlled</option>
+          </select>
+        </div>
+        <button class="btn-remove-med" onclick="this.parentElement.remove()" title="Remove">✕</button>
+      `;
       wrap.appendChild(div);
     }
 
@@ -667,6 +557,14 @@
       renderTests();
     }
 
+    // ── Helpers ───────────────────────────────────────────
+    function setVerifyLink(tokenNumber, verifyHash) {
+      const verifyUrl = `https://medical-s-ai.vercel.app/pages/verify.html?token=${tokenNumber}&hash=${verifyHash}`;
+      const el = document.getElementById("verify-link-display");
+      el.href = verifyUrl;
+      el.textContent = verifyUrl;
+    }
+
     // ── Confirm ─────────────────────────────────────────
     async function doConfirm() {
       const editedData = {
@@ -691,13 +589,16 @@
 
         if (window._tokenNumber) {
           document.getElementById("token-display").textContent = window._tokenNumber;
+          if (window._verifyHash) setVerifyLink(window._tokenNumber, window._verifyHash);
           goStep(3);
           return;
         }
 
         const data = await api("POST", `/consultations/confirm/${consultationId}`);
         window._tokenNumber = data.token_number;
+        window._verifyHash = data.verify_hash;
         document.getElementById("token-display").textContent = window._tokenNumber;
+        setVerifyLink(window._tokenNumber, window._verifyHash);
         goStep(3);
         toast("Prescription confirmed. Token: " + window._tokenNumber, "success");
       } catch (e) {
@@ -705,27 +606,16 @@
       }
     }
 
-    // ── SMS + Copy ────────────────────────────────────────
-    async function doSendSMS() {
-      const btn = document.getElementById("btn-send-sms");
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Sending…';
-
-      try {
-        await api("POST", `/consultations/send-sms/${consultationId}`);
-        document.getElementById("wa-result").innerHTML = `<div class="wa-result success">✅ SMS sent with prescription link to patient.</div>`;
-        setTimeout(() => goStep(4), 1200);
-      } catch (e) {
-        document.getElementById("wa-result").innerHTML = `<div class="wa-result error">⚠️ ${e.message}</div>`;
-        btn.disabled = false;
-        btn.textContent = "📩 Retry SMS";
-      }
-    }
-
+    // ── Copy / View PDF ───────────────────────────────────
     function copyPdfLink() {
       const pdfUrl = `${BASE}/prescriptions/${document.getElementById("token-display").textContent}.pdf`;
       navigator.clipboard.writeText(pdfUrl);
       toast("PDF link copied to clipboard", "success");
+    }
+
+    function viewPdf() {
+      const pdfUrl = `${BASE}/prescriptions/${document.getElementById("token-display").textContent}.pdf`;
+      window.open(pdfUrl, "_blank");
     }
 
     // ── Step nav ─────────────────────────────────────────
@@ -760,16 +650,10 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    function viewPdf() {
-      const pdfUrl = `${BASE}/prescriptions/${document.getElementById("token-display").textContent}.pdf`;
-      window.open(pdfUrl, "_blank");
-    }
-
     function goBack() {
       window.location.href = `/pages/patient.html?id=${patientId}`;
     }
 
-    // ── Helpers ───────────────────────────────────────────
     function safeJSON(str, fallback) {
       try { return JSON.parse(str); } catch { return fallback; }
     }
