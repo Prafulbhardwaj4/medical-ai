@@ -227,7 +227,7 @@ def generate_prescription_pdf(
         elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
         elements.append(Spacer(1, 3*mm))
 
-        verify_url = f"https://medical-s-ai.netlify.app/pages/verify.html?token={token_number}&hash={verify_hash}"
+        verify_url = f"https://medical-s-ai.vercel.app/pages/verify.html?token={token_number}&hash={verify_hash}"
 
         # Generate QR code image in memory
         qr = qrcode.QRCode(version=1, box_size=4, border=1)
@@ -247,10 +247,10 @@ def generate_prescription_pdf(
                 qr_image,
                 Paragraph(
                     f"<b>Verify this prescription</b><br/>"
-                    f"Scan QR or visit medscribe.in/verify<br/>"
+                    f"Scan QR or open the link below:<br/>"
                     f"Token: <b>{token_number}</b><br/>"
-                    f"Verification Code: <b>{verify_hash}</b><br/>"
-                    f"<font color='#dc2626'>Only valid at medscribe.in — do not trust other domains.</font>",
+                    f"Verification Code: <b>{verify_hash}</b>"
+                    f"<font color='#0d9488'>{verify_url}</font><br/>",
                     verify_text_style
                 )
             ]
