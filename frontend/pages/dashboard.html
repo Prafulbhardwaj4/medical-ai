@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Dashboard</title>
-  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/style.css?v=2" />
 </head>
 
 <body>
@@ -29,7 +29,6 @@
       </div>
     </header>
 
-    <!-- Sidebar — BUG FIX: Add Patient uses onclick only, no href navigation -->
     <nav class="sidebar">
       <div class="sidebar-section-label">Navigation</div>
       <a class="nav-item active" href="dashboard.html">
@@ -52,7 +51,6 @@
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
-    <!-- Main -->
     <main class="main-content">
 
       <!-- Stats -->
@@ -68,9 +66,9 @@
           <div class="stat-sub">prescriptions generated</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">WhatsApp Sent</div>
-          <div class="stat-value" id="stat-wa">—</div>
-          <div class="stat-sub">this session</div>
+          <div class="stat-label">WhatsApp</div>
+          <div class="stat-value" style="font-size:1rem;padding-top:6px;color:var(--slate)">Coming Soon</div>
+          <div class="stat-sub">via WhatsApp Cloud API</div>
         </div>
       </div>
 
@@ -178,19 +176,37 @@
 
   <div id="toast"></div>
 
-  <script src="../js/api.js"></script>
+  <script src="../js/api.js?v=2"></script>
   <script>
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
 
-    let allPatients = [];
+    let totalPatientCount = 0;
+
+    async function loadStats() {
+      try {
+        const data = await api("GET", "/patients/?search=");
+        totalPatientCount = data.length;
+        document.getElementById("stat-patients").textContent = totalPatientCount;
+      } catch (e) {}
+
+      try {
+        const consultations = await api("GET", "/consultations/today");
+        document.getElementById("stat-today").textContent = consultations.count ?? consultations.length ?? 0;
+      } catch (e) {
+        document.getElementById("stat-today").textContent = "—";
+      }
+    }
 
     async function loadPatients(search = "") {
       try {
         const data = await api("GET", `/patients/?search=${encodeURIComponent(search)}`);
-        allPatients = data;
         renderTable(data);
-        document.getElementById("stat-patients").textContent = data.length;
+        // Only update total count when not searching
+        if (!search) {
+          totalPatientCount = data.length;
+          document.getElementById("stat-patients").textContent = totalPatientCount;
+        }
       } catch (e) {
         toast(e.message, "error");
       }
@@ -229,7 +245,7 @@
     let searchTimer;
     function searchPatients(val) {
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => loadPatients(val), 300);
+      searchTimer = setTimeout(() => loadPatients(val), 400);
     }
 
     function goToPatient(id) {
@@ -260,6 +276,7 @@
         toast("Patient added successfully", "success");
         closeAddPatient();
         loadPatients();
+        loadStats();
       } catch (e) {
         toast(e.message, "error");
       } finally {
@@ -279,12 +296,12 @@
       });
     }
 
-    // Close modal on overlay click
     document.getElementById("modal-add").addEventListener("click", function (e) {
       if (e.target === this) closeAddPatient();
     });
 
     loadPatients();
+    loadStats();
 
   </script>
 </body>
