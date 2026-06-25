@@ -24,6 +24,8 @@ def signup(request: Request, payload: DoctorCreate, db: Session = Depends(get_db
     existing = db.query(Doctor).filter(Doctor.email == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+    if len(payload.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     doctor = Doctor(
         title=payload.title,
         name=payload.name,

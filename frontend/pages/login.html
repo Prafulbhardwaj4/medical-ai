@@ -57,6 +57,10 @@
             <label class="form-label">Password</label>
             <input class="form-control" id="login-password" type="password" placeholder="••••••••" />
           </div>
+          <div class="form-group">
+            <label class="form-label">Confirm Password</label>
+            <input class="form-control" id="su-confirm-password" type="password" placeholder="Re-enter password" />
+          </div>
           <div class="err-msg" id="login-err"></div>
           <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-login" onclick="doLogin()">
             Sign In
@@ -185,6 +189,15 @@
       }
       if (!/[0-9]/.test(password)) {
         err.textContent = "Password must contain at least one number.";
+        return;
+      }
+      if (!/[A-Z]/.test(password)) {
+        err.textContent = "Password must contain at least one uppercase letter.";
+        return;
+      }
+
+      if (password !== document.getElementById("su-confirm-password").value) {
+        err.textContent = "Passwords do not match.";
         return;
       }
 
