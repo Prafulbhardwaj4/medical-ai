@@ -57,7 +57,7 @@
             <label class="form-label">Password</label>
             <input class="form-control" id="login-password" type="password" placeholder="••••••••" />
           </div>
-          
+
           <div class="err-msg" id="login-err"></div>
           <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-login" onclick="doLogin()">
             Sign In
@@ -110,7 +110,22 @@
           </div>
           <div class="form-group">
             <label class="form-label">Password</label>
-            <input class="form-control" id="su-password" type="password" placeholder="Min. 8 characters" />
+            <input class="form-control" id="su-password" type="password" placeholder="Min. 8 characters"
+              oninput="checkPasswordStrength(this.value)" />
+            <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px" id="password-strength">
+              <div id="check-length"
+                style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
+                <span id="icon-length">○</span> At least 8 characters
+              </div>
+              <div id="check-number"
+                style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
+                <span id="icon-number">○</span> At least one number
+              </div>
+              <div id="check-upper"
+                style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
+                <span id="icon-upper">○</span> At least one uppercase letter
+              </div>
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">Confirm Password</label>
@@ -170,6 +185,23 @@
       }
     }
 
+    function checkPasswordStrength(val) {
+      const setCheck = (id, iconId, passed) => {
+        const el = document.getElementById(id);
+        const icon = document.getElementById(iconId);
+        if (passed) {
+          el.style.color = "var(--teal)";
+          icon.textContent = "✓";
+        } else {
+          el.style.color = "var(--slate-light)";
+          icon.textContent = "○";
+        }
+      };
+      setCheck("check-length", "icon-length", val.length >= 8);
+      setCheck("check-number", "icon-number", /[0-9]/.test(val));
+      setCheck("check-upper", "icon-upper", /[A-Z]/.test(val));
+    }
+
     async function doSignup() {
       const btn = document.getElementById("btn-signup");
       const err = document.getElementById("signup-err");
@@ -198,7 +230,7 @@
       }
 
       if (password !== document.getElementById("su-confirm-password").value) {
-        err.textContent = "Passwords do not match.";
+        err.textContent = "Confirmation password doesn't match. Please re-enter.";
         return;
       }
 
