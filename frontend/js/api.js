@@ -127,6 +127,6 @@ function validatePatient(name, phone, age) {
 
 function validateLogin(email, password) {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address.";
-  if (!password || password.length < 6) return "Password must be at least 6 characters.";
+  if (!password) return "Please enter your password.";
   return null;
 }
