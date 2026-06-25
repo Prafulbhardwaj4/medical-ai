@@ -7,45 +7,115 @@
   <title>MedScribe — Consultation</title>
   <link rel="stylesheet" href="../css/style.css?v=2" />
   <style>
-    .section-block { margin-bottom: 20px; }
+    .section-block {
+      margin-bottom: 20px;
+    }
+
     .section-title {
-      font-size: 0.72rem; font-weight: 700; color: var(--slate);
-      text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--slate);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 8px;
     }
-    .tests-wrap { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    .tests-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
     .test-tag {
-      background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;
-      padding: 4px 10px; font-size: 0.82rem; color: #1d4ed8;
-      display: flex; align-items: center; gap: 6px; font-weight: 500;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.82rem;
+      color: #1d4ed8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
     }
+
     .test-tag button {
-      background: none; border: none; cursor: pointer; color: #93c5fd;
-      font-size: 1rem; line-height: 1; padding: 0; transition: color 0.1s;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #93c5fd;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0;
+      transition: color 0.1s;
     }
-    .test-tag button:hover { color: var(--danger); }
+
+    .test-tag button:hover {
+      color: var(--danger);
+    }
+
     .wa-result {
-      border-radius: var(--radius); padding: 13px 16px;
-      font-size: 0.875rem; font-weight: 500; margin-top: 14px;
+      border-radius: var(--radius);
+      padding: 13px 16px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-top: 14px;
     }
-    .wa-result.success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
-    .wa-result.error { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
-    .success-panel { text-align: center; padding: 32px 20px; }
+
+    .wa-result.success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #6ee7b7;
+    }
+
+    .wa-result.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+
+    .success-panel {
+      text-align: center;
+      padding: 32px 20px;
+    }
+
     .success-icon {
-      width: 64px; height: 64px; border-radius: 50%; background: #d1fae5;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.8rem; margin: 0 auto 16px;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #d1fae5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      margin: 0 auto 16px;
     }
+
     .token-box {
-      display: inline-block; background: var(--smoke); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); padding: 18px 32px; margin: 20px auto;
+      display: inline-block;
+      background: var(--smoke);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 32px;
+      margin: 20px auto;
     }
+
     .token-label {
-      font-size: 0.72rem; font-weight: 700; color: var(--slate);
-      text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--slate);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 6px;
     }
+
     .token-value {
-      font-family: 'DM Mono', monospace; font-size: 2rem;
-      font-weight: 600; color: var(--navy); letter-spacing: 0.05em;
+      font-family: 'DM Mono', monospace;
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--navy);
+      letter-spacing: 0.05em;
     }
   </style>
 </head>
@@ -103,13 +173,21 @@
 
       <!-- Steps -->
       <div class="steps" id="steps">
-        <div class="step active" id="step-1"><div class="step-num">1</div> Record</div>
+        <div class="step active" id="step-1">
+          <div class="step-num">1</div> Record
+        </div>
         <div class="step-line" id="line-1"></div>
-        <div class="step" id="step-2"><div class="step-num">2</div> Review</div>
+        <div class="step" id="step-2">
+          <div class="step-num">2</div> Review
+        </div>
         <div class="step-line" id="line-2"></div>
-        <div class="step" id="step-3"><div class="step-num">3</div> Confirm</div>
+        <div class="step" id="step-3">
+          <div class="step-num">3</div> Confirm
+        </div>
         <div class="step-line" id="line-3"></div>
-        <div class="step" id="step-4"><div class="step-num">4</div> Send</div>
+        <div class="step" id="step-4">
+          <div class="step-num">4</div> Send
+        </div>
       </div>
 
       <!-- STEP 1: Record -->
@@ -124,7 +202,9 @@
         <div id="last-visit-wrap"
           style="display:none;margin-bottom:16px;background:var(--smoke);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <span style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em">Last Visit</span>
+            <span
+              style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em">Last
+              Visit</span>
             <span id="last-visit-date" style="font-size:0.78rem;color:var(--slate)"></span>
           </div>
           <div style="font-size:0.85rem;color:var(--navy)">
@@ -141,12 +221,15 @@
         </div>
 
         <div style="margin-top:20px">
-          <label class="form-label">Transcript <span style="font-weight:400;color:var(--slate-light)">(editable after recording)</span></label>
-          <textarea class="transcript-box" id="transcript" placeholder="Transcript will appear here after recording…" rows="5"></textarea>
+          <label class="form-label">Transcript <span style="font-weight:400;color:var(--slate-light)">(editable after
+              recording)</span></label>
+          <textarea class="transcript-box" id="transcript" placeholder="Transcript will appear here after recording…"
+            rows="5"></textarea>
         </div>
 
         <div style="display:flex;justify-content:flex-end;margin-top:16px;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-outline" id="btn-retranscribe" style="display:none" onclick="retranscribe()">Re-transcribe</button>
+          <button class="btn btn-outline" id="btn-retranscribe" style="display:none"
+            onclick="retranscribe()">Re-transcribe</button>
           <button class="btn btn-primary" id="btn-structure" disabled onclick="doStructure()">
             Analyse with AI →
           </button>
@@ -193,7 +276,8 @@
 
         <div class="section-block">
           <div class="section-title">Diagnosis</div>
-          <textarea class="form-control" id="f-diagnosis" rows="2" placeholder="Leave blank if not determined"></textarea>
+          <textarea class="form-control" id="f-diagnosis" rows="2"
+            placeholder="Leave blank if not determined"></textarea>
         </div>
 
         <div class="section-block">
@@ -261,7 +345,8 @@
           <p style="margin-top:8px">Patient has received the prescription on WhatsApp.</p>
           <div style="display:flex;justify-content:center;gap:12px;margin-top:32px;flex-wrap:wrap">
             <button class="btn btn-outline" onclick="goBack()">← Back to Patient</button>
-            <button class="btn btn-primary" onclick="window.location.href='/pages/dashboard.html'">Go to Dashboard</button>
+            <button class="btn btn-primary" onclick="window.location.href='/pages/dashboard.html'">Go to
+              Dashboard</button>
           </div>
         </div>
       </div>
@@ -557,13 +642,13 @@
       renderTests();
     }
 
-    // ── Helpers ───────────────────────────────────────────
-    function setVerifyLink(tokenNumber, verifyHash) {
-      const verifyUrl = `https://medical-s-ai.vercel.app/pages/verify.html?token=${tokenNumber}&hash=${verifyHash}`;
-      const el = document.getElementById("verify-link-display");
-      el.href = verifyUrl;
-      el.textContent = verifyUrl;
-    }
+    // // ── Helpers ───────────────────────────────────────────
+    // function setVerifyLink(tokenNumber, verifyHash) {
+    //   const verifyUrl = `https://medical-s-ai.vercel.app/pages/verify.html?token=${tokenNumber}&hash=${verifyHash}`;
+    //   const el = document.getElementById("verify-link-display");
+    //   el.href = verifyUrl;
+    //   el.textContent = verifyUrl;
+    // }
 
     // ── Confirm ─────────────────────────────────────────
     async function doConfirm() {
@@ -607,15 +692,25 @@
     }
 
     // ── Copy / View PDF ───────────────────────────────────
-    function copyPdfLink() {
-      const pdfUrl = `${BASE}/prescriptions/${document.getElementById("token-display").textContent}.pdf`;
-      navigator.clipboard.writeText(pdfUrl);
-      toast("PDF link copied to clipboard", "success");
-    }
+    // function copyPdfLink() {
+    //   const pdfUrl = `${BASE}/prescriptions/${document.getElementById("token-display").textContent}.pdf`;
+    //   navigator.clipboard.writeText(pdfUrl);
+    //   toast("PDF link copied to clipboard", "success");
+    // }
 
-    function viewPdf() {
-      const pdfUrl = `${BASE}/prescriptions/${document.getElementById("token-display").textContent}.pdf`;
-      window.open(pdfUrl, "_blank");
+    async function viewPdf() {
+      const token = document.getElementById("token-display").textContent;
+      try {
+        const response = await fetch(`${BASE}/consultations/prescriptions/${token}.pdf`, {
+          headers: { "Authorization": `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error("PDF not found");
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+      } catch (e) {
+        toast("Could not load PDF", "error");
+      }
     }
 
     // ── Step nav ─────────────────────────────────────────

@@ -20,6 +20,8 @@ import json
 import asyncio
 from datetime import datetime
 import pytz
+from fastapi.responses import FileResponse
+import os
 
 
 
@@ -274,6 +276,27 @@ def get_history(
         .all()
     )
     return consultations
+
+@router.get("/prescriptions/{token_number}.pdf")
+def get_prescription_pdf(
+    token_number: str,
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db)
+):
+    consultation = db.query(Consultation).filter(
+        Consultation.token_number == token_number,
+        Consultation.doctor_id == current_doctor.id,
+        Consultation.is_voided == False
+    ).first()
+
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    pdf_path = os.path.join("prescriptions", f"{token_number}.pdf")
+    if not os.path.exists(pdf_path):
+        raise HTTPException(status_code=404, detail="PDF not found")
+
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{token_number}.pdf")
 
 
 @router.get("/verify/{token_number}")

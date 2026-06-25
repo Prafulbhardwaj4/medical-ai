@@ -49,7 +49,6 @@ app.include_router(patients_router.router)
 app.include_router(consultations_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
-app.mount("/prescriptions", StaticFiles(directory="prescriptions"), name="prescriptions")
 @app.get("/")
 def root():
     return {"status": "MedScribe API running"}

@@ -178,6 +178,16 @@
         return;
       }
 
+      const password = document.getElementById("su-password").value;
+      if (password.length < 8) {
+        err.textContent = "Password must be at least 8 characters.";
+        return;
+      }
+      if (!/[0-9]/.test(password)) {
+        err.textContent = "Password must contain at least one number.";
+        return;
+      }
+
       const phone = document.getElementById("su-phone").value.trim();
       if (phone.length !== 10 || !/^\d{10}$/.test(phone)) {
         err.textContent = "Please enter a valid 10-digit phone number.";
