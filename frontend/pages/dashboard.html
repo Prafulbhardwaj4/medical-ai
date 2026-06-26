@@ -178,6 +178,10 @@
 
   <script src="../js/api.js?v=2"></script>
   <script>
+
+    const doc = getDoctor();
+    if (doc && (doc.role === 'admin' || doc.role === 'super_admin')) window.location.href = 'analytics.html';
+
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
 
@@ -188,7 +192,7 @@
         const data = await api("GET", "/patients/?search=");
         totalPatientCount = data.length;
         document.getElementById("stat-patients").textContent = totalPatientCount;
-      } catch (e) {}
+      } catch (e) { }
 
       try {
         const consultations = await api("GET", "/consultations/today");

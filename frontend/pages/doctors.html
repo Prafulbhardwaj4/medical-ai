@@ -90,10 +90,6 @@
 
     <script src="../js/api.js?v=3"></script>
     <script>
-
-        const doc = getDoctor();
-        if (doc && (doc.role === 'admin' || doc.role === 'super_admin')) window.location.href = 'analytics.html';
-
         requireAuth();
         fillTopbar();
         loadDoctors();
