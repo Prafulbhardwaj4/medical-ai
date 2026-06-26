@@ -40,6 +40,110 @@ def today_consultations(current_doctor: Doctor = Depends(get_current_doctor), db
     ).count()
     return {"count": count}
 
+@router.get("/analytics")
+def get_analytics(
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db)
+):
+    from sqlalchemy import func
+    import json
+
+    # Base query — all confirmed, non-voided consultations for this doctor
+    base = db.query(Consultation).filter(
+        Consultation.doctor_id == current_doctor.id,
+        Consultation.token_number != None,
+        Consultation.is_voided == False
+    )
+
+    total_consultations = base.count()
+
+    # Total patients
+    total_patients = db.query(Patient).filter(
+        Patient.doctor_id == current_doctor.id
+    ).count()
+
+    # Consultations per day (last 30 days)
+    all_consultations = base.order_by(Consultation.created_at).all()
+
+    daily_counts = {}
+    for c in all_consultations:
+        day = c.created_at.strftime("%d %b")
+        daily_counts[day] = daily_counts.get(day, 0) + 1
+
+    # Age group distribution from patients
+    patients = db.query(Patient).filter(Patient.doctor_id == current_doctor.id).all()
+    age_groups = {"0-12": 0, "13-25": 0, "26-40": 0, "41-60": 0, "60+": 0}
+    for p in patients:
+        if p.age <= 12:
+            age_groups["0-12"] += 1
+        elif p.age <= 25:
+            age_groups["13-25"] += 1
+        elif p.age <= 40:
+            age_groups["26-40"] += 1
+        elif p.age <= 60:
+            age_groups["41-60"] += 1
+        else:
+            age_groups["60+"] += 1
+
+    # Gender distribution
+    gender_counts = {}
+    for p in patients:
+        g = p.gender.capitalize()
+        gender_counts[g] = gender_counts.get(g, 0) + 1
+
+    # Top diagnoses
+    diagnosis_counts = {}
+    for c in all_consultations:
+        if c.diagnosis:
+            d = c.diagnosis.strip().lower().capitalize()
+            diagnosis_counts[d] = diagnosis_counts.get(d, 0) + 1
+    top_diagnoses = sorted(diagnosis_counts.items(), key=lambda x: x[1], reverse=True)[:8]
+
+    # Top medicines
+    medicine_counts = {}
+    for c in all_consultations:
+        meds = json.loads(c.medicines or "[]")
+        for m in meds:
+            name = m.get("name", "").strip().capitalize()
+            if name:
+                medicine_counts[name] = medicine_counts.get(name, 0) + 1
+    top_medicines = sorted(medicine_counts.items(), key=lambda x: x[1], reverse=True)[:8]
+
+    # OTC vs Rx ratio
+    otc_count = 0
+    rx_count = 0
+    for c in all_consultations:
+        meds = json.loads(c.medicines or "[]")
+        for m in meds:
+            if m.get("schedule") == "otc":
+                otc_count += 1
+            else:
+                rx_count += 1
+
+    # Tests ordered
+    test_counts = {}
+    for c in all_consultations:
+        tests = json.loads(c.tests or "[]")
+        for t in tests:
+            t = t.strip().capitalize()
+            if t:
+                test_counts[t] = test_counts.get(t, 0) + 1
+    top_tests = sorted(test_counts.items(), key=lambda x: x[1], reverse=True)[:6]
+
+    return {
+        "summary": {
+            "total_consultations": total_consultations,
+            "total_patients": total_patients,
+            "otc_medicines": otc_count,
+            "rx_medicines": rx_count
+        },
+        "daily_consultations": daily_counts,
+        "age_groups": age_groups,
+        "gender_distribution": gender_counts,
+        "top_diagnoses": [{"name": k, "count": v} for k, v in top_diagnoses],
+        "top_medicines": [{"name": k, "count": v} for k, v in top_medicines],
+        "top_tests": [{"name": k, "count": v} for k, v in top_tests]
+    }
 
 @router.post("/transcribe/{patient_id}")
 async def transcribe(
