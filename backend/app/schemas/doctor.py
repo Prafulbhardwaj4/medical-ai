@@ -17,6 +17,7 @@ class DoctorLogin(BaseModel):
     password: str
 
 class DoctorOut(BaseModel):
+    hospital_id: Optional[int] = None
     id: int
     title: str
     name: str
