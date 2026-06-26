@@ -1,176 +1,173 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Manage Doctors — MedScribe</title>
-    <link rel="stylesheet" href="../css/style.css?v=3" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manage Doctors — MedScribe</title>
+  <link rel="stylesheet" href="../css/style.css?v=3" />
 </head>
-
 <body>
-    <div class="app-layout">
-        <nav class="sidebar">
-            <div class="sidebar-section-label">Navigation</div>
-            <a class="nav-item" href="analytics.html">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                Analytics
-            </a>
-            <a class="nav-item active" href="doctors.html">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Manage Doctors
-            </a>
-        </nav>
+  <div class="app-shell">
 
-        <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger-btn" onclick="toggleSidebar()">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="topbar-brand">Med<span>Scribe</span></div>
+      </div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn-logout" onclick="logout()">Sign out</button>
+      </div>
+    </header>
 
-        <div class="main-content">
-            <header class="topbar">
-                <button class="hamburger" onclick="toggleSidebar()">
-                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                </button>
-                <div class="topbar-info">
-                    <span class="topbar-name" id="topbar-doctor-name"></span>
-                    <span class="topbar-clinic" id="topbar-clinic"></span>
-                </div>
-                <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
-            </header>
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Navigation</div>
+      <a class="nav-item" href="analytics.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        Analytics
+      </a>
+      <a class="nav-item active" href="doctors.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Manage Doctors
+      </a>
+    </nav>
 
-            <div class="page-body">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-                    <h2 class="page-title" style="margin:0">Manage Doctors</h2>
-                    <button class="btn btn-primary" onclick="openAddModal()">+ Add Doctor</button>
-                </div>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
-                <div class="card" id="doctors-list">
-                    <p style="color:var(--text-muted)">Loading...</p>
-                </div>
-            </div>
-        </div>
+    <main class="main-content">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <h2>Manage Doctors</h2>
+        <button class="btn btn-primary" onclick="openAddModal()">+ Add Doctor</button>
+      </div>
+
+      <div class="card" id="doctors-list">
+        <p>Loading...</p>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Add Doctor Modal -->
+  <div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
+    <div class="card" style="width:100%;max-width:480px;margin:24px">
+      <h3 style="margin-bottom:20px">Add Doctor</h3>
+      <div style="display:flex;gap:12px;margin-bottom:14px">
+        <select class="form-control" id="d-title" style="width:100px">
+          <option>Dr.</option>
+          <option>Mr.</option>
+          <option>Ms.</option>
+        </select>
+        <input class="form-control" id="d-name" placeholder="Full Name" style="flex:1" />
+      </div>
+      <input class="form-control" id="d-email" type="email" placeholder="Email" style="margin-bottom:14px" />
+      <input class="form-control" id="d-phone" placeholder="Phone e.g. +919876543210" style="margin-bottom:14px" />
+      <input class="form-control" id="d-specialization" placeholder="Specialization" style="margin-bottom:14px" />
+      <input class="form-control" id="d-reg" placeholder="Registration Number (optional)" style="margin-bottom:14px" />
+      <input class="form-control" id="d-password" type="password" placeholder="Temporary Password" style="margin-bottom:20px" />
+      <div class="err-msg" id="modal-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="submitAddDoctor()">Create Account</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeModal()">Cancel</button>
+      </div>
     </div>
+  </div>
 
-    <!-- Add Doctor Modal -->
-    <div id="modal-overlay"
-        style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
-        <div class="card" style="width:100%;max-width:480px;margin:24px">
-            <h3 style="margin-bottom:20px">Add Doctor</h3>
-            <div style="display:flex;gap:12px;margin-bottom:14px">
-                <select class="form-control" id="d-title" style="width:100px">
-                    <option>Dr.</option>
-                    <option>Mr.</option>
-                    <option>Ms.</option>
-                </select>
-                <input class="form-control" id="d-name" placeholder="Full Name" style="flex:1" />
-            </div>
-            <input class="form-control" id="d-email" type="email" placeholder="Email" style="margin-bottom:14px" />
-            <input class="form-control" id="d-phone" placeholder="Phone e.g. +919876543210"
-                style="margin-bottom:14px" />
-            <input class="form-control" id="d-specialization" placeholder="Specialization" style="margin-bottom:14px" />
-            <input class="form-control" id="d-reg" placeholder="Registration Number (optional)"
-                style="margin-bottom:14px" />
-            <input class="form-control" id="d-password" type="password" placeholder="Temporary Password"
-                style="margin-bottom:20px" />
-            <div class="err-msg" id="modal-err" style="margin-bottom:12px"></div>
-            <div style="display:flex;gap:12px">
-                <button class="btn btn-primary" style="flex:1" onclick="submitAddDoctor()">Create Account</button>
-                <button class="btn btn-outline" style="flex:1" onclick="closeModal()">Cancel</button>
-            </div>
-        </div>
-    </div>
+  <div id="toast"></div>
 
-    <div id="toast"></div>
+  <script src="../js/api.js?v=3"></script>
+  <script>
+    requireAuth();
+    fillTopbar();
+    loadDoctors();
 
-    <script src="../js/api.js?v=3"></script>
-    <script>
-        requireAuth();
-        fillTopbar();
-        loadDoctors();
+    function openAddModal() {
+      document.getElementById('modal-overlay').style.display = 'flex';
+    }
 
-        function openAddModal() {
-            document.getElementById('modal-overlay').style.display = 'flex';
+    function closeModal() {
+      document.getElementById('modal-overlay').style.display = 'none';
+      document.getElementById('modal-err').textContent = '';
+    }
+
+    async function loadDoctors() {
+      const container = document.getElementById('doctors-list');
+      try {
+        const data = await api('GET', '/admin/doctors');
+        if (!data || data.length === 0) {
+          container.innerHTML = '<p style="color:var(--slate)">No doctors added yet.</p>';
+          return;
         }
-
-        function closeModal() {
-            document.getElementById('modal-overlay').style.display = 'none';
-            document.getElementById('modal-err').textContent = '';
-        }
-
-        async function loadDoctors() {
-            const container = document.getElementById('doctors-list');
-            try {
-                const data = await api('GET', '/admin/doctors');
-                if (!data || data.length === 0) {
-                    container.innerHTML = '<p style="color:var(--text-muted)">No doctors added yet.</p>';
-                    return;
-                }
-                container.innerHTML = data.map(d => `
+        container.innerHTML = data.map(d => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
             <div>
               <div style="font-weight:600">${sanitize(d.name)}</div>
-              <div style="color:var(--text-muted);font-size:13px">${sanitize(d.specialization)} · ${sanitize(d.email)}</div>
-              <div style="color:var(--text-muted);font-size:13px">${sanitize(d.phone)}</div>
+              <div style="color:var(--slate);font-size:13px">${sanitize(d.specialization)} · ${sanitize(d.email)}</div>
+              <div style="color:var(--slate);font-size:13px">${sanitize(d.phone)}</div>
             </div>
             <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="toggleActive(${d.id}, this)">
               ${d.is_active ? 'Deactivate' : 'Activate'}
             </button>
           </div>
         `).join('');
-            } catch (e) {
-                container.innerHTML = '<p style="color:var(--text-muted)">Failed to load doctors.</p>';
-            }
-        }
+      } catch(e) {
+        container.innerHTML = '<p style="color:var(--slate)">Failed to load doctors.</p>';
+      }
+    }
 
-        async function submitAddDoctor() {
-            const err = document.getElementById('modal-err');
-            const name = document.getElementById('d-name').value.trim();
-            const email = document.getElementById('d-email').value.trim();
-            const phone = document.getElementById('d-phone').value.trim();
-            const specialization = document.getElementById('d-specialization').value.trim();
-            const password = document.getElementById('d-password').value;
-            const title = document.getElementById('d-title').value;
-            const reg = document.getElementById('d-reg').value.trim();
+    async function submitAddDoctor() {
+      const err = document.getElementById('modal-err');
+      const name = document.getElementById('d-name').value.trim();
+      const email = document.getElementById('d-email').value.trim();
+      const phone = document.getElementById('d-phone').value.trim();
+      const specialization = document.getElementById('d-specialization').value.trim();
+      const password = document.getElementById('d-password').value;
+      const title = document.getElementById('d-title').value;
+      const reg = document.getElementById('d-reg').value.trim();
 
-            if (!name || !email || !phone || !specialization || !password) {
-                err.textContent = 'All fields except registration number are required.';
-                return;
-            }
+      if (!name || !email || !phone || !specialization || !password) {
+        err.textContent = 'All fields except registration number are required.';
+        return;
+      }
 
-            const doctor = getDoctor();
-            const params = new URLSearchParams({
-                hospital_id: doctor.hospital_id,
-                name, email, phone, specialization, password, title,
-                registration_number: reg
-            });
+      const doctor = getDoctor();
+      const params = new URLSearchParams({
+        hospital_id: doctor.hospital_id,
+        name, email, phone, specialization, password, title,
+        registration_number: reg
+      });
 
-            try {
-                await api('POST', `/admin/doctors?${params.toString()}`);
-                toast('Doctor account created successfully.', 'success');
-                closeModal();
-                loadDoctors();
-            } catch (e) {
-                err.textContent = e.message;
-            }
-        }
+      try {
+        await api('POST', `/admin/doctors?${params.toString()}`);
+        toast('Doctor account created successfully.', 'success');
+        closeModal();
+        loadDoctors();
+      } catch(e) {
+        err.textContent = e.message;
+      }
+    }
 
-        async function toggleActive(doctorId, btn) {
-            try {
-                const data = await api('PATCH', `/admin/doctors/${doctorId}/toggle-active`);
-                btn.textContent = data.is_active ? 'Deactivate' : 'Activate';
-                btn.className = `btn ${data.is_active ? 'btn-outline' : 'btn-primary'} btn-sm`;
-                toast(`Doctor ${data.is_active ? 'activated' : 'deactivated'}.`, 'success');
-            } catch (e) {
-                toast(e.message, 'error');
-            }
-        }
-    </script>
+    async function toggleActive(doctorId, btn) {
+      try {
+        const data = await api('PATCH', `/admin/doctors/${doctorId}/toggle-active`);
+        btn.textContent = data.is_active ? 'Deactivate' : 'Activate';
+        btn.className = `btn ${data.is_active ? 'btn-outline' : 'btn-primary'} btn-sm`;
+        toast(`Doctor ${data.is_active ? 'activated' : 'deactivated'}.`, 'success');
+      } catch(e) {
+        toast(e.message, 'error');
+      }
+    }
+  </script>
 </body>
-
 </html>
