@@ -17,29 +17,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
 
-@router.post("/signup", response_model=DoctorOut, status_code=201)
-@limiter.limit("3/minute")
-def signup(request: Request, payload: DoctorCreate, db: Session = Depends(get_db)):
-    email = payload.email.lower().strip()
-    existing = db.query(Doctor).filter(Doctor.email == email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    if len(payload.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    doctor = Doctor(
-        title=payload.title,
-        name=payload.name,
-        email=email,
-        phone=payload.phone,
-        specialization=payload.specialization,
-        registration_number=payload.registration_number,
-        clinic_name=payload.clinic_name,
-        hashed_password=hash_password(payload.password)
-    )
-    db.add(doctor)
-    db.commit()
-    db.refresh(doctor)
-    return doctor
+@router.post("/signup", status_code=403)
+def signup(request: Request):
+    raise HTTPException(status_code=403, detail="Public signup is disabled. Contact your hospital admin.")
 
 @router.post("/login", response_model=Token)
 @limiter.limit("5/minute")
@@ -47,7 +27,6 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
     email = payload.email.lower().strip()
     doctor = db.query(Doctor).filter(Doctor.email == email).first()
 
-    # Always return same error — don't reveal if email exists
     if not doctor:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
@@ -63,6 +42,10 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
     if doctor.locked_until and datetime.utcnow() >= doctor.locked_until:
         doctor.failed_login_attempts = 0
         doctor.locked_until = None
+
+    # Check if account is active
+    if not doctor.is_active:
+        raise HTTPException(status_code=403, detail="Account is deactivated. Contact your admin.")
 
     # Wrong password
     if not verify_password(payload.password, doctor.hashed_password):
@@ -82,7 +65,7 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
     doctor.locked_until = None
     db.commit()
 
-    token = create_access_token({"sub": str(doctor.id)})
+    token = create_access_token({"sub": str(doctor.id), "role": doctor.role.value})
     return {"access_token": token, "token_type": "bearer", "doctor": doctor}
 
 @router.get("/me", response_model=DoctorOut)

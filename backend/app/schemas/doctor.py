@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from typing import Optional
 
 class DoctorCreate(BaseModel):
     title: str = "Dr."
@@ -22,8 +23,10 @@ class DoctorOut(BaseModel):
     email: str
     phone: str
     specialization: str
-    registration_number: str = ""
-    clinic_name: str
+    registration_number: Optional[str] = ""
+    clinic_name: Optional[str] = ""
+    role: str = "doctor"
+    is_active: bool = True
     created_at: datetime
 
     class Config:

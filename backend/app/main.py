@@ -12,6 +12,8 @@ from app.config import settings
 import warnings
 from fastapi.staticfiles import StaticFiles
 import os
+from app.routers import admin as admin_router
+from app.models.hospital import Hospital
 
 if settings.SECRET_KEY == "changeme":
     warnings.warn("WARNING: SECRET_KEY is default. Set a strong key in .env before deploying.")
@@ -47,6 +49,7 @@ app.add_middleware(
 app.include_router(auth_router.router)
 app.include_router(patients_router.router)
 app.include_router(consultations_router.router)
+app.include_router(admin_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
 @app.get("/")

@@ -1,7 +1,14 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
+import enum
+
+class UserRole(enum.Enum):
+    super_admin = "super_admin"
+    admin = "admin"
+    sub_admin = "sub_admin"
+    doctor = "doctor"
 
 class Doctor(Base):
     __tablename__ = "doctors"
@@ -13,10 +20,16 @@ class Doctor(Base):
     phone = Column(String, nullable=False)
     specialization = Column(String, nullable=False)
     registration_number = Column(String, nullable=True)
-    clinic_name = Column(String, nullable=False)
+    clinic_name = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True)
 
+    role = Column(Enum(UserRole), default=UserRole.doctor, nullable=False)
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+
     patients = relationship("Patient", back_populates="doctor")
+    hospital = relationship("Hospital", backref="doctors")

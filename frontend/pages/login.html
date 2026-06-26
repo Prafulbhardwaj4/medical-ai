@@ -144,7 +144,7 @@
   <script src="../js/api.js"></script>
   <script>
     // Redirect if already logged in
-    if (getToken()) window.location.href = "/pages/dashboard.html";
+    if (getToken()) redirectByRole(getDoctor()?.role);
 
     function switchTab(tab) {
       document.getElementById("form-login").style.display = tab === "login" ? "block" : "none";
@@ -177,7 +177,7 @@
         const json = await data.json();
         if (!data.ok) throw new Error(json.detail || "Login failed");
         saveSession(json.access_token, json.doctor);
-        window.location.href = "/pages/dashboard.html";
+        redirectByRole(json.doctor.role);
       } catch (e) {
         err.textContent = e.message;
         btn.disabled = false;

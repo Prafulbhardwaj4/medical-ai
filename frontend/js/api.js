@@ -56,7 +56,7 @@ async function api(method, path, body = null, isFormData = false) {
 
   if (res.status === 403 || res.status === 404) {
     toast("Access denied or resource not found.", "error");
-    setTimeout(() => window.location.href = "/pages/dashboard.html", 1500);
+    setTimeout(() => redirectByRole(getDoctor()?.role), 1500);
     return;
   }
 
@@ -129,4 +129,14 @@ function validateLogin(email, password) {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address.";
   if (!password) return "Please enter your password.";
   return null;
+}
+
+function redirectByRole(role) {
+  if (role === 'doctor' || role === 'sub_admin') {
+    window.location.href = '/pages/dashboard.html';
+  } else if (role === 'admin' || role === 'super_admin') {
+    window.location.href = '/pages/analytics.html';
+  } else {
+    window.location.href = '/pages/dashboard.html';
+  }
 }
