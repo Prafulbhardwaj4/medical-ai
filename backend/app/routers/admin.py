@@ -7,12 +7,25 @@ from app.utils.auth import hash_password
 from app.config import settings
 import secrets
 from app.utils.auth import hash_password, get_current_doctor
+import re
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 def verify_super_admin_key(x_super_admin_key: str = Header(...)):
     if x_super_admin_key != settings.SUPER_ADMIN_KEY:
         raise HTTPException(status_code=403, detail="Invalid super admin key")
+
+import re
+
+def validate_fields(name, email, phone, password):
+    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+    if not re.match(r'^\+?[0-9]{10,13}$', phone):
+        raise HTTPException(status_code=400, detail="Invalid phone number")
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if len(name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Name too short")
 
 @router.post("/hospitals", status_code=201)
 def create_hospital(
@@ -56,6 +69,9 @@ def create_admin(
     db: Session = Depends(get_db),
     _: None = Depends(verify_super_admin_key)
 ):
+    
+    validate_fields(name, email, phone, password)
+
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
@@ -117,6 +133,8 @@ def create_doctor(
     # Admin can only create doctors for their own hospital
     if current_doctor.role.value != "super_admin" and current_doctor.hospital_id != hospital_id:
         raise HTTPException(status_code=403, detail="Cannot create doctor for another hospital")
+
+    validate_fields(name, email, phone, password)
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -292,6 +310,8 @@ def create_admin_jwt(
 ):
     if current_doctor.role.value != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    validate_fields(name, email, phone, password)
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="../css/style.css?v=3" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <body>
   <div class="app-shell">
 
@@ -17,7 +19,8 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div class="topbar-brand">Med<span>Scribe</span> <span style="color:var(--slate);font-size:0.75rem;margin-left:8px">Super Admin</span></div>
+        <div class="topbar-brand">Med<span>Scribe</span> <span
+            style="color:var(--slate);font-size:0.75rem;margin-left:8px">Super Admin</span></div>
       </div>
       <div class="topbar-doctor">
         <span><strong id="topbar-doctor-name"></strong></span>
@@ -29,13 +32,15 @@
       <div class="sidebar-section-label">Navigation</div>
       <a class="nav-item active" id="nav-overview" href="#" onclick="showSection('overview')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
         Overview
       </a>
       <a class="nav-item" id="nav-hospitals" href="#" onclick="showSection('hospitals')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
         </svg>
         Hospitals
       </a>
@@ -77,8 +82,12 @@
 
         <!-- Revenue per hospital -->
         <div class="card" style="margin-top:24px">
-          <div class="card-header"><h2>Revenue by Hospital</h2></div>
-          <div id="revenue-list"><p style="color:var(--slate)">Loading...</p></div>
+          <div class="card-header">
+            <h2>Revenue by Hospital</h2>
+          </div>
+          <div id="revenue-list">
+            <p style="color:var(--slate)">Loading...</p>
+          </div>
         </div>
       </div>
 
@@ -89,7 +98,9 @@
           <button class="btn btn-primary" onclick="openHospitalModal()">+ Add Hospital</button>
         </div>
 
-        <div id="hospitals-list"><p style="color:var(--slate)">Loading...</p></div>
+        <div id="hospitals-list">
+          <p style="color:var(--slate)">Loading...</p>
+        </div>
 
         <!-- Hospital detail panel -->
         <div id="hospital-detail" style="display:none;margin-top:24px">
@@ -100,7 +111,9 @@
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
             <div class="card">
-              <div class="card-header"><h2>Hospital Info</h2></div>
+              <div class="card-header">
+                <h2>Hospital Info</h2>
+              </div>
               <div id="detail-info"></div>
             </div>
             <div class="card">
@@ -113,7 +126,9 @@
           </div>
 
           <div class="card">
-            <div class="card-header"><h2>Doctors</h2></div>
+            <div class="card-header">
+              <h2>Doctors</h2>
+            </div>
             <div id="detail-doctors"></div>
           </div>
         </div>
@@ -123,7 +138,8 @@
   </div>
 
   <!-- Add Hospital Modal -->
-  <div id="hospital-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
+  <div id="hospital-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
     <div class="card" style="width:100%;max-width:480px;margin:24px">
       <h3 style="margin-bottom:20px">Add Hospital</h3>
       <input class="form-control" id="h-name" placeholder="Hospital Name" style="margin-bottom:14px" />
@@ -139,7 +155,8 @@
   </div>
 
   <!-- Add Admin Modal -->
-  <div id="admin-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
+  <div id="admin-modal"
+    style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
     <div class="card" style="width:100%;max-width:480px;margin:24px">
       <h3 style="margin-bottom:4px">Add Admin</h3>
       <p style="margin-bottom:20px;font-size:13px;color:var(--slate)" id="admin-modal-sub"></p>
@@ -147,7 +164,8 @@
       <input class="form-control" id="a-email" type="email" placeholder="Email" style="margin-bottom:14px" />
       <input class="form-control" id="a-phone" placeholder="Phone e.g. +919876543210" style="margin-bottom:14px" />
       <input class="form-control" id="a-specialization" placeholder="Specialization" style="margin-bottom:14px" />
-      <input class="form-control" id="a-password" type="password" placeholder="Temporary Password" style="margin-bottom:20px" />
+      <input class="form-control" id="a-password" type="password" placeholder="Temporary Password"
+        style="margin-bottom:20px" />
       <div class="err-msg" id="admin-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
         <button class="btn btn-primary" style="flex:1" onclick="submitAdmin()">Create Admin</button>
@@ -188,7 +206,7 @@
         document.getElementById('stat-new-hospitals').textContent = `+${data.new_hospitals_this_month} this month`;
         document.getElementById('stat-new-doctors').textContent = `+${data.new_doctors_this_month} this month`;
         loadRevenueList();
-      } catch(e) {
+      } catch (e) {
         toast('Failed to load stats', 'error');
       }
     }
@@ -214,7 +232,7 @@
             </div>
           </div>
         `).join('');
-      } catch(e) {
+      } catch (e) {
         container.innerHTML = '<p style="color:var(--slate)">Failed to load.</p>';
       }
     }
@@ -245,7 +263,7 @@
             </div>
           </div>
         `).join('');
-      } catch(e) {
+      } catch (e) {
         container.innerHTML = '<p style="color:var(--slate)">Failed to load.</p>';
       }
     }
@@ -294,7 +312,7 @@
           `).join('');
 
         document.getElementById('admin-modal-sub').textContent = `For: ${h.name}`;
-      } catch(e) {
+      } catch (e) {
         toast('Failed to load hospital details', 'error');
       }
     }
@@ -319,14 +337,21 @@
       const city = document.getElementById('h-city').value.trim();
       const state = document.getElementById('h-state').value.trim();
       const address = document.getElementById('h-address').value.trim();
-      if (!name || !city || !state) { err.textContent = 'Name, city and state are required.'; return; }
+
+      if (!name || !city || !state) {
+        err.textContent = 'Name, city and state are required.'; return;
+      }
+      if (name.length < 3) {
+        err.textContent = 'Hospital name must be at least 3 characters.'; return;
+      }
+
       const params = new URLSearchParams({ name, city, state, address });
       try {
         await api('POST', `/admin/hospitals-jwt?${params.toString()}`);
         toast('Hospital created.', 'success');
         closeHospitalModal();
         loadHospitals();
-      } catch(e) { err.textContent = e.message; }
+      } catch (e) { err.textContent = e.message; }
     }
 
     // ── ADMIN MODAL ──
@@ -344,18 +369,32 @@
       const phone = document.getElementById('a-phone').value.trim();
       const specialization = document.getElementById('a-specialization').value.trim();
       const password = document.getElementById('a-password').value;
-      if (!name || !email || !phone || !specialization || !password) { err.textContent = 'All fields are required.'; return; }
+
+      if (!name || !email || !phone || !specialization || !password) {
+        err.textContent = 'All fields are required.'; return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        err.textContent = 'Enter a valid email.'; return;
+      }
+      if (!/^\+?[0-9]{10,13}$/.test(phone)) {
+        err.textContent = 'Enter a valid phone number (10-13 digits).'; return;
+      }
+      if (password.length < 8) {
+        err.textContent = 'Password must be at least 8 characters.'; return;
+      }
+
       const params = new URLSearchParams({ hospital_id: currentHospitalId, name, email, phone, specialization, password });
       try {
         await api('POST', `/admin/create-admin-jwt?${params.toString()}`);
         toast('Admin created.', 'success');
         closeAdminModal();
         openDetail(currentHospitalId);
-      } catch(e) { err.textContent = e.message; }
+      } catch (e) { err.textContent = e.message; }
     }
 
     // Load overview on start
     loadStats();
   </script>
 </body>
+
 </html>

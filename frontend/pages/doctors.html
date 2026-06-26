@@ -127,36 +127,42 @@
     }
 
     async function submitAddDoctor() {
-      const err = document.getElementById('modal-err');
-      const name = document.getElementById('d-name').value.trim();
-      const email = document.getElementById('d-email').value.trim();
-      const phone = document.getElementById('d-phone').value.trim();
-      const specialization = document.getElementById('d-specialization').value.trim();
-      const password = document.getElementById('d-password').value;
-      const title = document.getElementById('d-title').value;
-      const reg = document.getElementById('d-reg').value.trim();
+  const err = document.getElementById('modal-err');
+  const name = document.getElementById('d-name').value.trim();
+  const email = document.getElementById('d-email').value.trim();
+  const phone = document.getElementById('d-phone').value.trim();
+  const specialization = document.getElementById('d-specialization').value.trim();
+  const password = document.getElementById('d-password').value;
+  const title = document.getElementById('d-title').value;
+  const reg = document.getElementById('d-reg').value.trim();
 
-      if (!name || !email || !phone || !specialization || !password) {
-        err.textContent = 'All fields except registration number are required.';
-        return;
-      }
+  if (!name || !email || !phone || !specialization || !password) {
+    err.textContent = 'All fields except registration number are required.'; return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    err.textContent = 'Enter a valid email.'; return;
+  }
+  if (!/^\+?[0-9]{10,13}$/.test(phone)) {
+    err.textContent = 'Enter a valid phone number (10-13 digits).'; return;
+  }
+  if (password.length < 8) {
+    err.textContent = 'Password must be at least 8 characters.'; return;
+  }
 
-      const doctor = getDoctor();
-      const params = new URLSearchParams({
-        hospital_id: doctor.hospital_id,
-        name, email, phone, specialization, password, title,
-        registration_number: reg
-      });
+  const doctor = getDoctor();
+  const params = new URLSearchParams({
+    hospital_id: doctor.hospital_id,
+    name, email, phone, specialization, password, title,
+    registration_number: reg
+  });
 
-      try {
-        await api('POST', `/admin/doctors?${params.toString()}`);
-        toast('Doctor account created successfully.', 'success');
-        closeModal();
-        loadDoctors();
-      } catch(e) {
-        err.textContent = e.message;
-      }
-    }
+  try {
+    await api('POST', `/admin/doctors?${params.toString()}`);
+    toast('Doctor account created successfully.', 'success');
+    closeModal();
+    loadDoctors();
+  } catch(e) { err.textContent = e.message; }
+}
 
     async function toggleActive(doctorId, btn) {
       try {
