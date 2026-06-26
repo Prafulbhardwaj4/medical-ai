@@ -14,7 +14,7 @@ function saveSession(token, doctor) {
   try {
     localStorage.setItem("ms_token", token);
     localStorage.setItem("ms_doctor", JSON.stringify(doctor));
-  } catch(e) {
+  } catch (e) {
     toast("Storage blocked. Please enable cookies in browser settings.", "error");
   }
 }
@@ -23,7 +23,7 @@ function clearSession() {
   try {
     localStorage.removeItem("ms_token");
     localStorage.removeItem("ms_doctor");
-  } catch(e) {}
+  } catch (e) { }
 }
 
 function requireAuth() {
@@ -33,7 +33,7 @@ function requireAuth() {
       return false;
     }
     return true;
-  } catch(e) {
+  } catch (e) {
     window.location.href = "/pages/login.html";
     return false;
   }
@@ -107,7 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
 async function logout() {
   try {
     await api("POST", "/auth/logout");
-  } catch(e) {}
+  } catch (e) { }
   clearSession();
   window.location.href = "/pages/login.html";
 }
@@ -134,8 +134,10 @@ function validateLogin(email, password) {
 function redirectByRole(role) {
   if (role === 'doctor' || role === 'sub_admin') {
     window.location.href = '/pages/dashboard.html';
-  } else if (role === 'admin' || role === 'super_admin') {
+  } else if (role === 'admin') {
     window.location.href = '/pages/analytics.html';
+  } else if (role === 'super_admin') {
+    window.location.href = '/pages/superadmin.html';
   } else {
     window.location.href = '/pages/dashboard.html';
   }

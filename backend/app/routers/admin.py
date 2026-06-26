@@ -233,3 +233,82 @@ def create_superadmin(
         "email": superadmin.email,
         "role": superadmin.role.value
     }
+
+@router.get("/hospitals-list")
+def list_hospitals_jwt(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    hospitals = db.query(Hospital).all()
+    return [
+        {
+            "id": h.id,
+            "name": h.name,
+            "hospital_code": h.hospital_code,
+            "city": h.city,
+            "is_active": h.is_active
+        }
+        for h in hospitals
+    ]
+
+@router.post("/hospitals-jwt", status_code=201)
+def create_hospital_jwt(
+    name: str,
+    city: str,
+    state: str,
+    address: str = "",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    words = name.strip().upper().split()
+    code_base = "".join([w[0] for w in words])[:4]
+    hospital_code = f"{code_base}-{secrets.token_hex(3).upper()}"
+    while db.query(Hospital).filter(Hospital.hospital_code == hospital_code).first():
+        hospital_code = f"{code_base}-{secrets.token_hex(3).upper()}"
+
+    hospital = Hospital(name=name, address=address, city=city, state=state, hospital_code=hospital_code)
+    db.add(hospital)
+    db.commit()
+    db.refresh(hospital)
+    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code}
+
+@router.post("/create-admin-jwt", status_code=201)
+def create_admin_jwt(
+    hospital_id: int,
+    name: str,
+    email: str,
+    phone: str,
+    specialization: str,
+    password: str,
+    title: str = "Dr.",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    email = email.lower().strip()
+    existing = db.query(Doctor).filter(Doctor.email == email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    admin = Doctor(
+        title=title, name=name, email=email, phone=phone,
+        specialization=specialization, clinic_name=hospital.name,
+        hashed_password=hash_password(password),
+        role=UserRole.admin, hospital_id=hospital_id, is_active=True
+    )
+    db.add(admin)
+    db.commit()
+    db.refresh(admin)
+    return {"id": admin.id, "name": admin.name, "email": admin.email, "role": admin.role.value}
