@@ -197,3 +197,39 @@ def toggle_doctor_active(
     doctor.is_active = not doctor.is_active
     db.commit()
     return {"id": doctor.id, "is_active": doctor.is_active}
+
+@router.post("/create-superadmin", status_code=201)
+def create_superadmin(
+    name: str,
+    email: str,
+    phone: str,
+    password: str,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_super_admin_key)
+):
+    email = email.lower().strip()
+    existing = db.query(Doctor).filter(Doctor.email == email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    superadmin = Doctor(
+        title="",
+        name=name,
+        email=email,
+        phone=phone,
+        specialization="",
+        clinic_name="",
+        hashed_password=hash_password(password),
+        role=UserRole.super_admin,
+        hospital_id=None,
+        is_active=True
+    )
+    db.add(superadmin)
+    db.commit()
+    db.refresh(superadmin)
+    return {
+        "id": superadmin.id,
+        "name": superadmin.name,
+        "email": superadmin.email,
+        "role": superadmin.role.value
+    }
