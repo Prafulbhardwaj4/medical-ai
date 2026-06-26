@@ -6,14 +6,20 @@ from app.database import get_db
 from app.models.patient import Patient
 from app.models.consultation import Consultation
 from app.models.doctor import Doctor
+from app.models.hospital import Hospital
 from app.schemas.patient import PatientCreate, PatientOut, PatientSummary
 from app.utils.auth import get_current_doctor
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
-def generate_patient_uid(db: Session) -> str:
-    count = db.query(Patient).count() + 1
-    return f"PAT-{count:05d}"
+def generate_patient_uid(db: Session, hospital_code: str) -> str:
+    prefix = hospital_code.split("-")[0]
+    count = db.query(Patient).join(Doctor).filter(
+        Doctor.hospital_id == db.query(Doctor.hospital_id).filter(
+            Doctor.hospital.has(hospital_code=hospital_code)
+        ).scalar_subquery()
+    ).count() + 1
+    return f"{prefix}-{count:04d}"
 
 @router.post("/", response_model=PatientOut, status_code=201)
 def create_patient(
@@ -21,8 +27,11 @@ def create_patient(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    hospital_code = hospital.hospital_code if hospital else "GEN"
+
     patient = Patient(
-        patient_uid=generate_patient_uid(db),
+        patient_uid=generate_patient_uid(db, hospital_code),
         name=payload.name,
         phone=payload.phone,
         age=payload.age,
