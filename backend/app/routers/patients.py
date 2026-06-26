@@ -13,7 +13,7 @@ from app.utils.auth import get_current_doctor
 router = APIRouter(prefix="/patients", tags=["patients"])
 
 def generate_patient_uid(db: Session, hospital_code: str) -> str:
-    prefix = hospital_code.split("-")[0]
+    prefix = hospital_code.replace("-", "")[:6]  # e.g. CH8E81
     count = db.query(Patient).join(Doctor).filter(
         Doctor.hospital_id == db.query(Doctor.hospital_id).filter(
             Doctor.hospital.has(hospital_code=hospital_code)
