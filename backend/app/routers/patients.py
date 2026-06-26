@@ -12,12 +12,10 @@ from app.utils.auth import get_current_doctor
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
-def generate_patient_uid(db: Session, hospital_code: str) -> str:
-    prefix = hospital_code.replace("-", "")[:6]  # e.g. CH8E81
+def generate_patient_uid(db: Session, hospital_id: int, hospital_code: str) -> str:
+    prefix = hospital_code.replace("-", "")[:4]
     count = db.query(Patient).join(Doctor).filter(
-        Doctor.hospital_id == db.query(Doctor.hospital_id).filter(
-            Doctor.hospital.has(hospital_code=hospital_code)
-        ).scalar_subquery()
+        Doctor.hospital_id == hospital_id
     ).count() + 1
     return f"{prefix}-{count:04d}"
 
@@ -31,7 +29,7 @@ def create_patient(
     hospital_code = hospital.hospital_code if hospital else "GEN"
 
     patient = Patient(
-        patient_uid=generate_patient_uid(db, hospital_code),
+        patient_uid=generate_patient_uid(db, current_doctor.hospital_id, hospital_code),
         name=payload.name,
         phone=payload.phone,
         age=payload.age,
