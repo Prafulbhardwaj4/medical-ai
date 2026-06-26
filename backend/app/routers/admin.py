@@ -312,3 +312,96 @@ def create_admin_jwt(
     db.commit()
     db.refresh(admin)
     return {"id": admin.id, "name": admin.name, "email": admin.email, "role": admin.role.value}
+
+@router.get("/stats")
+def superadmin_stats(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from datetime import datetime
+    import pytz
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    total_hospitals = db.query(Hospital).filter(Hospital.is_active == True).count()
+    total_doctors = db.query(Doctor).filter(
+        Doctor.role == UserRole.doctor,
+        Doctor.is_active == True
+    ).count()
+    new_hospitals_this_month = db.query(Hospital).filter(
+        Hospital.created_at >= month_start
+    ).count()
+    new_doctors_this_month = db.query(Doctor).filter(
+        Doctor.role == UserRole.doctor,
+        Doctor.created_at >= month_start
+    ).count()
+
+    monthly_revenue = total_doctors * 499
+
+    return {
+        "total_hospitals": total_hospitals,
+        "total_doctors": total_doctors,
+        "new_hospitals_this_month": new_hospitals_this_month,
+        "new_doctors_this_month": new_doctors_this_month,
+        "monthly_revenue": monthly_revenue
+    }
+
+@router.get("/hospital/{hospital_id}")
+def hospital_detail(
+    hospital_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    admins = db.query(Doctor).filter(
+        Doctor.hospital_id == hospital_id,
+        Doctor.role.in_([UserRole.admin, UserRole.sub_admin])
+    ).all()
+
+    doctors = db.query(Doctor).filter(
+        Doctor.hospital_id == hospital_id,
+        Doctor.role == UserRole.doctor
+    ).all()
+
+    return {
+        "id": hospital.id,
+        "name": hospital.name,
+        "city": hospital.city,
+        "state": hospital.state,
+        "address": hospital.address,
+        "hospital_code": hospital.hospital_code,
+        "is_active": hospital.is_active,
+        "created_at": hospital.created_at.isoformat(),
+        "admins": [
+            {
+                "id": a.id,
+                "name": f"{a.title} {a.name}",
+                "email": a.email,
+                "phone": a.phone,
+                "role": a.role.value,
+                "is_active": a.is_active
+            }
+            for a in admins
+        ],
+        "doctors": [
+            {
+                "id": d.id,
+                "name": f"{d.title} {d.name}",
+                "specialization": d.specialization,
+                "is_active": d.is_active
+            }
+            for d in doctors
+        ],
+        "doctor_count": len(doctors),
+        "monthly_revenue": len(doctors) * 499
+    }
