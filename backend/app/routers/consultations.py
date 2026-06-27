@@ -48,19 +48,34 @@ def get_analytics(
     from sqlalchemy import func
     import json
 
-    # Base query — all confirmed, non-voided consultations for this doctor
-    base = db.query(Consultation).filter(
-        Consultation.doctor_id == current_doctor.id,
-        Consultation.token_number != None,
-        Consultation.is_voided == False
-    )
+    # Scope by hospital for admin/super_admin, by doctor for doctor/sub_admin
+    if current_doctor.role.value in ["admin", "super_admin"]:
+        hospital_doctor_ids = [
+            d.id for d in db.query(Doctor).filter(
+                Doctor.hospital_id == current_doctor.hospital_id
+            ).all()
+        ]
+        base = db.query(Consultation).filter(
+            Consultation.doctor_id.in_(hospital_doctor_ids),
+            Consultation.token_number != None,
+            Consultation.is_voided == False
+        )
+        patients = db.query(Patient).filter(
+            Patient.doctor_id.in_(hospital_doctor_ids)
+        ).all()
+        total_patients = len(patients)
+    else:
+        base = db.query(Consultation).filter(
+            Consultation.doctor_id == current_doctor.id,
+            Consultation.token_number != None,
+            Consultation.is_voided == False
+        )
+        patients = db.query(Patient).filter(
+            Patient.doctor_id == current_doctor.id
+        ).all()
+        total_patients = len(patients)
 
     total_consultations = base.count()
-
-    # Total patients
-    total_patients = db.query(Patient).filter(
-        Patient.doctor_id == current_doctor.id
-    ).count()
 
     # Consultations per day (last 30 days)
     all_consultations = base.order_by(Consultation.created_at).all()
