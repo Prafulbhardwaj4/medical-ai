@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Admin Dashboard</title>
   <link rel="stylesheet" href="../css/style.css?v=3" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -29,64 +28,44 @@
 
     <nav class="sidebar">
       <div class="sidebar-section-label">Hospital Admin</div>
-      <a class="nav-item active" href="#overview" onclick="scrollTo('overview')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-        </svg>
+      <a class="nav-item active" id="nav-overview" href="#" onclick="showSection('overview')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
         Overview
       </a>
-      <a class="nav-item" href="doctors.html">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-        Manage Doctors
+      <a class="nav-item" id="nav-doctors" href="#" onclick="showSection('doctors')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+        Doctors
       </a>
-      <a class="nav-item" href="#doctors-section" onclick="scrollTo('doctors-section')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-        Doctor Stats
-      </a>
-      <a class="nav-item" href="#consultations-section" onclick="scrollTo('consultations-section')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
+      <a class="nav-item" id="nav-consultations" href="#" onclick="showSection('consultations')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
         Consultations
       </a>
-      <a class="nav-item" href="#medicines-section" onclick="scrollTo('medicines-section')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-        </svg>
+      <a class="nav-item" id="nav-medicines" href="#" onclick="showSection('medicines')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
         Medicines
       </a>
-      <a class="nav-item" href="#tests-section" onclick="scrollTo('tests-section')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-        </svg>
+      <a class="nav-item" id="nav-tests" href="#" onclick="showSection('tests')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
         Tests & Diagnoses
       </a>
-      <a class="nav-item" href="#demographics-section" onclick="scrollTo('demographics-section')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
+      <a class="nav-item" id="nav-demographics" href="#" onclick="showSection('demographics')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
         Demographics
       </a>
-      <a class="nav-item" href="#" onclick="comingSoon('Complaints & Suggestions')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-        </svg>
+      <a class="nav-item" id="nav-manage-doctors" href="doctors.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
+        Manage Doctors
+      </a>
+      <a class="nav-item" id="nav-complaints" href="#" onclick="comingSoon('Complaints & Suggestions')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
         Complaints
       </a>
-      <a class="nav-item" href="#" onclick="comingSoon('Attendance')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
+      <a class="nav-item" id="nav-attendance" href="#" onclick="comingSoon('Attendance')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
         Attendance
       </a>
-      <a class="nav-item" href="#" onclick="comingSoon('Reports')">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
+      <a class="nav-item" id="nav-reports" href="#" onclick="comingSoon('Reports')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
         Reports
       </a>
     </nav>
@@ -96,13 +75,12 @@
     <main class="main-content">
 
       <!-- OVERVIEW -->
-      <div id="overview" style="scroll-margin-top:80px">
+      <div id="section-overview" class="section">
         <div class="page-header">
-          <h1>Hospital Dashboard</h1>
+          <h1>Overview</h1>
           <p id="hospital-name-sub" style="color:var(--slate)"></p>
         </div>
-
-        <div class="stats-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px">
+        <div class="stats-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
           <div class="stat-card">
             <div class="stat-label">Today's Consultations</div>
             <div class="stat-value" id="stat-today">—</div>
@@ -124,85 +102,74 @@
             <div class="stat-sub" id="stat-month">— this month</div>
           </div>
         </div>
-
-        <div class="card" style="margin-bottom:20px">
-          <div class="card-header"><h2>Consultations Over Time</h2></div>
-          <canvas id="chart-daily" height="120"></canvas>
+        <div class="card">
+          <div class="card-header"><h2>Today's Activity</h2></div>
+          <div id="today-activity"></div>
         </div>
       </div>
 
-      <!-- DOCTOR STATS -->
-      <div id="doctors-section" style="scroll-margin-top:80px;margin-bottom:20px">
+      <!-- DOCTORS -->
+      <div id="section-doctors" class="section" style="display:none">
+        <div class="page-header"><h1>Doctor Performance</h1></div>
         <div class="card">
-          <div class="card-header"><h2>Doctor Performance</h2></div>
           <div id="doctors-table"></div>
         </div>
       </div>
 
-      <!-- RECENT CONSULTATIONS -->
-      <div id="consultations-section" style="scroll-margin-top:80px;margin-bottom:20px">
+      <!-- CONSULTATIONS -->
+      <div id="section-consultations" class="section" style="display:none">
+        <div class="page-header"><h1>Recent Consultations</h1></div>
         <div class="card">
-          <div class="card-header"><h2>Recent Consultations</h2></div>
           <div id="consultations-table"></div>
         </div>
       </div>
 
       <!-- MEDICINES -->
-      <div id="medicines-section" style="scroll-margin-top:80px;margin-bottom:20px">
-        <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px">
+      <div id="section-medicines" class="section" style="display:none">
+        <div class="page-header"><h1>Medicines</h1></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
           <div class="card">
-            <div class="card-header"><h2>Most Prescribed Medicines</h2></div>
-            <canvas id="chart-medicines" height="200"></canvas>
+            <div class="card-header"><h2>Most Prescribed</h2></div>
+            <div id="medicines-table"></div>
           </div>
           <div class="card">
-            <div class="card-header"><h2>OTC vs Rx</h2></div>
-            <canvas id="chart-otcrx" height="200"></canvas>
+            <div class="card-header"><h2>OTC vs Rx Summary</h2></div>
+            <div id="otcrx-summary"></div>
           </div>
         </div>
       </div>
 
       <!-- TESTS & DIAGNOSES -->
-      <div id="tests-section" style="scroll-margin-top:80px;margin-bottom:20px">
+      <div id="section-tests" class="section" style="display:none">
+        <div class="page-header"><h1>Tests & Diagnoses</h1></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
           <div class="card">
             <div class="card-header"><h2>Top Diagnoses</h2></div>
-            <canvas id="chart-diagnoses" height="200"></canvas>
+            <div id="diagnoses-table"></div>
           </div>
           <div class="card">
             <div class="card-header"><h2>Most Ordered Tests</h2></div>
-            <canvas id="chart-tests" height="200"></canvas>
+            <div id="tests-table"></div>
           </div>
         </div>
       </div>
 
       <!-- DEMOGRAPHICS -->
-      <div id="demographics-section" style="scroll-margin-top:80px;margin-bottom:40px">
+      <div id="section-demographics" class="section" style="display:none">
+        <div class="page-header"><h1>Patient Demographics</h1></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px">
           <div class="card">
             <div class="card-header"><h2>Age Groups</h2></div>
-            <canvas id="chart-age" height="200"></canvas>
+            <div id="age-table"></div>
           </div>
           <div class="card">
             <div class="card-header"><h2>Gender</h2></div>
-            <canvas id="chart-gender" height="200"></canvas>
+            <div id="gender-table"></div>
           </div>
           <div class="card">
             <div class="card-header"><h2>Blood Groups</h2></div>
-            <canvas id="chart-blood" height="200"></canvas>
+            <div id="blood-table"></div>
           </div>
-        </div>
-      </div>
-
-      <!-- EMPTY STATE -->
-      <div id="empty-state" style="display:none" class="card">
-        <div class="empty-state">
-          <div class="empty-state-icon">
-            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          </div>
-          <h3>No data yet</h3>
-          <p>Complete some consultations to see analytics here.</p>
         </div>
       </div>
 
@@ -232,22 +199,27 @@
       document.getElementById('hospital-name-sub').textContent = doctor.clinic_name;
     }
 
-    function scrollTo(id) {
-      document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+    let dashData = null;
+
+    const SECTIONS = ['overview','doctors','consultations','medicines','tests','demographics'];
+
+    function showSection(name) {
+      SECTIONS.forEach(s => {
+        document.getElementById(`section-${s}`).style.display = s === name ? 'block' : 'none';
+        const nav = document.getElementById(`nav-${s}`);
+        if (nav) nav.classList.toggle('active', s === name);
+      });
+      // Remove active from non-section nav items
+      ['manage-doctors','complaints','attendance','reports'].forEach(s => {
+        const el = document.getElementById(`nav-${s}`);
+        if (el) el.classList.remove('active');
+      });
+      if (dashData) renderSection(name);
     }
 
     function comingSoon(name) {
       document.getElementById('coming-soon-name').textContent = name + ' — Coming Soon';
       document.getElementById('coming-soon-modal').style.display = 'flex';
-    }
-
-    const TEAL = "#0D9488";
-    const NAVY = "#0F1F3D";
-    const COLORS = ["#0D9488","#0F1F3D","#14B8A6","#64748B","#1D4ED8","#7C3AED","#DC2626","#F59E0B","#10B981","#EC4899"];
-
-    function formatDate(iso) {
-      if (!iso) return '—';
-      return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     }
 
     function timeAgo(iso) {
@@ -262,17 +234,40 @@
       return 'Just now';
     }
 
-    async function loadDashboard() {
-      try {
-        const data = await api("GET", "/consultations/admin-dashboard");
+    function dataTable(rows, emptyMsg) {
+      if (!rows || rows.length === 0) return `<p style="color:var(--slate);padding:8px 0">${emptyMsg}</p>`;
+      return rows;
+    }
 
-        if (data.overview.total_consultations === 0) {
-          document.getElementById("empty-state").style.display = "block";
-          return;
-        }
+    function rankTable(items, col1, col2) {
+      if (!items || items.length === 0) return '<p style="color:var(--slate)">No data yet.</p>';
+      return `<table style="width:100%;border-collapse:collapse;font-size:14px">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th style="text-align:left;padding:8px;color:var(--slate);font-weight:600">#</th>
+          <th style="text-align:left;padding:8px;color:var(--slate);font-weight:600">${col1}</th>
+          <th style="text-align:right;padding:8px;color:var(--slate);font-weight:600">${col2}</th>
+        </tr></thead>
+        <tbody>${items.map((item, i) => `
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:10px 8px;color:var(--slate)">${i+1}</td>
+            <td style="padding:10px 8px;font-weight:500">${sanitize(item.name)}</td>
+            <td style="padding:10px 8px;text-align:right;font-weight:600;color:var(--teal)">${item.count}</td>
+          </tr>`).join('')}
+        </tbody></table>`;
+    }
 
-        // Overview stats
-        const ov = data.overview;
+    function statRow(label, value) {
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--slate)">${label}</span>
+        <span style="font-weight:600">${value}</span>
+      </div>`;
+    }
+
+    function renderSection(name) {
+      const d = dashData;
+      const ov = d.overview;
+
+      if (name === 'overview') {
         document.getElementById("stat-today").textContent = ov.today_consultations;
         document.getElementById("stat-week").textContent = `${ov.week_consultations} this week`;
         document.getElementById("stat-patients").textContent = ov.total_patients;
@@ -282,145 +277,148 @@
         document.getElementById("stat-total").textContent = ov.total_consultations;
         document.getElementById("stat-month").textContent = `${ov.month_consultations} this month`;
 
-        // Daily chart
-        new Chart(document.getElementById("chart-daily"), {
-          type: "line",
-          data: {
-            labels: Object.keys(data.daily_consultations),
-            datasets: [{ label: "Consultations", data: Object.values(data.daily_consultations), borderColor: TEAL, backgroundColor: "rgba(13,148,136,0.08)", tension: 0.4, fill: true, pointBackgroundColor: TEAL, pointRadius: 4 }]
-          },
-          options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { ticks: { maxTicksLimit: 10 } } } }
+        // Today's activity — show today's consultations
+        const todayConsults = d.recent_consultations.filter(c => {
+          const date = new Date(c.date);
+          const today = new Date();
+          return date.toDateString() === today.toDateString();
         });
 
-        // Doctor stats table
-        const doctorsTable = document.getElementById("doctors-table");
-        if (data.doctor_stats.length === 0) {
-          doctorsTable.innerHTML = '<p style="color:var(--slate)">No doctors yet.</p>';
-        } else {
-          doctorsTable.innerHTML = `
-            <div style="overflow-x:auto">
-              <table style="width:100%;border-collapse:collapse;font-size:14px">
-                <thead>
-                  <tr style="border-bottom:2px solid var(--border)">
-                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Doctor</th>
-                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Specialization</th>
-                    <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">Today</th>
-                    <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">This Week</th>
-                    <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">Total</th>
-                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Last Active</th>
-                    <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${data.doctor_stats.map(d => `
-                    <tr style="border-bottom:1px solid var(--border)">
-                      <td style="padding:12px 8px;font-weight:600">${sanitize(d.name)}</td>
-                      <td style="padding:12px 8px;color:var(--slate)">${sanitize(d.specialization)}</td>
-                      <td style="padding:12px 8px;text-align:center">${d.today_consultations}</td>
-                      <td style="padding:12px 8px;text-align:center">${d.week_consultations}</td>
-                      <td style="padding:12px 8px;text-align:center;font-weight:600">${d.total_consultations}</td>
-                      <td style="padding:12px 8px;color:var(--slate);font-size:13px">${timeAgo(d.last_active)}</td>
-                      <td style="padding:12px 8px;text-align:center"><span class="badge ${d.is_active ? 'badge-teal' : 'badge-grey'}">${d.is_active ? 'Active' : 'Inactive'}</span></td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          `;
-        }
+        document.getElementById("today-activity").innerHTML = todayConsults.length === 0
+          ? '<p style="color:var(--slate);padding:8px 0">No consultations today yet.</p>'
+          : `<table style="width:100%;border-collapse:collapse;font-size:14px">
+              <thead><tr style="border-bottom:2px solid var(--border)">
+                <th style="text-align:left;padding:8px;color:var(--slate);font-weight:600">Token</th>
+                <th style="text-align:left;padding:8px;color:var(--slate);font-weight:600">Patient</th>
+                <th style="text-align:left;padding:8px;color:var(--slate);font-weight:600">Doctor</th>
+                <th style="text-align:left;padding:8px;color:var(--slate);font-weight:600">Diagnosis</th>
+              </tr></thead>
+              <tbody>${todayConsults.map(c => `
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:10px 8px;font-family:monospace;font-size:12px">${sanitize(c.token)}</td>
+                  <td style="padding:10px 8px;font-weight:500">${sanitize(c.patient_name)}</td>
+                  <td style="padding:10px 8px;color:var(--slate)">${sanitize(c.doctor_name)}</td>
+                  <td style="padding:10px 8px">${sanitize(c.diagnosis)}</td>
+                </tr>`).join('')}
+              </tbody></table>`;
+      }
 
-        // Recent consultations table
-        const consultTable = document.getElementById("consultations-table");
-        if (data.recent_consultations.length === 0) {
-          consultTable.innerHTML = '<p style="color:var(--slate)">No consultations yet.</p>';
-        } else {
-          consultTable.innerHTML = `
-            <div style="overflow-x:auto">
-              <table style="width:100%;border-collapse:collapse;font-size:14px">
-                <thead>
-                  <tr style="border-bottom:2px solid var(--border)">
-                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Token</th>
-                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Patient</th>
-                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Doctor</th>
-                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Diagnosis</th>
-                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${data.recent_consultations.map(c => `
-                    <tr style="border-bottom:1px solid var(--border)">
-                      <td style="padding:12px 8px;font-family:monospace;font-size:12px">${sanitize(c.token)}</td>
-                      <td style="padding:12px 8px">
-                        <div style="font-weight:600">${sanitize(c.patient_name)}</div>
-                        <div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div>
-                      </td>
-                      <td style="padding:12px 8px;color:var(--slate)">${sanitize(c.doctor_name)}</td>
-                      <td style="padding:12px 8px">${sanitize(c.diagnosis)}</td>
-                      <td style="padding:12px 8px;color:var(--slate);font-size:13px">${sanitize(c.date)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          `;
-        }
+      if (name === 'doctors') {
+        document.getElementById("doctors-table").innerHTML = d.doctor_stats.length === 0
+          ? '<p style="color:var(--slate)">No doctors yet.</p>'
+          : `<table style="width:100%;border-collapse:collapse;font-size:14px">
+              <thead><tr style="border-bottom:2px solid var(--border)">
+                <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Doctor</th>
+                <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Specialization</th>
+                <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">Today</th>
+                <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">This Week</th>
+                <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">Total</th>
+                <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Last Active</th>
+                <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">Status</th>
+              </tr></thead>
+              <tbody>${d.doctor_stats.map(doc => `
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:12px 8px;font-weight:600">${sanitize(doc.name)}</td>
+                  <td style="padding:12px 8px;color:var(--slate)">${sanitize(doc.specialization)}</td>
+                  <td style="padding:12px 8px;text-align:center">${doc.today_consultations}</td>
+                  <td style="padding:12px 8px;text-align:center">${doc.week_consultations}</td>
+                  <td style="padding:12px 8px;text-align:center;font-weight:600">${doc.total_consultations}</td>
+                  <td style="padding:12px 8px;color:var(--slate);font-size:13px">${timeAgo(doc.last_active)}</td>
+                  <td style="padding:12px 8px;text-align:center"><span class="badge ${doc.is_active ? 'badge-teal' : 'badge-grey'}">${doc.is_active ? 'Active' : 'Inactive'}</span></td>
+                </tr>`).join('')}
+              </tbody></table>`;
+      }
 
-        // Medicines chart
-        if (data.top_medicines.length > 0) {
-          new Chart(document.getElementById("chart-medicines"), {
-            type: "bar",
-            data: { labels: data.top_medicines.map(m => m.name), datasets: [{ label: "Times prescribed", data: data.top_medicines.map(m => m.count), backgroundColor: COLORS, borderRadius: 6 }] },
-            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
+      if (name === 'consultations') {
+        document.getElementById("consultations-table").innerHTML = d.recent_consultations.length === 0
+          ? '<p style="color:var(--slate)">No consultations yet.</p>'
+          : `<table style="width:100%;border-collapse:collapse;font-size:14px">
+              <thead><tr style="border-bottom:2px solid var(--border)">
+                <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Token</th>
+                <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Patient</th>
+                <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Doctor</th>
+                <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Diagnosis</th>
+                <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Date</th>
+              </tr></thead>
+              <tbody>${d.recent_consultations.map(c => `
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:12px 8px;font-family:monospace;font-size:12px">${sanitize(c.token)}</td>
+                  <td style="padding:12px 8px">
+                    <div style="font-weight:600">${sanitize(c.patient_name)}</div>
+                    <div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div>
+                  </td>
+                  <td style="padding:12px 8px;color:var(--slate)">${sanitize(c.doctor_name)}</td>
+                  <td style="padding:12px 8px">${sanitize(c.diagnosis)}</td>
+                  <td style="padding:12px 8px;color:var(--slate);font-size:13px">${sanitize(c.date)}</td>
+                </tr>`).join('')}
+              </tbody></table>`;
+      }
 
-        // OTC vs Rx
-        new Chart(document.getElementById("chart-otcrx"), {
-          type: "doughnut",
-          data: { labels: ["OTC", "Rx"], datasets: [{ data: [ov.otc_medicines, ov.rx_medicines], backgroundColor: [TEAL, NAVY], borderWidth: 0 }] },
-          options: { responsive: true, plugins: { legend: { position: "bottom", labels: { padding: 16, font: { size: 12 } } } } }
-        });
+      if (name === 'medicines') {
+        document.getElementById("medicines-table").innerHTML = rankTable(d.top_medicines, 'Medicine', 'Times Prescribed');
+        document.getElementById("otcrx-summary").innerHTML = `
+          ${statRow('Total OTC Medicines Prescribed', ov.otc_medicines)}
+          ${statRow('Total Rx Medicines Prescribed', ov.rx_medicines)}
+          ${statRow('Total Medicines Prescribed', ov.otc_medicines + ov.rx_medicines)}
+          ${statRow('OTC %', ov.otc_medicines + ov.rx_medicines > 0 ? Math.round(ov.otc_medicines / (ov.otc_medicines + ov.rx_medicines) * 100) + '%' : '—')}
+          ${statRow('Rx %', ov.otc_medicines + ov.rx_medicines > 0 ? Math.round(ov.rx_medicines / (ov.otc_medicines + ov.rx_medicines) * 100) + '%' : '—')}
+        `;
+      }
 
-        // Diagnoses
-        if (data.top_diagnoses.length > 0) {
-          new Chart(document.getElementById("chart-diagnoses"), {
-            type: "bar",
-            data: { labels: data.top_diagnoses.map(d => d.name), datasets: [{ label: "Cases", data: data.top_diagnoses.map(d => d.count), backgroundColor: TEAL, borderRadius: 6 }] },
-            options: { indexAxis: "y", responsive: true, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
+      if (name === 'tests') {
+        document.getElementById("diagnoses-table").innerHTML = rankTable(d.top_diagnoses, 'Diagnosis', 'Cases');
+        document.getElementById("tests-table").innerHTML = rankTable(d.top_tests, 'Test', 'Times Ordered');
+      }
 
-        // Tests
-        if (data.top_tests.length > 0) {
-          new Chart(document.getElementById("chart-tests"), {
-            type: "bar",
-            data: { labels: data.top_tests.map(t => t.name), datasets: [{ label: "Times ordered", data: data.top_tests.map(t => t.count), backgroundColor: NAVY, borderRadius: 6 }] },
-            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
+      if (name === 'demographics') {
+        const demo = d.demographics;
 
-        // Demographics
-        const demo = data.demographics;
-        new Chart(document.getElementById("chart-age"), {
-          type: "bar",
-          data: { labels: Object.keys(demo.age_groups), datasets: [{ label: "Patients", data: Object.values(demo.age_groups), backgroundColor: COLORS.slice(0,5), borderRadius: 6 }] },
-          options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-        });
+        document.getElementById("age-table").innerHTML = `
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="text-align:left;padding:8px;color:var(--slate);font-weight:600">Age Group</th>
+              <th style="text-align:right;padding:8px;color:var(--slate);font-weight:600">Patients</th>
+            </tr></thead>
+            <tbody>${Object.entries(demo.age_groups).map(([k,v]) => `
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:10px 8px">${k}</td>
+                <td style="padding:10px 8px;text-align:right;font-weight:600">${v}</td>
+              </tr>`).join('')}
+            </tbody></table>`;
 
-        new Chart(document.getElementById("chart-gender"), {
-          type: "doughnut",
-          data: { labels: Object.keys(demo.gender), datasets: [{ data: Object.values(demo.gender), backgroundColor: [TEAL, NAVY, "#64748B"], borderWidth: 0 }] },
-          options: { responsive: true, plugins: { legend: { position: "bottom", labels: { padding: 16, font: { size: 12 } } } } }
-        });
+        document.getElementById("gender-table").innerHTML = `
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="text-align:left;padding:8px;color:var(--slate);font-weight:600">Gender</th>
+              <th style="text-align:right;padding:8px;color:var(--slate);font-weight:600">Patients</th>
+            </tr></thead>
+            <tbody>${Object.entries(demo.gender).map(([k,v]) => `
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:10px 8px">${k}</td>
+                <td style="padding:10px 8px;text-align:right;font-weight:600">${v}</td>
+              </tr>`).join('')}
+            </tbody></table>`;
 
-        if (Object.keys(demo.blood_groups).length > 0) {
-          new Chart(document.getElementById("chart-blood"), {
-            type: "bar",
-            data: { labels: Object.keys(demo.blood_groups), datasets: [{ label: "Patients", data: Object.values(demo.blood_groups), backgroundColor: COLORS, borderRadius: 6 }] },
-            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
+        document.getElementById("blood-table").innerHTML = Object.keys(demo.blood_groups).length === 0
+          ? '<p style="color:var(--slate)">No blood group data.</p>'
+          : `<table style="width:100%;border-collapse:collapse;font-size:14px">
+              <thead><tr style="border-bottom:2px solid var(--border)">
+                <th style="text-align:left;padding:8px;color:var(--slate);font-weight:600">Blood Group</th>
+                <th style="text-align:right;padding:8px;color:var(--slate);font-weight:600">Patients</th>
+              </tr></thead>
+              <tbody>${Object.entries(demo.blood_groups).map(([k,v]) => `
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:10px 8px">${k}</td>
+                  <td style="padding:10px 8px;text-align:right;font-weight:600">${v}</td>
+                </tr>`).join('')}
+              </tbody></table>`;
+      }
+    }
 
+    async function loadDashboard() {
+      try {
+        dashData = await api("GET", "/consultations/admin-dashboard");
+        renderSection('overview');
       } catch(e) {
         toast("Failed to load dashboard", "error");
       }
