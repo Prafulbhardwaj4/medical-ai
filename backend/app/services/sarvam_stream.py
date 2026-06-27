@@ -29,83 +29,57 @@ async def stream_transcribe(
     url = f"{base_url}?{urlencode(params)}"
     headers = {"api-subscription-key": settings.SARVAM_API_KEY}
 
-    pending_chunks = []
-    done = False
+    try:
+        async with websockets.connect(
+            url,
+            additional_headers=headers,
+            ping_interval=None,
+            close_timeout=10,
+            max_size=10 * 1024 * 1024
+        ) as ws:
 
-    while not done:
-        try:
-            async with websockets.connect(
-                url,
-                additional_headers=headers,
-                ping_interval=20,
-                ping_timeout=30,
-                close_timeout=10
-            ) as ws:
-
-                async def send_audio():
-                    nonlocal done
-                    # Send any pending chunks from previous connection
-                    for chunk in pending_chunks:
+            async def send_audio():
+                while True:
+                    chunk = await audio_queue.get()
+                    if chunk is None:
                         try:
-                            payload = {
-                                "audio": {
-                                    "data": base64.b64encode(chunk).decode(),
-                                    "sample_rate": 16000,
-                                    "encoding": "audio/wav",
-                                }
-                            }
-                            await ws.send(json.dumps(payload))
+                            await ws.close()
                         except Exception:
-                            return
-                    pending_chunks.clear()
-
-                    while True:
-                        chunk = await audio_queue.get()
-                        if chunk is None:
-                            done = True
-                            try:
-                                await ws.close()
-                            except Exception:
-                                pass
-                            break
-                        try:
-                            payload = {
-                                "audio": {
-                                    "data": base64.b64encode(chunk).decode(),
-                                    "sample_rate": 16000,
-                                    "encoding": "audio/wav",
-                                }
-                            }
-                            await ws.send(json.dumps(payload))
-                        except Exception:
-                            # Connection dropped — save chunk and reconnect
-                            pending_chunks.append(chunk)
-                            break
-
-                async def receive_transcript():
+                            pass
+                        break
                     try:
-                        async for message in ws:
-                            try:
-                                data = json.loads(message)
-                                if data.get("type") == "data":
-                                    inner = data.get("data", {})
-                                    text = inner.get("transcript", "")
-                                    if text:
-                                        await transcript_queue.put({
-                                            "type": "transcript",
-                                            "text": text,
-                                        })
-                            except Exception:
-                                continue
+                        payload = {
+                            "audio": {
+                                "data": base64.b64encode(chunk).decode(),
+                                "sample_rate": 16000,
+                                "encoding": "audio/wav",
+                            }
+                        }
+                        await ws.send(json.dumps(payload))
                     except Exception:
-                        pass
+                        break
 
-                await asyncio.gather(send_audio(), receive_transcript())
+            async def receive_transcript():
+                try:
+                    async for message in ws:
+                        try:
+                            data = json.loads(message)
+                            if data.get("type") == "data":
+                                inner = data.get("data", {})
+                                text = inner.get("transcript", "")
+                                if text:
+                                    await transcript_queue.put({
+                                        "type": "transcript",
+                                        "text": text,
+                                    })
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
 
-        except Exception as e:
-            if done:
-                break
-            # Wait briefly before reconnecting
-            await asyncio.sleep(1)
+            await asyncio.gather(send_audio(), receive_transcript())
 
-    await transcript_queue.put({"type": "end"})
+    except Exception as e:
+        await transcript_queue.put({"type": "error", "message": str(e)})
+    finally:
+        await transcript_queue.put({"type": "end"})
