@@ -79,6 +79,8 @@ async def stream_transcribe(
 
             await asyncio.gather(send_audio(), receive_transcript())
 
+    except websockets.exceptions.ConnectionClosedError as e:
+        await transcript_queue.put({"type": "error", "message": f"Connection closed: code={e.code} reason={e.reason}"})
     except Exception as e:
         await transcript_queue.put({"type": "error", "message": str(e)})
     finally:
