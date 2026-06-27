@@ -672,3 +672,159 @@ def send_prescription_sms(
         "pdf_url": pdf_url,
         "sent_to": patient.phone
     }
+
+@router.get("/admin-dashboard")
+def admin_dashboard(
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db)
+):
+    import json
+    from datetime import datetime, timedelta
+    from app.models.hospital import Hospital
+
+    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Get all doctors in hospital
+    hospital_doctors = db.query(DoctorModel).filter(
+        DoctorModel.hospital_id == current_doctor.hospital_id,
+        DoctorModel.role == "doctor"
+    ).all()
+    doctor_ids = [d.id for d in hospital_doctors]
+
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = now - timedelta(days=7)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # Base consultation query
+    all_consults = db.query(Consultation).filter(
+        Consultation.doctor_id.in_(doctor_ids),
+        Consultation.token_number != None,
+        Consultation.is_voided == False
+    ).all()
+
+    today_consults = [c for c in all_consults if c.created_at >= today_start]
+    week_consults = [c for c in all_consults if c.created_at >= week_start]
+    month_consults = [c for c in all_consults if c.created_at >= month_start]
+
+    # All patients
+    all_patients = db.query(Patient).filter(
+        Patient.doctor_id.in_(doctor_ids)
+    ).all()
+    new_patients_month = [p for p in all_patients if p.created_at >= month_start]
+
+    # Per doctor stats
+    doctor_stats = []
+    for d in hospital_doctors:
+        d_consults = [c for c in all_consults if c.doctor_id == d.id]
+        d_today = [c for c in today_consults if c.doctor_id == d.id]
+        d_week = [c for c in week_consults if c.doctor_id == d.id]
+        last_consult = max(d_consults, key=lambda c: c.created_at) if d_consults else None
+        doctor_stats.append({
+            "id": d.id,
+            "name": f"{d.title} {d.name}",
+            "specialization": d.specialization,
+            "is_active": d.is_active,
+            "total_consultations": len(d_consults),
+            "today_consultations": len(d_today),
+            "week_consultations": len(d_week),
+            "last_active": last_consult.created_at.isoformat() if last_consult else None
+        })
+
+    # Recent consultations
+    recent_consults = sorted(all_consults, key=lambda c: c.created_at, reverse=True)[:20]
+    recent_list = []
+    for c in recent_consults:
+        patient = db.query(Patient).filter(Patient.id == c.patient_id).first()
+        doctor = next((d for d in hospital_doctors if d.id == c.doctor_id), None)
+        recent_list.append({
+            "token": c.token_number,
+            "patient_name": patient.name if patient else "—",
+            "patient_uid": patient.patient_uid if patient else "—",
+            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
+            "diagnosis": c.diagnosis or "—",
+            "date": c.created_at.strftime("%d %b %Y %I:%M %p")
+        })
+
+    # Medicine stats
+    medicine_counts = {}
+    otc_count = 0
+    rx_count = 0
+    for c in all_consults:
+        meds = json.loads(c.medicines or "[]")
+        for m in meds:
+            name = m.get("name", "").strip().capitalize()
+            if name:
+                medicine_counts[name] = medicine_counts.get(name, 0) + 1
+            if m.get("schedule") == "otc":
+                otc_count += 1
+            else:
+                rx_count += 1
+    top_medicines = sorted(medicine_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    # Test stats
+    test_counts = {}
+    for c in all_consults:
+        tests = json.loads(c.tests or "[]")
+        for t in tests:
+            t = t.strip().capitalize()
+            if t:
+                test_counts[t] = test_counts.get(t, 0) + 1
+    top_tests = sorted(test_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    # Diagnosis stats
+    diagnosis_counts = {}
+    for c in all_consults:
+        if c.diagnosis:
+            d = c.diagnosis.strip().capitalize()
+            diagnosis_counts[d] = diagnosis_counts.get(d, 0) + 1
+    top_diagnoses = sorted(diagnosis_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    # Demographics
+    age_groups = {"0-12": 0, "13-25": 0, "26-40": 0, "41-60": 0, "60+": 0}
+    gender_counts = {}
+    blood_groups = {}
+    for p in all_patients:
+        if p.age <= 12: age_groups["0-12"] += 1
+        elif p.age <= 25: age_groups["13-25"] += 1
+        elif p.age <= 40: age_groups["26-40"] += 1
+        elif p.age <= 60: age_groups["41-60"] += 1
+        else: age_groups["60+"] += 1
+        g = p.gender.capitalize()
+        gender_counts[g] = gender_counts.get(g, 0) + 1
+        if p.blood_group:
+            bg = p.blood_group.strip().upper()
+            blood_groups[bg] = blood_groups.get(bg, 0) + 1
+
+    # Daily consultations
+    daily_counts = {}
+    for c in all_consults:
+        day = c.created_at.strftime("%d %b")
+        daily_counts[day] = daily_counts.get(day, 0) + 1
+
+    return {
+        "overview": {
+            "total_consultations": len(all_consults),
+            "today_consultations": len(today_consults),
+            "week_consultations": len(week_consults),
+            "month_consultations": len(month_consults),
+            "total_patients": len(all_patients),
+            "new_patients_month": len(new_patients_month),
+            "total_doctors": len(hospital_doctors),
+            "active_doctors": len([d for d in hospital_doctors if d.is_active]),
+            "otc_medicines": otc_count,
+            "rx_medicines": rx_count
+        },
+        "doctor_stats": doctor_stats,
+        "recent_consultations": recent_list,
+        "top_medicines": [{"name": k, "count": v} for k, v in top_medicines],
+        "top_tests": [{"name": k, "count": v} for k, v in top_tests],
+        "top_diagnoses": [{"name": k, "count": v} for k, v in top_diagnoses],
+        "demographics": {
+            "age_groups": age_groups,
+            "gender": gender_counts,
+            "blood_groups": blood_groups
+        },
+        "daily_consultations": daily_counts
+    }

@@ -1,316 +1,432 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MedScribe — Analytics</title>
-    <link rel="stylesheet" href="../css/style.css?v=2" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedScribe — Admin Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css?v=3" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-
 <body>
-    <div class="app-shell">
+  <div class="app-shell">
 
-        <header class="topbar">
-            <div style="display:flex;align-items:center;gap:10px">
-                <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
-                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                </button>
-                <div class="topbar-brand">Med<span>Scribe</span></div>
-            </div>
-            <div class="topbar-doctor">
-                <span><strong id="topbar-doctor-name"></strong></span>
-                <div class="topbar-divider"></div>
-                <span id="topbar-clinic" style="color:var(--slate)"></span>
-                <button class="btn-logout" onclick="logout()">Sign out</button>
-            </div>
-        </header>
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="topbar-brand">Med<span>Scribe</span></div>
+      </div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn-logout" onclick="logout()">Sign out</button>
+      </div>
+    </header>
 
-        <nav class="sidebar">
-            <div class="sidebar-section-label">Navigation</div>
-            <a class="nav-item active" href="analytics.html">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                Analytics
-            </a>
-            <a class="nav-item" href="doctors.html">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Manage Doctors
-            </a>
-        </nav>
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Hospital Admin</div>
+      <a class="nav-item active" href="#overview" onclick="scrollTo('overview')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Overview
+      </a>
+      <a class="nav-item" href="doctors.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Manage Doctors
+      </a>
+      <a class="nav-item" href="#doctors-section" onclick="scrollTo('doctors-section')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        Doctor Stats
+      </a>
+      <a class="nav-item" href="#consultations-section" onclick="scrollTo('consultations-section')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        Consultations
+      </a>
+      <a class="nav-item" href="#medicines-section" onclick="scrollTo('medicines-section')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+        Medicines
+      </a>
+      <a class="nav-item" href="#tests-section" onclick="scrollTo('tests-section')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+        </svg>
+        Tests & Diagnoses
+      </a>
+      <a class="nav-item" href="#demographics-section" onclick="scrollTo('demographics-section')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Demographics
+      </a>
+      <a class="nav-item" href="#" onclick="comingSoon('Complaints & Suggestions')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+        </svg>
+        Complaints
+      </a>
+      <a class="nav-item" href="#" onclick="comingSoon('Attendance')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+        Attendance
+      </a>
+      <a class="nav-item" href="#" onclick="comingSoon('Reports')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        Reports
+      </a>
+    </nav>
 
-        <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
-        <main class="main-content">
+    <main class="main-content">
 
-            <div class="page-header">
-                <h1>Analytics</h1>
-                <p>Consultation patterns and clinical insights</p>
-            </div>
+      <!-- OVERVIEW -->
+      <div id="overview" style="scroll-margin-top:80px">
+        <div class="page-header">
+          <h1>Hospital Dashboard</h1>
+          <p id="hospital-name-sub" style="color:var(--slate)"></p>
+        </div>
 
-            <!-- Summary cards -->
-            <div class="stats-row" id="summary-row">
-                <div class="stat-card">
-                    <div class="stat-label">Total Consultations</div>
-                    <div class="stat-value" id="stat-total-consults">—</div>
-                    <div class="stat-sub">confirmed prescriptions</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Total Patients</div>
-                    <div class="stat-value" id="stat-total-patients">—</div>
-                    <div class="stat-sub">registered</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">OTC Medicines</div>
-                    <div class="stat-value" id="stat-otc">—</div>
-                    <div class="stat-sub">over the counter</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Rx Medicines</div>
-                    <div class="stat-value" id="stat-rx">—</div>
-                    <div class="stat-sub">prescription controlled</div>
-                </div>
-            </div>
+        <div class="stats-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px">
+          <div class="stat-card">
+            <div class="stat-label">Today's Consultations</div>
+            <div class="stat-value" id="stat-today">—</div>
+            <div class="stat-sub" id="stat-week">— this week</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Patients</div>
+            <div class="stat-value" id="stat-patients">—</div>
+            <div class="stat-sub" id="stat-new-patients">— new this month</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Active Doctors</div>
+            <div class="stat-value" id="stat-active-doctors">—</div>
+            <div class="stat-sub" id="stat-total-doctors">— total</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Consultations</div>
+            <div class="stat-value" id="stat-total">—</div>
+            <div class="stat-sub" id="stat-month">— this month</div>
+          </div>
+        </div>
 
-            <!-- Row 1: Daily consultations + Age groups -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>Consultations Over Time</h2>
-                    </div>
-                    <canvas id="chart-daily" height="200"></canvas>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <h2>Patient Age Groups</h2>
-                    </div>
-                    <canvas id="chart-age" height="200"></canvas>
-                </div>
-            </div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-header"><h2>Consultations Over Time</h2></div>
+          <canvas id="chart-daily" height="120"></canvas>
+        </div>
+      </div>
 
-            <!-- Row 2: Top diagnoses + Gender -->
-            <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:20px">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>Top Diagnoses</h2>
-                    </div>
-                    <canvas id="chart-diagnoses" height="200"></canvas>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <h2>Gender Distribution</h2>
-                    </div>
-                    <canvas id="chart-gender" height="200"></canvas>
-                </div>
-            </div>
+      <!-- DOCTOR STATS -->
+      <div id="doctors-section" style="scroll-margin-top:80px;margin-bottom:20px">
+        <div class="card">
+          <div class="card-header"><h2>Doctor Performance</h2></div>
+          <div id="doctors-table"></div>
+        </div>
+      </div>
 
-            <!-- Row 3: Top medicines + Top tests -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>Most Prescribed Medicines</h2>
-                    </div>
-                    <canvas id="chart-medicines" height="200"></canvas>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <h2>Tests Ordered</h2>
-                    </div>
-                    <canvas id="chart-tests" height="200"></canvas>
-                </div>
-            </div>
+      <!-- RECENT CONSULTATIONS -->
+      <div id="consultations-section" style="scroll-margin-top:80px;margin-bottom:20px">
+        <div class="card">
+          <div class="card-header"><h2>Recent Consultations</h2></div>
+          <div id="consultations-table"></div>
+        </div>
+      </div>
 
-            <!-- Empty state -->
-            <div id="empty-state" style="display:none" class="card">
-                <div class="empty-state">
-                    <div class="empty-state-icon">
-                        <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                            stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                    </div>
-                    <h3>No data yet</h3>
-                    <p>Complete some consultations to see analytics here.</p>
-                </div>
-            </div>
+      <!-- MEDICINES -->
+      <div id="medicines-section" style="scroll-margin-top:80px;margin-bottom:20px">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px">
+          <div class="card">
+            <div class="card-header"><h2>Most Prescribed Medicines</h2></div>
+            <canvas id="chart-medicines" height="200"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>OTC vs Rx</h2></div>
+            <canvas id="chart-otcrx" height="200"></canvas>
+          </div>
+        </div>
+      </div>
 
-        </main>
+      <!-- TESTS & DIAGNOSES -->
+      <div id="tests-section" style="scroll-margin-top:80px;margin-bottom:20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div class="card">
+            <div class="card-header"><h2>Top Diagnoses</h2></div>
+            <canvas id="chart-diagnoses" height="200"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Most Ordered Tests</h2></div>
+            <canvas id="chart-tests" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- DEMOGRAPHICS -->
+      <div id="demographics-section" style="scroll-margin-top:80px;margin-bottom:40px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px">
+          <div class="card">
+            <div class="card-header"><h2>Age Groups</h2></div>
+            <canvas id="chart-age" height="200"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Gender</h2></div>
+            <canvas id="chart-gender" height="200"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Blood Groups</h2></div>
+            <canvas id="chart-blood" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- EMPTY STATE -->
+      <div id="empty-state" style="display:none" class="card">
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <h3>No data yet</h3>
+          <p>Complete some consultations to see analytics here.</p>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Coming Soon Modal -->
+  <div id="coming-soon-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+    <div class="card" style="max-width:360px;width:100%;margin:24px;text-align:center;padding:40px 24px">
+      <div style="font-size:2.5rem;margin-bottom:12px">🚧</div>
+      <h3 id="coming-soon-name" style="margin-bottom:8px"></h3>
+      <p style="color:var(--slate);margin-bottom:20px">This feature is under development and will be available soon.</p>
+      <button class="btn btn-primary" onclick="document.getElementById('coming-soon-modal').style.display='none'">Got it</button>
     </div>
+  </div>
 
-    <div id="toast"></div>
-    <script src="../js/api.js?v=2"></script>
-    <script>
-        const doc = getDoctor();
-        if (doc && doc.role === 'doctor') window.location.href = 'dashboard.html';
-        
-        if (!requireAuth()) throw new Error();
-        fillTopbar();
+  <div id="toast"></div>
+  <script src="../js/api.js?v=3"></script>
+  <script>
+    const doc = getDoctor();
+    if (doc && doc.role === 'doctor') window.location.href = 'dashboard.html';
+    if (!requireAuth()) throw new Error();
+    fillTopbar();
 
-        const TEAL = "#0D9488";
-        const NAVY = "#0F1F3D";
-        const TEAL_LIGHT = "#14B8A6";
-        const COLORS = [
-            "#0D9488", "#0F1F3D", "#14B8A6", "#64748B", "#1D4ED8",
-            "#7C3AED", "#DC2626", "#F59E0B", "#10B981", "#EC4899"
-        ];
+    const doctor = getDoctor();
+    if (doctor && doctor.clinic_name) {
+      document.getElementById('hospital-name-sub').textContent = doctor.clinic_name;
+    }
 
-        async function loadAnalytics() {
-            try {
-                const data = await api("GET", "/consultations/analytics");
+    function scrollTo(id) {
+      document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+    }
 
-                if (data.summary.total_consultations === 0) {
-                    document.getElementById("empty-state").style.display = "block";
-                    document.querySelectorAll(".card:not(#empty-state)").forEach(c => c.style.display = "none");
-                    document.getElementById("summary-row").style.display = "none";
-                    return;
-                }
+    function comingSoon(name) {
+      document.getElementById('coming-soon-name').textContent = name + ' — Coming Soon';
+      document.getElementById('coming-soon-modal').style.display = 'flex';
+    }
 
-                // Summary
-                document.getElementById("stat-total-consults").textContent = data.summary.total_consultations;
-                document.getElementById("stat-total-patients").textContent = data.summary.total_patients;
-                document.getElementById("stat-otc").textContent = data.summary.otc_medicines;
-                document.getElementById("stat-rx").textContent = data.summary.rx_medicines;
+    const TEAL = "#0D9488";
+    const NAVY = "#0F1F3D";
+    const COLORS = ["#0D9488","#0F1F3D","#14B8A6","#64748B","#1D4ED8","#7C3AED","#DC2626","#F59E0B","#10B981","#EC4899"];
 
-                // Daily consultations
-                const dailyLabels = Object.keys(data.daily_consultations);
-                const dailyValues = Object.values(data.daily_consultations);
-                new Chart(document.getElementById("chart-daily"), {
-                    type: "line",
-                    data: {
-                        labels: dailyLabels,
-                        datasets: [{
-                            label: "Consultations",
-                            data: dailyValues,
-                            borderColor: TEAL,
-                            backgroundColor: "rgba(13,148,136,0.08)",
-                            tension: 0.4,
-                            fill: true,
-                            pointBackgroundColor: TEAL,
-                            pointRadius: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            y: { beginAtZero: true, ticks: { stepSize: 1 } },
-                            x: { ticks: { maxTicksLimit: 8 } }
-                        }
-                    }
-                });
+    function formatDate(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
 
-                // Age groups
-                new Chart(document.getElementById("chart-age"), {
-                    type: "bar",
-                    data: {
-                        labels: Object.keys(data.age_groups),
-                        datasets: [{
-                            label: "Patients",
-                            data: Object.values(data.age_groups),
-                            backgroundColor: COLORS.slice(0, 5),
-                            borderRadius: 6
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-                    }
-                });
+    function timeAgo(iso) {
+      if (!iso) return 'Never';
+      const diff = Date.now() - new Date(iso).getTime();
+      const mins = Math.floor(diff / 60000);
+      const hours = Math.floor(mins / 60);
+      const days = Math.floor(hours / 24);
+      if (days > 0) return `${days}d ago`;
+      if (hours > 0) return `${hours}h ago`;
+      if (mins > 0) return `${mins}m ago`;
+      return 'Just now';
+    }
 
-                // Top diagnoses
-                new Chart(document.getElementById("chart-diagnoses"), {
-                    type: "bar",
-                    data: {
-                        labels: data.top_diagnoses.map(d => d.name),
-                        datasets: [{
-                            label: "Cases",
-                            data: data.top_diagnoses.map(d => d.count),
-                            backgroundColor: TEAL,
-                            borderRadius: 6
-                        }]
-                    },
-                    options: {
-                        indexAxis: "y",
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } }
-                    }
-                });
+    async function loadDashboard() {
+      try {
+        const data = await api("GET", "/consultations/admin-dashboard");
 
-                // Gender
-                new Chart(document.getElementById("chart-gender"), {
-                    type: "doughnut",
-                    data: {
-                        labels: Object.keys(data.gender_distribution),
-                        datasets: [{
-                            data: Object.values(data.gender_distribution),
-                            backgroundColor: [TEAL, NAVY, "#64748B"],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: { position: "bottom", labels: { padding: 16, font: { size: 12 } } }
-                        }
-                    }
-                });
-
-                // Top medicines
-                new Chart(document.getElementById("chart-medicines"), {
-                    type: "bar",
-                    data: {
-                        labels: data.top_medicines.map(m => m.name),
-                        datasets: [{
-                            label: "Times prescribed",
-                            data: data.top_medicines.map(m => m.count),
-                            backgroundColor: COLORS,
-                            borderRadius: 6
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-                    }
-                });
-
-                // Top tests
-                new Chart(document.getElementById("chart-tests"), {
-                    type: "bar",
-                    data: {
-                        labels: data.top_tests.map(t => t.name),
-                        datasets: [{
-                            label: "Times ordered",
-                            data: data.top_tests.map(t => t.count),
-                            backgroundColor: NAVY,
-                            borderRadius: 6
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-                    }
-                });
-
-            } catch (e) {
-                toast("Failed to load analytics", "error");
-            }
+        if (data.overview.total_consultations === 0) {
+          document.getElementById("empty-state").style.display = "block";
+          return;
         }
 
-        loadAnalytics();
-    </script>
-</body>
+        // Overview stats
+        const ov = data.overview;
+        document.getElementById("stat-today").textContent = ov.today_consultations;
+        document.getElementById("stat-week").textContent = `${ov.week_consultations} this week`;
+        document.getElementById("stat-patients").textContent = ov.total_patients;
+        document.getElementById("stat-new-patients").textContent = `+${ov.new_patients_month} this month`;
+        document.getElementById("stat-active-doctors").textContent = ov.active_doctors;
+        document.getElementById("stat-total-doctors").textContent = `${ov.total_doctors} total`;
+        document.getElementById("stat-total").textContent = ov.total_consultations;
+        document.getElementById("stat-month").textContent = `${ov.month_consultations} this month`;
 
+        // Daily chart
+        new Chart(document.getElementById("chart-daily"), {
+          type: "line",
+          data: {
+            labels: Object.keys(data.daily_consultations),
+            datasets: [{ label: "Consultations", data: Object.values(data.daily_consultations), borderColor: TEAL, backgroundColor: "rgba(13,148,136,0.08)", tension: 0.4, fill: true, pointBackgroundColor: TEAL, pointRadius: 4 }]
+          },
+          options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { ticks: { maxTicksLimit: 10 } } } }
+        });
+
+        // Doctor stats table
+        const doctorsTable = document.getElementById("doctors-table");
+        if (data.doctor_stats.length === 0) {
+          doctorsTable.innerHTML = '<p style="color:var(--slate)">No doctors yet.</p>';
+        } else {
+          doctorsTable.innerHTML = `
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:14px">
+                <thead>
+                  <tr style="border-bottom:2px solid var(--border)">
+                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Doctor</th>
+                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Specialization</th>
+                    <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">Today</th>
+                    <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">This Week</th>
+                    <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">Total</th>
+                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Last Active</th>
+                    <th style="text-align:center;padding:10px 8px;color:var(--slate);font-weight:600">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${data.doctor_stats.map(d => `
+                    <tr style="border-bottom:1px solid var(--border)">
+                      <td style="padding:12px 8px;font-weight:600">${sanitize(d.name)}</td>
+                      <td style="padding:12px 8px;color:var(--slate)">${sanitize(d.specialization)}</td>
+                      <td style="padding:12px 8px;text-align:center">${d.today_consultations}</td>
+                      <td style="padding:12px 8px;text-align:center">${d.week_consultations}</td>
+                      <td style="padding:12px 8px;text-align:center;font-weight:600">${d.total_consultations}</td>
+                      <td style="padding:12px 8px;color:var(--slate);font-size:13px">${timeAgo(d.last_active)}</td>
+                      <td style="padding:12px 8px;text-align:center"><span class="badge ${d.is_active ? 'badge-teal' : 'badge-grey'}">${d.is_active ? 'Active' : 'Inactive'}</span></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+
+        // Recent consultations table
+        const consultTable = document.getElementById("consultations-table");
+        if (data.recent_consultations.length === 0) {
+          consultTable.innerHTML = '<p style="color:var(--slate)">No consultations yet.</p>';
+        } else {
+          consultTable.innerHTML = `
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:14px">
+                <thead>
+                  <tr style="border-bottom:2px solid var(--border)">
+                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Token</th>
+                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Patient</th>
+                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Doctor</th>
+                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Diagnosis</th>
+                    <th style="text-align:left;padding:10px 8px;color:var(--slate);font-weight:600">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${data.recent_consultations.map(c => `
+                    <tr style="border-bottom:1px solid var(--border)">
+                      <td style="padding:12px 8px;font-family:monospace;font-size:12px">${sanitize(c.token)}</td>
+                      <td style="padding:12px 8px">
+                        <div style="font-weight:600">${sanitize(c.patient_name)}</div>
+                        <div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div>
+                      </td>
+                      <td style="padding:12px 8px;color:var(--slate)">${sanitize(c.doctor_name)}</td>
+                      <td style="padding:12px 8px">${sanitize(c.diagnosis)}</td>
+                      <td style="padding:12px 8px;color:var(--slate);font-size:13px">${sanitize(c.date)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+
+        // Medicines chart
+        if (data.top_medicines.length > 0) {
+          new Chart(document.getElementById("chart-medicines"), {
+            type: "bar",
+            data: { labels: data.top_medicines.map(m => m.name), datasets: [{ label: "Times prescribed", data: data.top_medicines.map(m => m.count), backgroundColor: COLORS, borderRadius: 6 }] },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+
+        // OTC vs Rx
+        new Chart(document.getElementById("chart-otcrx"), {
+          type: "doughnut",
+          data: { labels: ["OTC", "Rx"], datasets: [{ data: [ov.otc_medicines, ov.rx_medicines], backgroundColor: [TEAL, NAVY], borderWidth: 0 }] },
+          options: { responsive: true, plugins: { legend: { position: "bottom", labels: { padding: 16, font: { size: 12 } } } } }
+        });
+
+        // Diagnoses
+        if (data.top_diagnoses.length > 0) {
+          new Chart(document.getElementById("chart-diagnoses"), {
+            type: "bar",
+            data: { labels: data.top_diagnoses.map(d => d.name), datasets: [{ label: "Cases", data: data.top_diagnoses.map(d => d.count), backgroundColor: TEAL, borderRadius: 6 }] },
+            options: { indexAxis: "y", responsive: true, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+
+        // Tests
+        if (data.top_tests.length > 0) {
+          new Chart(document.getElementById("chart-tests"), {
+            type: "bar",
+            data: { labels: data.top_tests.map(t => t.name), datasets: [{ label: "Times ordered", data: data.top_tests.map(t => t.count), backgroundColor: NAVY, borderRadius: 6 }] },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+
+        // Demographics
+        const demo = data.demographics;
+        new Chart(document.getElementById("chart-age"), {
+          type: "bar",
+          data: { labels: Object.keys(demo.age_groups), datasets: [{ label: "Patients", data: Object.values(demo.age_groups), backgroundColor: COLORS.slice(0,5), borderRadius: 6 }] },
+          options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+
+        new Chart(document.getElementById("chart-gender"), {
+          type: "doughnut",
+          data: { labels: Object.keys(demo.gender), datasets: [{ data: Object.values(demo.gender), backgroundColor: [TEAL, NAVY, "#64748B"], borderWidth: 0 }] },
+          options: { responsive: true, plugins: { legend: { position: "bottom", labels: { padding: 16, font: { size: 12 } } } } }
+        });
+
+        if (Object.keys(demo.blood_groups).length > 0) {
+          new Chart(document.getElementById("chart-blood"), {
+            type: "bar",
+            data: { labels: Object.keys(demo.blood_groups), datasets: [{ label: "Patients", data: Object.values(demo.blood_groups), backgroundColor: COLORS, borderRadius: 6 }] },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+
+      } catch(e) {
+        toast("Failed to load dashboard", "error");
+      }
+    }
+
+    loadDashboard();
+  </script>
+</body>
 </html>
