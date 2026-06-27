@@ -681,7 +681,6 @@
 
         if (window._tokenNumber) {
           document.getElementById("token-display").textContent = window._tokenNumber;
-          if (window._verifyHash) setVerifyLink(window._tokenNumber, window._verifyHash);
           goStep(3);
           btn.disabled = false;
           btn.textContent = "Confirm & Generate PDF →";
@@ -692,7 +691,6 @@
         window._tokenNumber = data.token_number;
         window._verifyHash = data.verify_hash;
         document.getElementById("token-display").textContent = window._tokenNumber;
-        setVerifyLink(window._tokenNumber, window._verifyHash);
         goStep(3);
         toast("Prescription confirmed. Token: " + window._tokenNumber, "success");
       } catch (e) {
