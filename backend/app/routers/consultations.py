@@ -712,6 +712,7 @@ def admin_dashboard(
     all_patients = db.query(Patient).filter(
         Patient.doctor_id.in_(doctor_ids)
     ).all()
+    patient_map = {p.id: p for p in all_patients}
     new_patients_month = [p for p in all_patients if p.created_at >= month_start]
 
     # Per doctor stats
@@ -736,7 +737,7 @@ def admin_dashboard(
     recent_consults = sorted(all_consults, key=lambda c: c.created_at, reverse=True)[:20]
     recent_list = []
     for c in recent_consults:
-        patient = db.query(Patient).filter(Patient.id == c.patient_id).first()
+        patient = patient_map.get(c.patient_id)
         doctor = next((d for d in hospital_doctors if d.id == c.doctor_id), None)
         recent_list.append({
             "token": c.token_number,
@@ -747,8 +748,9 @@ def admin_dashboard(
             "date": c.created_at.strftime("%d %b %Y %I:%M %p")
         })
 
-    # Medicine stats
+    # Medicine stats with diagnosis mapping
     medicine_counts = {}
+    medicine_diagnosis = {}
     otc_count = 0
     rx_count = 0
     for c in all_consults:
@@ -757,11 +759,25 @@ def admin_dashboard(
             name = m.get("name", "").strip().capitalize()
             if name:
                 medicine_counts[name] = medicine_counts.get(name, 0) + 1
+                if c.diagnosis:
+                    diag = c.diagnosis.strip().capitalize()
+                    if name not in medicine_diagnosis:
+                        medicine_diagnosis[name] = {}
+                    medicine_diagnosis[name][diag] = medicine_diagnosis[name].get(diag, 0) + 1
             if m.get("schedule") == "otc":
                 otc_count += 1
             else:
                 rx_count += 1
-    top_medicines = sorted(medicine_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    top_medicines_detailed = []
+    for name, count in sorted(medicine_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
+        diag_map = medicine_diagnosis.get(name, {})
+        top_diag = max(diag_map.items(), key=lambda x: x[1])[0] if diag_map else "—"
+        top_medicines_detailed.append({
+            "name": name,
+            "count": count,
+            "top_diagnosis": top_diag
+        })
 
     # Test stats
     test_counts = {}
@@ -785,17 +801,66 @@ def admin_dashboard(
     age_groups = {"0-12": 0, "13-25": 0, "26-40": 0, "41-60": 0, "60+": 0}
     gender_counts = {}
     blood_groups = {}
+    age_diagnosis = {}
+    gender_diagnosis = {}
+
     for p in all_patients:
-        if p.age <= 12: age_groups["0-12"] += 1
-        elif p.age <= 25: age_groups["13-25"] += 1
-        elif p.age <= 40: age_groups["26-40"] += 1
-        elif p.age <= 60: age_groups["41-60"] += 1
-        else: age_groups["60+"] += 1
+        if p.age <= 12: ag = "0-12"
+        elif p.age <= 25: ag = "13-25"
+        elif p.age <= 40: ag = "26-40"
+        elif p.age <= 60: ag = "41-60"
+        else: ag = "60+"
+        age_groups[ag] += 1
+
         g = p.gender.capitalize()
         gender_counts[g] = gender_counts.get(g, 0) + 1
+
         if p.blood_group:
             bg = p.blood_group.strip().upper()
             blood_groups[bg] = blood_groups.get(bg, 0) + 1
+
+    # Age & gender -> diagnosis patterns
+    for c in all_consults:
+        patient = patient_map.get(c.patient_id)
+        if not patient or not c.diagnosis:
+            continue
+        diag = c.diagnosis.strip().capitalize()
+
+        if patient.age <= 12: ag = "0-12"
+        elif patient.age <= 25: ag = "13-25"
+        elif patient.age <= 40: ag = "26-40"
+        elif patient.age <= 60: ag = "41-60"
+        else: ag = "60+"
+
+        if ag not in age_diagnosis:
+            age_diagnosis[ag] = {}
+        age_diagnosis[ag][diag] = age_diagnosis[ag].get(diag, 0) + 1
+
+        g = patient.gender.capitalize()
+        if g not in gender_diagnosis:
+            gender_diagnosis[g] = {}
+        gender_diagnosis[g][diag] = gender_diagnosis[g].get(diag, 0) + 1
+
+    age_patterns = []
+    for ag in ["0-12", "13-25", "26-40", "41-60", "60+"]:
+        diags = age_diagnosis.get(ag, {})
+        top = max(diags.items(), key=lambda x: x[1]) if diags else ("—", 0)
+        age_patterns.append({
+            "age_group": ag,
+            "total_patients": age_groups[ag],
+            "top_diagnosis": top[0],
+            "cases": top[1]
+        })
+
+    gender_patterns = []
+    for g, diags in gender_diagnosis.items():
+        top = max(diags.items(), key=lambda x: x[1])
+        gender_patterns.append({
+            "gender": g,
+            "total_patients": gender_counts.get(g, 0),
+            "top_diagnosis": top[0],
+            "cases": top[1]
+        })
 
     # Daily consultations
     daily_counts = {}
@@ -818,13 +883,15 @@ def admin_dashboard(
         },
         "doctor_stats": doctor_stats,
         "recent_consultations": recent_list,
-        "top_medicines": [{"name": k, "count": v} for k, v in top_medicines],
+        "top_medicines": top_medicines_detailed,
         "top_tests": [{"name": k, "count": v} for k, v in top_tests],
         "top_diagnoses": [{"name": k, "count": v} for k, v in top_diagnoses],
         "demographics": {
             "age_groups": age_groups,
             "gender": gender_counts,
-            "blood_groups": blood_groups
+            "blood_groups": blood_groups,
+            "age_patterns": age_patterns,
+            "gender_patterns": gender_patterns
         },
         "daily_consultations": daily_counts
     }
