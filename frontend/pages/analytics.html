@@ -73,13 +73,23 @@
             font-weight: 600;
         }
 
-        @media (max-width: 900px) {
+        @media (max-width:900px) {
             .section-grid-2 {
                 grid-template-columns: 1fr;
             }
 
             .section-grid-3 {
                 grid-template-columns: 1fr;
+            }
+
+            .filter-grid {
+                grid-template-columns: 1fr 1fr !important;
+            }
+        }
+
+        @media (max-width:600px) {
+            .filter-grid {
+                grid-template-columns: 1fr !important;
             }
         }
     </style>
@@ -120,6 +130,13 @@
                         d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 Doctors
+            </a>
+            <a class="nav-item" id="nav-patients" href="#" onclick="showSection('patients');return false;">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Patients
             </a>
             <a class="nav-item" id="nav-consultations" href="#" onclick="showSection('consultations');return false;">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -210,6 +227,20 @@
                         <div class="stat-sub" id="stat-month">— this month</div>
                     </div>
                 </div>
+                <div class="section-grid-2" style="margin-bottom:20px">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Patient Visits</h2>
+                        </div>
+                        <div id="visit-type-summary"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Consultation Quality</h2>
+                        </div>
+                        <div id="void-summary"></div>
+                    </div>
+                </div>
                 <div class="card">
                     <div class="card-header">
                         <h2>Today's Consultations</h2>
@@ -228,14 +259,53 @@
                 </div>
             </div>
 
+            <!-- PATIENTS -->
+            <div id="section-patients" class="section" style="display:none">
+                <div class="page-header">
+                    <h1>Patients</h1>
+                    <p style="color:var(--slate)" id="patients-count"></p>
+                </div>
+                <div class="card" style="margin-bottom:20px">
+                    <input type="text" id="patient-search" class="form-control"
+                        placeholder="Search by name, UID or phone..." oninput="filterPatients()" />
+                </div>
+                <div class="card">
+                    <div class="table-wrap" id="patients-table"></div>
+                </div>
+            </div>
+
             <!-- CONSULTATIONS -->
             <div id="section-consultations" class="section" style="display:none">
                 <div class="page-header">
-                    <h1>Recent Consultations</h1>
-                    <p style="color:var(--slate)">Last 20 confirmed prescriptions</p>
+                    <h1>Consultations</h1>
+                </div>
+                <div class="card" style="margin-bottom:20px">
+                    <div class="filter-grid"
+                        style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end">
+                        <div>
+                            <label style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">From
+                                Date</label>
+                            <input type="date" id="filter-from" class="form-control" />
+                        </div>
+                        <div>
+                            <label style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">To
+                                Date</label>
+                            <input type="date" id="filter-to" class="form-control" />
+                        </div>
+                        <div>
+                            <label style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">Search
+                                Patient / Token</label>
+                            <input type="text" id="filter-search" class="form-control"
+                                placeholder="Name, UID or token..." />
+                        </div>
+                        <button class="btn btn-primary" onclick="loadConsultations(1)">Search</button>
+                    </div>
                 </div>
                 <div class="card">
                     <div class="table-wrap" id="consultations-table"></div>
+                    <div id="consultations-pagination"
+                        style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap;gap:10px">
+                    </div>
                 </div>
             </div>
 
@@ -325,7 +395,8 @@
         }
 
         let dashData = null;
-        const SECTIONS = ['overview', 'doctors', 'consultations', 'medicines', 'tests', 'demographics'];
+        let allPatients = [];
+        const SECTIONS = ['overview', 'doctors', 'patients', 'consultations', 'medicines', 'tests', 'demographics'];
 
         function showSection(name) {
             SECTIONS.forEach(s => {
@@ -362,12 +433,12 @@
         function rankTable(items, col1, col2, diagKey) {
             if (!items || !items.length) return emptyMsg('No data yet.');
             const rows = items.map((item, i) => `
-                <tr>
-                <td style="color:var(--slate);font-size:13px;width:40px">${i + 1}</td>
-                <td style="font-weight:500">${sanitize(item.name)}</td>
-                <td style="text-align:center;font-weight:600;color:var(--teal)">${item.count}</td>
-                ${diagKey ? `<td style="color:var(--slate);font-size:13px">${sanitize(item[diagKey] || '—')}</td>` : ''}
-                </tr>`).join('');
+        <tr>
+          <td style="color:var(--slate);font-size:13px;width:40px">${i + 1}</td>
+          <td style="font-weight:500">${sanitize(item.name)}</td>
+          <td style="text-align:center;font-weight:600;color:var(--teal)">${item.count}</td>
+          ${diagKey ? `<td style="color:var(--slate);font-size:13px">${sanitize(item[diagKey] || '—')}</td>` : ''}
+        </tr>`).join('');
             const headers = [
                 '<th style="width:40px">#</th>',
                 `<th>${col1}</th>`,
@@ -379,6 +450,46 @@
 
         function statItem(label, value) {
             return `<div class="stat-row-item"><span>${label}</span><span>${value}</span></div>`;
+        }
+
+        function filterPatients() {
+            const q = document.getElementById('patient-search').value.toLowerCase();
+            const filtered = q ? allPatients.filter(p =>
+                p.name.toLowerCase().includes(q) ||
+                p.patient_uid.toLowerCase().includes(q) ||
+                p.phone.toLowerCase().includes(q)
+            ) : allPatients;
+            renderPatientsTable(filtered);
+        }
+
+        function renderPatientsTable(patients) {
+            const container = document.getElementById('patients-table');
+            if (!patients.length) {
+                container.innerHTML = emptyMsg('No patients found.');
+                return;
+            }
+            const rows = patients.map(p => `<tr>
+        <td style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(p.patient_uid)}</td>
+        <td style="font-weight:600">${sanitize(p.name)}</td>
+        <td style="text-align:center">${p.age}</td>
+        <td>${sanitize(p.gender)}</td>
+        <td style="text-align:center">${sanitize(p.blood_group)}</td>
+        <td style="color:var(--slate)">${sanitize(p.phone)}</td>
+        <td style="color:var(--slate);white-space:nowrap">${sanitize(p.doctor)}</td>
+        <td style="text-align:center;font-weight:600;color:var(--teal)">${p.total_visits}</td>
+        <td style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(p.last_visit)}</td>
+        <td style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(p.registered)}</td>
+      </tr>`).join('');
+            container.innerHTML = makeTable(
+                ['UID', 'Name',
+                    '<span style="display:block;text-align:center">Age</span>',
+                    'Gender',
+                    '<span style="display:block;text-align:center">Blood Group</span>',
+                    'Phone', 'Doctor',
+                    '<span style="display:block;text-align:center">Visits</span>',
+                    'Last Visit', 'Registered'],
+                rows
+            );
         }
 
         function renderSection(name) {
@@ -395,9 +506,23 @@
                 document.getElementById("stat-total").textContent = ov.total_consultations;
                 document.getElementById("stat-month").textContent = `${ov.month_consultations} this month`;
 
+                document.getElementById("visit-type-summary").innerHTML = `
+          ${statItem('New Patients (1 visit)', ov.new_patient_visits)}
+          ${statItem('Returning Patients (2+ visits)', ov.returning_patient_visits)}
+          ${statItem('Total Unique Patients', ov.total_patients)}
+        `;
+
+                document.getElementById("void-summary").innerHTML = `
+          ${statItem('Confirmed Consultations', ov.total_consultations)}
+          ${statItem('Voided Consultations', ov.voided_consultations)}
+          ${statItem('Void Rate', ov.void_rate + '%')}
+        `;
+
                 const today = new Date();
-                const todayStr = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, ' ');
-                const todayConsults = d.recent_consultations.filter(c => c.date.startsWith(todayStr) || c.date.includes(today.getDate() + ' ' + today.toLocaleString('en', { month: 'short' }) + ' ' + today.getFullYear()));
+                const todayConsults = d.recent_consultations.filter(c => {
+                    const d2 = new Date(c.date);
+                    return c.date.includes(today.getDate() + ' ' + today.toLocaleString('en', { month: 'short' }) + ' ' + today.getFullYear());
+                });
 
                 if (!todayConsults.length) {
                     document.getElementById("today-activity").innerHTML = emptyMsg('No consultations today yet.');
@@ -436,21 +561,14 @@
                 }
             }
 
+            if (name === 'patients') {
+                allPatients = d.patients || [];
+                document.getElementById('patients-count').textContent = `${allPatients.length} total patients`;
+                renderPatientsTable(allPatients);
+            }
+
             if (name === 'consultations') {
-                if (!d.recent_consultations.length) {
-                    document.getElementById("consultations-table").innerHTML = emptyMsg('No consultations yet.');
-                } else {
-                    const rows = d.recent_consultations.map(c => `<tr>
-            <td style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}</td>
-            <td><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
-            <td style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
-            <td>${sanitize(c.diagnosis)}</td>
-            <td style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(c.date)}</td>
-          </tr>`).join('');
-                    document.getElementById("consultations-table").innerHTML = makeTable(
-                        ['Token', 'Patient', 'Doctor', 'Diagnosis', 'Date'], rows
-                    );
-                }
+                loadConsultations(1);
             }
 
             if (name === 'medicines') {
@@ -499,10 +617,58 @@
                 } else {
                     const bloodRows = Object.entries(demo.blood_groups).map(([k, v]) => `<tr>
             <td>${k}</td>
-            <td style="font-weight:600;text-align:right">${v}</td>
+            <td style="text-align:center;font-weight:600">${v}</td>
           </tr>`).join('');
-                    document.getElementById("blood-table").innerHTML = makeTable(['Blood Group', 'Patients'], bloodRows);
+                    document.getElementById("blood-table").innerHTML = makeTable(
+                        ['Blood Group', '<span style="display:block;text-align:center">Patients</span>'],
+                        bloodRows
+                    );
                 }
+            }
+        }
+
+        async function loadConsultations(page) {
+            const from = document.getElementById('filter-from')?.value || '';
+            const to = document.getElementById('filter-to')?.value || '';
+            const search = document.getElementById('filter-search')?.value.trim() || '';
+            const params = new URLSearchParams({ page, limit: 50 });
+            if (from) params.append('from_date', from);
+            if (to) params.append('to_date', to);
+            try {
+                const data = await api('GET', `/consultations/admin-consultations?${params.toString()}`);
+                let consults = data.consultations;
+                if (search) {
+                    const q = search.toLowerCase();
+                    consults = consults.filter(c =>
+                        c.patient_name.toLowerCase().includes(q) ||
+                        c.patient_uid.toLowerCase().includes(q) ||
+                        c.token.toLowerCase().includes(q)
+                    );
+                }
+                const table = document.getElementById('consultations-table');
+                const pagination = document.getElementById('consultations-pagination');
+                if (!consults.length) {
+                    table.innerHTML = emptyMsg('No consultations found.');
+                    pagination.innerHTML = '';
+                    return;
+                }
+                const rows = consults.map(c => `<tr>
+          <td style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}</td>
+          <td><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
+          <td style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
+          <td>${sanitize(c.diagnosis)}</td>
+          <td style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(c.date)}</td>
+        </tr>`).join('');
+                table.innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis', 'Date'], rows);
+                pagination.innerHTML = `
+          <span style="color:var(--slate);font-size:13px">Page ${data.page} of ${data.pages} · ${data.total} total</span>
+          <div style="display:flex;gap:8px">
+            ${data.page > 1 ? `<button class="btn btn-outline btn-sm" onclick="loadConsultations(${data.page - 1})">← Prev</button>` : ''}
+            ${data.page < data.pages ? `<button class="btn btn-outline btn-sm" onclick="loadConsultations(${data.page + 1})">Next →</button>` : ''}
+          </div>
+        `;
+            } catch (e) {
+                document.getElementById('consultations-table').innerHTML = emptyMsg('Failed to load consultations.');
             }
         }
 

@@ -685,24 +685,32 @@ def admin_dashboard(
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    # Get all doctors in hospital
     hospital_doctors = db.query(DoctorModel).filter(
         DoctorModel.hospital_id == current_doctor.hospital_id,
         DoctorModel.role == "doctor"
     ).all()
     doctor_ids = [d.id for d in hospital_doctors]
+    doctor_map = {d.id: d for d in hospital_doctors}
 
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = now - timedelta(days=7)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    # Base consultation query
+    # All confirmed consultations
     all_consults = db.query(Consultation).filter(
         Consultation.doctor_id.in_(doctor_ids),
         Consultation.token_number != None,
         Consultation.is_voided == False
     ).all()
+
+    # Voided consultations
+    voided_consults = db.query(Consultation).filter(
+        Consultation.doctor_id.in_(doctor_ids),
+        Consultation.is_voided == True
+    ).count()
+
+    total_attempted = len(all_consults) + voided_consults
 
     today_consults = [c for c in all_consults if c.created_at >= today_start]
     week_consults = [c for c in all_consults if c.created_at >= week_start]
@@ -714,6 +722,37 @@ def admin_dashboard(
     ).all()
     patient_map = {p.id: p for p in all_patients}
     new_patients_month = [p for p in all_patients if p.created_at >= month_start]
+
+    # New vs returning patients
+    # A patient is "returning" if they have more than 1 consultation
+    patient_consult_count = {}
+    for c in all_consults:
+        patient_consult_count[c.patient_id] = patient_consult_count.get(c.patient_id, 0) + 1
+    new_patient_visits = sum(1 for count in patient_consult_count.values() if count == 1)
+    returning_patient_visits = sum(1 for count in patient_consult_count.values() if count > 1)
+
+    # Patients list
+    patients_list = []
+    for p in sorted(all_patients, key=lambda x: x.created_at, reverse=True):
+        doctor = doctor_map.get(p.doctor_id)
+        consult_count = patient_consult_count.get(p.id, 0)
+        last_consult = max(
+            [c for c in all_consults if c.patient_id == p.id],
+            key=lambda c: c.created_at,
+            default=None
+        )
+        patients_list.append({
+            "patient_uid": p.patient_uid,
+            "name": p.name,
+            "age": p.age,
+            "gender": p.gender,
+            "blood_group": p.blood_group or "—",
+            "phone": p.phone,
+            "doctor": f"{doctor.title} {doctor.name}" if doctor else "—",
+            "total_visits": consult_count,
+            "last_visit": last_consult.created_at.strftime("%d %b %Y") if last_consult else "—",
+            "registered": p.created_at.strftime("%d %b %Y")
+        })
 
     # Per doctor stats
     doctor_stats = []
@@ -738,7 +777,7 @@ def admin_dashboard(
     recent_list = []
     for c in recent_consults:
         patient = patient_map.get(c.patient_id)
-        doctor = next((d for d in hospital_doctors if d.id == c.doctor_id), None)
+        doctor = doctor_map.get(c.doctor_id)
         recent_list.append({
             "token": c.token_number,
             "patient_name": patient.name if patient else "—",
@@ -748,7 +787,7 @@ def admin_dashboard(
             "date": c.created_at.strftime("%d %b %Y %I:%M %p")
         })
 
-    # Medicine stats with diagnosis mapping
+    # Medicine stats
     medicine_counts = {}
     medicine_diagnosis = {}
     otc_count = 0
@@ -811,31 +850,25 @@ def admin_dashboard(
         elif p.age <= 60: ag = "41-60"
         else: ag = "60+"
         age_groups[ag] += 1
-
         g = p.gender.capitalize()
         gender_counts[g] = gender_counts.get(g, 0) + 1
-
         if p.blood_group:
             bg = p.blood_group.strip().upper()
             blood_groups[bg] = blood_groups.get(bg, 0) + 1
 
-    # Age & gender -> diagnosis patterns
     for c in all_consults:
         patient = patient_map.get(c.patient_id)
         if not patient or not c.diagnosis:
             continue
         diag = c.diagnosis.strip().capitalize()
-
         if patient.age <= 12: ag = "0-12"
         elif patient.age <= 25: ag = "13-25"
         elif patient.age <= 40: ag = "26-40"
         elif patient.age <= 60: ag = "41-60"
         else: ag = "60+"
-
         if ag not in age_diagnosis:
             age_diagnosis[ag] = {}
         age_diagnosis[ag][diag] = age_diagnosis[ag].get(diag, 0) + 1
-
         g = patient.gender.capitalize()
         if g not in gender_diagnosis:
             gender_diagnosis[g] = {}
@@ -862,7 +895,6 @@ def admin_dashboard(
             "cases": top[1]
         })
 
-    # Daily consultations
     daily_counts = {}
     for c in all_consults:
         day = c.created_at.strftime("%d %b")
@@ -879,10 +911,15 @@ def admin_dashboard(
             "total_doctors": len(hospital_doctors),
             "active_doctors": len([d for d in hospital_doctors if d.is_active]),
             "otc_medicines": otc_count,
-            "rx_medicines": rx_count
+            "rx_medicines": rx_count,
+            "voided_consultations": voided_consults,
+            "void_rate": round(voided_consults / total_attempted * 100, 1) if total_attempted > 0 else 0,
+            "new_patient_visits": new_patient_visits,
+            "returning_patient_visits": returning_patient_visits
         },
         "doctor_stats": doctor_stats,
         "recent_consultations": recent_list,
+        "patients": patients_list,
         "top_medicines": top_medicines_detailed,
         "top_tests": [{"name": k, "count": v} for k, v in top_tests],
         "top_diagnoses": [{"name": k, "count": v} for k, v in top_diagnoses],
@@ -894,4 +931,73 @@ def admin_dashboard(
             "gender_patterns": gender_patterns
         },
         "daily_consultations": daily_counts
+    }
+
+@router.get("/admin-consultations")
+def admin_consultations(
+    from_date: str = None,
+    to_date: str = None,
+    doctor_id: int = None,
+    page: int = 1,
+    limit: int = 50,
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db)
+):
+    from datetime import datetime
+    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital_doctor_ids = [
+        d.id for d in db.query(DoctorModel).filter(
+            DoctorModel.hospital_id == current_doctor.hospital_id,
+            DoctorModel.role == "doctor"
+        ).all()
+    ]
+
+    query = db.query(Consultation).filter(
+        Consultation.doctor_id.in_(hospital_doctor_ids),
+        Consultation.token_number != None,
+        Consultation.is_voided == False
+    )
+
+    if from_date:
+        try:
+            fd = datetime.strptime(from_date, "%Y-%m-%d")
+            query = query.filter(Consultation.created_at >= fd)
+        except: pass
+
+    if to_date:
+        try:
+            td = datetime.strptime(to_date, "%Y-%m-%d")
+            td = td.replace(hour=23, minute=59, second=59)
+            query = query.filter(Consultation.created_at <= td)
+        except: pass
+
+    if doctor_id:
+        query = query.filter(Consultation.doctor_id == doctor_id)
+
+    total = query.count()
+    consults = query.order_by(Consultation.created_at.desc()).offset((page-1)*limit).limit(limit).all()
+
+    result = []
+    all_doctors = {d.id: d for d in db.query(DoctorModel).filter(DoctorModel.id.in_(hospital_doctor_ids)).all()}
+    all_patients = {p.id: p for p in db.query(Patient).filter(Patient.doctor_id.in_(hospital_doctor_ids)).all()}
+
+    for c in consults:
+        patient = all_patients.get(c.patient_id)
+        doctor = all_doctors.get(c.doctor_id)
+        result.append({
+            "token": c.token_number,
+            "patient_name": patient.name if patient else "—",
+            "patient_uid": patient.patient_uid if patient else "—",
+            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
+            "diagnosis": c.diagnosis or "—",
+            "date": c.created_at.strftime("%d %b %Y %I:%M %p")
+        })
+
+    return {
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit,
+        "consultations": result
     }
