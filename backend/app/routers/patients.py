@@ -14,9 +14,7 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 
 def generate_patient_uid(db: Session, hospital_id: int, hospital_code: str) -> str:
     prefix = hospital_code.replace("-", "")[:4]
-    count = db.query(Patient).join(Doctor).filter(
-        Doctor.hospital_id == hospital_id
-    ).count() + 1
+    count = db.query(Patient).filter(Patient.hospital_id == hospital_id).count() + 1
     return f"{prefix}-{count:04d}"
 
 @router.post("/", response_model=PatientOut, status_code=201)
@@ -35,7 +33,8 @@ def create_patient(
         age=payload.age,
         blood_group=payload.blood_group,
         gender=payload.gender,
-        doctor_id=current_doctor.id
+        hospital_id=current_doctor.hospital_id,
+        created_by=current_doctor.id
     )
     db.add(patient)
     db.commit()
@@ -51,7 +50,7 @@ def list_patients(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     offset = (page - 1) * limit
-    query = db.query(Patient).filter(Patient.doctor_id == current_doctor.id)
+    query = db.query(Patient).filter(Patient.hospital_id == current_doctor.hospital_id)
     if search:
         query = query.filter(
             Patient.name.ilike(f"%{search}%") |
@@ -88,7 +87,7 @@ def get_patient(
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
-        Patient.doctor_id == current_doctor.id
+        Patient.hospital_id == current_doctor.hospital_id
     ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
@@ -103,7 +102,7 @@ def update_patient(
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
-        Patient.doctor_id == current_doctor.id
+        Patient.hospital_id == current_doctor.hospital_id
     ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")

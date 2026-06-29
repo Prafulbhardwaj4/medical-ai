@@ -169,9 +169,18 @@
         gap: 16px;
         padding: 20px;
       }
-      .patient-header-actions { width: 100%; }
-      .patient-header-actions .btn { flex: 1; }
-      .patient-meta { gap: 16px; }
+
+      .patient-header-actions {
+        width: 100%;
+      }
+
+      .patient-header-actions .btn {
+        flex: 1;
+      }
+
+      .patient-meta {
+        gap: 16px;
+      }
     }
   </style>
 </head>
@@ -379,6 +388,7 @@
               <span class="badge badge-navy">${v.token_number || "Draft"}</span>
               <span style="font-size:0.875rem;font-weight:600;color:var(--navy)">${formatDate(v.created_at)}</span>
               <span style="font-size:0.82rem;color:var(--slate)">${v.chief_complaint || "—"}</span>
+              <span style="font-size:0.82rem;color:var(--teal);font-weight:500">${v.doctor_name || ""}</span>
             </div>
             <div style="display:flex;align-items:center;gap:10px">
               <span class="badge ${waClass}">WhatsApp: ${v.whatsapp_status}</span>

@@ -7,7 +7,7 @@ class PatientCreate(BaseModel):
     phone: str
     age: int
     blood_group: Optional[str] = None
-    gender: str  # "male" / "female" / "other"
+    gender: str
 
 class PatientOut(BaseModel):
     id: int
@@ -17,7 +17,8 @@ class PatientOut(BaseModel):
     age: int
     blood_group: Optional[str] = None
     gender: str
-    doctor_id: int
+    hospital_id: Optional[int] = None
+    created_by: int
     created_at: datetime
 
     class Config:

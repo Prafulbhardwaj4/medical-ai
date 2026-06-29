@@ -56,6 +56,8 @@ class ConsultationHistoryItem(BaseModel):
     advice: Optional[str]
     followup: Optional[str]
     whatsapp_status: str
+    doctor_name: Optional[str] = None
+    vitals: Optional[str] = None
 
     class Config:
         from_attributes = True

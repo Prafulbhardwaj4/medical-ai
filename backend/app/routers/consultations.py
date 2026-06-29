@@ -86,7 +86,7 @@ def get_analytics(
         daily_counts[day] = daily_counts.get(day, 0) + 1
 
     # Age group distribution from patients
-    patients = db.query(Patient).filter(Patient.doctor_id == current_doctor.id).all()
+    patients = db.query(Patient).filter(Patient.hospital_id == current_doctor.hospital_id).all()
     age_groups = {"0-12": 0, "13-25": 0, "26-40": 0, "41-60": 0, "60+": 0}
     for p in patients:
         if p.age <= 12:
@@ -169,7 +169,7 @@ async def transcribe(
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
-        Patient.doctor_id == current_doctor.id
+        Patient.hospital_id == current_doctor.hospital_id
     ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
@@ -249,7 +249,7 @@ async def websocket_transcribe(
 
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
-        Patient.doctor_id == doctor.id
+        Patient.hospital_id == doctor.hospital_id
     ).first()
     if not patient:
         await websocket.close(code=4003)
@@ -379,7 +379,7 @@ def get_history(
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
-        Patient.doctor_id == current_doctor.id
+        Patient.hospital_id == current_doctor.hospital_id
     ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
@@ -394,7 +394,26 @@ def get_history(
         .order_by(desc(Consultation.created_at))
         .all()
     )
-    return consultations
+
+    result = []
+    for c in consultations:
+        doctor = db.query(DoctorModel).filter(DoctorModel.id == c.doctor_id).first()
+        item = ConsultationHistoryItem(
+            id=c.id,
+            token_number=c.token_number,
+            created_at=c.created_at,
+            chief_complaint=c.chief_complaint,
+            diagnosis=c.diagnosis,
+            medicines=c.medicines,
+            tests=c.tests,
+            advice=c.advice,
+            followup=c.followup,
+            whatsapp_status=c.whatsapp_status,
+            vitals=c.vitals,
+            doctor_name=f"{doctor.title} {doctor.name}" if doctor else "—"
+        )
+        result.append(item)
+    return result
 
 @router.get("/prescriptions/{token_number}.pdf")
 def get_prescription_pdf(
@@ -404,7 +423,6 @@ def get_prescription_pdf(
 ):
     consultation = db.query(Consultation).filter(
         Consultation.token_number == token_number,
-        Consultation.doctor_id == current_doctor.id,
         Consultation.is_voided == False
     ).first()
 
