@@ -752,7 +752,7 @@ def admin_dashboard(
     # Patients list
     patients_list = []
     for p in sorted(all_patients, key=lambda x: x.created_at, reverse=True):
-        doctor = doctor_map.get(p.doctor_id)
+        doctor = doctor_map.get(p.created_by)
         consult_count = patient_consult_count.get(p.id, 0)
         last_consult = max(
             [c for c in all_consults if c.patient_id == p.id],
