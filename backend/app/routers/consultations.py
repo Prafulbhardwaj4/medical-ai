@@ -71,7 +71,7 @@ def get_analytics(
             Consultation.is_voided == False
         )
         patients = db.query(Patient).filter(
-            Patient.doctor_id == current_doctor.id
+            Patient.hospital_id == current_doctor.hospital_id
         ).all()
         total_patients = len(patients)
 
@@ -736,7 +736,7 @@ def admin_dashboard(
 
     # All patients
     all_patients = db.query(Patient).filter(
-        Patient.doctor_id.in_(doctor_ids)
+        Patient.hospital_id == current_doctor.hospital_id
     ).all()
     patient_map = {p.id: p for p in all_patients}
     new_patients_month = [p for p in all_patients if p.created_at >= month_start]
@@ -999,7 +999,7 @@ def admin_consultations(
 
     result = []
     all_doctors = {d.id: d for d in db.query(DoctorModel).filter(DoctorModel.id.in_(hospital_doctor_ids)).all()}
-    all_patients = {p.id: p for p in db.query(Patient).filter(Patient.doctor_id.in_(hospital_doctor_ids)).all()}
+    all_patients = {p.id: p for p in db.query(Patient).filter(Patient.hospital_id == current_doctor.hospital_id).all()}
 
     for c in consults:
         patient = all_patients.get(c.patient_id)
