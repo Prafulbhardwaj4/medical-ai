@@ -61,7 +61,7 @@ def get_analytics(
             Consultation.is_voided == False
         )
         patients = db.query(Patient).filter(
-            Patient.doctor_id.in_(hospital_doctor_ids)
+            Patient.hospital_id == current_doctor.hospital_id
         ).all()
         total_patients = len(patients)
     else:
@@ -421,19 +421,23 @@ def get_prescription_pdf(
     current_doctor: Doctor = Depends(get_current_doctor),
     db: Session = Depends(get_db)
 ):
-    consultation = db.query(Consultation).filter(
+    consultation = db.query(Consultation).join(
+        Patient, Consultation.patient_id == Patient.id
+    ).filter(
         Consultation.token_number == token_number,
-        Consultation.is_voided == False
+        Consultation.is_voided == False,
+        Patient.hospital_id == current_doctor.hospital_id
     ).first()
 
     if not consultation:
         raise HTTPException(status_code=404, detail="Prescription not found")
 
-    pdf_path = os.path.join("prescriptions", f"{token_number}.pdf")
+    safe_token = os.path.basename(token_number)
+    pdf_path = os.path.join("prescriptions", f"{safe_token}.pdf")
     if not os.path.exists(pdf_path):
-        raise HTTPException(status_code=404, detail="PDF not found")
+        raise HTTPException(status_code=404, detail="PDF file not found")
 
-    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{token_number}.pdf")
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{safe_token}.pdf")
 
 
 @router.get("/verify/{token_number}")
@@ -473,10 +477,19 @@ def verify_prescription(token_number: str, hash: str, db: Session = Depends(get_
 
 
 @router.post("/verify/{token_number}/dispense")
-def mark_dispensed(token_number: str, hash: str, db: Session = Depends(get_db)):
-    consultation = db.query(Consultation).filter(
+def mark_dispensed(
+    token_number: str,
+    hash: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    consultation = db.query(Consultation).join(
+        Patient, Consultation.patient_id == Patient.id
+    ).filter(
         Consultation.token_number == token_number,
-        Consultation.verify_hash == hash
+        Consultation.verify_hash == hash,
+        Consultation.is_voided == False,
+        Patient.hospital_id == current_doctor.hospital_id
     ).first()
 
     if not consultation:
@@ -617,6 +630,8 @@ def update_consultation(
     ).first()
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
+    if consultation.token_number:
+        raise HTTPException(status_code=400, detail="Cannot edit a confirmed prescription.")
 
     consultation.chief_complaint = payload.chief_complaint
     consultation.diagnosis = payload.diagnosis

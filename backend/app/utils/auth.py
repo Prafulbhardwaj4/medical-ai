@@ -6,6 +6,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
+from app.models.blacklisted_token import BlacklistedToken
 import pytz
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -29,6 +30,14 @@ def decode_access_token(token: str) -> dict:
     except JWTError:
         return None
 
+def blacklist_token(token: str, db: Session):
+    entry = BlacklistedToken(token=token, blacklisted_at=datetime.utcnow())
+    db.add(entry)
+    db.commit()
+
+def is_token_blacklisted(token: str, db: Session) -> bool:
+    return db.query(BlacklistedToken).filter(BlacklistedToken.token == token).first() is not None
+
 def get_current_doctor(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
@@ -40,9 +49,9 @@ def get_current_doctor(
         headers={"WWW-Authenticate": "Bearer"},
     )
     payload = decode_access_token(credentials.credentials)
-    if is_token_blacklisted(credentials.credentials):
-        raise credentials_exception
     if payload is None:
+        raise credentials_exception
+    if is_token_blacklisted(credentials.credentials, db):
         raise credentials_exception
     doctor_id: int = payload.get("sub")
     if doctor_id is None:
@@ -50,19 +59,11 @@ def get_current_doctor(
     doctor = db.query(Doctor).filter(Doctor.id == int(doctor_id)).first()
     if doctor is None:
         raise credentials_exception
+    if not doctor.is_active:
+        raise credentials_exception
     return doctor
-
-# Simple in-memory token blacklist (resets on server restart)
-_blacklisted_tokens = set()
-
-def blacklist_token(token: str):
-    _blacklisted_tokens.add(token)
-
-def is_token_blacklisted(token: str) -> bool:
-    return token in _blacklisted_tokens
 
 IST = pytz.timezone("Asia/Kolkata")
 
 def now_ist():
-    from datetime import datetime
     return datetime.now(IST)

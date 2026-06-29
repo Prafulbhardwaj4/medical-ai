@@ -132,9 +132,9 @@ function validateLogin(email, password) {
 }
 
 function redirectByRole(role) {
-  if (role === 'doctor' || role === 'sub_admin') {
+  if (role === 'doctor') {
     window.location.href = '/pages/dashboard.html';
-  } else if (role === 'admin') {
+  } else if (role === 'admin' || role === 'sub_admin') {
     window.location.href = '/pages/analytics.html';
   } else if (role === 'super_admin') {
     window.location.href = '/pages/superadmin.html';

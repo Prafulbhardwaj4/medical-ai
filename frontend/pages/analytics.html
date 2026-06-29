@@ -385,7 +385,7 @@
     <script src="../js/api.js?v=3"></script>
     <script>
         const doc = getDoctor();
-        if (doc && doc.role === 'doctor') window.location.href = 'dashboard.html';
+        if (doc && (doc.role === 'doctor')) window.location.href = 'dashboard.html';
         if (!requireAuth()) throw new Error();
         fillTopbar();
 

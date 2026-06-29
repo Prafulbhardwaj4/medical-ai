@@ -75,7 +75,8 @@ def me(current_doctor: Doctor = Depends(get_current_doctor)):
 @router.post("/logout")
 def logout(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db)
 ):
-    blacklist_token(credentials.credentials)
+    blacklist_token(credentials.credentials, db)
     return {"message": "Logged out successfully"}

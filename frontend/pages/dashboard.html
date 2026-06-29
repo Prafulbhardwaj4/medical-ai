@@ -180,7 +180,7 @@
   <script>
 
     const doc = getDoctor();
-    if (doc && (doc.role === 'admin' || doc.role === 'super_admin')) window.location.href = 'analytics.html';
+    if (doc && (doc.role === 'admin' || doc.role === 'sub_admin' || doc.role === 'super_admin')) window.location.href = 'analytics.html';
 
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();

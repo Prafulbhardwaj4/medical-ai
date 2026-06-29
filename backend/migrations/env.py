@@ -7,6 +7,11 @@ from sqlalchemy import pool
 from alembic import context
 from app.database import Base
 from app.models import Doctor, Patient, Consultation
+from app.models.hospital import Hospital
+from app.models.doctor import Doctor
+from app.models.patient import Patient
+from app.models.consultation import Consultation
+from app.models.blacklisted_token import BlacklistedToken
 
 config = context.config
 

@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from app.routers import admin as admin_router
 from app.models.hospital import Hospital
+from app.models.blacklisted_token import BlacklistedToken
 
 if settings.SECRET_KEY == "changeme":
     warnings.warn("WARNING: SECRET_KEY is default. Set a strong key in .env before deploying.")
