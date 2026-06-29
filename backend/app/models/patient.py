@@ -13,8 +13,9 @@ class Patient(Base):
     age = Column(Integer, nullable=False)
     blood_group = Column(String, nullable=True)
     gender = Column(String, nullable=False)
+    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)
-    created_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
+    created_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     doctor = relationship("Doctor", foreign_keys=[created_by], back_populates="patients")
