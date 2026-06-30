@@ -440,7 +440,7 @@ def get_prescription_pdf(
 
 @router.get("/verify/{token_number}")
 @limiter.limit("10/minute")
-def verify_prescription(token_number: str, hash: str, db: Session = Depends(get_db)):
+def verify_prescription(request: Request, token_number: str, hash: str, db: Session = Depends(get_db)):
     consultation = db.query(Consultation).filter(
         Consultation.token_number == token_number
     ).first()
