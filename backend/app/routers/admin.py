@@ -24,6 +24,10 @@ def validate_fields(name, email, phone, password):
         raise HTTPException(status_code=400, detail="Invalid phone number")
     if len(password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if not re.search(r'[0-9]', password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one number")
+    if not re.search(r'[A-Z]', password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter")
     if len(name.strip()) < 2:
         raise HTTPException(status_code=400, detail="Name too short")
 
@@ -212,6 +216,18 @@ def toggle_doctor_active(
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
 
+    # Prevent deactivating yourself
+    if doctor.id == current_doctor.id:
+        raise HTTPException(status_code=400, detail="You cannot deactivate your own account")
+
+    # sub_admin cannot deactivate admin or other sub_admins
+    if current_doctor.role.value == "sub_admin" and doctor.role.value in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Sub admin cannot deactivate admin accounts")
+
+    # admin cannot deactivate other admins or sub_admins
+    if current_doctor.role.value == "admin" and doctor.role.value in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Cannot deactivate admin or sub admin accounts")
+
     doctor.is_active = not doctor.is_active
     db.commit()
     return {"id": doctor.id, "is_active": doctor.is_active}
@@ -250,6 +266,59 @@ def create_superadmin(
         "name": superadmin.name,
         "email": superadmin.email,
         "role": superadmin.role.value
+    }
+
+@router.post("/create-subadmin", status_code=201)
+def create_subadmin(
+    hospital_id: int,
+    name: str,
+    email: str,
+    phone: str,
+    password: str,
+    specialization: str,
+    title: str = "Dr.",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if current_doctor.role.value != "super_admin" and current_doctor.hospital_id != hospital_id:
+        raise HTTPException(status_code=403, detail="Cannot create sub admin for another hospital")
+
+    validate_fields(name, email, phone, password)
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    email = email.lower().strip()
+    existing = db.query(Doctor).filter(Doctor.email == email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    subadmin = Doctor(
+        title=title,
+        name=name,
+        email=email,
+        phone=phone,
+        specialization=specialization,
+        clinic_name=hospital.name,
+        hashed_password=hash_password(password),
+        role=UserRole.sub_admin,
+        hospital_id=hospital_id,
+        is_active=True,
+        created_by=current_doctor.id
+    )
+    db.add(subadmin)
+    db.commit()
+    db.refresh(subadmin)
+    return {
+        "id": subadmin.id,
+        "name": subadmin.name,
+        "email": subadmin.email,
+        "role": subadmin.role.value,
+        "hospital": hospital.name
     }
 
 @router.get("/hospitals-list")

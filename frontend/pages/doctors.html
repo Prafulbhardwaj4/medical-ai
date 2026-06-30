@@ -141,7 +141,21 @@
       <input class="form-control" id="d-specialization" placeholder="Specialization" style="margin-bottom:14px" />
       <input class="form-control" id="d-reg" placeholder="Registration Number (optional)" style="margin-bottom:14px" />
       <input class="form-control" id="d-password" type="password" placeholder="Temporary Password"
-        style="margin-bottom:20px" />
+        oninput="checkPasswordStrength(this.value)" style="margin-bottom:8px" />
+      <div style="margin-bottom:20px;display:flex;flex-direction:column;gap:4px" id="password-strength">
+        <div id="check-length"
+          style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
+          <span id="icon-length">○</span> At least 8 characters
+        </div>
+        <div id="check-number"
+          style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
+          <span id="icon-number">○</span> At least one number
+        </div>
+        <div id="check-upper"
+          style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
+          <span id="icon-upper">○</span> At least one uppercase letter
+        </div>
+      </div>
       <div class="err-msg" id="modal-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
         <button class="btn btn-primary" style="flex:1" onclick="submitAddDoctor()">Create Account</button>
@@ -156,6 +170,23 @@
     requireAuth();
     fillTopbar();
     loadDoctors();
+
+    function checkPasswordStrength(val) {
+      const setCheck = (id, iconId, passed) => {
+        const el = document.getElementById(id);
+        const icon = document.getElementById(iconId);
+        if (passed) {
+          el.style.color = "var(--teal)";
+          icon.textContent = "✓";
+        } else {
+          el.style.color = "var(--slate-light)";
+          icon.textContent = "○";
+        }
+      };
+      setCheck("check-length", "icon-length", val.length >= 8);
+      setCheck("check-number", "icon-number", /[0-9]/.test(val));
+      setCheck("check-upper", "icon-upper", /[A-Z]/.test(val));
+    }
 
     function openAddModal() {
       document.getElementById('modal-overlay').style.display = 'flex';
@@ -212,6 +243,12 @@
       }
       if (password.length < 8) {
         err.textContent = 'Password must be at least 8 characters.'; return;
+      }
+      if (!/[0-9]/.test(password)) {
+        err.textContent = 'Password must contain at least one number.'; return;
+      }
+      if (!/[A-Z]/.test(password)) {
+        err.textContent = 'Password must contain at least one uppercase letter.'; return;
       }
 
       const doctor = getDoctor();

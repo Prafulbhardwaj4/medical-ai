@@ -7,7 +7,7 @@ from app.models.consultation import Consultation
 from app.models.patient import Patient
 from app.models.doctor import Doctor
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem
-from app.utils.auth import get_current_doctor, now_ist, decode_access_token
+from app.utils.auth import get_current_doctor, now_ist, decode_access_token, is_token_blacklisted
 from app.services.whisper import transcribe_audio
 from app.services.groq_service import structure_transcript
 from app.services.pdf_service import generate_prescription_pdf
@@ -22,9 +22,10 @@ from datetime import datetime
 import pytz
 from fastapi.responses import FileResponse
 import os
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
-
-
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/consultations", tags=["consultations"])
 
 
@@ -77,32 +78,28 @@ def get_analytics(
 
     total_consultations = base.count()
 
-    # Consultations per day (last 30 days)
-    all_consultations = base.order_by(Consultation.created_at).all()
+    # Load only fields needed for JSON parsing — no full ORM objects
+    all_consultations = base.with_entities(
+        Consultation.created_at,
+        Consultation.diagnosis,
+        Consultation.medicines,
+        Consultation.tests
+    ).order_by(Consultation.created_at).all()
 
     daily_counts = {}
     for c in all_consultations:
         day = c.created_at.strftime("%d %b")
         daily_counts[day] = daily_counts.get(day, 0) + 1
 
-    # Age group distribution from patients
-    patients = db.query(Patient).filter(Patient.hospital_id == current_doctor.hospital_id).all()
+    # Age + gender distribution via DB aggregation
     age_groups = {"0-12": 0, "13-25": 0, "26-40": 0, "41-60": 0, "60+": 0}
-    for p in patients:
-        if p.age <= 12:
-            age_groups["0-12"] += 1
-        elif p.age <= 25:
-            age_groups["13-25"] += 1
-        elif p.age <= 40:
-            age_groups["26-40"] += 1
-        elif p.age <= 60:
-            age_groups["41-60"] += 1
-        else:
-            age_groups["60+"] += 1
-
-    # Gender distribution
     gender_counts = {}
     for p in patients:
+        if p.age <= 12: age_groups["0-12"] += 1
+        elif p.age <= 25: age_groups["13-25"] += 1
+        elif p.age <= 40: age_groups["26-40"] += 1
+        elif p.age <= 60: age_groups["41-60"] += 1
+        else: age_groups["60+"] += 1
         g = p.gender.capitalize()
         gender_counts[g] = gender_counts.get(g, 0) + 1
 
@@ -114,26 +111,21 @@ def get_analytics(
             diagnosis_counts[d] = diagnosis_counts.get(d, 0) + 1
     top_diagnoses = sorted(diagnosis_counts.items(), key=lambda x: x[1], reverse=True)[:8]
 
-    # Top medicines
+    # Top medicines + OTC vs Rx
     medicine_counts = {}
+    otc_count = 0
+    rx_count = 0
     for c in all_consultations:
         meds = json.loads(c.medicines or "[]")
         for m in meds:
             name = m.get("name", "").strip().capitalize()
             if name:
                 medicine_counts[name] = medicine_counts.get(name, 0) + 1
-    top_medicines = sorted(medicine_counts.items(), key=lambda x: x[1], reverse=True)[:8]
-
-    # OTC vs Rx ratio
-    otc_count = 0
-    rx_count = 0
-    for c in all_consultations:
-        meds = json.loads(c.medicines or "[]")
-        for m in meds:
             if m.get("schedule") == "otc":
                 otc_count += 1
             else:
                 rx_count += 1
+    top_medicines = sorted(medicine_counts.items(), key=lambda x: x[1], reverse=True)[:8]
 
     # Tests ordered
     test_counts = {}
@@ -161,7 +153,9 @@ def get_analytics(
     }
 
 @router.post("/transcribe/{patient_id}")
+@limiter.limit("10/minute")
 async def transcribe(
+    request: Request,
     patient_id: int,
     audio: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -240,10 +234,14 @@ async def websocket_transcribe(
         await websocket.close(code=4001)
         return
 
+    if is_token_blacklisted(token, db):
+        await websocket.close(code=4001)
+        return
+
     doctor = db.query(DoctorModel).filter(
         DoctorModel.id == int(payload.get("sub"))
     ).first()
-    if not doctor:
+    if not doctor or not doctor.is_active:
         await websocket.close(code=4001)
         return
 
@@ -385,7 +383,8 @@ def get_history(
         raise HTTPException(status_code=404, detail="Patient not found")
 
     consultations = (
-        db.query(Consultation)
+        db.query(Consultation, DoctorModel)
+        .outerjoin(DoctorModel, Consultation.doctor_id == DoctorModel.id)
         .filter(
             Consultation.patient_id == patient_id,
             Consultation.token_number != None,
@@ -396,8 +395,7 @@ def get_history(
     )
 
     result = []
-    for c in consultations:
-        doctor = db.query(DoctorModel).filter(DoctorModel.id == c.doctor_id).first()
+    for c, doctor in consultations:
         item = ConsultationHistoryItem(
             id=c.id,
             token_number=c.token_number,
@@ -441,6 +439,7 @@ def get_prescription_pdf(
 
 
 @router.get("/verify/{token_number}")
+@limiter.limit("10/minute")
 def verify_prescription(token_number: str, hash: str, db: Session = Depends(get_db)):
     consultation = db.query(Consultation).filter(
         Consultation.token_number == token_number
@@ -506,7 +505,9 @@ def mark_dispensed(
 
 
 @router.post("/structure/{consultation_id}")
+@limiter.limit("10/minute")
 async def structure(
+    request: Request,
     consultation_id: int,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
@@ -563,7 +564,9 @@ async def structure(
 
 
 @router.post("/confirm/{consultation_id}")
+@limiter.limit("10/minute")
 def confirm_prescription(
+    request: Request,
     consultation_id: int,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
@@ -581,23 +584,27 @@ def confirm_prescription(
 
     patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
 
+    import hashlib
+    import secrets
+
     prefix = "".join([w[0].upper() for w in current_doctor.clinic_name.split()][:3])
     date_str = now_ist().strftime("%d%m%y")
-    confirmed_count = db.query(Consultation).filter(
-        Consultation.doctor_id == current_doctor.id,
-        Consultation.token_number != None
-    ).count()
-    token_number = f"{prefix}-{confirmed_count + 1:04d}-{date_str}"
 
-    while db.query(Consultation).filter(Consultation.token_number == token_number).first():
-        import random
-        token_number = f"{prefix}-{confirmed_count + 1:04d}-{date_str}-{random.randint(10,99)}"
+    # Collision-safe token generation using unique random suffix
+    while True:
+        confirmed_count = db.query(Consultation).filter(
+            Consultation.doctor_id == current_doctor.id,
+            Consultation.token_number != None
+        ).count()
+        token_number = f"{prefix}-{confirmed_count + 1:04d}-{date_str}-{secrets.token_hex(2).upper()}"
+        existing = db.query(Consultation).filter(Consultation.token_number == token_number).first()
+        if not existing:
+            break
 
     consultation.token_number = token_number
 
-    import hashlib
     hash_input = f"{token_number}-{current_doctor.id}-{consultation.id}-{settings.SECRET_KEY}"
-    verify_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:8].upper()
+    verify_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:16].upper()
     consultation.verify_hash = verify_hash
 
     try:
@@ -666,7 +673,9 @@ def void_consultation(
 
 
 @router.post("/send-sms/{consultation_id}")
+@limiter.limit("5/minute")
 def send_prescription_sms(
+    request: Request,
     consultation_id: int,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
@@ -713,6 +722,7 @@ def admin_dashboard(
 ):
     import json
     from datetime import datetime, timedelta
+    from sqlalchemy import func, case
     from app.models.hospital import Hospital
 
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
@@ -730,20 +740,56 @@ def admin_dashboard(
     week_start = now - timedelta(days=7)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    # All confirmed consultations
-    all_consults = db.query(Consultation).filter(
+    # DB-level counts instead of loading all into memory
+    total_consults = db.query(Consultation).filter(
         Consultation.doctor_id.in_(doctor_ids),
         Consultation.token_number != None,
         Consultation.is_voided == False
-    ).all()
+    ).count()
 
-    # Voided consultations
+    today_count = db.query(Consultation).filter(
+        Consultation.doctor_id.in_(doctor_ids),
+        Consultation.token_number != None,
+        Consultation.is_voided == False,
+        Consultation.created_at >= today_start
+    ).count()
+
+    week_count = db.query(Consultation).filter(
+        Consultation.doctor_id.in_(doctor_ids),
+        Consultation.token_number != None,
+        Consultation.is_voided == False,
+        Consultation.created_at >= week_start
+    ).count()
+
+    month_count = db.query(Consultation).filter(
+        Consultation.doctor_id.in_(doctor_ids),
+        Consultation.token_number != None,
+        Consultation.is_voided == False,
+        Consultation.created_at >= month_start
+    ).count()
+
     voided_consults = db.query(Consultation).filter(
         Consultation.doctor_id.in_(doctor_ids),
         Consultation.is_voided == True
     ).count()
 
-    total_attempted = len(all_consults) + voided_consults
+    total_attempted = total_consults + voided_consults
+
+    # Load only what's needed for JSON parsing (medicines/tests/diagnosis)
+    all_consults = db.query(Consultation).filter(
+        Consultation.doctor_id.in_(doctor_ids),
+        Consultation.token_number != None,
+        Consultation.is_voided == False
+    ).with_entities(
+        Consultation.id,
+        Consultation.patient_id,
+        Consultation.doctor_id,
+        Consultation.created_at,
+        Consultation.token_number,
+        Consultation.diagnosis,
+        Consultation.medicines,
+        Consultation.tests
+    ).all()
 
     today_consults = [c for c in all_consults if c.created_at >= today_start]
     week_consults = [c for c in all_consults if c.created_at >= week_start]
@@ -996,34 +1042,51 @@ def admin_consultations(
     if from_date:
         try:
             fd = datetime.strptime(from_date, "%Y-%m-%d")
-            query = query.filter(Consultation.created_at >= fd)
-        except: pass
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid from_date format. Use YYYY-MM-DD")
+        query = query.filter(Consultation.created_at >= fd)
 
     if to_date:
         try:
             td = datetime.strptime(to_date, "%Y-%m-%d")
-            td = td.replace(hour=23, minute=59, second=59)
-            query = query.filter(Consultation.created_at <= td)
-        except: pass
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid to_date format. Use YYYY-MM-DD")
+        td = td.replace(hour=23, minute=59, second=59)
+        query = query.filter(Consultation.created_at <= td)
+
+    if from_date and to_date and fd > td:
+        raise HTTPException(status_code=400, detail="from_date cannot be after to_date")
 
     if doctor_id:
         query = query.filter(Consultation.doctor_id == doctor_id)
 
     total = query.count()
-    consults = query.order_by(Consultation.created_at.desc()).offset((page-1)*limit).limit(limit).all()
+    consults = (
+        query
+        .join(Patient, Consultation.patient_id == Patient.id)
+        .join(DoctorModel, Consultation.doctor_id == DoctorModel.id)
+        .with_entities(
+            Consultation.token_number,
+            Consultation.diagnosis,
+            Consultation.created_at,
+            Patient.name.label("patient_name"),
+            Patient.patient_uid.label("patient_uid"),
+            DoctorModel.title.label("doctor_title"),
+            DoctorModel.name.label("doctor_name")
+        )
+        .order_by(Consultation.created_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
 
     result = []
-    all_doctors = {d.id: d for d in db.query(DoctorModel).filter(DoctorModel.id.in_(hospital_doctor_ids)).all()}
-    all_patients = {p.id: p for p in db.query(Patient).filter(Patient.hospital_id == current_doctor.hospital_id).all()}
-
     for c in consults:
-        patient = all_patients.get(c.patient_id)
-        doctor = all_doctors.get(c.doctor_id)
         result.append({
             "token": c.token_number,
-            "patient_name": patient.name if patient else "—",
-            "patient_uid": patient.patient_uid if patient else "—",
-            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
+            "patient_name": c.patient_name or "—",
+            "patient_uid": c.patient_uid or "—",
+            "doctor_name": f"{c.doctor_title} {c.doctor_name}" if c.doctor_name else "—",
             "diagnosis": c.diagnosis or "—",
             "date": c.created_at.strftime("%d %b %Y %I:%M %p")
         })

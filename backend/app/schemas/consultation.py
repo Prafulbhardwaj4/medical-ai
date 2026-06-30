@@ -1,13 +1,13 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 class MedicineItem(BaseModel):
     name: str
     dosage: str
     frequency: str
     duration: str
-    schedule: str = "controlled"
+    schedule: Literal["otc", "controlled"] = "controlled"
 
 class Vitals(BaseModel):
     bp: str = ""
