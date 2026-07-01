@@ -56,11 +56,16 @@ def get_current_doctor(
     doctor_id: int = payload.get("sub")
     if doctor_id is None:
         raise credentials_exception
+    from app.models.hospital import Hospital
     doctor = db.query(Doctor).filter(Doctor.id == int(doctor_id)).first()
     if doctor is None:
         raise credentials_exception
     if not doctor.is_active:
         raise credentials_exception
+    if doctor.role.value != "super_admin":
+        hospital = db.query(Hospital).filter(Hospital.id == doctor.hospital_id).first()
+        if not hospital or not hospital.is_active:
+            raise credentials_exception
     return doctor
 
 IST = pytz.timezone("Asia/Kolkata")

@@ -9,6 +9,7 @@ from app.models.doctor import Doctor
 from app.models.hospital import Hospital
 from app.schemas.patient import PatientCreate, PatientOut, PatientSummary
 from app.utils.auth import get_current_doctor
+from app.utils.audit import log_action
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -44,6 +45,15 @@ def create_patient(
     db.add(patient)
     db.commit()
     db.refresh(patient)
+
+    log_action(
+        db, current_doctor,
+        action="patient_created",
+        target_type="patient",
+        target_id=patient.id,
+        target_label=f"{patient.name} ({patient.patient_uid})"
+    )
+
     return patient
 
 @router.get("/", response_model=List[PatientSummary])
@@ -66,7 +76,6 @@ def list_patients(
 
     patient_ids = [p.id for p in patients]
 
-    # Single query to get last consultation per patient
     latest_consult_subq = (
         db.query(
             Consultation.patient_id,
@@ -136,4 +145,13 @@ def update_patient(
     patient.gender = payload.gender
     db.commit()
     db.refresh(patient)
+
+    log_action(
+        db, current_doctor,
+        action="patient_updated",
+        target_type="patient",
+        target_id=patient.id,
+        target_label=f"{patient.name} ({patient.patient_uid})"
+    )
+
     return patient

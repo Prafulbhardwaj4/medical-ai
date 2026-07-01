@@ -139,7 +139,7 @@ def generate_prescription_pdf(
     medicines = json.loads(consultation.medicines or "[]")
     if medicines:
         elements.append(Paragraph("Medicines", section_style))
-        med_data = [["Medicine", "Dosage", "Frequency", "Duration", "Type"]]
+        med_data = [["Medicine", "Brand Name", "Dosage", "Frequency", "Duration", "Type"]]
         has_controlled = False
         for m in medicines:
             schedule = m.get("schedule", "controlled")
@@ -148,6 +148,7 @@ def generate_prescription_pdf(
             type_label = "Rx" if schedule == "controlled" else "OTC"
             med_data.append([
                 cap_sentence(m.get("name", "")),
+                cap_sentence(m.get("brand_name", "—")),
                 m.get("dosage", ""),
                 cap_sentence(m.get("frequency", "")),
                 m.get("duration", "-"),
@@ -165,16 +166,16 @@ def generate_prescription_pdf(
             ("TOPPADDING", (0, 0), (-1, -1), 4),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("FONTNAME", (4, 1), (4, -1), "Helvetica-Bold"),
-            ("ALIGN", (4, 0), (4, -1), "CENTER"),
+            ("FONTNAME", (5, 1), (5, -1), "Helvetica-Bold"),
+            ("ALIGN", (5, 0), (5, -1), "CENTER"),
         ]
 
         for idx, m in enumerate(medicines, start=1):
             schedule = m.get("schedule", "controlled")
             color = colors.HexColor("#dc2626") if schedule == "controlled" else colors.HexColor("#16a34a")
-            med_table_style.append(("TEXTCOLOR", (4, idx), (4, idx), color))
+            med_table_style.append(("TEXTCOLOR", (5, idx), (5, idx), color))
 
-        med_table = Table(med_data, colWidths=[60*mm, 28*mm, 42*mm, 25*mm, 15*mm])
+        med_table = Table(med_data, colWidths=[45*mm, 35*mm, 25*mm, 38*mm, 22*mm, 15*mm])   
         med_table.setStyle(TableStyle(med_table_style))
         elements.append(med_table)
         elements.append(Spacer(1, 2*mm))

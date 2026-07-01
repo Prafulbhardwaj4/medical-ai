@@ -42,6 +42,13 @@
     <!-- Right panel -->
     <div class="auth-right">
       <div class="auth-box">
+        <div style="text-align:center;margin-bottom:28px">
+          <div style="font-size:1.5rem;font-weight:700;color:var(--navy, #0f1f3d);margin-bottom:6px">
+            Med<span style="color:var(--teal, #14b8a6)">Scribe</span>
+          </div>
+          <div style="color:var(--slate);font-size:14px">Sign in to your doctor account</div>
+        </div>
+
         <!-- LOGIN FORM -->
         <div id="form-login">
           <div class="form-group">
@@ -50,13 +57,23 @@
           </div>
           <div class="form-group">
             <label class="form-label">Password</label>
-            <input class="form-control" id="login-password" type="password" placeholder="••••••••" />
+            <div style="position:relative">
+              <input class="form-control" id="login-password" type="password" placeholder="••••••••"
+                style="padding-right:40px" />
+              <span onclick="toggleLoginPasswordVisibility()"
+                style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px"
+                id="login-eye-icon">👁</span>
+            </div>
           </div>
 
           <div class="err-msg" id="login-err"></div>
           <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-login" onclick="doLogin()">
             Sign In
           </button>
+
+          <div style="text-align:center;margin-top:20px;font-size:13px;color:var(--slate-light)">
+            Don't have an account? Contact your hospital admin.
+          </div>
         </div>
       </div>
     </div>
@@ -66,6 +83,18 @@
   <script>
     // Redirect if already logged in
     if (getToken()) redirectByRole(getDoctor()?.role);
+
+    function toggleLoginPasswordVisibility() {
+      const input = document.getElementById("login-password");
+      const icon = document.getElementById("login-eye-icon");
+      if (input.type === "password") {
+        input.type = "text";
+        icon.textContent = "🙈";
+      } else {
+        input.type = "password";
+        icon.textContent = "👁";
+      }
+    }
 
     async function doLogin() {
       const btn = document.getElementById("btn-login");

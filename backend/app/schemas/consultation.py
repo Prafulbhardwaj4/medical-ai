@@ -4,6 +4,7 @@ from typing import Optional, List, Literal
 
 class MedicineItem(BaseModel):
     name: str
+    brand_name: str = ""
     dosage: str
     frequency: str
     duration: str
@@ -57,6 +58,7 @@ class ConsultationHistoryItem(BaseModel):
     followup: Optional[str]
     whatsapp_status: str
     doctor_name: Optional[str] = None
+    doctor_specialization: Optional[str] = None
     vitals: Optional[str] = None
 
     class Config:

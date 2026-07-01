@@ -388,7 +388,7 @@
               <span class="badge badge-navy">${v.token_number || "Draft"}</span>
               <span style="font-size:0.875rem;font-weight:600;color:var(--navy)">${formatDate(v.created_at)}</span>
               <span style="font-size:0.82rem;color:var(--slate)">${v.chief_complaint || "—"}</span>
-              <span style="font-size:0.82rem;color:var(--teal);font-weight:500">${v.doctor_name || ""}</span>
+              <span style="font-size:0.82rem;color:var(--teal);font-weight:500">${v.doctor_name || ""}${v.doctor_specialization ? ` · ${v.doctor_specialization}` : ""}</span>
             </div>
             <div style="display:flex;align-items:center;gap:10px">
               <span class="badge ${waClass}">WhatsApp: ${v.whatsapp_status}</span>

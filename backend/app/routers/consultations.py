@@ -8,6 +8,7 @@ from app.models.patient import Patient
 from app.models.doctor import Doctor
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem
 from app.utils.auth import get_current_doctor, now_ist, decode_access_token, is_token_blacklisted
+from app.utils.audit import log_action
 from app.services.whisper import transcribe_audio
 from app.services.groq_service import structure_transcript
 from app.services.pdf_service import generate_prescription_pdf
@@ -408,7 +409,8 @@ def get_history(
             followup=c.followup,
             whatsapp_status=c.whatsapp_status,
             vitals=c.vitals,
-            doctor_name=f"{doctor.title} {doctor.name}" if doctor else "—"
+            doctor_name=f"{doctor.title} {doctor.name}" if doctor else "—",
+            doctor_specialization=doctor.specialization if doctor else None
         )
         result.append(item)
     return result
@@ -479,16 +481,12 @@ def verify_prescription(request: Request, token_number: str, hash: str, db: Sess
 def mark_dispensed(
     token_number: str,
     hash: str,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    db: Session = Depends(get_db)
 ):
-    consultation = db.query(Consultation).join(
-        Patient, Consultation.patient_id == Patient.id
-    ).filter(
+    consultation = db.query(Consultation).filter(
         Consultation.token_number == token_number,
         Consultation.verify_hash == hash,
-        Consultation.is_voided == False,
-        Patient.hospital_id == current_doctor.hospital_id
+        Consultation.is_voided == False
     ).first()
 
     if not consultation:
@@ -500,6 +498,15 @@ def mark_dispensed(
     consultation.is_dispensed = True
     consultation.dispensed_at = now_ist()
     db.commit()
+
+    log_action(
+        db, None,
+        action="prescription_dispensed",
+        target_type="consultation",
+        target_id=consultation.id,
+        target_label=consultation.token_number,
+        hospital_id=None
+    )
 
     return {"message": "Marked as dispensed", "dispensed_at": consultation.dispensed_at.isoformat()}
 
@@ -616,9 +623,28 @@ def confirm_prescription(
     db.commit()
     db.refresh(consultation)
 
+    log_action(
+        db, current_doctor,
+        action="prescription_confirmed",
+        target_type="consultation",
+        target_id=consultation.id,
+        target_label=token_number,
+        details=f"Patient: {patient.name} ({patient.patient_uid})"
+    )
+
+    log_action(
+        db, current_doctor,
+        action="prescription_confirmed",
+        target_type="consultation",
+        target_id=consultation.id,
+        target_label=token_number,
+        details=f"Patient: {patient.name} ({patient.patient_uid})"
+    )
+
     return {
         "consultation_id": consultation.id,
         "token_number": token_number,
+        "verify_hash": verify_hash,
         "pdf_path": pdf_path,
         "message": "Prescription confirmed and PDF generated."
     }
@@ -669,6 +695,16 @@ def void_consultation(
 
     consultation.is_voided = True
     db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="consultation_voided",
+        target_type="consultation",
+        target_id=consultation.id,
+        target_label=consultation.token_number or f"Draft #{consultation.id}",
+        details=f"Patient ID: {consultation.patient_id}"
+    )
+
     return {"message": "Consultation voided"}
 
 

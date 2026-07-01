@@ -98,6 +98,12 @@
           <button class="btn btn-primary" onclick="openHospitalModal()">+ Add Hospital</button>
         </div>
 
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          <button class="btn btn-sm hospital-filter-btn active" data-filter="all" onclick="setHospitalFilter('all', this)">All</button>
+          <button class="btn btn-sm hospital-filter-btn" data-filter="active" onclick="setHospitalFilter('active', this)">Active</button>
+          <button class="btn btn-sm hospital-filter-btn" data-filter="inactive" onclick="setHospitalFilter('inactive', this)">Inactive</button>
+        </div>
+
         <div id="hospitals-list">
           <p style="color:var(--slate)">Loading...</p>
         </div>
@@ -162,10 +168,33 @@
       <p style="margin-bottom:20px;font-size:13px;color:var(--slate)" id="admin-modal-sub"></p>
       <input class="form-control" id="a-name" placeholder="Full Name" style="margin-bottom:14px" />
       <input class="form-control" id="a-email" type="email" placeholder="Email" style="margin-bottom:14px" />
-      <input class="form-control" id="a-phone" placeholder="Phone e.g. +919876543210" style="margin-bottom:14px" />
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+        <span style="padding:9px 12px;background:var(--smoke-mid);border:1.5px solid var(--border);border-radius:var(--radius);font-size:0.9rem;color:var(--slate);white-space:nowrap;font-weight:500">+91</span>
+        <input class="form-control" id="a-phone" type="tel" placeholder="9876543210" maxlength="10" style="flex:1" />
+      </div>
       <input class="form-control" id="a-specialization" placeholder="Specialization" style="margin-bottom:14px" />
-      <input class="form-control" id="a-password" type="password" placeholder="Temporary Password"
+
+      <div style="position:relative;margin-bottom:8px">
+        <input class="form-control" id="a-password" type="password" placeholder="Temporary Password"
+          oninput="checkAdminPasswordStrength(this.value)" style="padding-right:40px" />
+        <span onclick="togglePasswordVisibility('a-password', this)"
+          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px">👁</span>
+      </div>
+      <div style="margin-bottom:14px;display:flex;flex-direction:column;gap:4px" id="admin-password-strength">
+        <div id="a-check-length" style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
+          <span id="a-icon-length">○</span> At least 8 characters
+        </div>
+        <div id="a-check-number" style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
+          <span id="a-icon-number">○</span> At least one number
+        </div>
+        <div id="a-check-upper" style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
+          <span id="a-icon-upper">○</span> At least one uppercase letter
+        </div>
+      </div>
+
+      <input class="form-control" id="a-confirm-password" type="password" placeholder="Confirm Password"
         style="margin-bottom:20px" />
+
       <div class="err-msg" id="admin-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
         <button class="btn btn-primary" style="flex:1" onclick="submitAdmin()">Create Admin</button>
@@ -238,31 +267,64 @@
     }
 
     // ── HOSPITALS ──
+    let hospitalFilter = 'all';
+    let allHospitalsCache = [];
+
+    function setHospitalFilter(filter, btn) {
+      hospitalFilter = filter;
+      document.querySelectorAll('.hospital-filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderHospitalsList();
+    }
+
+    function renderHospitalsList() {
+      const container = document.getElementById('hospitals-list');
+      let data = allHospitalsCache;
+      if (hospitalFilter === 'active') data = data.filter(h => h.is_active);
+      if (hospitalFilter === 'inactive') data = data.filter(h => !h.is_active);
+
+      if (!data || data.length === 0) {
+        container.innerHTML = '<div class="card"><p style="color:var(--slate)">No hospitals found.</p></div>';
+        return;
+      }
+      container.innerHTML = data.map(h => `
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div style="cursor:pointer;flex:1" onclick="openDetail(${h.id})">
+              <div style="font-weight:600;font-size:1rem">${sanitize(h.name)}</div>
+              <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(h.city)} · Code: ${sanitize(h.hospital_code)}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span>
+              <button class="btn ${h.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="event.stopPropagation(); toggleHospitalActive(${h.id}, this)">
+                ${h.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+              <svg onclick="openDetail(${h.id})" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--slate);cursor:pointer">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function toggleHospitalActive(hospitalId, btn) {
+      try {
+        const data = await api('PATCH', `/admin/hospitals/${hospitalId}/toggle-active`);
+        toast(`Hospital ${data.is_active ? 'activated' : 'deactivated'}.`, 'success');
+        loadHospitals();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
     async function loadHospitals() {
       const container = document.getElementById('hospitals-list');
       document.getElementById('hospital-detail').style.display = 'none';
       try {
         const data = await api('GET', '/admin/hospitals-list');
-        if (!data || data.length === 0) {
-          container.innerHTML = '<div class="card"><p style="color:var(--slate)">No hospitals yet.</p></div>';
-          return;
-        }
-        container.innerHTML = data.map(h => `
-          <div class="card" style="margin-bottom:12px;cursor:pointer" onclick="openDetail(${h.id})">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div>
-                <div style="font-weight:600;font-size:1rem">${sanitize(h.name)}</div>
-                <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(h.city)} · Code: ${sanitize(h.hospital_code)}</div>
-              </div>
-              <div style="display:flex;align-items:center;gap:12px">
-                <span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span>
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--slate)">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        `).join('');
+        allHospitalsCache = data || [];
+        renderHospitalsList();
       } catch (e) {
         container.innerHTML = '<p style="color:var(--slate)">Failed to load.</p>';
       }
@@ -362,6 +424,34 @@
       document.getElementById('admin-modal').style.display = 'none';
       document.getElementById('admin-err').textContent = '';
     }
+    function togglePasswordVisibility(inputId, iconEl) {
+      const input = document.getElementById(inputId);
+      if (input.type === "password") {
+        input.type = "text";
+        iconEl.textContent = "🙈";
+      } else {
+        input.type = "password";
+        iconEl.textContent = "👁";
+      }
+    }
+
+    function checkAdminPasswordStrength(val) {
+      const setCheck = (id, iconId, passed) => {
+        const el = document.getElementById(id);
+        const icon = document.getElementById(iconId);
+        if (passed) {
+          el.style.color = "var(--teal)";
+          icon.textContent = "✓";
+        } else {
+          el.style.color = "var(--slate-light)";
+          icon.textContent = "○";
+        }
+      };
+      setCheck("a-check-length", "a-icon-length", val.length >= 8);
+      setCheck("a-check-number", "a-icon-number", /[0-9]/.test(val));
+      setCheck("a-check-upper", "a-icon-upper", /[A-Z]/.test(val));
+    }
+
     async function submitAdmin() {
       const err = document.getElementById('admin-err');
       const name = document.getElementById('a-name').value.trim();
@@ -369,6 +459,7 @@
       const phone = document.getElementById('a-phone').value.trim();
       const specialization = document.getElementById('a-specialization').value.trim();
       const password = document.getElementById('a-password').value;
+      const confirmPassword = document.getElementById('a-confirm-password').value;
 
       if (!name || !email || !phone || !specialization || !password) {
         err.textContent = 'All fields are required.'; return;
@@ -376,14 +467,23 @@
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         err.textContent = 'Enter a valid email.'; return;
       }
-      if (!/^\+?[0-9]{10,13}$/.test(phone)) {
-        err.textContent = 'Enter a valid phone number (10-13 digits).'; return;
+      if (phone.length !== 10 || !/^\d{10}$/.test(phone)) {
+        err.textContent = 'Enter a valid 10-digit phone number.'; return;
       }
       if (password.length < 8) {
         err.textContent = 'Password must be at least 8 characters.'; return;
       }
+      if (!/[0-9]/.test(password)) {
+        err.textContent = 'Password must contain at least one number.'; return;
+      }
+      if (!/[A-Z]/.test(password)) {
+        err.textContent = 'Password must contain at least one uppercase letter.'; return;
+      }
+      if (password !== confirmPassword) {
+        err.textContent = 'Passwords do not match.'; return;
+      }
 
-      const params = new URLSearchParams({ hospital_id: currentHospitalId, name, email, phone, specialization, password });
+      const params = new URLSearchParams({ hospital_id: currentHospitalId, name, email, phone: "+91" + phone, specialization, password });
       try {
         await api('POST', `/admin/create-admin-jwt?${params.toString()}`);
         toast('Admin created.', 'success');

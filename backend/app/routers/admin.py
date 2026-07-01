@@ -7,6 +7,7 @@ from app.utils.auth import hash_password
 from app.config import settings
 import secrets
 from app.utils.auth import hash_password, get_current_doctor
+from app.utils.audit import log_action
 import re
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -127,13 +128,18 @@ def create_doctor(
     specialization: str,
     title: str = "Dr.",
     registration_number: str = "",
+    is_subadmin: bool = False,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     # Only admin/sub_admin can create doctors
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
+    # sub_admin cannot create another sub_admin
+    if current_doctor.role.value == "sub_admin" and is_subadmin:
+        raise HTTPException(status_code=403, detail="Sub admin cannot create another sub admin")
+
     # Admin can only create doctors for their own hospital
     if current_doctor.role.value != "super_admin" and current_doctor.hospital_id != hospital_id:
         raise HTTPException(status_code=403, detail="Cannot create doctor for another hospital")
@@ -158,7 +164,7 @@ def create_doctor(
         registration_number=registration_number,
         clinic_name=hospital.name,
         hashed_password=hash_password(password),
-        role=UserRole.doctor,
+        role=UserRole.sub_admin if is_subadmin else UserRole.doctor,
         hospital_id=hospital_id,
         is_active=True,
         created_by=current_doctor.id
@@ -166,6 +172,16 @@ def create_doctor(
     db.add(doctor)
     db.commit()
     db.refresh(doctor)
+
+    log_action(
+        db, current_doctor,
+        action="account_created",
+        target_type="doctor",
+        target_id=doctor.id,
+        target_label=f"{doctor.title} {doctor.name}",
+        details=f"Created as {doctor.role.value} in {hospital.name}"
+    )
+
     return {
         "id": doctor.id,
         "name": doctor.name,
@@ -230,7 +246,55 @@ def toggle_doctor_active(
 
     doctor.is_active = not doctor.is_active
     db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="account_activated" if doctor.is_active else "account_deactivated",
+        target_type="doctor",
+        target_id=doctor.id,
+        target_label=f"{doctor.title} {doctor.name}"
+    )
+
     return {"id": doctor.id, "is_active": doctor.is_active}
+
+
+@router.patch("/doctors/{doctor_id}/toggle-role")
+def toggle_doctor_role(
+    doctor_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admin or super admin can change roles")
+
+    doctor = db.query(Doctor).filter(
+        Doctor.id == doctor_id,
+        Doctor.hospital_id == current_doctor.hospital_id
+    ).first()
+
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+
+    if doctor.id == current_doctor.id:
+        raise HTTPException(status_code=400, detail="You cannot change your own role")
+
+    if doctor.role.value not in ["doctor", "sub_admin"]:
+        raise HTTPException(status_code=400, detail="Can only toggle role between doctor and sub admin")
+
+    old_role = doctor.role.value
+    doctor.role = UserRole.doctor if doctor.role.value == "sub_admin" else UserRole.sub_admin
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="role_changed",
+        target_type="doctor",
+        target_id=doctor.id,
+        target_label=f"{doctor.title} {doctor.name}",
+        details=f"{old_role} → {doctor.role.value}"
+    )
+
+    return {"id": doctor.id, "role": doctor.role.value}
 
 @router.post("/create-superadmin", status_code=201)
 def create_superadmin(
@@ -341,6 +405,34 @@ def list_hospitals_jwt(
         for h in hospitals
     ]
 
+@router.patch("/hospitals/{hospital_id}/toggle-active")
+def toggle_hospital_active(
+    hospital_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    hospital.is_active = not hospital.is_active
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="hospital_activated" if hospital.is_active else "hospital_deactivated",
+        target_type="hospital",
+        target_id=hospital.id,
+        target_label=hospital.name,
+        hospital_id=hospital.id
+    )
+
+    return {"id": hospital.id, "is_active": hospital.is_active}
+
+
 @router.post("/hospitals-jwt", status_code=201)
 def create_hospital_jwt(
     name: str,
@@ -363,6 +455,15 @@ def create_hospital_jwt(
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
+
+    log_action(
+        db, current_doctor,
+        action="hospital_created",
+        target_type="hospital",
+        target_id=hospital.id,
+        target_label=hospital.name,
+        hospital_id=hospital.id
+    )
     return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code}
 
 @router.post("/create-admin-jwt", status_code=201)
@@ -400,6 +501,17 @@ def create_admin_jwt(
     db.add(admin)
     db.commit()
     db.refresh(admin)
+
+    log_action(
+        db, current_doctor,
+        action="account_created",
+        target_type="doctor",
+        target_id=admin.id,
+        target_label=f"{admin.title} {admin.name}",
+        details=f"Created as admin in {hospital.name}",
+        hospital_id=hospital_id
+    )
+
     return {"id": admin.id, "name": admin.name, "email": admin.email, "role": admin.role.value}
 
 @router.get("/stats")

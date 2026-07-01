@@ -43,6 +43,13 @@
             d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
         Doctors
+        <a class="nav-item" href="analytics.html?section=patients">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          Patients
+        </a>
       </a>
       <a class="nav-item" href="analytics.html?section=consultations">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -99,12 +106,12 @@
         </svg>
         Reports
       </a>
-      <a class="nav-item" href="analytics.html?section=patients">
+      <a class="nav-item" href="audit.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
-            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
         </svg>
-        Patients
+        Audit Log
       </a>
     </nav>
 
@@ -137,12 +144,21 @@
         <input class="form-control" id="d-name" placeholder="Full Name" style="flex:1" />
       </div>
       <input class="form-control" id="d-email" type="email" placeholder="Email" style="margin-bottom:14px" />
-      <input class="form-control" id="d-phone" placeholder="Phone e.g. +919876543210" style="margin-bottom:14px" />
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+        <span
+          style="padding:9px 12px;background:var(--smoke-mid);border:1.5px solid var(--border);border-radius:var(--radius);font-size:0.9rem;color:var(--slate);white-space:nowrap;font-weight:500">+91</span>
+        <input class="form-control" id="d-phone" type="tel" placeholder="9876543210" maxlength="10" style="flex:1" />
+      </div>
       <input class="form-control" id="d-specialization" placeholder="Specialization" style="margin-bottom:14px" />
       <input class="form-control" id="d-reg" placeholder="Registration Number (optional)" style="margin-bottom:14px" />
-      <input class="form-control" id="d-password" type="password" placeholder="Temporary Password"
-        oninput="checkPasswordStrength(this.value)" style="margin-bottom:8px" />
-      <div style="margin-bottom:20px;display:flex;flex-direction:column;gap:4px" id="password-strength">
+
+      <div style="position:relative;margin-bottom:8px">
+        <input class="form-control" id="d-password" type="password" placeholder="Temporary Password"
+          oninput="checkPasswordStrength(this.value)" style="padding-right:40px" />
+        <span onclick="togglePasswordVisibility('d-password', this)"
+          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px">👁</span>
+      </div>
+      <div style="margin-bottom:14px;display:flex;flex-direction:column;gap:4px" id="password-strength">
         <div id="check-length"
           style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
           <span id="icon-length">○</span> At least 8 characters
@@ -156,6 +172,16 @@
           <span id="icon-upper">○</span> At least one uppercase letter
         </div>
       </div>
+
+      <input class="form-control" id="d-confirm-password" type="password" placeholder="Confirm Password"
+        style="margin-bottom:14px" />
+
+      <label
+        style="display:flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;font-size:14px;color:var(--slate)">
+        <input type="checkbox" id="d-is-subadmin" style="width:16px;height:16px" />
+        Make this user a Sub Admin
+      </label>
+
       <div class="err-msg" id="modal-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
         <button class="btn btn-primary" style="flex:1" onclick="submitAddDoctor()">Create Account</button>
@@ -188,6 +214,17 @@
       setCheck("check-upper", "icon-upper", /[A-Z]/.test(val));
     }
 
+    function togglePasswordVisibility(inputId, iconEl) {
+      const input = document.getElementById(inputId);
+      if (input.type === "password") {
+        input.type = "text";
+        iconEl.textContent = "🙈";
+      } else {
+        input.type = "password";
+        iconEl.textContent = "👁";
+      }
+    }
+
     function openAddModal() {
       document.getElementById('modal-overlay').style.display = 'flex';
     }
@@ -208,13 +245,18 @@
         container.innerHTML = data.map(d => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px">
             <div>
-              <div style="font-weight:600">${sanitize(d.name)}</div>
+              <div style="font-weight:600">${sanitize(d.name)} ${d.role === 'sub_admin' ? '<span style="font-size:11px;color:var(--teal);font-weight:600">(Sub Admin)</span>' : ''}</div>
               <div style="color:var(--slate);font-size:13px">${sanitize(d.specialization)} · ${sanitize(d.email)}</div>
               <div style="color:var(--slate);font-size:13px">${sanitize(d.phone)}</div>
             </div>
-            <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="toggleActive(${d.id}, this)">
-              ${d.is_active ? 'Deactivate' : 'Activate'}
-            </button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" onclick="toggleRole(${d.id}, this)">
+                ${d.role === 'sub_admin' ? 'Demote to Doctor' : 'Promote to Sub Admin'}
+              </button>
+              <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="toggleActive(${d.id}, this)">
+                ${d.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+            </div>
           </div>
         `).join('');
       } catch (e) {
@@ -229,8 +271,10 @@
       const phone = document.getElementById('d-phone').value.trim();
       const specialization = document.getElementById('d-specialization').value.trim();
       const password = document.getElementById('d-password').value;
+      const confirmPassword = document.getElementById('d-confirm-password').value;
       const title = document.getElementById('d-title').value;
       const reg = document.getElementById('d-reg').value.trim();
+      const isSubadmin = document.getElementById('d-is-subadmin').checked;
 
       if (!name || !email || !phone || !specialization || !password) {
         err.textContent = 'All fields except registration number are required.'; return;
@@ -238,8 +282,8 @@
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         err.textContent = 'Enter a valid email.'; return;
       }
-      if (!/^\+?[0-9]{10,13}$/.test(phone)) {
-        err.textContent = 'Enter a valid phone number (10-13 digits).'; return;
+      if (phone.length !== 10 || !/^\d{10}$/.test(phone)) {
+        err.textContent = 'Enter a valid 10-digit phone number.'; return;
       }
       if (password.length < 8) {
         err.textContent = 'Password must be at least 8 characters.'; return;
@@ -250,12 +294,16 @@
       if (!/[A-Z]/.test(password)) {
         err.textContent = 'Password must contain at least one uppercase letter.'; return;
       }
+      if (password !== confirmPassword) {
+        err.textContent = 'Passwords do not match.'; return;
+      }
 
       const doctor = getDoctor();
       const params = new URLSearchParams({
         hospital_id: doctor.hospital_id,
-        name, email, phone, specialization, password, title,
-        registration_number: reg
+        name, email, phone: "+91" + phone, specialization, password, title,
+        registration_number: reg,
+        is_subadmin: isSubadmin
       });
 
       try {
@@ -272,6 +320,16 @@
         btn.textContent = data.is_active ? 'Deactivate' : 'Activate';
         btn.className = `btn ${data.is_active ? 'btn-outline' : 'btn-primary'} btn-sm`;
         toast(`Doctor ${data.is_active ? 'activated' : 'deactivated'}.`, 'success');
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    async function toggleRole(doctorId, btn) {
+      try {
+        const data = await api('PATCH', `/admin/doctors/${doctorId}/toggle-role`);
+        toast(`Role updated to ${data.role}.`, 'success');
+        loadDoctors();
       } catch (e) {
         toast(e.message, 'error');
       }

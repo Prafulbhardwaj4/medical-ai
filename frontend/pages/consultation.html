@@ -391,7 +391,7 @@
         if (!visits || visits.length === 0) return;
         const last = visits[0];
         const meds = safeJSON(last.medicines, []);
-        const medText = meds.length ? meds.map(m => `${m.name} ${m.dosage}`).join(", ") : "—";
+        const medText = meds.length ? meds.map(m => m.brand_name ? `${m.name} (${m.brand_name}) ${m.dosage}` : `${m.name} ${m.dosage}`).join(", ") : "—";
         document.getElementById("last-visit-date").textContent = formatDate(last.created_at);
         document.getElementById("lv-diagnosis").textContent = last.diagnosis || "—";
         document.getElementById("lv-medicines").textContent = medText;
@@ -580,8 +580,12 @@
       const schedule = m.schedule || "controlled";
       div.innerHTML = `
         <div class="form-group" style="margin:0">
-          <label class="form-label">Medicine</label>
+          <label class="form-label">Generic Name</label>
           <input class="form-control med-name" value="${m.name || ""}" placeholder="Paracetamol" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Brand Name</label>
+          <input class="form-control med-brand" value="${m.brand_name || ""}" placeholder="Crocin (optional)" />
         </div>
         <div class="form-group" style="margin:0">
           <label class="form-label">Dosage</label>
@@ -610,6 +614,7 @@
     function getMedicines() {
       return [...document.querySelectorAll(".med-row")].map(row => ({
         name: row.querySelector(".med-name").value.trim(),
+        brand_name: row.querySelector(".med-brand").value.trim(),
         dosage: row.querySelector(".med-dosage").value.trim(),
         frequency: row.querySelector(".med-freq").value.trim(),
         duration: row.querySelector(".med-dur").value.trim(),
