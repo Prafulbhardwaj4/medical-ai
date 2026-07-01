@@ -104,6 +104,7 @@ def get_analytics(
         g = p.gender.capitalize()
         gender_counts[g] = gender_counts.get(g, 0) + 1
 
+
     # Top diagnoses
     diagnosis_counts = {}
     for c in all_consultations:
