@@ -105,11 +105,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 async function logout() {
-  try {
-    await api("POST", "/auth/logout");
-  } catch (e) { }
   clearSession();
   window.location.href = "/pages/login.html";
+  try {
+    await fetch(`${BASE}/auth/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+  } catch (e) { }
 }
 
 function sanitize(str) {
