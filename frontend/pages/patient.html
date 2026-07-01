@@ -519,7 +519,26 @@
     }
 
     async function voidConsultation(id) {
-      if (!confirm("Void this consultation? It will be hidden from history.")) return;
+      // Custom styled confirmation
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+      overlay.innerHTML = `
+        <div style="background:white;border-radius:12px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+          <div style="font-size:1.1rem;font-weight:700;color:var(--navy);margin-bottom:8px">Void Consultation?</div>
+          <div style="color:var(--slate);font-size:14px;margin-bottom:24px">This consultation will be marked as void and hidden from active history. This cannot be undone.</div>
+          <div style="display:flex;gap:12px">
+            <button id="void-confirm-btn" class="btn btn-sm" style="flex:1;background:#dc2626;color:white;border:none">Yes, Void It</button>
+            <button id="void-cancel-btn" class="btn btn-outline btn-sm" style="flex:1">Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      const confirmed = await new Promise(resolve => {
+        document.getElementById('void-confirm-btn').onclick = () => { document.body.removeChild(overlay); resolve(true); };
+        document.getElementById('void-cancel-btn').onclick = () => { document.body.removeChild(overlay); resolve(false); };
+        overlay.onclick = (e) => { if (e.target === overlay) { document.body.removeChild(overlay); resolve(false); } };
+      });
+      if (!confirmed) return;
       try {
         await api("POST", `/consultations/void/${id}`);
         toast("Consultation voided", "success");

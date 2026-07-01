@@ -200,7 +200,7 @@ def list_doctors(
 
     doctors = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role == UserRole.doctor
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
     ).all()
 
     return [
@@ -210,7 +210,9 @@ def list_doctors(
             "email": d.email,
             "phone": d.phone,
             "specialization": d.specialization,
-            "is_active": d.is_active
+            "registration_number": d.registration_number or "",
+            "is_active": d.is_active,
+            "role": d.role.value
         }
         for d in doctors
     ]

@@ -5,7 +5,7 @@ from typing import List
 from app.database import get_db
 from app.models.consultation import Consultation
 from app.models.patient import Patient
-from app.models.doctor import Doctor
+from app.models.doctor import Doctor, UserRole
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem
 from app.utils.auth import get_current_doctor, now_ist, decode_access_token, is_token_blacklisted
 from app.utils.audit import log_action
@@ -1065,14 +1065,13 @@ def admin_consultations(
     hospital_doctor_ids = [
         d.id for d in db.query(DoctorModel).filter(
             DoctorModel.hospital_id == current_doctor.hospital_id,
-            DoctorModel.role == "doctor"
+            DoctorModel.role.in_([UserRole.doctor, UserRole.sub_admin])
         ).all()
     ]
 
     query = db.query(Consultation).filter(
         Consultation.doctor_id.in_(hospital_doctor_ids),
-        Consultation.token_number != None,
-        Consultation.is_voided == False
+        Consultation.token_number != None
     )
 
     if from_date:
@@ -1105,6 +1104,7 @@ def admin_consultations(
             Consultation.token_number,
             Consultation.diagnosis,
             Consultation.created_at,
+            Consultation.is_voided,
             Patient.name.label("patient_name"),
             Patient.patient_uid.label("patient_uid"),
             DoctorModel.title.label("doctor_title"),
@@ -1124,7 +1124,8 @@ def admin_consultations(
             "patient_uid": c.patient_uid or "—",
             "doctor_name": f"{c.doctor_title} {c.doctor_name}" if c.doctor_name else "—",
             "diagnosis": c.diagnosis or "—",
-            "date": c.created_at.strftime("%d %b %Y %I:%M %p")
+            "date": c.created_at.strftime("%d %b %Y %I:%M %p"),
+            "is_voided": c.is_voided
         })
 
     return {

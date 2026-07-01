@@ -137,8 +137,10 @@ function validateLogin(email, password) {
 function redirectByRole(role) {
   if (role === 'doctor') {
     window.location.href = '/pages/dashboard.html';
-  } else if (role === 'admin' || role === 'sub_admin') {
+  } else if (role === 'admin') {
     window.location.href = '/pages/analytics.html';
+  } else if (role === 'sub_admin') {
+    window.location.href = '/pages/dashboard.html';
   } else if (role === 'super_admin') {
     window.location.href = '/pages/superadmin.html';
   } else {

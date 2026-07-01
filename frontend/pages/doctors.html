@@ -226,6 +226,23 @@
     }
 
     function openAddModal() {
+      // Clear all fields on open so previous data doesn't persist
+      document.getElementById('d-name').value = '';
+      document.getElementById('d-email').value = '';
+      document.getElementById('d-phone').value = '';
+      document.getElementById('d-specialization').value = '';
+      document.getElementById('d-reg').value = '';
+      document.getElementById('d-password').value = '';
+      document.getElementById('d-confirm-password').value = '';
+      document.getElementById('d-is-subadmin').checked = false;
+      document.getElementById('modal-err').textContent = '';
+      // Reset password checklist
+      ['check-length', 'check-number', 'check-upper'].forEach(id => {
+        document.getElementById(id).style.color = 'var(--slate-light)';
+      });
+      ['icon-length', 'icon-number', 'icon-upper'].forEach(id => {
+        document.getElementById(id).textContent = '○';
+      });
       document.getElementById('modal-overlay').style.display = 'flex';
     }
 
@@ -243,19 +260,30 @@
           return;
         }
         container.innerHTML = data.map(d => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px">
-            <div>
-              <div style="font-weight:600">${sanitize(d.name)} ${d.role === 'sub_admin' ? '<span style="font-size:11px;color:var(--teal);font-weight:600">(Sub Admin)</span>' : ''}</div>
-              <div style="color:var(--slate);font-size:13px">${sanitize(d.specialization)} · ${sanitize(d.email)}</div>
-              <div style="color:var(--slate);font-size:13px">${sanitize(d.phone)}</div>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-outline btn-sm" onclick="toggleRole(${d.id}, this)">
-                ${d.role === 'sub_admin' ? 'Demote to Doctor' : 'Promote to Sub Admin'}
-              </button>
-              <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="toggleActive(${d.id}, this)">
-                ${d.is_active ? 'Deactivate' : 'Activate'}
-              </button>
+          <div style="padding:16px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+              <div>
+                <div style="font-weight:600;font-size:15px">
+                  ${sanitize(d.name)}
+                  <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:6px;${d.role === 'sub_admin' ? 'background:#ccfbf1;color:#0d9488' : 'background:#f1f5f9;color:#64748b'}">
+                    ${d.role === 'sub_admin' ? 'Sub Admin' : 'Doctor'}
+                  </span>
+                  <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:4px;${d.is_active ? 'background:#dcfce7;color:#16a34a' : 'background:#fee2e2;color:#dc2626'}">
+                    ${d.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(d.specialization)}</div>
+                <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(d.email)} · ${sanitize(d.phone)}</div>
+                ${d.registration_number ? `<div style="color:var(--slate-light);font-size:12px;margin-top:2px">Reg: ${sanitize(d.registration_number)}</div>` : ''}
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <button class="btn btn-outline btn-sm" onclick="toggleRole(${d.id}, this)">
+                  ${d.role === 'sub_admin' ? 'Demote to Doctor' : 'Promote to Sub Admin'}
+                </button>
+                <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="toggleActive(${d.id}, this)">
+                  ${d.is_active ? 'Deactivate' : 'Activate'}
+                </button>
+              </div>
             </div>
           </div>
         `).join('');

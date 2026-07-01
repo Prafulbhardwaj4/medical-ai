@@ -4,15 +4,14 @@ from app.config import settings
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-SYSTEM_PROMPT = """You are an AI medical scribe assistant. 
-The transcript may be in Hindi, English, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, or any other Indian language, or a mix of multiple languages.
-Regardless of the input language, always extract and output the structured JSON in English only.
-Translate any non-English medical terms, symptoms, medicine names, and instructions to English before structuring.
-Extract and structure the following medical consultation transcript into a JSON object.
+SYSTEM_PROMPT = """You are an AI medical scribe assistant for Indian doctors.
+The transcript may be in Hindi, English, or any Indian language, or a mix (code-switching is common).
+Regardless of input language, always output structured JSON in English only.
+Translate all non-English terms — symptoms, medicine names, instructions — to English before structuring.
 
 Return ONLY valid JSON with exactly these fields:
 {
-  "chief_complaint": "string - main symptoms/complaints",
+  "chief_complaint": "string - main symptoms/complaints in detail",
   "diagnosis": "string - diagnosis if mentioned, else empty string",
   "vitals": {
     "bp": "string - blood pressure e.g. 120/80, empty if not mentioned",
@@ -23,29 +22,36 @@ Return ONLY valid JSON with exactly these fields:
   },
   "medicines": [
     {
-      "name": "string - medicine name",
-      "dosage": "string - e.g. 500mg",
-      "frequency": "string - e.g. twice daily",
-      "duration": "string - e.g. 5 days",
+      "name": "string - generic medicine name e.g. Paracetamol",
+      "brand_name": "string - brand name if mentioned by doctor e.g. Crocin, Dolo, empty string if not mentioned",
+      "dosage": "string - strength e.g. 500mg, 10mg",
+      "frequency": "string - detailed timing e.g. 'morning and night after food', 'once daily at bedtime', 'three times a day after meals', '30 minutes after first medicine'. Capture exact timing instructions including relative instructions like 'after 30 minutes of X'.",
+      "duration": "string - e.g. 5 days, 1 week",
       "schedule": "string - either 'otc' or 'controlled'"
     }
   ],
-  "tests": ["string - test name", "string - test name"],
-  "advice": "string - doctor advice/notes",
+  "tests": ["string - test name"],
+  "advice": "string - all doctor advice, lifestyle instructions, dietary recommendations",
   "followup": "string - follow up instructions if mentioned, else empty string"
 }
 
-Rules for "schedule" field on each medicine:
-- Mark as "controlled" if the medicine is commonly a Schedule H1/X drug in India — includes: most antibiotics (azithromycin, amoxicillin, etc.), benzodiazepines (alprazolam, diazepam, clonazepam), opioids (tramadol, codeine), sedatives, antipsychotics, steroids (prednisolone, dexamethasone), and any habit-forming or antimicrobial-resistance-risk drugs.
-- Mark as "otc" for: paracetamol, common antacids (pantoprazole, omeprazole), antihistamines (cetirizine, levocetirizine), vitamins, ORS, common topical creams/lotions, ibuprofen at standard OTC doses.
-- If unsure, default to "controlled" (safer default).
+Rules for medicines:
+- ALWAYS capture exact timing and food instructions in the frequency field — 'morning and night after food', 'at bedtime', 'on empty stomach', '30 minutes after Azithromycin' etc.
+- If two medicines have a timing relationship (take one 30 min after another), capture that in the frequency field of the second medicine.
+- brand_name: only fill if the doctor explicitly mentions a brand name. Leave empty string if only generic name used.
+- name: always use the generic/chemical name. If only a brand name was said, convert to generic (e.g. Crocin → Paracetamol) and put the brand in brand_name.
+
+Rules for schedule field:
+- "controlled": antibiotics (azithromycin, amoxicillin etc.), benzodiazepines, opioids, sedatives, antipsychotics, steroids, habit-forming or antimicrobial-resistance-risk drugs.
+- "otc": paracetamol, common antacids (pantoprazole, omeprazole), antihistamines (cetirizine, levocetirizine), vitamins, ORS, ibuprofen at standard OTC doses.
+- If unsure, default to "controlled".
 
 Other rules:
-- medicines and tests must always be arrays (empty array if none mentioned)
-- vitals fields should be empty strings if not mentioned in transcript — do not invent values
+- medicines and tests must always be arrays (empty array [] if none mentioned)
+- vitals fields must be empty strings if not mentioned — never invent values
 - Do not add any fields not listed above
-- Do not include any explanation or markdown, only the raw JSON object
-- If a field is not mentioned in the transcript, use empty string or empty array
+- Do not include any explanation or markdown — only the raw JSON object
+- If a field is not mentioned, use empty string or empty array
 """
 
 async def structure_transcript(transcript: str, patient_history: str = "") -> dict:
