@@ -4,6 +4,14 @@
   <meta charset="UTF-8" />
   <title>Receptionist — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=3" />
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #print-area, #print-area * { visibility: visible; }
+      #print-area { position: absolute; top: 0; left: 0; width: 100%; }
+      .no-print { display: none !important; }
+    }
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -77,17 +85,20 @@
 
         <!-- STEP 4: Token slip -->
         <div id="step-token" style="display:none;text-align:center">
-          <div style="padding:20px 0">
-            <p style="color:var(--slate);margin-bottom:6px">Token Number</p>
-            <div style="font-size:2.4rem;font-weight:700;color:var(--navy);letter-spacing:1px" id="slip-token"></div>
+          <div id="print-area">
+            <p style="font-weight:700;color:var(--navy);margin-bottom:2px" id="slip-hospital"></p>
+            <div style="padding:20px 0">
+              <p style="color:var(--slate);margin-bottom:6px">Token Number</p>
+              <div style="font-size:2.4rem;font-weight:700;color:var(--navy);letter-spacing:1px" id="slip-token"></div>
+            </div>
+            <div style="text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:20px">
+              <p><strong>Patient:</strong> <span id="slip-name"></span></p>
+              <p><strong>Doctor:</strong> <span id="slip-doctor"></span></p>
+              <p><strong>Reason:</strong> <span id="slip-category"></span></p>
+              <p><strong>Date:</strong> <span id="slip-date"></span></p>
+            </div>
           </div>
-          <div style="text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:20px">
-            <p><strong>Patient:</strong> <span id="slip-name"></span></p>
-            <p><strong>Doctor:</strong> <span id="slip-doctor"></span></p>
-            <p><strong>Reason:</strong> <span id="slip-category"></span></p>
-            <p><strong>Date:</strong> <span id="slip-date"></span></p>
-          </div>
-          <div style="display:flex;gap:10px">
+          <div style="display:flex;gap:10px" class="no-print">
             <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
             <button class="btn btn-primary" style="flex:1" onclick="goToStep('search')">New Check-In</button>
           </div>
@@ -198,10 +209,16 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
+    let preferredDoctorId = null;
+
     function selectExistingPatient(p) {
       selectedPatient = p;
+      preferredDoctorId = null;
       document.getElementById('cat-patient-name').textContent = `${p.name} (${p.patient_uid})`;
       goToStepCategory();
+      api("GET", `/patients/${p.id}/preferred-doctor`).then(r => {
+        preferredDoctorId = r.doctor_id;
+      }).catch(() => {});
     }
 
     function goToStepCategory() {
@@ -218,7 +235,9 @@
       try {
         const doctors = await api("GET", "/patients/hospital-doctors");
         const sel = document.getElementById('doc-select');
-        sel.innerHTML = doctors.map(d => `<option value="${d.id}">${d.title} ${d.name} — ${d.specialization}</option>`).join('');
+        sel.innerHTML = doctors.map(d =>
+          `<option value="${d.id}" ${d.id === preferredDoctorId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}</option>`
+        ).join('');
         document.getElementById('step-category').style.display = 'none';
         document.getElementById('step-doctor').style.display = '';
       } catch (e) { toast(e.message, "error"); }
@@ -235,6 +254,7 @@
           issue_category: selectedCategory,
           doctor_id: parseInt(doctorId)
         });
+        document.getElementById('slip-hospital').textContent = getDoctor()?.clinic_name || '';
         document.getElementById('slip-token').textContent = result.token_number;
         document.getElementById('slip-name').textContent = result.patient_name;
         document.getElementById('slip-doctor').textContent = result.doctor_name;

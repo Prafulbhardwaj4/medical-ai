@@ -124,6 +124,28 @@ def hospital_doctors(
         Doctor.is_active == True
     ).all()
 
+@router.get("/{patient_id}/preferred-doctor")
+def preferred_doctor(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    result = (
+        db.query(Consultation.doctor_id, func.count(Consultation.id).label("visit_count"))
+        .filter(Consultation.patient_id == patient_id, Consultation.is_voided == False)
+        .group_by(Consultation.doctor_id)
+        .order_by(desc("visit_count"))
+        .first()
+    )
+    return {"doctor_id": result.doctor_id if result else None}
+
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(
     patient_id: int,
