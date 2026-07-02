@@ -37,13 +37,6 @@
         </svg>
         Overview
       </a>
-      <a class="nav-item" href="analytics.html?section=doctors">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-        Doctors
-      </a>
       <a class="nav-item" href="analytics.html?section=patients">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -248,11 +241,21 @@
               <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(d.specialization)}</div>
               <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(d.email)} · ${sanitize(d.phone)}</div>
               ${d.registration_number ? `<div style="color:var(--slate-light);font-size:12px;margin-top:2px">Reg: ${sanitize(d.registration_number)}</div>` : ''}
+              <div style="display:flex;gap:16px;margin-top:8px">
+                <div style="font-size:12px;color:var(--slate)">Today: <strong style="color:var(--navy)">${d.consultations_today}</strong></div>
+                <div style="font-size:12px;color:var(--slate)">This week: <strong style="color:var(--navy)">${d.consultations_week}</strong></div>
+                <div style="font-size:12px;color:var(--slate)">Total: <strong style="color:var(--navy)">${d.consultations_total}</strong></div>
+              </div>
+              <div style="display:flex;gap:16px;margin-top:8px">
+                <div style="font-size:12px;color:var(--slate)">Today: <strong style="color:var(--navy)">${d.consultations_today}</strong></div>
+                <div style="font-size:12px;color:var(--slate)">This week: <strong style="color:var(--navy)">${d.consultations_week}</strong></div>
+                <div style="font-size:12px;color:var(--slate)">Total: <strong style="color:var(--navy)">${d.consultations_total}</strong></div>
+              </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <button class="btn btn-outline btn-sm" id="role-btn-${d.id}" onclick="toggleRole(${d.id})">
+              ${d.id !== getDoctor()?.id && getDoctor()?.role === 'admin' ? `<button class="btn btn-outline btn-sm" id="role-btn-${d.id}" onclick="toggleRole(${d.id})">
                 ${d.role === 'sub_admin' ? 'Demote to Doctor' : 'Promote to Sub Admin'}
-              </button>
+              </button>` : ''}
               <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" id="active-btn-${d.id}" onclick="toggleActive(${d.id})">
                 ${d.is_active ? 'Deactivate' : 'Activate'}
               </button>

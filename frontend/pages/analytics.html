@@ -124,13 +124,6 @@
                 </svg>
                 Overview
             </a>
-            <a class="nav-item" id="nav-doctors" href="#" onclick="showSection('doctors');return false;">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Doctors
-            </a>
             <a class="nav-item" id="nav-patients" href="#" onclick="showSection('patients');return false;">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round"
@@ -253,16 +246,6 @@
                         <h2>Today's Consultations</h2>
                     </div>
                     <div class="table-wrap" id="today-activity"></div>
-                </div>
-            </div>
-
-            <!-- DOCTORS -->
-            <div id="section-doctors" class="section" style="display:none">
-                <div class="page-header">
-                    <h1>Doctor Performance</h1>
-                </div>
-                <div class="card">
-                    <div class="table-wrap" id="doctors-table"></div>
                 </div>
             </div>
 
@@ -403,7 +386,7 @@
 
         let dashData = null;
         let allPatients = [];
-        const SECTIONS = ['overview', 'doctors', 'patients', 'consultations', 'medicines', 'tests', 'demographics'];
+        const SECTIONS = ['overview', 'patients', 'consultations', 'medicines', 'tests', 'demographics'];
 
         function showSection(name) {
             SECTIONS.forEach(s => {
@@ -541,30 +524,6 @@
             <td>${sanitize(c.diagnosis)}</td>
           </tr>`).join('');
                     document.getElementById("today-activity").innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis'], rows);
-                }
-            }
-
-            if (name === 'doctors') {
-                if (!d.doctor_stats.length) {
-                    document.getElementById("doctors-table").innerHTML = emptyMsg('No doctors yet.');
-                } else {
-                    const rows = d.doctor_stats.map(doc => `<tr>
-            <td style="font-weight:600;white-space:nowrap">${sanitize(doc.name)}</td>
-            <td style="color:var(--slate)">${sanitize(doc.specialization)}</td>
-            <td style="text-align:center">${doc.today_consultations}</td>
-            <td style="text-align:center">${doc.week_consultations}</td>
-            <td style="text-align:center;font-weight:600">${doc.total_consultations}</td>
-            <td style="color:var(--slate);font-size:13px;white-space:nowrap">${timeAgo(doc.last_active)}</td>
-            <td style="text-align:center"><span class="badge ${doc.is_active ? 'badge-teal' : 'badge-grey'}">${doc.is_active ? 'Active' : 'Inactive'}</span></td>
-          </tr>`).join('');
-                    document.getElementById("doctors-table").innerHTML = makeTable(
-                        ['Doctor', 'Specialization',
-                            '<span style="display:block;text-align:center">Today</span>',
-                            '<span style="display:block;text-align:center">This Week</span>',
-                            '<span style="display:block;text-align:center">Total</span>',
-                            'Last Active', 'Status'],
-                        rows
-                    );
                 }
             }
 

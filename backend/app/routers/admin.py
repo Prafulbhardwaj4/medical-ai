@@ -9,6 +9,9 @@ import secrets
 from app.utils.auth import hash_password, get_current_doctor
 from app.utils.audit import log_action
 import re
+from app.models.consultation import Consultation
+from sqlalchemy import func
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -203,8 +206,30 @@ def list_doctors(
         Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
     ).all()
 
-    return [
-        {
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = now - timedelta(days=7)
+
+    result = []
+    for d in doctors:
+        total = db.query(Consultation).filter(
+            Consultation.doctor_id == d.id,
+            Consultation.token_number != None,
+            Consultation.is_voided == False
+        ).count()
+        today = db.query(Consultation).filter(
+            Consultation.doctor_id == d.id,
+            Consultation.token_number != None,
+            Consultation.is_voided == False,
+            Consultation.created_at >= today_start
+        ).count()
+        week = db.query(Consultation).filter(
+            Consultation.doctor_id == d.id,
+            Consultation.token_number != None,
+            Consultation.is_voided == False,
+            Consultation.created_at >= week_start
+        ).count()
+        result.append({
             "id": d.id,
             "name": f"{d.title} {d.name}",
             "email": d.email,
@@ -212,10 +237,12 @@ def list_doctors(
             "specialization": d.specialization,
             "registration_number": d.registration_number or "",
             "is_active": d.is_active,
-            "role": d.role.value
-        }
-        for d in doctors
-    ]
+            "role": d.role.value,
+            "consultations_today": today,
+            "consultations_week": week,
+            "consultations_total": total
+        })
+    return result
 
 @router.patch("/doctors/{doctor_id}/toggle-active")
 def toggle_doctor_active(
