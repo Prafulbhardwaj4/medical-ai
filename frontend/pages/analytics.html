@@ -535,7 +535,7 @@
                     document.getElementById("today-activity").innerHTML = emptyMsg('No consultations today yet.');
                 } else {
                     const rows = todayConsults.map(c => `<tr>
-            <td style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}</td>
+            <td style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}${c.is_voided ? ' <span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626">Voided</span>' : ''}</td>
             <td><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
             <td style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
             <td>${sanitize(c.diagnosis)}</td>
@@ -660,7 +660,7 @@
                     return;
                 }
                 const rows = consults.map(c => `<tr>
-          <td style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}</td>
+          <td style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}${c.is_voided ? ' <span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626">Voided</span>' : ''}</td>
           <td><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
           <td style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
           <td>${sanitize(c.diagnosis)}</td>

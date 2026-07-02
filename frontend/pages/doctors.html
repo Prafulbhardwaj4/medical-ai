@@ -43,13 +43,13 @@
             d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
         Doctors
-        <a class="nav-item" href="analytics.html?section=patients">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round"
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          Patients
-        </a>
+      </a>
+      <a class="nav-item" href="analytics.html?section=patients">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+        Patients
       </a>
       <a class="nav-item" href="analytics.html?section=consultations">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -118,10 +118,14 @@
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <main class="main-content">
-      <div
-        style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
         <h2 style="margin:0">Manage Doctors</h2>
         <button class="btn btn-primary" onclick="openAddModal()">+ Add Doctor</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:20px">
+        <button class="btn btn-sm" id="df-all" onclick="setDoctorFilter('all')" style="background:var(--teal);color:white;border-color:var(--teal)">All</button>
+        <button class="btn btn-outline btn-sm" id="df-doctor" onclick="setDoctorFilter('doctor')">Doctors</button>
+        <button class="btn btn-outline btn-sm" id="df-sub_admin" onclick="setDoctorFilter('sub_admin')">Sub Admins</button>
       </div>
       <div class="card" id="doctors-list">
         <p>Loading...</p>
@@ -195,19 +199,88 @@
   <script>
     requireAuth();
     fillTopbar();
+
+    let doctorFilter = 'all';
+    let allDoctorsCache = [];
+
+    function setDoctorFilter(filter) {
+      doctorFilter = filter;
+      ['all', 'doctor', 'sub_admin'].forEach(f => {
+        const btn = document.getElementById(`df-${f}`);
+        if (!btn) return;
+        btn.style.background = '';
+        btn.style.color = '';
+        btn.style.borderColor = '';
+        btn.classList.add('btn-outline');
+        btn.classList.remove('btn-primary');
+      });
+      const active = document.getElementById(`df-${filter}`);
+      if (active) {
+        active.style.background = 'var(--teal)';
+        active.style.color = 'white';
+        active.style.borderColor = 'var(--teal)';
+        active.classList.remove('btn-outline');
+      }
+      renderDoctors();
+    }
+
+    function renderDoctors() {
+      const container = document.getElementById('doctors-list');
+      let data = allDoctorsCache;
+      if (doctorFilter !== 'all') data = data.filter(d => d.role === doctorFilter);
+      if (!data.length) {
+        container.innerHTML = '<p style="color:var(--slate);padding:12px">No doctors found.</p>';
+        return;
+      }
+      container.innerHTML = data.map(d => `
+        <div style="padding:16px 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+            <div>
+              <div style="font-weight:600;font-size:15px">
+                ${sanitize(d.name)}
+                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:6px;${d.role === 'sub_admin' ? 'background:#ccfbf1;color:#0d9488' : 'background:#f1f5f9;color:#64748b'}">
+                  ${d.role === 'sub_admin' ? 'Sub Admin' : 'Doctor'}
+                </span>
+                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:4px;${d.is_active ? 'background:#dcfce7;color:#16a34a' : 'background:#fee2e2;color:#dc2626'}">
+                  ${d.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+              <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(d.specialization)}</div>
+              <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(d.email)} · ${sanitize(d.phone)}</div>
+              ${d.registration_number ? `<div style="color:var(--slate-light);font-size:12px;margin-top:2px">Reg: ${sanitize(d.registration_number)}</div>` : ''}
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button class="btn btn-outline btn-sm" id="role-btn-${d.id}" onclick="toggleRole(${d.id})">
+                ${d.role === 'sub_admin' ? 'Demote to Doctor' : 'Promote to Sub Admin'}
+              </button>
+              <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" id="active-btn-${d.id}" onclick="toggleActive(${d.id})">
+                ${d.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadDoctors() {
+      const container = document.getElementById('doctors-list');
+      try {
+        const data = await api('GET', '/admin/doctors');
+        allDoctorsCache = data || [];
+        renderDoctors();
+      } catch (e) {
+        container.innerHTML = '<p style="color:var(--slate)">Failed to load doctors.</p>';
+      }
+    }
+
     loadDoctors();
 
     function checkPasswordStrength(val) {
       const setCheck = (id, iconId, passed) => {
         const el = document.getElementById(id);
         const icon = document.getElementById(iconId);
-        if (passed) {
-          el.style.color = "var(--teal)";
-          icon.textContent = "✓";
-        } else {
-          el.style.color = "var(--slate-light)";
-          icon.textContent = "○";
-        }
+        if (passed) { el.style.color = "var(--teal)"; icon.textContent = "✓"; }
+        else { el.style.color = "var(--slate-light)"; icon.textContent = "○"; }
       };
       setCheck("check-length", "icon-length", val.length >= 8);
       setCheck("check-number", "icon-number", /[0-9]/.test(val));
@@ -216,17 +289,11 @@
 
     function togglePasswordVisibility(inputId, iconEl) {
       const input = document.getElementById(inputId);
-      if (input.type === "password") {
-        input.type = "text";
-        iconEl.textContent = "🙈";
-      } else {
-        input.type = "password";
-        iconEl.textContent = "👁";
-      }
+      if (input.type === "password") { input.type = "text"; iconEl.textContent = "🙈"; }
+      else { input.type = "password"; iconEl.textContent = "👁"; }
     }
 
     function openAddModal() {
-      // Clear all fields on open so previous data doesn't persist
       document.getElementById('d-name').value = '';
       document.getElementById('d-email').value = '';
       document.getElementById('d-phone').value = '';
@@ -236,7 +303,6 @@
       document.getElementById('d-confirm-password').value = '';
       document.getElementById('d-is-subadmin').checked = false;
       document.getElementById('modal-err').textContent = '';
-      // Reset password checklist
       ['check-length', 'check-number', 'check-upper'].forEach(id => {
         document.getElementById(id).style.color = 'var(--slate-light)';
       });
@@ -251,49 +317,9 @@
       document.getElementById('modal-err').textContent = '';
     }
 
-    async function loadDoctors() {
-      const container = document.getElementById('doctors-list');
-      try {
-        const data = await api('GET', '/admin/doctors');
-        if (!data || data.length === 0) {
-          container.innerHTML = '<p style="color:var(--slate)">No doctors added yet.</p>';
-          return;
-        }
-        container.innerHTML = data.map(d => `
-          <div style="padding:16px 0;border-bottom:1px solid var(--border)">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
-              <div>
-                <div style="font-weight:600;font-size:15px">
-                  ${sanitize(d.name)}
-                  <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:6px;${d.role === 'sub_admin' ? 'background:#ccfbf1;color:#0d9488' : 'background:#f1f5f9;color:#64748b'}">
-                    ${d.role === 'sub_admin' ? 'Sub Admin' : 'Doctor'}
-                  </span>
-                  <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:4px;${d.is_active ? 'background:#dcfce7;color:#16a34a' : 'background:#fee2e2;color:#dc2626'}">
-                    ${d.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(d.specialization)}</div>
-                <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(d.email)} · ${sanitize(d.phone)}</div>
-                ${d.registration_number ? `<div style="color:var(--slate-light);font-size:12px;margin-top:2px">Reg: ${sanitize(d.registration_number)}</div>` : ''}
-              </div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                <button class="btn btn-outline btn-sm" onclick="toggleRole(${d.id}, this)">
-                  ${d.role === 'sub_admin' ? 'Demote to Doctor' : 'Promote to Sub Admin'}
-                </button>
-                <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="toggleActive(${d.id}, this)">
-                  ${d.is_active ? 'Deactivate' : 'Activate'}
-                </button>
-              </div>
-            </div>
-          </div>
-        `).join('');
-      } catch (e) {
-        container.innerHTML = '<p style="color:var(--slate)">Failed to load doctors.</p>';
-      }
-    }
-
     async function submitAddDoctor() {
       const err = document.getElementById('modal-err');
+      const btn = document.querySelector('#modal-overlay .btn-primary');
       const name = document.getElementById('d-name').value.trim();
       const email = document.getElementById('d-email').value.trim();
       const phone = document.getElementById('d-phone').value.trim();
@@ -313,25 +339,19 @@
       if (phone.length !== 10 || !/^\d{10}$/.test(phone)) {
         err.textContent = 'Enter a valid 10-digit phone number.'; return;
       }
-      if (password.length < 8) {
-        err.textContent = 'Password must be at least 8 characters.'; return;
-      }
-      if (!/[0-9]/.test(password)) {
-        err.textContent = 'Password must contain at least one number.'; return;
-      }
-      if (!/[A-Z]/.test(password)) {
-        err.textContent = 'Password must contain at least one uppercase letter.'; return;
-      }
-      if (password !== confirmPassword) {
-        err.textContent = 'Passwords do not match.'; return;
-      }
+      if (password.length < 8) { err.textContent = 'Password must be at least 8 characters.'; return; }
+      if (!/[0-9]/.test(password)) { err.textContent = 'Password must contain at least one number.'; return; }
+      if (!/[A-Z]/.test(password)) { err.textContent = 'Password must contain at least one uppercase letter.'; return; }
+      if (password !== confirmPassword) { err.textContent = 'Passwords do not match.'; return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
 
       const doctor = getDoctor();
       const params = new URLSearchParams({
         hospital_id: doctor.hospital_id,
         name, email, phone: "+91" + phone, specialization, password, title,
-        registration_number: reg,
-        is_subadmin: isSubadmin
+        registration_number: reg, is_subadmin: isSubadmin
       });
 
       try {
@@ -339,26 +359,42 @@
         toast('Doctor account created successfully.', 'success');
         closeModal();
         loadDoctors();
-      } catch (e) { err.textContent = e.message; }
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+      }
     }
 
-    async function toggleActive(doctorId, btn) {
+    async function toggleActive(doctorId) {
+      const btn = document.getElementById(`active-btn-${doctorId}`);
+      const original = btn.textContent.trim();
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
       try {
         const data = await api('PATCH', `/admin/doctors/${doctorId}/toggle-active`);
-        btn.textContent = data.is_active ? 'Deactivate' : 'Activate';
-        btn.className = `btn ${data.is_active ? 'btn-outline' : 'btn-primary'} btn-sm`;
         toast(`Doctor ${data.is_active ? 'activated' : 'deactivated'}.`, 'success');
+        await loadDoctors();
       } catch (e) {
+        btn.disabled = false;
+        btn.textContent = original;
         toast(e.message, 'error');
       }
     }
 
-    async function toggleRole(doctorId, btn) {
+    async function toggleRole(doctorId) {
+      const btn = document.getElementById(`role-btn-${doctorId}`);
+      const original = btn.textContent.trim();
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
       try {
         const data = await api('PATCH', `/admin/doctors/${doctorId}/toggle-role`);
         toast(`Role updated to ${data.role}.`, 'success');
-        loadDoctors();
+        await loadDoctors();
       } catch (e) {
+        btn.disabled = false;
+        btn.textContent = original;
         toast(e.message, 'error');
       }
     }
