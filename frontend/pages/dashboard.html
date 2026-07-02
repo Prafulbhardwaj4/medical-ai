@@ -181,6 +181,21 @@
     </div>
   </div>
 
+  <!-- Generate Token Modal -->
+  <div class="modal-overlay" id="modal-generate-token">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>No Token Today</h2>
+        <button class="modal-close" onclick="closeGenerateTokenModal()">×</button>
+      </div>
+      <p style="color:var(--slate);margin-bottom:20px">This patient hasn't checked in today. Generate a token to continue.</p>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="closeGenerateTokenModal()">Cancel</button>
+        <button class="btn btn-primary" id="btn-generate-token-dash" onclick="confirmGenerateToken()">Generate Token</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
 
   <script src="../js/api.js?v=2"></script>
@@ -264,8 +279,40 @@
       searchTimer = setTimeout(() => loadPatients(val), 400);
     }
 
-    function goToPatient(id) {
-      window.location.href = `/pages/patient.html?id=${id}`;
+    let pendingPatientId = null;
+
+    async function goToPatient(id) {
+      try {
+        const status = await api("GET", `/patients/${id}/checkin-today`);
+        if (status.exists) {
+          window.location.href = `/pages/patient.html?id=${id}`;
+        } else {
+          pendingPatientId = id;
+          document.getElementById('modal-generate-token').classList.add('open');
+        }
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function closeGenerateTokenModal() {
+      document.getElementById('modal-generate-token').classList.remove('open');
+      pendingPatientId = null;
+    }
+
+    async function confirmGenerateToken() {
+      const btn = document.getElementById('btn-generate-token-dash');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        await api("POST", `/patients/${pendingPatientId}/checkin`, {
+          issue_category: "General OPD",
+          doctor_id: getDoctor().id
+        });
+        window.location.href = `/pages/patient.html?id=${pendingPatientId}`;
+      } catch (e) {
+        toast(e.message, "error");
+        btn.disabled = false;
+        btn.innerHTML = "Generate Token";
+      }
     }
 
     function openAddPatient() { document.getElementById("modal-add").classList.add("open"); }

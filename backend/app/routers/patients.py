@@ -98,9 +98,43 @@ def list_patients(
     )
     consult_map = {c.patient_id: c for c in latest_consults}
 
+    latest_checkin_subq = (
+        db.query(
+            Checkin.patient_id,
+            func.max(Checkin.created_at).label("max_created_at")
+        )
+        .filter(Checkin.patient_id.in_(patient_ids))
+        .group_by(Checkin.patient_id)
+        .subquery()
+    )
+    latest_checkins = (
+        db.query(Checkin)
+        .join(
+            latest_checkin_subq,
+            (Checkin.patient_id == latest_checkin_subq.c.patient_id) &
+            (Checkin.created_at == latest_checkin_subq.c.max_created_at)
+        )
+        .all()
+    )
+    checkin_map = {c.patient_id: c for c in latest_checkins}
+
     result = []
     for p in patients:
         last_consult = consult_map.get(p.id)
+        last_checkin = checkin_map.get(p.id)
+
+        candidates = []
+        if last_consult:
+            candidates.append((last_consult.created_at, last_consult.token_number))
+        if last_checkin:
+            candidates.append((last_checkin.created_at, last_checkin.token_number))
+
+        if candidates:
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            last_visit, last_token = candidates[0]
+        else:
+            last_visit, last_token = None, None
+
         result.append(PatientSummary(
             id=p.id,
             patient_uid=p.patient_uid,
@@ -108,8 +142,8 @@ def list_patients(
             phone=p.phone,
             age=p.age,
             gender=p.gender,
-            last_visit=last_consult.created_at if last_consult else None,
-            last_token=last_consult.token_number if last_consult else None,
+            last_visit=last_visit,
+            last_token=last_token,
         ))
     return result
 
@@ -145,6 +179,28 @@ def preferred_doctor(
         .first()
     )
     return {"doctor_id": result.doctor_id if result else None}
+
+@router.get("/{patient_id}/checkin-today")
+def checkin_today(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    checkin = db.query(Checkin).filter(
+        Checkin.patient_id == patient_id,
+        Checkin.visit_date == date.today()
+    ).order_by(desc(Checkin.created_at)).first()
+
+    if not checkin:
+        return {"exists": False}
+    return {"exists": True, "token_number": checkin.token_number}
 
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(
