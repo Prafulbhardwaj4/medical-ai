@@ -219,11 +219,6 @@
     requireAuth();
     fillTopbar();
 
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('openAddPatient') === 'true') {
-      openAddPatient();
-    }
-
     if (getDoctor()?.role === 'sub_admin') {
       document.getElementById('sidebar-admin').style.display = 'none';
       document.getElementById('sidebar-subadmin').style.display = '';
