@@ -105,6 +105,44 @@
         </div>
 
       </div>
+
+      <div class="card" style="margin-top:24px">
+        <div class="card-header">
+          <h2>All Patients</h2>
+          <div style="display:flex;gap:12px;align-items:center">
+            <div class="search-wrap">
+              <svg class="search-icon" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8" />
+                <path stroke-linecap="round" d="M21 21l-4.35-4.35" />
+              </svg>
+              <input class="form-control" id="list-search-input" placeholder="Search name, phone, ID…"
+                oninput="searchAllPatients(this.value)" />
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;padding:0 0 14px 0">
+          <button class="btn btn-sm" id="pf-all" onclick="setPatientFilter('all')" style="background:var(--teal);color:white;border-color:var(--teal)">All</button>
+          <button class="btn btn-outline btn-sm" id="pf-male" onclick="setPatientFilter('male')">Male</button>
+          <button class="btn btn-outline btn-sm" id="pf-female" onclick="setPatientFilter('female')">Female</button>
+        </div>
+        <div class="table-wrap">
+          <table id="all-patients-table">
+            <thead>
+              <tr>
+                <th>Patient</th>
+                <th>ID</th>
+                <th>Phone</th>
+                <th>Age / Gender</th>
+                <th>Last Visit</th>
+              </tr>
+            </thead>
+            <tbody id="all-patients-tbody">
+              <tr><td colspan="5"><div class="empty-state"><p>Loading patients…</p></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </main>
   </div>
 
@@ -311,6 +349,55 @@
       const d = new Date(iso);
       return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
     }
+    function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+
+    let allPatientsData = [];
+    let patientFilter = 'all';
+
+    async function loadAllPatients(search = '') {
+      try {
+        const data = await api("GET", `/patients/?search=${encodeURIComponent(search)}&limit=200`);
+        allPatientsData = data;
+        renderAllPatients();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function renderAllPatients() {
+      let data = allPatientsData;
+      if (patientFilter !== 'all') data = data.filter(p => p.gender?.toLowerCase() === patientFilter);
+      const tbody = document.getElementById('all-patients-tbody');
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No patients found.</p></div></td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(p => `
+        <tr>
+          <td><strong>${p.name}</strong></td>
+          <td><span class="badge badge-navy">${p.patient_uid}</span></td>
+          <td style="color:var(--slate)">${p.phone}</td>
+          <td>${p.age}y / ${capitalize(p.gender)}</td>
+          <td>${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
+        </tr>
+      `).join('');
+    }
+
+    function setPatientFilter(filter) {
+      patientFilter = filter;
+      ['all', 'male', 'female'].forEach(f => {
+        const btn = document.getElementById(`pf-${f}`);
+        if (f === filter) { btn.classList.remove('btn-outline'); btn.style.background = 'var(--teal)'; btn.style.color = 'white'; btn.style.borderColor = 'var(--teal)'; }
+        else { btn.classList.add('btn-outline'); btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; }
+      });
+      renderAllPatients();
+    }
+
+    let listSearchTimer;
+    function searchAllPatients(val) {
+      clearTimeout(listSearchTimer);
+      listSearchTimer = setTimeout(() => loadAllPatients(val), 350);
+    }
+
+    loadAllPatients();
   </script>
 </body>
 </html>
