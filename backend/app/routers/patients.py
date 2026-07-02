@@ -113,6 +113,17 @@ def list_patients(
         ))
     return result
 
+@router.get("/hospital-doctors", response_model=List[DoctorLite])
+def hospital_doctors(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    return db.query(Doctor).filter(
+        Doctor.hospital_id == current_doctor.hospital_id,
+        Doctor.role.in_(["doctor", "sub_admin"]),
+        Doctor.is_active == True
+    ).all()
+
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(
     patient_id: int,
@@ -157,17 +168,6 @@ def update_patient(
     )
 
     return patient
-
-@router.get("/hospital-doctors", response_model=List[DoctorLite])
-def hospital_doctors(
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    return db.query(Doctor).filter(
-        Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_(["doctor", "sub_admin"]),
-        Doctor.is_active == True
-    ).all()
 
 def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> str:
     today = date.today()
