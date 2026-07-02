@@ -479,7 +479,9 @@ def verify_prescription(request: Request, token_number: str, hash: str, db: Sess
 
 
 @router.post("/verify/{token_number}/dispense")
+@limiter.limit("10/minute")
 def mark_dispensed(
+    request: Request,
     token_number: str,
     hash: str,
     db: Session = Depends(get_db)
@@ -623,15 +625,6 @@ def confirm_prescription(
 
     db.commit()
     db.refresh(consultation)
-
-    log_action(
-        db, current_doctor,
-        action="prescription_confirmed",
-        target_type="consultation",
-        target_id=consultation.id,
-        target_label=token_number,
-        details=f"Patient: {patient.name} ({patient.patient_uid})"
-    )
 
     log_action(
         db, current_doctor,

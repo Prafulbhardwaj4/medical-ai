@@ -46,6 +46,10 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
     # Check if account is active
     if not doctor.is_active:
         raise HTTPException(status_code=403, detail="Account is deactivated. Contact your admin.")
+    
+    # Check if the doctor's hospital is active
+    if doctor.hospital_id and doctor.hospital and not doctor.hospital.is_active:
+        raise HTTPException(status_code=403, detail="Your hospital account has been deactivated. Contact support.")
 
     # Wrong password
     if not verify_password(payload.password, doctor.hashed_password):
