@@ -188,6 +188,7 @@
 
     const doc = getDoctor();
     if (doc && (doc.role === 'admin' || doc.role === 'super_admin')) window.location.href = 'analytics.html';
+    if (doc && doc.role === 'receptionist') window.location.href = 'receptionist.html';
 
     if (doc && doc.role === 'sub_admin') {
       document.getElementById('nav-add-doctor').style.display = '';

@@ -166,8 +166,10 @@
           style="padding:9px 12px;background:var(--smoke-mid);border:1.5px solid var(--border);border-radius:var(--radius);font-size:0.9rem;color:var(--slate);white-space:nowrap;font-weight:500">+91</span>
         <input class="form-control" id="d-phone" type="tel" placeholder="9876543210" maxlength="10" style="flex:1" />
       </div>
-      <input class="form-control" id="d-specialization" placeholder="Specialization" style="margin-bottom:14px" />
-      <input class="form-control" id="d-reg" placeholder="Registration Number (optional)" style="margin-bottom:14px" />
+      <div id="doctor-only-fields">
+        <input class="form-control" id="d-specialization" placeholder="Specialization" style="margin-bottom:14px" />
+        <input class="form-control" id="d-reg" placeholder="Registration Number (optional)" style="margin-bottom:14px" />
+      </div>
 
       <div style="position:relative;margin-bottom:8px">
         <input class="form-control" id="d-password" type="password" placeholder="Temporary Password"
@@ -194,7 +196,7 @@
         style="margin-bottom:14px" />
 
       <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Role</label>
-      <select class="form-control" id="d-role" style="margin-bottom:20px">
+      <select class="form-control" id="d-role" style="margin-bottom:20px" onchange="toggleRoleFields()">
         <option value="doctor">Doctor</option>
         <option value="sub_admin">Sub Admin</option>
         <option value="receptionist">Receptionist</option>
@@ -276,7 +278,7 @@
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              ${d.id !== getDoctor()?.id && getDoctor()?.role === 'admin' ? `<button class="btn btn-outline btn-sm" id="role-btn-${d.id}" onclick="toggleRole(${d.id})">
+              ${d.id !== getDoctor()?.id && getDoctor()?.role === 'admin' && d.role !== 'receptionist' ? `<button class="btn btn-outline btn-sm" id="role-btn-${d.id}" onclick="toggleRole(${d.id})">
                 ${d.role === 'sub_admin' ? 'Demote to Doctor' : 'Promote to Sub Admin'}
               </button>` : ''}
               <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" id="active-btn-${d.id}" onclick="toggleActive(${d.id})">
@@ -343,6 +345,12 @@
       document.getElementById('modal-err').textContent = '';
     }
 
+    function toggleRoleFields() {
+      const role = document.getElementById('d-role').value;
+      document.getElementById('doctor-only-fields').style.display =
+        (role === 'doctor' || role === 'sub_admin') ? '' : 'none';
+    }
+
     async function submitAddDoctor() {
       const err = document.getElementById('modal-err');
       const btn = document.querySelector('#modal-overlay .btn-primary');
@@ -356,8 +364,9 @@
       const reg = document.getElementById('d-reg').value.trim();
       const role = document.getElementById('d-role').value;
       if (role === 'test_center' || role === 'pharmacy') { toast('Coming soon.', 'info'); return; }
+      const needsSpecialization = (role === 'doctor' || role === 'sub_admin');
 
-      if (!name || !email || !phone || !specialization || !password) {
+      if (!name || !email || !phone || !password || (needsSpecialization && !specialization)) {
         err.textContent = 'All fields except registration number are required.'; return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {

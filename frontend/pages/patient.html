@@ -331,6 +331,7 @@
   <script>
     if (!requireAuth()) throw new Error();
     fillTopbar();
+    if (getDoctor()?.role === 'receptionist') window.location.href = 'receptionist.html';
 
     const params = new URLSearchParams(location.search);
     const patientId = params.get("id");

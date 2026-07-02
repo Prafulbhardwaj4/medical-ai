@@ -143,6 +143,8 @@ function redirectByRole(role) {
     window.location.href = '/pages/dashboard.html';
   } else if (role === 'super_admin') {
     window.location.href = '/pages/superadmin.html';
+  } else if (role === 'receptionist') {
+    window.location.href = '/pages/receptionist.html';
   } else {
     window.location.href = '/pages/dashboard.html';
   }
