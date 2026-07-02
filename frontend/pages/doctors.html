@@ -119,13 +119,6 @@
       </a>
       <div class="nav-divider"></div>
       <div class="sidebar-section-label">Quick Actions</div>
-      <a class="nav-item" href="dashboard.html?openAddPatient=true">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-        </svg>
-        Add Patient
-      </a>
       <a class="nav-item active" href="doctors.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -145,6 +138,7 @@
         <button class="btn btn-sm" id="df-all" onclick="setDoctorFilter('all')" style="background:var(--teal);color:white;border-color:var(--teal)">All</button>
         <button class="btn btn-outline btn-sm" id="df-doctor" onclick="setDoctorFilter('doctor')">Doctors</button>
         <button class="btn btn-outline btn-sm" id="df-sub_admin" onclick="setDoctorFilter('sub_admin')">Sub Admins</button>
+        <button class="btn btn-outline btn-sm" id="df-receptionist" onclick="setDoctorFilter('receptionist')">Receptionists</button>
       </div>
       <div class="card" id="doctors-list">
         <p>Loading...</p>
@@ -199,11 +193,14 @@
       <input class="form-control" id="d-confirm-password" type="password" placeholder="Confirm Password"
         style="margin-bottom:14px" />
 
-      <label
-        style="display:flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;font-size:14px;color:var(--slate)">
-        <input type="checkbox" id="d-is-subadmin" style="width:16px;height:16px" />
-        Make this user a Sub Admin
-      </label>
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Role</label>
+      <select class="form-control" id="d-role" style="margin-bottom:20px">
+        <option value="doctor">Doctor</option>
+        <option value="sub_admin">Sub Admin</option>
+        <option value="receptionist">Receptionist</option>
+        <option value="test_center">Test Center (Coming Soon)</option>
+        <option value="pharmacy">Pharmacy (Coming Soon)</option>
+      </select>
 
       <div class="err-msg" id="modal-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
@@ -262,8 +259,8 @@
             <div>
               <div style="font-weight:600;font-size:15px">
                 ${sanitize(d.name)}
-                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:6px;${d.role === 'sub_admin' ? 'background:#ccfbf1;color:#0d9488' : 'background:#f1f5f9;color:#64748b'}">
-                  ${d.role === 'sub_admin' ? 'Sub Admin' : 'Doctor'}
+                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:6px;${d.role === 'sub_admin' ? 'background:#ccfbf1;color:#0d9488' : d.role === 'receptionist' ? 'background:#fef3c7;color:#b45309' : 'background:#f1f5f9;color:#64748b'}">
+                  ${d.role === 'sub_admin' ? 'Sub Admin' : d.role === 'receptionist' ? 'Receptionist' : 'Doctor'}
                 </span>
                 <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:4px;${d.is_active ? 'background:#dcfce7;color:#16a34a' : 'background:#fee2e2;color:#dc2626'}">
                   ${d.is_active ? 'Active' : 'Inactive'}
@@ -357,7 +354,8 @@
       const confirmPassword = document.getElementById('d-confirm-password').value;
       const title = document.getElementById('d-title').value;
       const reg = document.getElementById('d-reg').value.trim();
-      const isSubadmin = document.getElementById('d-is-subadmin').checked;
+      const role = document.getElementById('d-role').value;
+      if (role === 'test_center' || role === 'pharmacy') { toast('Coming soon.', 'info'); return; }
 
       if (!name || !email || !phone || !specialization || !password) {
         err.textContent = 'All fields except registration number are required.'; return;
@@ -380,7 +378,7 @@
       const params = new URLSearchParams({
         hospital_id: doctor.hospital_id,
         name, email, phone: "+91" + phone, specialization, password, title,
-        registration_number: reg, is_subadmin: isSubadmin
+        registration_number: reg, role
       });
 
       try {

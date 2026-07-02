@@ -131,7 +131,7 @@ def create_doctor(
     specialization: str,
     title: str = "Dr.",
     registration_number: str = "",
-    is_subadmin: bool = False,
+    role: str = "doctor",
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -139,9 +139,11 @@ def create_doctor(
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    # sub_admin cannot create another sub_admin
-    if current_doctor.role.value == "sub_admin" and is_subadmin:
-        raise HTTPException(status_code=403, detail="Sub admin cannot create another sub admin")
+    if role not in ["doctor", "sub_admin", "receptionist"]:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    if current_doctor.role.value == "sub_admin" and role != "doctor":
+        raise HTTPException(status_code=403, detail="Sub admin can only create doctor accounts")
 
     # Admin can only create doctors for their own hospital
     if current_doctor.role.value != "super_admin" and current_doctor.hospital_id != hospital_id:
@@ -167,7 +169,7 @@ def create_doctor(
         registration_number=registration_number,
         clinic_name=hospital.name,
         hashed_password=hash_password(password),
-        role=UserRole.sub_admin if is_subadmin else UserRole.doctor,
+        role=UserRole(role),
         hospital_id=hospital_id,
         is_active=True,
         created_by=current_doctor.id
@@ -203,7 +205,7 @@ def list_doctors(
 
     doctors = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.receptionist])
     ).all()
 
     now = datetime.utcnow()

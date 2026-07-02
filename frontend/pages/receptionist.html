@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Receptionist — MedScribe</title>
+  <link rel="stylesheet" href="../css/style.css?v=3" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-brand">Med<span>Scribe</span></div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <button class="btn-logout" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Navigation</div>
+      <div class="nav-item active" onclick="openAddPatient()">+ Add Patient</div>
+    </nav>
+    <main class="main-content">
+      <h2>Patients</h2>
+      <input id="search-input" placeholder="Search by name / phone / UID" oninput="loadPatients()" />
+      <div id="patients-list"></div>
+    </main>
+
+    <div class="modal-overlay" id="modal-add">
+      <div class="modal">
+        <div class="modal-header"><h3>Add Patient</h3><button class="modal-close" onclick="closeAddPatient()">×</button></div>
+        <input id="p-name" placeholder="Full name" />
+        <input id="p-phone" placeholder="Phone" />
+        <input id="p-age" type="number" placeholder="Age" />
+        <select id="p-gender"><option>Male</option><option>Female</option><option>Other</option></select>
+        <select id="p-blood"><option value="">Blood group</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select>
+        <button class="btn btn-primary" onclick="savePatient()">Save Patient</button>
+      </div>
+    </div>
+  </div>
+  <div id="toast"></div>
+  <script src="../js/api.js?v=3"></script>
+  <script>
+    if (!requireAuth()) throw new Error();
+    fillTopbar();
+    if (getDoctor()?.role !== 'receptionist') window.location.href = 'login.html';
+
+    function openAddPatient() { document.getElementById("modal-add").classList.add("open"); }
+    function closeAddPatient() {
+      document.getElementById("modal-add").classList.remove("open");
+      document.getElementById("p-name").value = "";
+      document.getElementById("p-phone").value = "";
+      document.getElementById("p-age").value = "";
+    }
+
+    async function savePatient() {
+      try {
+        await api("POST", "/patients/", {
+          name: document.getElementById("p-name").value,
+          phone: document.getElementById("p-phone").value,
+          age: parseInt(document.getElementById("p-age").value),
+          gender: document.getElementById("p-gender").value,
+          blood_group: document.getElementById("p-blood").value || null
+        });
+        toast("Patient added.", "success");
+        closeAddPatient();
+        loadPatients();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function loadPatients() {
+      const search = document.getElementById("search-input").value;
+      try {
+        const data = await api("GET", `/patients/?search=${encodeURIComponent(search)}`);
+        document.getElementById("patients-list").innerHTML = data.map(p =>
+          `<div>${p.patient_uid} — ${p.name} — ${p.phone} — ${p.age}/${p.gender}</div>`
+        ).join('');
+      } catch (e) {}
+    }
+    loadPatients();
+  </script>
+</body>
+</html>
