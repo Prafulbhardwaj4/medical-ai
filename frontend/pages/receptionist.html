@@ -191,6 +191,12 @@
       }
     }
 
+    function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+    function formatDate(iso) {
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
     loadPatients();
   </script>
 </body>
