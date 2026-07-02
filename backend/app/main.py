@@ -14,6 +14,7 @@ from app.routers import audit as audit_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 from app.models.audit_log import AuditLog
+from app.models.checkin import Checkin
 from app.config import settings
 import warnings
 import os

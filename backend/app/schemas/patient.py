@@ -1,5 +1,5 @@
 from pydantic import BaseModel, validator
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 VALID_GENDERS = {"Male", "Female", "Other"}
@@ -76,6 +76,29 @@ class PatientSummary(BaseModel):
     gender: str
     last_visit: Optional[datetime] = None
     last_token: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class CheckinCreate(BaseModel):
+    issue_category: str
+    doctor_id: int
+
+class CheckinOut(BaseModel):
+    token_number: str
+    patient_name: str
+    doctor_name: str
+    issue_category: str
+    visit_date: date
+
+    class Config:
+        from_attributes = True
+
+class DoctorLite(BaseModel):
+    id: int
+    title: str
+    name: str
+    specialization: str
 
     class Config:
         from_attributes = True

@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 from typing import List
+from datetime import date
 from app.database import get_db
 from app.models.patient import Patient
 from app.models.consultation import Consultation
 from app.models.doctor import Doctor
 from app.models.hospital import Hospital
-from app.schemas.patient import PatientCreate, PatientOut, PatientSummary
+from app.models.checkin import Checkin
+from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 
@@ -155,3 +157,82 @@ def update_patient(
     )
 
     return patient
+
+@router.get("/hospital-doctors", response_model=List[DoctorLite])
+def hospital_doctors(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    return db.query(Doctor).filter(
+        Doctor.hospital_id == current_doctor.hospital_id,
+        Doctor.role.in_(["doctor", "sub_admin"]),
+        Doctor.is_active == True
+    ).all()
+
+def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> str:
+    today = date.today()
+    prefix = hospital_code.replace("-", "")[:4].upper()
+    date_part = today.strftime("%d%m%y")
+    while True:
+        count = db.query(Checkin).filter(
+            Checkin.hospital_id == hospital_id,
+            Checkin.visit_date == today
+        ).count() + 1
+        token = f"{prefix}-{date_part}-{count:03d}"
+        existing = db.query(Checkin).filter(Checkin.token_number == token).first()
+        if not existing:
+            return token
+
+@router.post("/{patient_id}/checkin", response_model=CheckinOut, status_code=201)
+def checkin_patient(
+    patient_id: int,
+    payload: CheckinCreate,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    doctor = db.query(Doctor).filter(
+        Doctor.id == payload.doctor_id,
+        Doctor.hospital_id == current_doctor.hospital_id,
+        Doctor.role.in_(["doctor", "sub_admin"])
+    ).first()
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+
+    checkin = Checkin(
+        hospital_id=current_doctor.hospital_id,
+        patient_id=patient.id,
+        token_number=token,
+        issue_category=payload.issue_category,
+        doctor_id=doctor.id,
+        created_by=current_doctor.id,
+        visit_date=date.today()
+    )
+    db.add(checkin)
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="patient_checked_in",
+        target_type="patient",
+        target_id=patient.id,
+        target_label=f"{patient.name} ({patient.patient_uid})",
+        details=f"Token {token} → {doctor.title} {doctor.name} ({payload.issue_category})"
+    )
+
+    return CheckinOut(
+        token_number=token,
+        patient_name=patient.name,
+        doctor_name=f"{doctor.title} {doctor.name}",
+        issue_category=payload.issue_category,
+        visit_date=date.today()
+    )

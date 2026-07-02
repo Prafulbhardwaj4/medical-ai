@@ -11,60 +11,93 @@
       <div class="topbar-brand">Med<span>Scribe</span></div>
       <div class="topbar-doctor">
         <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
         <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
       </div>
     </header>
 
     <nav class="sidebar">
       <div class="sidebar-section-label">Navigation</div>
-      <div class="nav-item active" onclick="openAddPatient()">
+      <div class="nav-item active">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
-        Add Patient
+        Dashboard
       </div>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <main class="main-content">
-      <div class="card">
-        <div class="card-header">
-          <h2>Patients</h2>
-          <div style="display:flex;gap:12px;align-items:center">
-            <div class="search-wrap">
-              <svg class="search-icon" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8" />
-                <path stroke-linecap="round" d="M21 21l-4.35-4.35" />
-              </svg>
-              <input class="form-control" id="search-input" placeholder="Search name, phone, ID…"
-                oninput="searchPatients(this.value)" />
-            </div>
-            <button class="btn btn-primary" onclick="openAddPatient()">+ Add Patient</button>
+      <div class="card" style="max-width:640px;margin:0 auto">
+
+        <!-- STEP 1: Search / Select / New -->
+        <div id="step-search">
+          <div class="card-header"><h2>Check In Patient</h2></div>
+          <div class="form-group">
+            <label class="form-label">Patient Name</label>
+            <input class="form-control" id="s-name" placeholder="Start typing name…" autocomplete="off"
+              oninput="onSearchInput(this.value)" />
+          </div>
+          <div id="search-results" style="margin-bottom:14px"></div>
+          <button class="btn btn-outline" style="width:100%" onclick="openNewPatient()">+ Add as New Patient</button>
+        </div>
+
+        <!-- STEP 2: Category -->
+        <div id="step-category" style="display:none">
+          <div class="card-header">
+            <h2>Reason for Visit</h2>
+            <button class="btn btn-outline btn-sm" onclick="goToStep('search')">← Back</button>
+          </div>
+          <p style="color:var(--slate);margin-bottom:16px">Checking in: <strong id="cat-patient-name"></strong></p>
+          <div style="display:flex;flex-wrap:wrap;gap:10px">
+            <button class="btn btn-outline category-chip" onclick="selectCategory('General OPD')">General OPD</button>
+            <button class="btn btn-outline category-chip" onclick="selectCategory('Emergency')">Emergency</button>
+            <button class="btn btn-outline category-chip" onclick="selectCategory('Fracture / Orthopedic')">Fracture / Orthopedic</button>
+            <button class="btn btn-outline category-chip" onclick="selectCategory('BP / Vitals Check')">BP / Vitals Check</button>
+            <button class="btn btn-outline category-chip" onclick="selectCategory('Follow-up')">Follow-up</button>
+            <button class="btn btn-outline category-chip" onclick="selectCategory('Other')">Other</button>
           </div>
         </div>
 
-        <div class="table-wrap">
-          <table id="patient-table">
-            <thead>
-              <tr>
-                <th>Patient</th>
-                <th>ID</th>
-                <th>Phone</th>
-                <th>Age / Gender</th>
-                <th>Last Visit</th>
-              </tr>
-            </thead>
-            <tbody id="patient-tbody">
-              <tr><td colspan="5"><div class="empty-state"><p>Loading patients…</p></div></td></tr>
-            </tbody>
-          </table>
+        <!-- STEP 3: Doctor -->
+        <div id="step-doctor" style="display:none">
+          <div class="card-header">
+            <h2>Assign Doctor</h2>
+            <button class="btn btn-outline btn-sm" onclick="goToStep('category')">← Back</button>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Doctor</label>
+            <select class="form-control" id="doc-select"></select>
+          </div>
+          <button class="btn btn-primary" id="btn-generate-token" style="width:100%" onclick="generateToken()">Generate Token</button>
         </div>
+
+        <!-- STEP 4: Token slip -->
+        <div id="step-token" style="display:none;text-align:center">
+          <div style="padding:20px 0">
+            <p style="color:var(--slate);margin-bottom:6px">Token Number</p>
+            <div style="font-size:2.4rem;font-weight:700;color:var(--navy);letter-spacing:1px" id="slip-token"></div>
+          </div>
+          <div style="text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:20px">
+            <p><strong>Patient:</strong> <span id="slip-name"></span></p>
+            <p><strong>Doctor:</strong> <span id="slip-doctor"></span></p>
+            <p><strong>Reason:</strong> <span id="slip-category"></span></p>
+            <p><strong>Date:</strong> <span id="slip-date"></span></p>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
+            <button class="btn btn-primary" style="flex:1" onclick="goToStep('search')">New Check-In</button>
+          </div>
+        </div>
+
       </div>
     </main>
   </div>
 
-  <!-- Add Patient Modal -->
+  <!-- Add New Patient Modal -->
   <div class="modal-overlay" id="modal-add">
     <div class="modal">
       <div class="modal-header">
@@ -122,45 +155,106 @@
     fillTopbar();
     if (getDoctor()?.role !== 'receptionist') window.location.href = 'login.html';
 
-    let totalPatientCount = 0;
+    let selectedPatient = null;
+    let selectedCategory = null;
 
-    async function loadPatients(search = "") {
-      try {
-        const data = await api("GET", `/patients/?search=${encodeURIComponent(search)}`);
-        renderTable(data);
-      } catch (e) { toast(e.message, "error"); }
-    }
-
-    function renderTable(patients) {
-      const tbody = document.getElementById("patient-tbody");
-      if (!patients.length) {
-        tbody.innerHTML = `<tr><td colspan="5">
-          <div class="empty-state">
-            <h3>No patients yet</h3>
-            <p>Click "Add Patient" to register your first patient.</p>
-          </div>
-        </td></tr>`;
-        return;
+    function goToStep(step) {
+      ['search', 'category', 'doctor', 'token'].forEach(s => {
+        document.getElementById(`step-${s}`).style.display = (s === step) ? '' : 'none';
+      });
+      if (step === 'search') {
+        selectedPatient = null;
+        selectedCategory = null;
+        document.getElementById('s-name').value = '';
+        document.getElementById('search-results').innerHTML = '';
+        document.getElementById('s-name').focus();
       }
-      tbody.innerHTML = patients.map(p => `
-        <tr>
-          <td><strong>${p.name}</strong></td>
-          <td><span class="badge badge-navy">${p.patient_uid}</span></td>
-          <td style="color:var(--slate)">${p.phone}</td>
-          <td>${p.age}y / ${capitalize(p.gender)}</td>
-          <td>${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
-        </tr>
-      `).join("");
     }
 
     let searchTimer;
-    function searchPatients(val) {
+    function onSearchInput(val) {
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => loadPatients(val), 400);
+      if (!val.trim()) { document.getElementById('search-results').innerHTML = ''; return; }
+      searchTimer = setTimeout(() => runSearch(val), 350);
     }
 
-    function openAddPatient() { document.getElementById("modal-add").classList.add("open"); }
-    function closeAddPatient() { document.getElementById("modal-add").classList.remove("open"); }
+    async function runSearch(val) {
+      try {
+        const data = await api("GET", `/patients/?search=${encodeURIComponent(val)}`);
+        const box = document.getElementById('search-results');
+        if (!data.length) {
+          box.innerHTML = `<p style="color:var(--slate-light);font-size:0.9rem;margin-bottom:10px">No matching patient found — add as new below.</p>`;
+          return;
+        }
+        box.innerHTML = data.map(p => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:8px">
+            <div>
+              <strong>${p.name}</strong>
+              <div style="font-size:0.82rem;color:var(--slate)">${p.patient_uid} · ${p.phone} · ${p.age}y</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick='selectExistingPatient(${JSON.stringify(p)})'>Select</button>
+          </div>
+        `).join('');
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function selectExistingPatient(p) {
+      selectedPatient = p;
+      document.getElementById('cat-patient-name').textContent = `${p.name} (${p.patient_uid})`;
+      goToStepCategory();
+    }
+
+    function goToStepCategory() {
+      document.getElementById('step-search').style.display = 'none';
+      document.getElementById('step-category').style.display = '';
+    }
+
+    function selectCategory(cat) {
+      selectedCategory = cat;
+      loadDoctorsAndGoNext();
+    }
+
+    async function loadDoctorsAndGoNext() {
+      try {
+        const doctors = await api("GET", "/patients/hospital-doctors");
+        const sel = document.getElementById('doc-select');
+        sel.innerHTML = doctors.map(d => `<option value="${d.id}">${d.title} ${d.name} — ${d.specialization}</option>`).join('');
+        document.getElementById('step-category').style.display = 'none';
+        document.getElementById('step-doctor').style.display = '';
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function generateToken() {
+      const btn = document.getElementById('btn-generate-token');
+      const doctorId = document.getElementById('doc-select').value;
+      if (!doctorId) { toast('No doctor available.', 'error'); return; }
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const result = await api("POST", `/patients/${selectedPatient.id}/checkin`, {
+          issue_category: selectedCategory,
+          doctor_id: parseInt(doctorId)
+        });
+        document.getElementById('slip-token').textContent = result.token_number;
+        document.getElementById('slip-name').textContent = result.patient_name;
+        document.getElementById('slip-doctor').textContent = result.doctor_name;
+        document.getElementById('slip-category').textContent = result.issue_category;
+        document.getElementById('slip-date').textContent = formatDate(result.visit_date);
+        document.getElementById('step-doctor').style.display = 'none';
+        document.getElementById('step-token').style.display = '';
+      } catch (e) {
+        toast(e.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Generate Token';
+      }
+    }
+
+    function openNewPatient() {
+      document.getElementById('p-name').value = document.getElementById('s-name').value.trim();
+      document.getElementById('modal-add').classList.add('open');
+    }
+    function closeAddPatient() { document.getElementById('modal-add').classList.remove('open'); }
 
     async function savePatient() {
       const btn = document.getElementById("btn-save-patient");
@@ -173,16 +267,18 @@
       if (verr) { toast(verr, "error"); btn.disabled = false; btn.textContent = "Save Patient"; return; }
       btn.innerHTML = '<span class="spinner"></span>';
       try {
-        await api("POST", "/patients/", {
+        const patient = await api("POST", "/patients/", {
           name: document.getElementById("p-name").value.trim(),
           phone: "+91" + document.getElementById("p-phone").value.trim(),
           age: parseInt(document.getElementById("p-age").value),
           blood_group: document.getElementById("p-blood-group").value || null,
           gender: document.getElementById("p-gender").value
         });
-        toast("Patient added successfully", "success");
+        toast("Patient added", "success");
         closeAddPatient();
-        loadPatients();
+        selectedPatient = patient;
+        document.getElementById('cat-patient-name').textContent = `${patient.name} (${patient.patient_uid})`;
+        goToStepCategory();
       } catch (e) {
         toast(e.message, "error");
       } finally {
@@ -191,13 +287,10 @@
       }
     }
 
-    function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
     function formatDate(iso) {
       const d = new Date(iso);
       return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
     }
-
-    loadPatients();
   </script>
 </body>
 </html>
