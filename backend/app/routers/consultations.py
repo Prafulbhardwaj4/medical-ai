@@ -15,11 +15,13 @@ from app.services.pdf_service import generate_prescription_pdf
 from app.services.sms_service import send_sms
 from app.services.sarvam_stream import stream_transcribe
 from app.models.doctor import Doctor as DoctorModel
+from app.models.checkin import Checkin
+from app.models.hospital import Hospital
 from app.config import settings
-from sqlalchemy import exists
+from sqlalchemy import exists, func
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, date
 import pytz
 from fastapi.responses import FileResponse
 import os
@@ -595,21 +597,48 @@ def confirm_prescription(
     patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
 
     import hashlib
-    import secrets
 
-    prefix = "".join([w[0].upper() for w in current_doctor.clinic_name.split()][:3])
-    date_str = now_ist().strftime("%d%m%y")
+    todays_checkin = db.query(Checkin).filter(
+        Checkin.patient_id == consultation.patient_id,
+        Checkin.visit_date == date.today()
+    ).order_by(desc(Checkin.created_at)).first()
 
-    # Collision-safe token generation using unique random suffix
-    while True:
-        confirmed_count = db.query(Consultation).filter(
-            Consultation.doctor_id == current_doctor.id,
-            Consultation.token_number != None
-        ).count()
-        token_number = f"{prefix}-{confirmed_count + 1:04d}-{date_str}-{secrets.token_hex(2).upper()}"
-        existing = db.query(Consultation).filter(Consultation.token_number == token_number).first()
-        if not existing:
-            break
+    if todays_checkin:
+        token_number = todays_checkin.token_number
+        clash = db.query(Consultation).filter(
+            Consultation.token_number == token_number,
+            Consultation.id != consultation.id
+        ).first()
+        if clash:
+            suffix = 2
+            while db.query(Consultation).filter(Consultation.token_number == f"{token_number}-{suffix}").first():
+                suffix += 1
+            token_number = f"{token_number}-{suffix}"
+    else:
+        # Fallback: no check-in exists yet (shouldn't normally happen), create one now
+        hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+        hospital_code = hospital.hospital_code if hospital else "GEN"
+        prefix = hospital_code.replace("-", "")[:4].upper()
+        date_part = date.today().strftime("%d%m%y")
+        while True:
+            count = db.query(Checkin).filter(
+                Checkin.hospital_id == current_doctor.hospital_id,
+                Checkin.visit_date == date.today()
+            ).count() + 1
+            token_number = f"{prefix}-{date_part}-{count:03d}"
+            if not db.query(Checkin).filter(Checkin.token_number == token_number).first():
+                break
+
+        fallback_checkin = Checkin(
+            hospital_id=current_doctor.hospital_id,
+            patient_id=consultation.patient_id,
+            token_number=token_number,
+            issue_category="General OPD",
+            doctor_id=current_doctor.id,
+            created_by=current_doctor.id,
+            visit_date=date.today()
+        )
+        db.add(fallback_checkin)
 
     consultation.token_number = token_number
 
