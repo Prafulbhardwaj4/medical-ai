@@ -139,6 +139,8 @@ def generate_prescription_pdf(
     medicines = json.loads(consultation.medicines or "[]")
     if medicines:
         elements.append(Paragraph("Medicines", section_style))
+        med_cell_style = ParagraphStyle("medcell", fontSize=9, fontName="Helvetica", leading=11)
+
         med_data = [["Medicine", "Brand Name", "Dosage", "Frequency", "Duration", "Type"]]
         has_controlled = False
         for m in medicines:
@@ -147,11 +149,11 @@ def generate_prescription_pdf(
                 has_controlled = True
             type_label = "Rx" if schedule == "controlled" else "OTC"
             med_data.append([
-                cap_sentence(m.get("name", "")),
-                cap_sentence(m.get("brand_name", "—")),
-                m.get("dosage", ""),
-                cap_sentence(m.get("frequency", "")),
-                m.get("duration", "-"),
+                Paragraph(cap_sentence(m.get("name", "")), med_cell_style),
+                Paragraph(cap_sentence(m.get("brand_name", "—")), med_cell_style),
+                Paragraph(m.get("dosage", ""), med_cell_style),
+                Paragraph(cap_sentence(m.get("frequency", "")), med_cell_style),
+                Paragraph(m.get("duration", "-"), med_cell_style),
                 type_label
             ])
 
@@ -175,7 +177,7 @@ def generate_prescription_pdf(
             color = colors.HexColor("#dc2626") if schedule == "controlled" else colors.HexColor("#16a34a")
             med_table_style.append(("TEXTCOLOR", (5, idx), (5, idx), color))
 
-        med_table = Table(med_data, colWidths=[45*mm, 35*mm, 25*mm, 38*mm, 22*mm, 15*mm])   
+        med_table = Table(med_data, colWidths=[38*mm, 26*mm, 20*mm, 52*mm, 22*mm, 12*mm])   
         med_table.setStyle(TableStyle(med_table_style))
         elements.append(med_table)
         elements.append(Spacer(1, 2*mm))

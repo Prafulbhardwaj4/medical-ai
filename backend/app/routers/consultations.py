@@ -789,7 +789,7 @@ def admin_dashboard(
 
     hospital_doctors = db.query(DoctorModel).filter(
         DoctorModel.hospital_id == current_doctor.hospital_id,
-        DoctorModel.role == "doctor"
+        DoctorModel.role.in_(["doctor", "sub_admin"])
     ).all()
     doctor_ids = [d.id for d in hospital_doctors]
     doctor_map = {d.id: d for d in hospital_doctors}

@@ -412,7 +412,7 @@
             <td><strong>${q.token_number}</strong></td>
             <td>${q.patient_name}</td>
             <td>${q.issue_category}</td>
-            <td style="color:var(--slate)">${new Date(q.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td>
+            <td style="color:var(--slate)">${new Date(q.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
             <td><span class="badge ${q.status === 'waiting' ? 'badge-amber' : 'badge-teal'}">${q.status === 'waiting' ? 'Waiting' : 'Consulted'}</span></td>
             <td><button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id})">Consult</button></td>
           </tr>
