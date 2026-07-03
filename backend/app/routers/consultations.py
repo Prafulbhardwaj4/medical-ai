@@ -869,6 +869,16 @@ def admin_dashboard(
     new_patient_visits = sum(1 for count in patient_consult_count.values() if count == 1)
     returning_patient_visits = sum(1 for count in patient_consult_count.values() if count > 1)
 
+    # Check-ins, for last-visit fallback (covers patients who checked in but haven't been consulted yet)
+    all_checkins = db.query(Checkin).filter(
+        Checkin.hospital_id == current_doctor.hospital_id
+    ).all()
+    patient_checkins = {}
+    for chk in all_checkins:
+        existing = patient_checkins.get(chk.patient_id)
+        if not existing or chk.created_at > existing.created_at:
+            patient_checkins[chk.patient_id] = chk
+
     # Patients list
     patients_list = []
     for p in sorted(all_patients, key=lambda x: x.created_at, reverse=True):
@@ -879,6 +889,15 @@ def admin_dashboard(
             key=lambda c: c.created_at,
             default=None
         )
+        last_checkin = patient_checkins.get(p.id)
+
+        candidates = []
+        if last_consult:
+            candidates.append(last_consult.created_at)
+        if last_checkin:
+            candidates.append(last_checkin.created_at)
+        last_visit_dt = max(candidates) if candidates else None
+
         patients_list.append({
             "patient_uid": p.patient_uid,
             "name": p.name,
@@ -888,7 +907,7 @@ def admin_dashboard(
             "phone": p.phone,
             "doctor": f"{doctor.title} {doctor.name}" if doctor else "—",
             "total_visits": consult_count,
-            "last_visit": last_consult.created_at.strftime("%d %b %Y") if last_consult else "—",
+            "last_visit": last_visit_dt.strftime("%d %b %Y") if last_visit_dt else "—",
             "registered": p.created_at.strftime("%d %b %Y")
         })
 
