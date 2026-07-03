@@ -128,14 +128,15 @@
         <div class="table-wrap">
           <table id="all-patients-table">
             <thead>
-              <tr>
-                <th>Patient</th>
-                <th>ID</th>
-                <th>Phone</th>
-                <th>Age / Gender</th>
-                <th>Last Visit</th>
-              </tr>
-            </thead>
+                <tr>
+                  <th>Patient</th>
+                  <th>ID</th>
+                  <th>Phone</th>
+                  <th>Age / Gender</th>
+                  <th>Last Visit</th>
+                  <th></th>
+                </tr>
+              </thead>
             <tbody id="all-patients-tbody">
               <tr><td colspan="5"><div class="empty-state"><p>Loading patients…</p></div></td></tr>
             </tbody>
@@ -146,11 +147,11 @@
     </main>
   </div>
 
-  <!-- Add New Patient Modal -->
+  <!-- Add/Edit Patient Modal -->
   <div class="modal-overlay" id="modal-add">
     <div class="modal">
       <div class="modal-header">
-        <h2>Add New Patient</h2>
+        <h2 id="modal-add-title">Add New Patient</h2>
         <button class="modal-close" onclick="closeAddPatient()">×</button>
       </div>
       <div class="form-group">
@@ -333,10 +334,30 @@
         btn.innerHTML = 'Generate Token';
       }
     }
+    let editingPatientId = null;
+
     function openNewPatient() {
+      editingPatientId = null;
+      document.getElementById('modal-add-title').textContent = 'Add New Patient';
       document.getElementById('p-name').value = document.getElementById('s-name').value.trim();
+      document.getElementById('p-phone').value = '';
+      document.getElementById('p-age').value = '';
+      document.getElementById('p-blood-group').value = '';
+      document.getElementById('p-gender').value = 'male';
       document.getElementById('modal-add').classList.add('open');
     }
+
+    function openEditPatient(p) {
+      editingPatientId = p.id;
+      document.getElementById('modal-add-title').textContent = 'Edit Patient';
+      document.getElementById('p-name').value = p.name;
+      document.getElementById('p-phone').value = (p.phone || '').replace(/^\+91/, '');
+      document.getElementById('p-age').value = p.age;
+      document.getElementById('p-blood-group').value = p.blood_group || '';
+      document.getElementById('p-gender').value = (p.gender || 'male').toLowerCase();
+      document.getElementById('modal-add').classList.add('open');
+    }
+
     function closeAddPatient() { document.getElementById('modal-add').classList.remove('open'); }
 
     async function savePatient() {
@@ -349,20 +370,28 @@
       );
       if (verr) { toast(verr, "error"); btn.disabled = false; btn.textContent = "Save Patient"; return; }
       btn.innerHTML = '<span class="spinner"></span>';
+      const payload = {
+        name: document.getElementById("p-name").value.trim(),
+        phone: "+91" + document.getElementById("p-phone").value.trim(),
+        age: parseInt(document.getElementById("p-age").value),
+        blood_group: document.getElementById("p-blood-group").value || null,
+        gender: document.getElementById("p-gender").value
+      };
       try {
-        const patient = await api("POST", "/patients/", {
-          name: document.getElementById("p-name").value.trim(),
-          phone: "+91" + document.getElementById("p-phone").value.trim(),
-          age: parseInt(document.getElementById("p-age").value),
-          blood_group: document.getElementById("p-blood-group").value || null,
-          gender: document.getElementById("p-gender").value
-        });
-        toast("Patient added", "success");
-        closeAddPatient();
-        selectedPatient = patient;
-        document.getElementById('cat-patient-name').textContent = `${patient.name} (${patient.patient_uid})`;
-        goToStepCategory();
-        loadAllPatients();
+        if (editingPatientId) {
+          await api("PUT", `/patients/${editingPatientId}`, payload);
+          toast("Patient updated", "success");
+          closeAddPatient();
+          loadAllPatients();
+        } else {
+          const patient = await api("POST", "/patients/", payload);
+          toast("Patient added", "success");
+          closeAddPatient();
+          selectedPatient = patient;
+          document.getElementById('cat-patient-name').textContent = `${patient.name} (${patient.patient_uid})`;
+          goToStepCategory();
+          loadAllPatients();
+        }
       } catch (e) {
         toast(e.message, "error");
       } finally {
@@ -403,6 +432,7 @@
           <td style="color:var(--slate)">${p.phone}</td>
           <td>${p.age}y / ${capitalize(p.gender)}</td>
           <td>${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
+          <td><button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openEditPatient(${JSON.stringify(p)})'>✏️ Edit</button></td>
         </tr>
       `).join('');
     }
