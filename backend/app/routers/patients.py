@@ -135,6 +135,8 @@ def list_patients(
         else:
             last_visit, last_token = None, None
 
+        checked_in_today = bool(last_checkin and last_checkin.visit_date == date.today())
+
         result.append(PatientSummary(
             id=p.id,
             patient_uid=p.patient_uid,
@@ -144,6 +146,7 @@ def list_patients(
             gender=p.gender,
             last_visit=last_visit,
             last_token=last_token,
+            checked_in_today=checked_in_today,
         ))
     return result
 
@@ -200,7 +203,16 @@ def checkin_today(
 
     if not checkin:
         return {"exists": False}
-    return {"exists": True, "token_number": checkin.token_number}
+
+    doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first()
+    return {
+        "exists": True,
+        "token_number": checkin.token_number,
+        "patient_name": patient.name,
+        "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
+        "issue_category": checkin.issue_category,
+        "visit_date": checkin.visit_date.isoformat()
+    }
 
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(
@@ -314,3 +326,40 @@ def checkin_patient(
         issue_category=payload.issue_category,
         visit_date=date.today()
     )
+
+@router.get("/queue/today")
+def todays_queue(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    checkins = db.query(Checkin).filter(
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.doctor_id == current_doctor.id,
+        Checkin.visit_date == date.today()
+    ).order_by(Checkin.created_at.asc()).all()
+
+    patient_ids = [c.patient_id for c in checkins]
+    patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_(patient_ids)).all()}
+
+    token_numbers = [c.token_number for c in checkins]
+    confirmed_tokens = set(
+        t[0] for t in db.query(Consultation.token_number)
+        .filter(Consultation.token_number.in_(token_numbers)).all()
+    )
+
+    result = []
+    for c in checkins:
+        p = patients.get(c.patient_id)
+        if not p:
+            continue
+        result.append({
+            "checkin_id": c.id,
+            "patient_id": p.id,
+            "patient_name": p.name,
+            "patient_uid": p.patient_uid,
+            "token_number": c.token_number,
+            "issue_category": c.issue_category,
+            "created_at": c.created_at.isoformat(),
+            "status": "done" if c.token_number in confirmed_tokens else "waiting"
+        })
+    return result

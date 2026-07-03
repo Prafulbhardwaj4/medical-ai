@@ -76,6 +76,7 @@ class PatientSummary(BaseModel):
     gender: str
     last_visit: Optional[datetime] = None
     last_token: Optional[str] = None
+    checked_in_today: bool = False
 
     class Config:
         from_attributes = True

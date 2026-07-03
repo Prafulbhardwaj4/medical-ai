@@ -238,7 +238,7 @@
         box.innerHTML = data.map(p => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:8px">
             <div>
-              <strong>${p.name}</strong>
+              <strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber" style="margin-left:6px">Checked in today</span>' : ''}
               <div style="font-size:0.82rem;color:var(--slate)">${p.patient_uid} · ${p.phone} · ${p.age}y</div>
             </div>
             <button class="btn btn-primary btn-sm" onclick='selectExistingPatient(${JSON.stringify(p)})'>Select</button>
@@ -249,14 +249,35 @@
 
     let preferredDoctorId = null;
 
-    function selectExistingPatient(p) {
+    async function selectExistingPatient(p) {
       selectedPatient = p;
       preferredDoctorId = null;
+
+      try {
+        const today = await api("GET", `/patients/${p.id}/checkin-today`);
+        if (today.exists) {
+          showExistingToken(today);
+          return;
+        }
+      } catch (e) {}
+
       document.getElementById('cat-patient-name').textContent = `${p.name} (${p.patient_uid})`;
       goToStepCategory();
       api("GET", `/patients/${p.id}/preferred-doctor`).then(r => {
         preferredDoctorId = r.doctor_id;
       }).catch(() => {});
+    }
+
+    function showExistingToken(t) {
+      document.getElementById('slip-hospital').textContent = getDoctor()?.clinic_name || '';
+      document.getElementById('slip-token').textContent = t.token_number;
+      document.getElementById('slip-name').textContent = t.patient_name;
+      document.getElementById('slip-doctor').textContent = t.doctor_name;
+      document.getElementById('slip-category').textContent = t.issue_category;
+      document.getElementById('slip-date').textContent = formatDate(t.visit_date);
+      ['search', 'category', 'doctor'].forEach(s => document.getElementById(`step-${s}`).style.display = 'none');
+      document.getElementById('step-token').style.display = '';
+      toast('Already checked in today — showing existing token.', 'info');
     }
 
     function goToStepCategory() {
@@ -337,6 +358,7 @@
         selectedPatient = patient;
         document.getElementById('cat-patient-name').textContent = `${patient.name} (${patient.patient_uid})`;
         goToStepCategory();
+        loadAllPatients();
       } catch (e) {
         toast(e.message, "error");
       } finally {
@@ -372,7 +394,7 @@
       }
       tbody.innerHTML = data.map(p => `
         <tr>
-          <td><strong>${p.name}</strong></td>
+          <td><strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber">Today</span>' : ''}</td>
           <td><span class="badge badge-navy">${p.patient_uid}</span></td>
           <td style="color:var(--slate)">${p.phone}</td>
           <td>${p.age}y / ${capitalize(p.gender)}</td>

@@ -355,6 +355,7 @@ tbody tr:hover { background: var(--smoke); }
 }
 .badge-teal  { background: #ccfbf1; color: #0f766e; }
 .badge-navy  { background: #dbeafe; color: #1e40af; }
+.badge-amber { background: #fef3c7; color: #b45309; }
 .badge-warn  { background: #fef3c7; color: #92400e; }
 .badge-grey  { background: var(--smoke-mid); color: var(--slate); }
 .badge-green { background: #d1fae5; color: #065f46; }
