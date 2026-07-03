@@ -879,11 +879,16 @@ def admin_dashboard(
         if not existing or chk.created_at > existing.created_at:
             patient_checkins[chk.patient_id] = chk
 
+    # Check-in counts per patient (a check-in counts as a visit even before consultation)
+    patient_checkin_count = {}
+    for chk in all_checkins:
+        patient_checkin_count[chk.patient_id] = patient_checkin_count.get(chk.patient_id, 0) + 1
+
     # Patients list
     patients_list = []
     for p in sorted(all_patients, key=lambda x: x.created_at, reverse=True):
         doctor = doctor_map.get(p.created_by)
-        consult_count = patient_consult_count.get(p.id, 0)
+        consult_count = max(patient_consult_count.get(p.id, 0), patient_checkin_count.get(p.id, 0))
         last_consult = max(
             [c for c in all_consults if c.patient_id == p.id],
             key=lambda c: c.created_at,
@@ -1043,11 +1048,12 @@ def admin_dashboard(
         })
 
     gender_patterns = []
-    for g, diags in gender_diagnosis.items():
-        top = max(diags.items(), key=lambda x: x[1])
+    for g, total in gender_counts.items():
+        diags = gender_diagnosis.get(g, {})
+        top = max(diags.items(), key=lambda x: x[1]) if diags else ("—", 0)
         gender_patterns.append({
             "gender": g,
-            "total_patients": gender_counts.get(g, 0),
+            "total_patients": total,
             "top_diagnosis": top[0],
             "cases": top[1]
         })
