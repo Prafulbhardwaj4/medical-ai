@@ -80,7 +80,7 @@
       </div>
 
       <!-- Today's Queue -->
-      <div class="card" id="queue-card">
+      <div class="card" id="queue-card" style="margin-bottom:24px">
         <div class="card-header">
           <h2>Today's Queue</h2>
           <span id="queue-count" style="color:var(--slate);font-size:0.9rem"></span>
@@ -322,6 +322,14 @@
       document.getElementById('modal-generate-token').classList.remove('open');
       pendingPatientId = null;
     }
+
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted) {
+        closeGenerateTokenModal();
+        const btn = document.getElementById('btn-generate-token-dash');
+        if (btn) { btn.disabled = false; btn.innerHTML = 'Generate Token'; }
+      }
+    });
 
     async function confirmGenerateToken() {
       const btn = document.getElementById('btn-generate-token-dash');

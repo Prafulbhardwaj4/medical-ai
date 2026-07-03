@@ -294,8 +294,12 @@
       try {
         const doctors = await api("GET", "/patients/hospital-doctors");
         const sel = document.getElementById('doc-select');
+        let defaultId = preferredDoctorId;
+        if (!defaultId && doctors.length) {
+          defaultId = doctors[Math.floor(Math.random() * doctors.length)].id;
+        }
         sel.innerHTML = doctors.map(d =>
-          `<option value="${d.id}" ${d.id === preferredDoctorId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}</option>`
+          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}</option>`
         ).join('');
         document.getElementById('step-category').style.display = 'none';
         document.getElementById('step-doctor').style.display = '';
@@ -321,6 +325,7 @@
         document.getElementById('slip-date').textContent = formatDate(result.visit_date);
         document.getElementById('step-doctor').style.display = 'none';
         document.getElementById('step-token').style.display = '';
+        loadAllPatients();
       } catch (e) {
         toast(e.message, "error");
       } finally {
@@ -328,7 +333,6 @@
         btn.innerHTML = 'Generate Token';
       }
     }
-
     function openNewPatient() {
       document.getElementById('p-name').value = document.getElementById('s-name').value.trim();
       document.getElementById('modal-add').classList.add('open');
@@ -393,7 +397,7 @@
         return;
       }
       tbody.innerHTML = data.map(p => `
-        <tr>
+        <tr style="cursor:pointer" onclick='selectExistingPatient(${JSON.stringify(p)})'>
           <td><strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber">Today</span>' : ''}</td>
           <td><span class="badge badge-navy">${p.patient_uid}</span></td>
           <td style="color:var(--slate)">${p.phone}</td>
