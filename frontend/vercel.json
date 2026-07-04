@@ -3,10 +3,6 @@
     {
       "source": "/",
       "destination": "/pages/login.html"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/$1"
     }
   ],
   "cleanUrls": true,
