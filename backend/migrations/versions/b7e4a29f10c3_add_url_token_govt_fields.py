@@ -22,7 +22,8 @@ def upgrade():
         used.add(token)
         conn.execute(sa.text("UPDATE patients SET url_token = :t WHERE id = :id"), {"t": token, "id": row[0]})
 
-    op.alter_column('patients', 'url_token', nullable=False)
+    with op.batch_alter_table('patients') as batch_op:
+        batch_op.alter_column('url_token', nullable=False)
     op.create_index('ix_patients_url_token', 'patients', ['url_token'], unique=True)
 
 def downgrade():

@@ -14,18 +14,28 @@ branch_labels = None
 depends_on = None
 
 def upgrade() -> None:
-    op.add_column('patients', sa.Column('hospital_id', sa.Integer(), sa.ForeignKey('hospitals.id'), nullable=True))
-    op.add_column('patients', sa.Column('created_by', sa.Integer(), sa.ForeignKey('doctors.id'), nullable=True))
+    with op.batch_alter_table('patients') as batch_op:
+        batch_op.add_column(sa.Column('hospital_id', sa.Integer(), sa.ForeignKey('hospitals.id', name='fk_patients_hospital_id'), nullable=True))
+        batch_op.add_column(sa.Column('created_by', sa.Integer(), sa.ForeignKey('doctors.id', name='fk_patients_created_by'), nullable=True))
     # Copy existing doctor_id to created_by
     op.execute("UPDATE patients SET created_by = doctor_id")
     # Set hospital_id from doctor's hospital
-    op.execute("""
-        UPDATE patients 
-        SET hospital_id = doctors.hospital_id 
-        FROM doctors 
-        WHERE patients.doctor_id = doctors.id
-    """)
+    bind = op.get_bind()
+    if bind.dialect.name == 'sqlite':
+        op.execute("""
+            UPDATE patients
+            SET hospital_id = (SELECT doctors.hospital_id FROM doctors WHERE doctors.id = patients.doctor_id)
+            WHERE EXISTS (SELECT 1 FROM doctors WHERE doctors.id = patients.doctor_id)
+        """)
+    else:
+        op.execute("""
+            UPDATE patients 
+            SET hospital_id = doctors.hospital_id 
+            FROM doctors 
+            WHERE patients.doctor_id = doctors.id
+        """)
 
 def downgrade() -> None:
-    op.drop_column('patients', 'created_by')
-    op.drop_column('patients', 'hospital_id')
+    with op.batch_alter_table('patients') as batch_op:
+        batch_op.drop_column('created_by')
+        batch_op.drop_column('hospital_id')

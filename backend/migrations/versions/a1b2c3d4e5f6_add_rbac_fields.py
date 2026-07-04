@@ -31,15 +31,17 @@ def upgrade() -> None:
     op.create_index('ix_hospitals_hospital_code', 'hospitals', ['hospital_code'])
 
     # Add new columns to doctors
-    op.add_column('doctors', sa.Column('role', sa.String(), nullable=False, server_default='doctor'))
-    op.add_column('doctors', sa.Column('hospital_id', sa.Integer(), sa.ForeignKey('hospitals.id'), nullable=True))
-    op.add_column('doctors', sa.Column('is_active', sa.Boolean(), nullable=False, server_default='1'))
-    op.add_column('doctors', sa.Column('created_by', sa.Integer(), sa.ForeignKey('doctors.id'), nullable=True))
+    with op.batch_alter_table('doctors') as batch_op:
+        batch_op.add_column(sa.Column('role', sa.String(), nullable=False, server_default='doctor'))
+        batch_op.add_column(sa.Column('hospital_id', sa.Integer(), sa.ForeignKey('hospitals.id', name='fk_doctors_hospital_id'), nullable=True))
+        batch_op.add_column(sa.Column('is_active', sa.Boolean(), nullable=False, server_default='1'))
+        batch_op.add_column(sa.Column('created_by', sa.Integer(), sa.ForeignKey('doctors.id', name='fk_doctors_created_by'), nullable=True))
 
 def downgrade() -> None:
-    op.drop_column('doctors', 'created_by')
-    op.drop_column('doctors', 'is_active')
-    op.drop_column('doctors', 'hospital_id')
-    op.drop_column('doctors', 'role')
+    with op.batch_alter_table('doctors') as batch_op:
+        batch_op.drop_column('created_by')
+        batch_op.drop_column('is_active')
+        batch_op.drop_column('hospital_id')
+        batch_op.drop_column('role')
     op.drop_index('ix_hospitals_hospital_code', table_name='hospitals')
     op.drop_table('hospitals')

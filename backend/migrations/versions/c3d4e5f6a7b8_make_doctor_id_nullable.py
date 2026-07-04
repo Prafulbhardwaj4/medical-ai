@@ -14,7 +14,9 @@ branch_labels = None
 depends_on = None
 
 def upgrade() -> None:
-    op.alter_column('patients', 'doctor_id', nullable=True)
+    with op.batch_alter_table('patients') as batch_op:
+        batch_op.alter_column('doctor_id', nullable=True)
 
 def downgrade() -> None:
-    op.alter_column('patients', 'doctor_id', nullable=False)
+    with op.batch_alter_table('patients') as batch_op:
+        batch_op.alter_column('doctor_id', nullable=False)
