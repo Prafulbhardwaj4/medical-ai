@@ -331,9 +331,27 @@
             <button class="btn btn-outline" onclick="goStep(2)">← Edit</button>
             <!-- <button class="btn btn-outline btn-lg" onclick="copyPdfLink()">🔗 Copy PDF Link</button> -->
             <button class="btn btn-outline btn-lg" onclick="viewPdf()">📄 View PDF</button>
+            <button class="btn btn-outline btn-lg" onclick="openNurseTaskModal()">🩺 Send to Nurse</button>
             <button class="btn btn-navy btn-lg" onclick="goBack()">✓ Done — Back to Patient</button>
           </div>
           <div id="wa-result"></div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="modal-nurse-task">
+        <div class="modal">
+          <div class="modal-header">
+            <h2>Send to Nurse</h2>
+            <button class="modal-close" onclick="closeNurseTaskModal()">×</button>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Instruction (e.g. IM Injection — Voveran 3ml, or Dressing — left forearm)</label>
+            <textarea class="form-control" id="nurse-task-note" rows="3"></textarea>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button class="btn btn-outline" onclick="closeNurseTaskModal()">Cancel</button>
+            <button class="btn btn-primary" id="btn-send-nurse-task" onclick="sendNurseTask()">Send</button>
+          </div>
         </div>
       </div>
 
@@ -763,6 +781,31 @@
 
     function goBack() {
       window.location.href = `/pages/patient.html?token=${patientToken}`;
+    }
+
+    function openNurseTaskModal() {
+      document.getElementById('nurse-task-note').value = '';
+      document.getElementById('modal-nurse-task').classList.add('open');
+    }
+    function closeNurseTaskModal() {
+      document.getElementById('modal-nurse-task').classList.remove('open');
+    }
+    async function sendNurseTask() {
+      const note = document.getElementById('nurse-task-note').value.trim();
+      if (!note) { toast('Enter an instruction for the nurse.', 'error'); return; }
+      const btn = document.getElementById('btn-send-nurse-task');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const r = await api("POST", `/patients/${patientId}/send-to-nurse-postconsult`, { note });
+        toast(`Sent to ${r.nurse_name}.`, 'success');
+        closeNurseTaskModal();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Send';
+      }
     }
 
     function safeJSON(str, fallback) {

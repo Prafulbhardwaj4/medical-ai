@@ -640,6 +640,14 @@ def confirm_prescription(
         )
         db.add(fallback_checkin)
 
+    if todays_checkin and todays_checkin.vitals_data:
+        try:
+            nurse_vitals = json.loads(todays_checkin.vitals_data)
+            existing_vitals = json.loads(consultation.vitals or "{}")
+            consultation.vitals = json.dumps({**nurse_vitals, **existing_vitals})
+        except Exception:
+            pass
+
     consultation.token_number = token_number
 
     hash_input = f"{token_number}-{current_doctor.id}-{consultation.id}-{settings.SECRET_KEY}"

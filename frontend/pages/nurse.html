@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Nurse Station — MedScribe</title>
+  <link rel="stylesheet" href="../css/style.css?v=3" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-brand">Med<span>Scribe</span></div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Navigation</div>
+      <div class="nav-item active">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Nurse Station
+      </div>
+    </nav>
+
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+    <main class="main-content">
+      <div class="card">
+        <div class="card-header"><h2>Vitals Queue</h2></div>
+        <div id="vitals-list"><p style="color:var(--slate)">Loading…</p></div>
+      </div>
+
+      <div class="card" style="margin-top:20px">
+        <div class="card-header"><h2>Post-Consultation Tasks</h2></div>
+        <div id="postconsult-list"><p style="color:var(--slate)">Loading…</p></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="modal-vitals">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <h2>Record Vitals</h2>
+        <button class="modal-close" onclick="closeVitalsModal()">×</button>
+      </div>
+      <p style="color:var(--slate);font-size:13px;margin-bottom:16px" id="vitals-modal-sub"></p>
+      <div id="vitals-fields"></div>
+      <button class="btn btn-outline btn-sm" style="margin:10px 0 20px" onclick="addVitalsField()">+ Add Field</button>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="closeVitalsModal()">Cancel</button>
+        <button class="btn btn-primary" id="btn-save-vitals" onclick="saveVitals()">Save Vitals</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-postconsult">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <h2>Complete Task</h2>
+        <button class="modal-close" onclick="closePostConsultModal()">×</button>
+      </div>
+      <p style="color:var(--slate);font-size:13px;margin-bottom:4px">Doctor's note:</p>
+      <p style="font-weight:600;margin-bottom:16px" id="postconsult-note"></p>
+      <div id="postconsult-fields"></div>
+      <button class="btn btn-outline btn-sm" style="margin:10px 0 20px" onclick="addPostConsultField()">+ Add Field</button>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="closePostConsultModal()">Cancel</button>
+        <button class="btn btn-primary" id="btn-save-postconsult" onclick="savePostConsult()">Mark Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="../js/api.js?v=3"></script>
+  <script>
+    requireAuth();
+    fillTopbar();
+    if (getDoctor()?.role !== 'nurse') redirectByRole(getDoctor()?.role);
+
+    const STANDARD_VITALS = ["Blood Pressure", "Pulse", "Temperature", "SpO2", "Respiratory Rate", "Weight", "Height", "Blood Sugar (GRBS)"];
+    let activeCheckinId = null;
+    let activePostConsultId = null;
+
+    function fieldRow(label, value) {
+      return `
+        <div style="display:flex;gap:8px;margin-bottom:8px" data-row>
+          <input class="form-control" placeholder="Field" value="${(label || '').replace(/"/g, '&quot;')}" style="flex:1" data-label />
+          <input class="form-control" placeholder="Value" value="${(value || '').replace(/"/g, '&quot;')}" style="flex:1" data-value />
+        </div>`;
+    }
+
+    function addVitalsField() {
+      document.getElementById('vitals-fields').insertAdjacentHTML('beforeend', fieldRow('', ''));
+    }
+    function addPostConsultField() {
+      document.getElementById('postconsult-fields').insertAdjacentHTML('beforeend', fieldRow('', ''));
+    }
+
+    function collectFields(containerId) {
+      const data = {};
+      document.querySelectorAll(`#${containerId} [data-row]`).forEach(row => {
+        const label = row.querySelector('[data-label]').value.trim();
+        const value = row.querySelector('[data-value]').value.trim();
+        if (label && value) data[label] = value;
+      });
+      return data;
+    }
+
+    async function loadQueues() {
+      try {
+        const vitals = await api("GET", "/nurses/vitals-queue");
+        document.getElementById('vitals-list').innerHTML = vitals.length ? vitals.map(v => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <strong>${v.patient_name}</strong>
+              <span class="badge badge-navy" style="margin-left:8px">${v.patient_uid}</span>
+              <div style="color:var(--slate);font-size:13px;margin-top:4px">Token ${v.token_number} · ${v.issue_category} · For ${v.doctor_name}</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick='openVitalsModal(${v.checkin_id}, ${JSON.stringify(v.patient_name)})'>Record Vitals</button>
+          </div>
+        `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No patients waiting for vitals.</p>';
+      } catch (e) { toast(e.message, "error"); }
+
+      try {
+        const tasks = await api("GET", "/nurses/post-consult-queue");
+        document.getElementById('postconsult-list').innerHTML = tasks.length ? tasks.map(t => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <strong>${t.patient_name}</strong>
+              <span class="badge badge-navy" style="margin-left:8px">${t.patient_uid}</span>
+              <div style="color:var(--slate);font-size:13px;margin-top:4px">Token ${t.token_number} · From ${t.doctor_name}</div>
+              <div style="color:var(--navy);font-size:13px;margin-top:4px;font-weight:600">${t.note || ''}</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick='openPostConsultModal(${t.checkin_id}, ${JSON.stringify(t.note || "")})'>Mark Done</button>
+          </div>
+        `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No pending tasks.</p>';
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function openVitalsModal(checkinId, patientName) {
+      activeCheckinId = checkinId;
+      document.getElementById('vitals-modal-sub').textContent = patientName;
+      document.getElementById('vitals-fields').innerHTML = STANDARD_VITALS.map(label => fieldRow(label, '')).join('');
+      document.getElementById('modal-vitals').classList.add('open');
+    }
+    function closeVitalsModal() {
+      document.getElementById('modal-vitals').classList.remove('open');
+      activeCheckinId = null;
+    }
+
+    async function saveVitals() {
+      const data = collectFields('vitals-fields');
+      if (!Object.keys(data).length) { toast('Enter at least one vitals value.', 'error'); return; }
+      const btn = document.getElementById('btn-save-vitals');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        await api("POST", `/nurses/vitals/${activeCheckinId}`, { data });
+        toast('Vitals recorded.', 'success');
+        closeVitalsModal();
+        loadQueues();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Save Vitals';
+      }
+    }
+
+    function openPostConsultModal(checkinId, note) {
+      activePostConsultId = checkinId;
+      document.getElementById('postconsult-note').textContent = note || '—';
+      document.getElementById('postconsult-fields').innerHTML = fieldRow('Notes', '');
+      document.getElementById('modal-postconsult').classList.add('open');
+    }
+    function closePostConsultModal() {
+      document.getElementById('modal-postconsult').classList.remove('open');
+      activePostConsultId = null;
+    }
+
+    async function savePostConsult() {
+      const data = collectFields('postconsult-fields');
+      const btn = document.getElementById('btn-save-postconsult');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        await api("POST", `/nurses/post-consult/${activePostConsultId}`, { data });
+        toast('Task marked done.', 'success');
+        closePostConsultModal();
+        loadQueues();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Mark Done';
+      }
+    }
+
+    loadQueues();
+    setInterval(loadQueues, 15000);
+  </script>
+</body>
+</html>

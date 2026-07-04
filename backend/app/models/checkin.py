@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Text
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -14,3 +14,15 @@ class Checkin(Base):
     created_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     visit_date = Column(Date, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    nurse_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    vitals_status = Column(String, default="none", nullable=False)
+    vitals_data = Column(Text, nullable=True)
+    vitals_recorded_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    vitals_recorded_at = Column(DateTime, nullable=True)
+
+    post_consult_status = Column(String, default="none", nullable=False)
+    post_consult_note = Column(Text, nullable=True)
+    post_consult_data = Column(Text, nullable=True)
+    post_consult_recorded_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    post_consult_recorded_at = Column(DateTime, nullable=True)

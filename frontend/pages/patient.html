@@ -245,6 +245,10 @@
           </div>
         </div>
         <div class="patient-header-actions">
+          <span class="badge badge-amber" id="vitals-badge" style="display:none"></span>
+          <button class="btn btn-outline btn-lg" id="btn-send-vitals" onclick="sendForVitals()" style="display:none">
+            🩺 Send for Vitals
+          </button>
           <button class="btn btn-outline btn-lg" onclick="openEditPatient()">
             ✏️ Edit Details
           </button>
@@ -252,6 +256,14 @@
             + New Consultation
           </button>
         </div>
+      </div>
+
+      <!-- Nurse-recorded vitals -->
+      <div class="card" id="vitals-card" style="display:none">
+        <div class="card-header">
+          <h2>Vitals (Recorded by Nurse)</h2>
+        </div>
+        <div id="vitals-rows" style="display:flex;flex-wrap:wrap;gap:20px"></div>
       </div>
 
       <!-- Visit history -->
@@ -475,10 +487,60 @@
         patientId = r.id;
         loadPatient();
         loadHistory();
+        loadVitalsStatus();
       } catch (e) {
         window.location.href = "/pages/dashboard.html";
       }
     })();
+
+    async function loadVitalsStatus() {
+      try {
+        const c = await api("GET", `/patients/${patientId}/checkin-today`);
+        const badge = document.getElementById('vitals-badge');
+        const btn = document.getElementById('btn-send-vitals');
+        const card = document.getElementById('vitals-card');
+        if (!c.exists) { badge.style.display = 'none'; btn.style.display = 'none'; card.style.display = 'none'; return; }
+
+        if (c.vitals_status === 'none') {
+          badge.style.display = 'none';
+          btn.style.display = '';
+          card.style.display = 'none';
+        } else if (c.vitals_status === 'pending') {
+          badge.className = 'badge badge-amber';
+          badge.textContent = `Vitals Pending — ${c.nurse_name || 'Nurse'}`;
+          badge.style.display = '';
+          btn.style.display = 'none';
+          card.style.display = 'none';
+        } else if (c.vitals_status === 'done') {
+          badge.className = 'badge badge-green';
+          badge.textContent = 'Vitals Recorded';
+          badge.style.display = '';
+          btn.style.display = 'none';
+          if (c.vitals_data) {
+            document.getElementById('vitals-rows').innerHTML = Object.entries(c.vitals_data).map(([k, v]) => `
+              <div>
+                <div style="font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:0.04em">${sanitize(k)}</div>
+                <div style="font-weight:600;font-size:15px">${sanitize(v)}</div>
+              </div>
+            `).join('');
+            card.style.display = '';
+          }
+        }
+      } catch (e) { /* no checkin today — ignore */ }
+    }
+
+    async function sendForVitals() {
+      const btn = document.getElementById('btn-send-vitals');
+      btn.disabled = true;
+      try {
+        await api("POST", `/patients/${patientId}/send-to-nurse`, {});
+        toast('Sent for vitals.', 'success');
+        loadVitalsStatus();
+      } catch (e) {
+        toast(e.message, 'error');
+        btn.disabled = false;
+      }
+    }
 
     function openEditPatient() {
       api("GET", `/patients/${patientId}`).then(p => {

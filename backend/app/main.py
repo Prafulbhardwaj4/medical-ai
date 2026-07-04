@@ -11,6 +11,7 @@ from app.routers import patients as patients_router
 from app.routers import consultations as consultations_router
 from app.routers import admin as admin_router
 from app.routers import audit as audit_router
+from app.routers import nurses as nurses_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 from app.models.audit_log import AuditLog
@@ -54,6 +55,7 @@ app.include_router(patients_router.router)
 app.include_router(consultations_router.router)
 app.include_router(admin_router.router)
 app.include_router(audit_router.router)
+app.include_router(nurses_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
 

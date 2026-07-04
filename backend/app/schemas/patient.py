@@ -1,6 +1,6 @@
 from pydantic import BaseModel, validator
 from datetime import datetime, date
-from typing import Optional
+from typing import Optional, Dict
 
 VALID_GENDERS = {"Male", "Female", "Other"}
 VALID_BLOOD_GROUPS = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
@@ -110,6 +110,7 @@ class PatientSummary(BaseModel):
 class CheckinCreate(BaseModel):
     issue_category: str
     doctor_id: int
+    send_to_nurse: Optional[bool] = False
 
 class CheckinOut(BaseModel):
     token_number: str
@@ -117,9 +118,19 @@ class CheckinOut(BaseModel):
     doctor_name: str
     issue_category: str
     visit_date: date
+    nurse_name: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+class VitalsSubmit(BaseModel):
+    data: Dict[str, str]
+
+class NurseNoteCreate(BaseModel):
+    note: str
+
+class NurseTaskComplete(BaseModel):
+    data: Dict[str, str] = {}
 
 class DoctorLite(BaseModel):
     id: int

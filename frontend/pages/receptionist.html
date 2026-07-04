@@ -80,6 +80,10 @@
             <label class="form-label">Doctor</label>
             <select class="form-control" id="doc-select"></select>
           </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="send-to-nurse" style="width:auto" />
+            <label for="send-to-nurse" style="font-size:14px;color:var(--slate);margin:0">Also send for vitals check (nurse room)</label>
+          </div>
           <button class="btn btn-primary" id="btn-generate-token" style="width:100%" onclick="generateToken()">Generate Token</button>
         </div>
 
@@ -96,6 +100,7 @@
               <p><strong>Doctor:</strong> <span id="slip-doctor"></span></p>
               <p><strong>Reason:</strong> <span id="slip-category"></span></p>
               <p><strong>Date:</strong> <span id="slip-date"></span></p>
+              <p id="slip-nurse-row" style="display:none"><strong>Vitals Room:</strong> <span id="slip-nurse"></span></p>
             </div>
           </div>
           <div style="display:flex;gap:10px" class="no-print">
@@ -331,7 +336,8 @@
       try {
         const result = await api("POST", `/patients/${selectedPatient.id}/checkin`, {
           issue_category: selectedCategory,
-          doctor_id: parseInt(doctorId)
+          doctor_id: parseInt(doctorId),
+          send_to_nurse: document.getElementById('send-to-nurse').checked
         });
         document.getElementById('slip-hospital').textContent = getDoctor()?.clinic_name || '';
         document.getElementById('slip-token').textContent = result.token_number;
@@ -339,6 +345,13 @@
         document.getElementById('slip-doctor').textContent = result.doctor_name;
         document.getElementById('slip-category').textContent = result.issue_category;
         document.getElementById('slip-date').textContent = formatDate(result.visit_date);
+        document.getElementById('send-to-nurse').checked = false;
+        if (result.nurse_name) {
+          document.getElementById('slip-nurse').textContent = result.nurse_name;
+          document.getElementById('slip-nurse-row').style.display = '';
+        } else {
+          document.getElementById('slip-nurse-row').style.display = 'none';
+        }
         document.getElementById('step-doctor').style.display = 'none';
         document.getElementById('step-token').style.display = '';
         loadAllPatients();

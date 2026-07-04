@@ -111,6 +111,10 @@ def generate_prescription_pdf(
         ("SpO2", vitals.get("spo2", "")),
     ]
     vital_items = [(k, v) for k, v in vital_items if v]
+    fixed_keys = {"bp", "temperature", "pulse", "weight", "spo2"}
+    for k, v in vitals.items():
+        if k not in fixed_keys and v:
+            vital_items.append((k, v))
 
     if vital_items:
         elements.append(Paragraph("Vitals", section_style))

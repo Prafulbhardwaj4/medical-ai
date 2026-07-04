@@ -139,6 +139,7 @@
         <button class="btn btn-outline btn-sm" id="df-doctor" onclick="setDoctorFilter('doctor')">Doctors</button>
         <button class="btn btn-outline btn-sm" id="df-sub_admin" onclick="setDoctorFilter('sub_admin')">Sub Admins</button>
         <button class="btn btn-outline btn-sm" id="df-receptionist" onclick="setDoctorFilter('receptionist')">Receptionists</button>
+        <button class="btn btn-outline btn-sm" id="df-nurse" onclick="setDoctorFilter('nurse')">Nurses</button>
       </div>
       <div class="card" id="doctors-list">
         <p>Loading...</p>
@@ -200,6 +201,7 @@
         <option value="doctor">Doctor</option>
         <option value="sub_admin">Sub Admin</option>
         <option value="receptionist">Receptionist</option>
+        <option value="nurse">Nurse</option>
         <option value="test_center">Test Center (Coming Soon)</option>
         <option value="pharmacy">Pharmacy (Coming Soon)</option>
       </select>
@@ -228,7 +230,7 @@
 
     function setDoctorFilter(filter) {
       doctorFilter = filter;
-      ['all', 'doctor', 'sub_admin'].forEach(f => {
+      ['all', 'doctor', 'sub_admin', 'receptionist', 'nurse'].forEach(f => {
         const btn = document.getElementById(`df-${f}`);
         if (!btn) return;
         btn.style.background = '';
@@ -261,8 +263,8 @@
             <div>
               <div style="font-weight:600;font-size:15px">
                 ${sanitize(d.name)}
-                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:6px;${d.role === 'sub_admin' ? 'background:#ccfbf1;color:#0d9488' : d.role === 'receptionist' ? 'background:#fef3c7;color:#b45309' : 'background:#f1f5f9;color:#64748b'}">
-                  ${d.role === 'sub_admin' ? 'Sub Admin' : d.role === 'receptionist' ? 'Receptionist' : 'Doctor'}
+                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:6px;${d.role === 'sub_admin' ? 'background:#ccfbf1;color:#0d9488' : d.role === 'receptionist' ? 'background:#fef3c7;color:#b45309' : d.role === 'nurse' ? 'background:#ede9fe;color:#6d28d9' : 'background:#f1f5f9;color:#64748b'}">
+                  ${d.role === 'sub_admin' ? 'Sub Admin' : d.role === 'receptionist' ? 'Receptionist' : d.role === 'nurse' ? 'Nurse' : 'Doctor'}
                 </span>
                 <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:4px;${d.is_active ? 'background:#dcfce7;color:#16a34a' : 'background:#fee2e2;color:#dc2626'}">
                   ${d.is_active ? 'Active' : 'Inactive'}

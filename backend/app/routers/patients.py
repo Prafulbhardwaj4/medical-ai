@@ -2,14 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 from typing import List
-from datetime import date
+from datetime import date, datetime
+import json
+import random
 from app.database import get_db
 from app.models.patient import Patient
 from app.models.consultation import Consultation
 from app.models.doctor import Doctor
 from app.models.hospital import Hospital
 from app.models.checkin import Checkin
-from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite
+from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 
@@ -33,6 +35,14 @@ def generate_url_token(db: Session) -> str:
         existing = db.query(Patient).filter(Patient.url_token == token).first()
         if not existing:
             return token
+
+def pick_random_nurse(db: Session, hospital_id: int):
+    nurses = db.query(Doctor).filter(
+        Doctor.hospital_id == hospital_id,
+        Doctor.role == "nurse",
+        Doctor.is_active == True
+    ).all()
+    return random.choice(nurses) if nurses else None
 
 @router.post("/", response_model=PatientOut, status_code=201)
 def create_patient(
@@ -232,14 +242,100 @@ def checkin_today(
         return {"exists": False}
 
     doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first()
+    nurse = db.query(Doctor).filter(Doctor.id == checkin.nurse_id).first() if checkin.nurse_id else None
     return {
         "exists": True,
         "token_number": checkin.token_number,
         "patient_name": patient.name,
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "issue_category": checkin.issue_category,
-        "visit_date": checkin.visit_date.isoformat()
+        "visit_date": checkin.visit_date.isoformat(),
+        "vitals_status": checkin.vitals_status,
+        "vitals_data": json.loads(checkin.vitals_data) if checkin.vitals_data else None,
+        "nurse_name": f"{nurse.title} {nurse.name}" if nurse else None,
+        "post_consult_status": checkin.post_consult_status,
+        "post_consult_note": checkin.post_consult_note
     }
+
+@router.post("/{patient_id}/send-to-nurse")
+def send_to_nurse(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    checkin = db.query(Checkin).filter(
+        Checkin.patient_id == patient_id,
+        Checkin.visit_date == date.today()
+    ).order_by(desc(Checkin.created_at)).first()
+    if not checkin:
+        raise HTTPException(status_code=400, detail="No check-in found for today.")
+
+    nurse = pick_random_nurse(db, current_doctor.hospital_id)
+    if not nurse:
+        raise HTTPException(status_code=400, detail="No nurse available at this hospital yet.")
+
+    checkin.nurse_id = nurse.id
+    checkin.vitals_status = "pending"
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="sent_to_nurse_vitals",
+        target_type="patient",
+        target_id=patient.id,
+        target_label=f"{patient.name} ({patient.patient_uid})",
+        details=f"Assigned to {nurse.title} {nurse.name}"
+    )
+
+    return {"nurse_name": f"{nurse.title} {nurse.name}"}
+
+@router.post("/{patient_id}/send-to-nurse-postconsult")
+def send_to_nurse_postconsult(
+    patient_id: int,
+    payload: NurseNoteCreate,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    checkin = db.query(Checkin).filter(
+        Checkin.patient_id == patient_id,
+        Checkin.visit_date == date.today()
+    ).order_by(desc(Checkin.created_at)).first()
+    if not checkin:
+        raise HTTPException(status_code=400, detail="No check-in found for today.")
+
+    nurse = pick_random_nurse(db, current_doctor.hospital_id)
+    if not nurse:
+        raise HTTPException(status_code=400, detail="No nurse available at this hospital yet.")
+
+    checkin.nurse_id = nurse.id
+    checkin.post_consult_status = "pending"
+    checkin.post_consult_note = payload.note
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="sent_to_nurse_postconsult",
+        target_type="patient",
+        target_id=patient.id,
+        target_label=f"{patient.name} ({patient.patient_uid})",
+        details=f"{payload.note} → {nurse.title} {nurse.name}"
+    )
+
+    return {"nurse_name": f"{nurse.title} {nurse.name}"}
 
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(
@@ -324,6 +420,12 @@ def checkin_patient(
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
 
+    nurse = None
+    if payload.send_to_nurse:
+        nurse = pick_random_nurse(db, current_doctor.hospital_id)
+        if not nurse:
+            raise HTTPException(status_code=400, detail="No nurse available at this hospital yet.")
+
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
@@ -334,7 +436,9 @@ def checkin_patient(
         issue_category=payload.issue_category,
         doctor_id=doctor.id,
         created_by=current_doctor.id,
-        visit_date=date.today()
+        visit_date=date.today(),
+        nurse_id=nurse.id if nurse else None,
+        vitals_status="pending" if nurse else "none"
     )
     db.add(checkin)
     db.commit()
@@ -345,7 +449,7 @@ def checkin_patient(
         target_type="patient",
         target_id=patient.id,
         target_label=f"{patient.name} ({patient.patient_uid})",
-        details=f"Token {token} → {doctor.title} {doctor.name} ({payload.issue_category})"
+        details=f"Token {token} → {doctor.title} {doctor.name} ({payload.issue_category})" + (f" · sent to {nurse.title} {nurse.name} for vitals" if nurse else "")
     )
 
     return CheckinOut(
@@ -353,7 +457,8 @@ def checkin_patient(
         patient_name=patient.name,
         doctor_name=f"{doctor.title} {doctor.name}",
         issue_category=payload.issue_category,
-        visit_date=date.today()
+        visit_date=date.today(),
+        nurse_name=f"{nurse.title} {nurse.name}" if nurse else None
     )
 
 @router.get("/queue/today")

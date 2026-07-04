@@ -145,6 +145,8 @@ function redirectByRole(role) {
     window.location.href = '/pages/superadmin.html';
   } else if (role === 'receptionist') {
     window.location.href = '/pages/receptionist.html';
+  } else if (role === 'nurse') {
+    window.location.href = '/pages/nurse.html';
   } else {
     window.location.href = '/pages/dashboard.html';
   }
