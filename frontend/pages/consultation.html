@@ -363,11 +363,12 @@
     if (getDoctor()?.role === 'receptionist') window.location.href = 'receptionist.html';
 
     const params = new URLSearchParams(location.search);
-    const patientId = params.get("patient_id");
-    if (!patientId) window.location.href = "/pages/dashboard.html";
+    const patientToken = params.get("token");
+    if (!patientToken) window.location.href = "/pages/dashboard.html";
+    let patientId = null;
 
-    document.getElementById("sidebar-patient-link").href = `patient.html?id=${patientId}`;
-    document.getElementById("mobile-back-link").href = `patient.html?id=${patientId}`;
+    document.getElementById("sidebar-patient-link").href = `patient.html?token=${patientToken}`;
+    document.getElementById("mobile-back-link").href = `patient.html?token=${patientToken}`;
 
     let consultationId = null;
     let mediaRecorder = null;
@@ -761,7 +762,7 @@
     }
 
     function goBack() {
-      window.location.href = `/pages/patient.html?id=${patientId}`;
+      window.location.href = `/pages/patient.html?token=${patientToken}`;
     }
 
     function safeJSON(str, fallback) {
@@ -777,8 +778,16 @@
       });
     }
 
-    loadPatient();
-    loadLastVisit();
+    (async () => {
+      try {
+        const r = await api("GET", `/patients/resolve/${patientToken}`);
+        patientId = r.id;
+        loadPatient();
+        loadLastVisit();
+      } catch (e) {
+        window.location.href = "/pages/dashboard.html";
+      }
+    })();
   </script>
 </body>
 

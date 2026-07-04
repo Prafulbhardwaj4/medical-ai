@@ -34,3 +34,7 @@ class Doctor(Base):
 
     patients = relationship("Patient", foreign_keys="Patient.created_by", back_populates="doctor")
     hospital = relationship("Hospital", backref="doctors")
+
+    @property
+    def hospital_type(self):
+        return self.hospital.hospital_type if self.hospital else None

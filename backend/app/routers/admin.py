@@ -35,15 +35,22 @@ def validate_fields(name, email, phone, password):
     if len(name.strip()) < 2:
         raise HTTPException(status_code=400, detail="Name too short")
 
+VALID_HOSPITAL_TYPES = {"government", "private"}
+
 @router.post("/hospitals", status_code=201)
 def create_hospital(
     name: str,
     city: str,
     state: str,
     address: str = "",
+    hospital_type: str = "private",
     db: Session = Depends(get_db),
     _: None = Depends(verify_super_admin_key)
 ):
+    hospital_type = hospital_type.strip().lower()
+    if hospital_type not in VALID_HOSPITAL_TYPES:
+        raise HTTPException(status_code=400, detail="hospital_type must be 'government' or 'private'")
+
     # Auto-generate hospital code from name
     words = name.strip().upper().split()
     code_base = "".join([w[0] for w in words])[:4]
@@ -58,12 +65,13 @@ def create_hospital(
         address=address,
         city=city,
         state=state,
-        hospital_code=hospital_code
+        hospital_code=hospital_code,
+        hospital_type=hospital_type
     )
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
-    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code}
+    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type}
 
 @router.post("/create-admin", status_code=201)
 def create_admin(
@@ -119,7 +127,7 @@ def list_hospitals(
     _: None = Depends(verify_super_admin_key)
 ):
     hospitals = db.query(Hospital).all()
-    return [{"id": h.id, "name": h.name, "hospital_code": h.hospital_code, "city": h.city, "is_active": h.is_active} for h in hospitals]
+    return [{"id": h.id, "name": h.name, "hospital_code": h.hospital_code, "hospital_type": h.hospital_type, "city": h.city, "is_active": h.is_active} for h in hospitals]
 
 @router.post("/doctors", status_code=201)
 def create_doctor(
@@ -430,6 +438,7 @@ def list_hospitals_jwt(
             "id": h.id,
             "name": h.name,
             "hospital_code": h.hospital_code,
+            "hospital_type": h.hospital_type,
             "city": h.city,
             "is_active": h.is_active
         }
@@ -470,11 +479,16 @@ def create_hospital_jwt(
     city: str,
     state: str,
     address: str = "",
+    hospital_type: str = "private",
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     if current_doctor.role.value != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital_type = hospital_type.strip().lower()
+    if hospital_type not in VALID_HOSPITAL_TYPES:
+        raise HTTPException(status_code=400, detail="hospital_type must be 'government' or 'private'")
 
     words = name.strip().upper().split()
     code_base = "".join([w[0] for w in words])[:4]
@@ -482,7 +496,7 @@ def create_hospital_jwt(
     while db.query(Hospital).filter(Hospital.hospital_code == hospital_code).first():
         hospital_code = f"{code_base}-{secrets.token_hex(3).upper()}"
 
-    hospital = Hospital(name=name, address=address, city=city, state=state, hospital_code=hospital_code)
+    hospital = Hospital(name=name, address=address, city=city, state=state, hospital_code=hospital_code, hospital_type=hospital_type)
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
@@ -495,7 +509,7 @@ def create_hospital_jwt(
         target_label=hospital.name,
         hospital_id=hospital.id
     )
-    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code}
+    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type}
 
 @router.post("/create-admin-jwt", status_code=201)
 def create_admin_jwt(
@@ -612,6 +626,7 @@ def hospital_detail(
         "state": hospital.state,
         "address": hospital.address,
         "hospital_code": hospital.hospital_code,
+        "hospital_type": hospital.hospital_type,
         "is_active": hospital.is_active,
         "created_at": hospital.created_at.isoformat(),
         "admins": [

@@ -190,6 +190,16 @@
           <option value="other">Other</option>
         </select>
       </div>
+      <div id="govt-fields" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Aadhaar Number (optional)</label>
+          <input class="form-control" id="p-aadhaar" maxlength="12" placeholder="123456789012" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">ABHA Number (optional)</label>
+          <input class="form-control" id="p-abha" maxlength="14" placeholder="14-digit ABHA number" />
+        </div>
+      </div>
       <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
         <button class="btn btn-outline" onclick="closeAddPatient()">Cancel</button>
         <button class="btn btn-primary" id="btn-save-patient" onclick="savePatient()">Save Patient</button>
@@ -204,6 +214,9 @@
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
     if (getDoctor()?.role !== 'receptionist') window.location.href = 'login.html';
+    if (getDoctor()?.hospital_type === 'government') {
+      document.getElementById('govt-fields').style.display = 'block';
+    }
 
     let selectedPatient = null;
     let selectedCategory = null;
@@ -346,6 +359,8 @@
       document.getElementById('p-age').value = '';
       document.getElementById('p-blood-group').value = '';
       document.getElementById('p-gender').value = 'male';
+      document.getElementById('p-aadhaar').value = '';
+      document.getElementById('p-abha').value = '';
       document.getElementById('modal-add').classList.add('open');
     }
 
@@ -357,6 +372,8 @@
       document.getElementById('p-age').value = p.age;
       document.getElementById('p-blood-group').value = p.blood_group || '';
       document.getElementById('p-gender').value = (p.gender || 'male').toLowerCase();
+      document.getElementById('p-aadhaar').value = p.aadhaar_number || '';
+      document.getElementById('p-abha').value = p.abha_number || '';
       document.getElementById('modal-add').classList.add('open');
     }
 
@@ -377,7 +394,9 @@
         phone: "+91" + document.getElementById("p-phone").value.trim(),
         age: parseInt(document.getElementById("p-age").value),
         blood_group: document.getElementById("p-blood-group").value || null,
-        gender: document.getElementById("p-gender").value
+        gender: document.getElementById("p-gender").value,
+        aadhaar_number: document.getElementById("p-aadhaar").value.trim() || null,
+        abha_number: document.getElementById("p-abha").value.trim() || null
       };
       try {
         if (editingPatientId) {

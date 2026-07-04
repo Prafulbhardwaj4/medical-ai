@@ -334,8 +334,9 @@
     if (getDoctor()?.role === 'receptionist') window.location.href = 'receptionist.html';
 
     const params = new URLSearchParams(location.search);
-    const patientId = params.get("id");
-    if (!patientId) window.location.href = "/pages/dashboard.html";
+    const patientToken = params.get("token");
+    if (!patientToken) window.location.href = "/pages/dashboard.html";
+    let patientId = null;
 
     async function loadPatient() {
       try {
@@ -442,7 +443,7 @@
     }
 
     function startConsultation() {
-      window.location.href = `/pages/consultation.html?patient_id=${patientId}`;
+      window.location.href = `/pages/consultation.html?token=${patientToken}`;
     }
 
     function openAddPatientFromSidebar() {
@@ -468,8 +469,16 @@
       });
     }
 
-    loadPatient();
-    loadHistory();
+    (async () => {
+      try {
+        const r = await api("GET", `/patients/resolve/${patientToken}`);
+        patientId = r.id;
+        loadPatient();
+        loadHistory();
+      } catch (e) {
+        window.location.href = "/pages/dashboard.html";
+      }
+    })();
 
     function openEditPatient() {
       api("GET", `/patients/${patientId}`).then(p => {

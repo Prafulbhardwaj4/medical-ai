@@ -8,6 +8,9 @@ class Patient(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     patient_uid = Column(String, unique=True, index=True)
+    url_token = Column(String, unique=True, index=True, nullable=False)
+    aadhaar_number = Column(String, nullable=True)
+    abha_number = Column(String, nullable=True)
     name = Column(String, nullable=False)
     phone = Column(String, nullable=False)
     age = Column(Integer, nullable=False)

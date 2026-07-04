@@ -161,7 +161,11 @@
       <input class="form-control" id="h-name" placeholder="Hospital Name" style="margin-bottom:14px" />
       <input class="form-control" id="h-city" placeholder="City" style="margin-bottom:14px" />
       <input class="form-control" id="h-state" placeholder="State" style="margin-bottom:14px" />
-      <input class="form-control" id="h-address" placeholder="Address (optional)" style="margin-bottom:20px" />
+      <input class="form-control" id="h-address" placeholder="Address (optional)" style="margin-bottom:14px" />
+      <select class="form-control" id="h-type" style="margin-bottom:20px">
+        <option value="private">Private</option>
+        <option value="government">Government</option>
+      </select>
       <div class="err-msg" id="hospital-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
         <button class="btn btn-primary" style="flex:1" onclick="submitHospital()">Create</button>
@@ -315,7 +319,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div style="cursor:pointer;flex:1" onclick="openDetail(${h.id})">
               <div style="font-weight:600;font-size:1rem">${sanitize(h.name)}</div>
-              <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(h.city)} · Code: ${sanitize(h.hospital_code)}</div>
+              <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(h.city)} · Code: ${sanitize(h.hospital_code)} · ${h.hospital_type === 'government' ? 'Government' : 'Private'}</div>
             </div>
             <div style="display:flex;align-items:center;gap:12px">
               <span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span>
@@ -368,6 +372,7 @@
             <div><span style="color:var(--slate);font-size:13px">State</span><div style="font-weight:500">${sanitize(h.state)}</div></div>
             <div><span style="color:var(--slate);font-size:13px">Address</span><div style="font-weight:500">${sanitize(h.address || '—')}</div></div>
             <div><span style="color:var(--slate);font-size:13px">Hospital Code</span><div style="font-weight:500;font-family:monospace">${sanitize(h.hospital_code)}</div></div>
+            <div><span style="color:var(--slate);font-size:13px">Type</span><div style="font-weight:500">${h.hospital_type === 'government' ? 'Government' : 'Private'}</div></div>
             <div><span style="color:var(--slate);font-size:13px">Status</span><div><span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span></div></div>
             <div><span style="color:var(--slate);font-size:13px">Doctors</span><div style="font-weight:500">${h.doctor_count}</div></div>
             <div><span style="color:var(--slate);font-size:13px">Monthly Revenue</span><div style="font-weight:600;color:var(--teal)">₹${h.monthly_revenue.toLocaleString('en-IN')}</div></div>
@@ -422,6 +427,7 @@
       const city = document.getElementById('h-city').value.trim();
       const state = document.getElementById('h-state').value.trim();
       const address = document.getElementById('h-address').value.trim();
+      const hospital_type = document.getElementById('h-type').value;
 
       if (!name || !city || !state) {
         err.textContent = 'Name, city and state are required.'; return;
@@ -430,7 +436,7 @@
         err.textContent = 'Hospital name must be at least 3 characters.'; return;
       }
 
-      const params = new URLSearchParams({ name, city, state, address });
+      const params = new URLSearchParams({ name, city, state, address, hospital_type });
       try {
         await api('POST', `/admin/hospitals-jwt?${params.toString()}`);
         toast('Hospital created.', 'success');

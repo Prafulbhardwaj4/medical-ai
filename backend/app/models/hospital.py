@@ -11,5 +11,6 @@ class Hospital(Base):
     city = Column(String, nullable=True)
     state = Column(String, nullable=True)
     hospital_code = Column(String, unique=True, index=True, nullable=False)
+    hospital_type = Column(String, default="private", nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

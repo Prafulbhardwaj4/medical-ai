@@ -16,14 +16,23 @@ from app.utils.audit import log_action
 router = APIRouter(prefix="/patients", tags=["patients"])
 
 def generate_patient_uid(db: Session, hospital_id: int, hospital_code: str) -> str:
-    from sqlalchemy import text
+    import secrets, string
     prefix = hospital_code.replace("-", "")[:4].upper()
+    alphabet = string.ascii_uppercase + string.digits
     while True:
-        count = db.query(Patient).filter(Patient.hospital_id == hospital_id).count() + 1
-        uid = f"{prefix}-{count:04d}"
+        suffix = "".join(secrets.choice(alphabet) for _ in range(6))
+        uid = f"{prefix}-{suffix}"
         existing = db.query(Patient).filter(Patient.patient_uid == uid).first()
         if not existing:
             return uid
+
+def generate_url_token(db: Session) -> str:
+    import secrets
+    while True:
+        token = secrets.token_urlsafe(9)
+        existing = db.query(Patient).filter(Patient.url_token == token).first()
+        if not existing:
+            return token
 
 @router.post("/", response_model=PatientOut, status_code=201)
 def create_patient(
@@ -36,11 +45,14 @@ def create_patient(
 
     patient = Patient(
         patient_uid=generate_patient_uid(db, current_doctor.hospital_id, hospital_code),
+        url_token=generate_url_token(db),
         name=payload.name,
         phone=payload.phone,
         age=payload.age,
         blood_group=payload.blood_group,
         gender=payload.gender,
+        aadhaar_number=payload.aadhaar_number,
+        abha_number=payload.abha_number,
         hospital_id=current_doctor.hospital_id,
         created_by=current_doctor.id
     )
@@ -140,6 +152,7 @@ def list_patients(
         result.append(PatientSummary(
             id=p.id,
             patient_uid=p.patient_uid,
+            url_token=p.url_token,
             name=p.name,
             phone=p.phone,
             age=p.age,
@@ -160,6 +173,20 @@ def hospital_doctors(
         Doctor.role.in_(["doctor", "sub_admin"]),
         Doctor.is_active == True
     ).all()
+
+@router.get("/resolve/{token}")
+def resolve_patient_token(
+    token: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.url_token == token,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return {"id": patient.id, "url_token": patient.url_token}
 
 @router.get("/{patient_id}/preferred-doctor")
 def preferred_doctor(
@@ -246,6 +273,8 @@ def update_patient(
     patient.age = payload.age
     patient.blood_group = payload.blood_group
     patient.gender = payload.gender
+    patient.aadhaar_number = payload.aadhaar_number
+    patient.abha_number = payload.abha_number
     db.commit()
     db.refresh(patient)
 
@@ -357,6 +386,7 @@ def todays_queue(
             "patient_id": p.id,
             "patient_name": p.name,
             "patient_uid": p.patient_uid,
+            "url_token": p.url_token,
             "token_number": c.token_number,
             "issue_category": c.issue_category,
             "created_at": c.created_at.isoformat(),

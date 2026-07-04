@@ -11,6 +11,8 @@ class PatientCreate(BaseModel):
     age: int
     blood_group: Optional[str] = None
     gender: str
+    aadhaar_number: Optional[str] = None
+    abha_number: Optional[str] = None
 
     @validator("name")
     def validate_name(cls, v):
@@ -51,14 +53,37 @@ class PatientCreate(BaseModel):
             raise ValueError(f"Blood group must be one of {', '.join(VALID_BLOOD_GROUPS)}")
         return v
 
+    @validator("aadhaar_number")
+    def validate_aadhaar(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        v = v.strip().replace(" ", "")
+        import re
+        if not re.match(r'^[0-9]{12}$', v):
+            raise ValueError("Aadhaar number must be 12 digits")
+        return v
+
+    @validator("abha_number")
+    def validate_abha(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        v = v.strip().replace("-", "").replace(" ", "")
+        import re
+        if not re.match(r'^[0-9]{14}$', v):
+            raise ValueError("ABHA number must be 14 digits")
+        return v
+
 class PatientOut(BaseModel):
     id: int
     patient_uid: str
+    url_token: str
     name: str
     phone: str
     age: int
     blood_group: Optional[str] = None
     gender: str
+    aadhaar_number: Optional[str] = None
+    abha_number: Optional[str] = None
     hospital_id: Optional[int] = None
     created_by: int
     created_at: datetime
@@ -69,6 +94,7 @@ class PatientOut(BaseModel):
 class PatientSummary(BaseModel):
     id: int
     patient_uid: str
+    url_token: str
     name: str
     phone: str
     age: int
