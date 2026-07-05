@@ -85,7 +85,7 @@
         </svg>
         Complaints
       </a>
-      <a class="nav-item" href="#" onclick="toast('Attendance — Coming Soon','info');return false;">
+      <a class="nav-item" href="attendance.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -170,6 +170,7 @@
       <div id="doctor-only-fields">
         <input class="form-control" id="d-specialization" placeholder="Specialization" style="margin-bottom:14px" />
         <input class="form-control" id="d-reg" placeholder="Registration Number (optional)" style="margin-bottom:14px" />
+        <input class="form-control" id="d-fee" type="number" min="0" step="1" placeholder="Consultation Fee (₹, optional)" style="margin-bottom:14px;display:none" />
       </div>
 
       <div style="position:relative;margin-bottom:8px">
@@ -329,9 +330,11 @@
       document.getElementById('d-phone').value = '';
       document.getElementById('d-specialization').value = '';
       document.getElementById('d-reg').value = '';
+      document.getElementById('d-fee').value = '';
       document.getElementById('d-password').value = '';
       document.getElementById('d-confirm-password').value = '';
       document.getElementById('d-role').value = 'doctor';
+      toggleRoleFields();
       document.getElementById('modal-err').textContent = '';
       ['check-length', 'check-number', 'check-upper'].forEach(id => {
         document.getElementById(id).style.color = 'var(--slate-light)';
@@ -349,8 +352,9 @@
 
     function toggleRoleFields() {
       const role = document.getElementById('d-role').value;
-      document.getElementById('doctor-only-fields').style.display =
-        (role === 'doctor' || role === 'sub_admin') ? '' : 'none';
+      const isDoctorRole = (role === 'doctor' || role === 'sub_admin');
+      document.getElementById('doctor-only-fields').style.display = isDoctorRole ? '' : 'none';
+      document.getElementById('d-fee').style.display = (isDoctorRole && getDoctor()?.billing_enabled) ? '' : 'none';
     }
 
     async function submitAddDoctor() {
@@ -386,11 +390,15 @@
       btn.innerHTML = '<span class="spinner"></span>';
 
       const doctor = getDoctor();
+      const fee = document.getElementById('d-fee').value.trim();
       const params = new URLSearchParams({
         hospital_id: doctor.hospital_id,
         name, email, phone: "+91" + phone, specialization, password, title,
         registration_number: reg, role
       });
+      if (fee && needsSpecialization && doctor.billing_enabled) {
+        params.set('consultation_fee', fee);
+      }
 
       try {
         await api('POST', `/admin/doctors?${params.toString()}`);

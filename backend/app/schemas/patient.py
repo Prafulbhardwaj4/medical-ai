@@ -11,7 +11,6 @@ class PatientCreate(BaseModel):
     age: int
     blood_group: Optional[str] = None
     gender: str
-    aadhaar_number: Optional[str] = None
     abha_number: Optional[str] = None
 
     @validator("name")
@@ -53,16 +52,6 @@ class PatientCreate(BaseModel):
             raise ValueError(f"Blood group must be one of {', '.join(VALID_BLOOD_GROUPS)}")
         return v
 
-    @validator("aadhaar_number")
-    def validate_aadhaar(cls, v):
-        if v is None or v.strip() == "":
-            return None
-        v = v.strip().replace(" ", "")
-        import re
-        if not re.match(r'^[0-9]{12}$', v):
-            raise ValueError("Aadhaar number must be 12 digits")
-        return v
-
     @validator("abha_number")
     def validate_abha(cls, v):
         if v is None or v.strip() == "":
@@ -82,7 +71,6 @@ class PatientOut(BaseModel):
     age: int
     blood_group: Optional[str] = None
     gender: str
-    aadhaar_number: Optional[str] = None
     abha_number: Optional[str] = None
     hospital_id: Optional[int] = None
     created_by: int
@@ -111,14 +99,21 @@ class CheckinCreate(BaseModel):
     issue_category: str
     doctor_id: int
     send_to_nurse: Optional[bool] = False
+    consultation_fee: Optional[float] = None
+    test_fee: Optional[float] = None
 
 class CheckinOut(BaseModel):
+    checkin_id: int
     token_number: str
     patient_name: str
     doctor_name: str
     issue_category: str
     visit_date: date
     nurse_name: Optional[str] = None
+    consultation_fee: Optional[float] = None
+    test_fee: Optional[float] = None
+    total_fee: Optional[float] = None
+    is_paid: bool = False
 
     class Config:
         from_attributes = True
@@ -137,6 +132,8 @@ class DoctorLite(BaseModel):
     title: str
     name: str
     specialization: str
+    on_duty_today: bool = False
+    consultation_fee: Optional[float] = None
 
     class Config:
         from_attributes = True

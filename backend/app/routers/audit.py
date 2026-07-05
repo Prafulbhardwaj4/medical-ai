@@ -22,14 +22,10 @@ def get_audit_logs(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    query = db.query(AuditLog)
-
-    # super_admin sees all, admin/sub_admin see only their hospital
-    if current_doctor.role.value != "super_admin":
-        query = query.filter(AuditLog.hospital_id == current_doctor.hospital_id)
+    query = db.query(AuditLog).filter(AuditLog.hospital_id == current_doctor.hospital_id)
 
     if action:
         query = query.filter(AuditLog.action == action)
@@ -81,12 +77,10 @@ def get_audit_summary(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    query = db.query(AuditLog)
-    if current_doctor.role.value != "super_admin":
-        query = query.filter(AuditLog.hospital_id == current_doctor.hospital_id)
+    query = db.query(AuditLog).filter(AuditLog.hospital_id == current_doctor.hospital_id)
 
     total = query.count()
     recent = query.order_by(desc(AuditLog.created_at)).limit(5).all()

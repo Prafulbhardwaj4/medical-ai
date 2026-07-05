@@ -79,6 +79,18 @@
         </div>
       </div>
 
+      <!-- Attendance -->
+      <div class="card" id="attendance-card" style="margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <strong>Today's Status:</strong>
+          <span class="badge badge-grey" id="attendance-badge" style="margin-left:8px">Not marked</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" id="btn-mark-present" onclick="markAttendance('present')">Present</button>
+          <button class="btn btn-outline btn-sm" id="btn-mark-break" onclick="markAttendance('on_break')">On Break</button>
+        </div>
+      </div>
+
       <!-- Today's Queue -->
       <div class="card" id="queue-card" style="margin-bottom:24px">
         <div class="card-header">
@@ -201,10 +213,6 @@
       </div>
       <div id="govt-fields" style="display:none">
         <div class="form-group">
-          <label class="form-label">Aadhaar Number (optional)</label>
-          <input class="form-control" id="p-aadhaar" maxlength="12" placeholder="123456789012" />
-        </div>
-        <div class="form-group">
           <label class="form-label">ABHA Number (optional)</label>
           <input class="form-control" id="p-abha" maxlength="14" placeholder="14-digit ABHA number" />
         </div>
@@ -250,6 +258,38 @@
     if (doc && doc.hospital_type === 'government') {
       document.getElementById('govt-fields').style.display = 'block';
     }
+
+    async function loadAttendance() {
+      try {
+        const list = await api("GET", "/doctors/attendance/today");
+        const mine = list.find(d => d.doctor_id === doc.id);
+        renderAttendanceBadge(mine ? mine.status : 'not_marked');
+      } catch (e) { }
+    }
+
+    function renderAttendanceBadge(status) {
+      const badge = document.getElementById('attendance-badge');
+      if (status === 'present') {
+        badge.className = 'badge badge-green';
+        badge.textContent = 'Present';
+      } else if (status === 'on_break') {
+        badge.className = 'badge badge-amber';
+        badge.textContent = 'On Break';
+      } else {
+        badge.className = 'badge badge-grey';
+        badge.textContent = 'Not marked';
+      }
+    }
+
+    async function markAttendance(status) {
+      try {
+        await api("POST", "/doctors/attendance", { status });
+        renderAttendanceBadge(status);
+        toast(status === 'present' ? "Marked present." : "Marked on break.", "success");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    loadAttendance();
 
     let totalPatientCount = 0;
 
@@ -385,7 +425,6 @@
           age: parseInt(document.getElementById("p-age").value),
           blood_group: document.getElementById("p-blood-group").value || null,
           gender: document.getElementById("p-gender").value,
-          aadhaar_number: document.getElementById("p-aadhaar").value.trim() || null,
           abha_number: document.getElementById("p-abha").value.trim() || null
         });
         toast("Patient added successfully", "success");

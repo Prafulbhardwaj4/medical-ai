@@ -78,11 +78,21 @@
           </div>
           <div class="form-group">
             <label class="form-label">Doctor</label>
-            <select class="form-control" id="doc-select"></select>
+            <select class="form-control" id="doc-select" onchange="updateFeeForSelectedDoctor()"></select>
           </div>
           <div class="form-group" style="display:flex;align-items:center;gap:8px">
             <input type="checkbox" id="send-to-nurse" style="width:auto" />
             <label for="send-to-nurse" style="font-size:14px;color:var(--slate);margin:0">Also send for vitals check (nurse room)</label>
+          </div>
+          <div id="fee-group" style="display:none">
+            <div class="form-group">
+              <label class="form-label">Consultation Fee (₹)</label>
+              <input type="number" min="0" step="1" class="form-control" id="consultation-fee" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Test Fee (₹, optional)</label>
+              <input type="number" min="0" step="1" class="form-control" id="test-fee" placeholder="0" />
+            </div>
           </div>
           <button class="btn btn-primary" id="btn-generate-token" style="width:100%" onclick="generateToken()">Generate Token</button>
         </div>
@@ -102,6 +112,12 @@
               <p><strong>Date:</strong> <span id="slip-date"></span></p>
               <p id="slip-nurse-row" style="display:none"><strong>Vitals Room:</strong> <span id="slip-nurse"></span></p>
             </div>
+          </div>
+          <div id="slip-billing-row" class="no-print" style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
+            <p><strong>Fee:</strong> ₹<span id="slip-fee">0</span>
+              <span id="slip-paid-badge" class="badge badge-amber" style="margin-left:6px">Unpaid</span>
+            </p>
+            <button class="btn btn-primary btn-sm" id="btn-mark-paid" style="width:100%;margin-top:8px" onclick="markPaid()">Mark as Paid</button>
           </div>
           <div style="display:flex;gap:10px" class="no-print">
             <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
@@ -197,10 +213,6 @@
       </div>
       <div id="govt-fields" style="display:none">
         <div class="form-group">
-          <label class="form-label">Aadhaar Number (optional)</label>
-          <input class="form-control" id="p-aadhaar" maxlength="12" placeholder="123456789012" />
-        </div>
-        <div class="form-group">
           <label class="form-label">ABHA Number (optional)</label>
           <input class="form-control" id="p-abha" maxlength="14" placeholder="14-digit ABHA number" />
         </div>
@@ -294,6 +306,10 @@
       document.getElementById('slip-doctor').textContent = t.doctor_name;
       document.getElementById('slip-category').textContent = t.issue_category;
       document.getElementById('slip-date').textContent = formatDate(t.visit_date);
+      document.getElementById('slip-nurse-row').style.display = t.nurse_name ? '' : 'none';
+      if (t.nurse_name) document.getElementById('slip-nurse').textContent = t.nurse_name;
+      currentCheckinId = t.checkin_id;
+      renderBillingRow(getDoctor()?.billing_enabled, t.total_fee, t.is_paid);
       ['search', 'category', 'doctor'].forEach(s => document.getElementById(`step-${s}`).style.display = 'none');
       document.getElementById('step-token').style.display = '';
       toast('Already checked in today — showing existing token.', 'info');
@@ -311,9 +327,12 @@
       loadDoctorsAndGoNext();
     }
 
+    let hospitalDoctors = [];
+
     async function loadDoctorsAndGoNext() {
       try {
         const doctors = await api("GET", "/patients/hospital-doctors");
+        hospitalDoctors = doctors;
         const sel = document.getElementById('doc-select');
         let defaultId = preferredDoctorId;
         if (!defaultId && doctors.length) {
@@ -322,10 +341,22 @@
         sel.innerHTML = doctors.map(d =>
           `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}</option>`
         ).join('');
+        document.getElementById('fee-group').style.display = getDoctor()?.billing_enabled ? '' : 'none';
+        updateFeeForSelectedDoctor();
         document.getElementById('step-category').style.display = 'none';
         document.getElementById('step-doctor').style.display = '';
       } catch (e) { toast(e.message, "error"); }
     }
+
+    function updateFeeForSelectedDoctor() {
+      if (!getDoctor()?.billing_enabled) return;
+      const selectedId = parseInt(document.getElementById('doc-select').value);
+      const doc = hospitalDoctors.find(d => d.id === selectedId);
+      const fee = (doc && doc.consultation_fee != null) ? doc.consultation_fee : (getDoctor()?.default_consultation_fee ?? '');
+      document.getElementById('consultation-fee').value = fee;
+    }
+
+    let currentCheckinId = null;
 
     async function generateToken() {
       const btn = document.getElementById('btn-generate-token');
@@ -334,10 +365,13 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
       try {
+        const billingOn = getDoctor()?.billing_enabled;
         const result = await api("POST", `/patients/${selectedPatient.id}/checkin`, {
           issue_category: selectedCategory,
           doctor_id: parseInt(doctorId),
-          send_to_nurse: document.getElementById('send-to-nurse').checked
+          send_to_nurse: document.getElementById('send-to-nurse').checked,
+          consultation_fee: billingOn ? (parseFloat(document.getElementById('consultation-fee').value) || null) : null,
+          test_fee: billingOn ? (parseFloat(document.getElementById('test-fee').value) || null) : null
         });
         document.getElementById('slip-hospital').textContent = getDoctor()?.clinic_name || '';
         document.getElementById('slip-token').textContent = result.token_number;
@@ -352,6 +386,8 @@
         } else {
           document.getElementById('slip-nurse-row').style.display = 'none';
         }
+        currentCheckinId = result.checkin_id;
+        renderBillingRow(billingOn, result.total_fee, result.is_paid);
         document.getElementById('step-doctor').style.display = 'none';
         document.getElementById('step-token').style.display = '';
         loadAllPatients();
@@ -360,6 +396,39 @@
       } finally {
         btn.disabled = false;
         btn.innerHTML = 'Generate Token';
+      }
+    }
+
+    function renderBillingRow(billingOn, totalFee, isPaid) {
+      const row = document.getElementById('slip-billing-row');
+      if (!billingOn) { row.style.display = 'none'; return; }
+      row.style.display = '';
+      document.getElementById('slip-fee').textContent = (totalFee || 0).toFixed(2);
+      const badge = document.getElementById('slip-paid-badge');
+      const btn = document.getElementById('btn-mark-paid');
+      if (isPaid) {
+        badge.className = 'badge badge-green';
+        badge.textContent = 'Paid ✓';
+        btn.style.display = 'none';
+      } else {
+        badge.className = 'badge badge-amber';
+        badge.textContent = 'Unpaid';
+        btn.style.display = '';
+      }
+    }
+
+    async function markPaid() {
+      const btn = document.getElementById('btn-mark-paid');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        await api("PATCH", `/patients/checkin/${currentCheckinId}/mark-paid`, {});
+        toast('Marked as paid.', 'success');
+        renderBillingRow(true, parseFloat(document.getElementById('slip-fee').textContent), true);
+      } catch (e) {
+        toast(e.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = 'Mark as Paid';
       }
     }
     let editingPatientId = null;
@@ -372,7 +441,6 @@
       document.getElementById('p-age').value = '';
       document.getElementById('p-blood-group').value = '';
       document.getElementById('p-gender').value = 'male';
-      document.getElementById('p-aadhaar').value = '';
       document.getElementById('p-abha').value = '';
       document.getElementById('modal-add').classList.add('open');
     }
@@ -385,7 +453,6 @@
       document.getElementById('p-age').value = p.age;
       document.getElementById('p-blood-group').value = p.blood_group || '';
       document.getElementById('p-gender').value = (p.gender || 'male').toLowerCase();
-      document.getElementById('p-aadhaar').value = p.aadhaar_number || '';
       document.getElementById('p-abha').value = p.abha_number || '';
       document.getElementById('modal-add').classList.add('open');
     }
@@ -408,7 +475,6 @@
         age: parseInt(document.getElementById("p-age").value),
         blood_group: document.getElementById("p-blood-group").value || null,
         gender: document.getElementById("p-gender").value,
-        aadhaar_number: document.getElementById("p-aadhaar").value.trim() || null,
         abha_number: document.getElementById("p-abha").value.trim() || null
       };
       try {

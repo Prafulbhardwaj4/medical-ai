@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float
 from datetime import datetime
 from app.database import Base
 
@@ -12,5 +12,7 @@ class Hospital(Base):
     state = Column(String, nullable=True)
     hospital_code = Column(String, unique=True, index=True, nullable=False)
     hospital_type = Column(String, default="private", nullable=False)
+    billing_enabled = Column(Boolean, default=True, nullable=False)
+    default_consultation_fee = Column(Float, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

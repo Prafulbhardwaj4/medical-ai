@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Text, Float, Boolean
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -26,3 +26,8 @@ class Checkin(Base):
     post_consult_data = Column(Text, nullable=True)
     post_consult_recorded_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     post_consult_recorded_at = Column(DateTime, nullable=True)
+
+    consultation_fee = Column(Float, nullable=True)
+    test_fee = Column(Float, nullable=True)
+    is_paid = Column(Boolean, default=False, nullable=False)
+    paid_at = Column(DateTime, nullable=True)

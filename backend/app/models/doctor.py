@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Enum, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -32,6 +32,7 @@ class Doctor(Base):
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    consultation_fee = Column(Float, nullable=True)
 
     patients = relationship("Patient", foreign_keys="Patient.created_by", back_populates="doctor")
     hospital = relationship("Hospital", backref="doctors")
@@ -39,3 +40,11 @@ class Doctor(Base):
     @property
     def hospital_type(self):
         return self.hospital.hospital_type if self.hospital else None
+
+    @property
+    def billing_enabled(self):
+        return self.hospital.billing_enabled if self.hospital else False
+
+    @property
+    def default_consultation_fee(self):
+        return self.hospital.default_consultation_fee if self.hospital else None

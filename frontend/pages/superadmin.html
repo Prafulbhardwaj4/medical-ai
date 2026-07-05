@@ -44,14 +44,7 @@
         </svg>
         Hospitals
       </a>
-      <a class="nav-item" href="audit.html">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
-        Audit Log
-      </a>
-    </nav>
+      </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
@@ -345,6 +338,16 @@
       }
     }
 
+    async function toggleHospitalBilling(hospitalId) {
+      try {
+        const data = await api('PATCH', `/admin/hospitals/${hospitalId}/toggle-billing`);
+        toast(`Billing ${data.billing_enabled ? 'enabled' : 'disabled'}.`, 'success');
+        openDetail(hospitalId);
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
     async function loadHospitals() {
       const container = document.getElementById('hospitals-list');
       document.getElementById('hospital-detail').style.display = 'none';
@@ -373,6 +376,10 @@
             <div><span style="color:var(--slate);font-size:13px">Address</span><div style="font-weight:500">${sanitize(h.address || '—')}</div></div>
             <div><span style="color:var(--slate);font-size:13px">Hospital Code</span><div style="font-weight:500;font-family:monospace">${sanitize(h.hospital_code)}</div></div>
             <div><span style="color:var(--slate);font-size:13px">Type</span><div style="font-weight:500">${h.hospital_type === 'government' ? 'Government' : 'Private'}</div></div>
+            <div><span style="color:var(--slate);font-size:13px">Billing</span><div style="display:flex;align-items:center;gap:8px">
+              <span class="badge ${h.billing_enabled ? 'badge-teal' : 'badge-grey'}">${h.billing_enabled ? 'Enabled' : 'Disabled'}</span>
+              <button class="btn btn-outline btn-sm" onclick="toggleHospitalBilling(${h.id})">${h.billing_enabled ? 'Disable' : 'Enable'}</button>
+            </div></div>
             <div><span style="color:var(--slate);font-size:13px">Status</span><div><span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span></div></div>
             <div><span style="color:var(--slate);font-size:13px">Doctors</span><div style="font-weight:500">${h.doctor_count}</div></div>
             <div><span style="color:var(--slate);font-size:13px">Monthly Revenue</span><div style="font-weight:600;color:var(--teal)">₹${h.monthly_revenue.toLocaleString('en-IN')}</div></div>

@@ -61,7 +61,6 @@ def create_patient(
         age=payload.age,
         blood_group=payload.blood_group,
         gender=payload.gender,
-        aadhaar_number=payload.aadhaar_number,
         abha_number=payload.abha_number,
         hospital_id=current_doctor.hospital_id,
         created_by=current_doctor.id
@@ -178,11 +177,28 @@ def hospital_doctors(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    return db.query(Doctor).filter(
+    from app.models.attendance import AttendanceRecord
+    doctors = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
         Doctor.role.in_(["doctor", "sub_admin"]),
         Doctor.is_active == True
     ).all()
+
+    present_ids = set(
+        r[0] for r in db.query(AttendanceRecord.doctor_id).filter(
+            AttendanceRecord.hospital_id == current_doctor.hospital_id,
+            AttendanceRecord.date == date.today(),
+            AttendanceRecord.status == "present"
+        ).all()
+    )
+
+    result = []
+    for d in doctors:
+        result.append(DoctorLite(
+            id=d.id, title=d.title, name=d.name, specialization=d.specialization,
+            on_duty_today=d.id in present_ids
+        ))
+    return result
 
 @router.get("/resolve/{token}")
 def resolve_patient_token(
@@ -254,7 +270,12 @@ def checkin_today(
         "vitals_data": json.loads(checkin.vitals_data) if checkin.vitals_data else None,
         "nurse_name": f"{nurse.title} {nurse.name}" if nurse else None,
         "post_consult_status": checkin.post_consult_status,
-        "post_consult_note": checkin.post_consult_note
+        "post_consult_note": checkin.post_consult_note,
+        "checkin_id": checkin.id,
+        "consultation_fee": checkin.consultation_fee,
+        "test_fee": checkin.test_fee,
+        "total_fee": (checkin.consultation_fee or 0) + (checkin.test_fee or 0),
+        "is_paid": checkin.is_paid
     }
 
 @router.post("/{patient_id}/send-to-nurse")
@@ -369,7 +390,6 @@ def update_patient(
     patient.age = payload.age
     patient.blood_group = payload.blood_group
     patient.gender = payload.gender
-    patient.aadhaar_number = payload.aadhaar_number
     patient.abha_number = payload.abha_number
     db.commit()
     db.refresh(patient)
@@ -429,6 +449,12 @@ def checkin_patient(
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
+    consultation_fee = payload.consultation_fee
+    if consultation_fee is None:
+        consultation_fee = doctor.consultation_fee
+    if consultation_fee is None and hospital:
+        consultation_fee = hospital.default_consultation_fee
+
     checkin = Checkin(
         hospital_id=current_doctor.hospital_id,
         patient_id=patient.id,
@@ -438,10 +464,13 @@ def checkin_patient(
         created_by=current_doctor.id,
         visit_date=date.today(),
         nurse_id=nurse.id if nurse else None,
-        vitals_status="pending" if nurse else "none"
+        vitals_status="pending" if nurse else "none",
+        consultation_fee=consultation_fee,
+        test_fee=payload.test_fee
     )
     db.add(checkin)
     db.commit()
+    db.refresh(checkin)
 
     log_action(
         db, current_doctor,
@@ -453,13 +482,46 @@ def checkin_patient(
     )
 
     return CheckinOut(
+        checkin_id=checkin.id,
         token_number=token,
         patient_name=patient.name,
         doctor_name=f"{doctor.title} {doctor.name}",
         issue_category=payload.issue_category,
         visit_date=date.today(),
-        nurse_name=f"{nurse.title} {nurse.name}" if nurse else None
+        nurse_name=f"{nurse.title} {nurse.name}" if nurse else None,
+        consultation_fee=consultation_fee,
+        test_fee=payload.test_fee,
+        total_fee=(consultation_fee or 0) + (payload.test_fee or 0),
+        is_paid=False
     )
+
+@router.patch("/checkin/{checkin_id}/mark-paid")
+def mark_checkin_paid(
+    checkin_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    checkin = db.query(Checkin).filter(
+        Checkin.id == checkin_id,
+        Checkin.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not checkin:
+        raise HTTPException(status_code=404, detail="Check-in not found")
+
+    checkin.is_paid = True
+    checkin.paid_at = datetime.utcnow()
+    db.commit()
+
+    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
+    log_action(
+        db, current_doctor,
+        action="payment_collected",
+        target_type="patient",
+        target_id=checkin.patient_id,
+        target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),
+        details=f"Token {checkin.token_number} · ₹{(checkin.consultation_fee or 0) + (checkin.test_fee or 0):.2f}"
+    )
+    return {"is_paid": True, "paid_at": checkin.paid_at.isoformat()}
 
 @router.get("/queue/today")
 def todays_queue(

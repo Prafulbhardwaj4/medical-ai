@@ -159,6 +159,13 @@
                 </svg>
                 Demographics
             </a>
+            <a class="nav-item" id="nav-billing" href="#" onclick="showSection('billing');return false;" style="display:none">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Billing
+            </a>
             <a class="nav-item" href="doctors.html">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -172,7 +179,7 @@
                 </svg>
                 Complaints
             </a>
-            <a class="nav-item" href="#" onclick="toast('Attendance — Coming Soon','info');return false;">
+            <a class="nav-item" href="attendance.html">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round"
                         d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -368,6 +375,35 @@
                 </div>
             </div>
 
+            <!-- BILLING -->
+            <div id="section-billing" class="section" style="display:none">
+                <div class="page-header">
+                    <h1>Billing</h1>
+                </div>
+                <div class="stats-row" style="margin-bottom:20px">
+                    <div class="stat-card">
+                        <div class="stat-label">Collected Today</div>
+                        <div class="stat-value" id="stat-collected-today">—</div>
+                        <div class="stat-sub" id="stat-paid-count">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Unpaid Today</div>
+                        <div class="stat-value" id="stat-unpaid-today">—</div>
+                        <div class="stat-sub" id="stat-unpaid-count">—</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Default Consultation Fee</h2>
+                    </div>
+                    <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Used as a fallback when a doctor doesn't have their own fee set.</p>
+                    <div style="display:flex;gap:10px;max-width:320px">
+                        <input type="number" min="0" step="1" class="form-control" id="default-fee-input" placeholder="₹" />
+                        <button class="btn btn-primary" onclick="saveDefaultFee()">Save</button>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 
@@ -383,10 +419,14 @@
         if (doctor && doctor.clinic_name) {
             document.getElementById('hospital-name-sub').textContent = doctor.clinic_name;
         }
+        if (doctor && doctor.billing_enabled) {
+            document.getElementById('nav-billing').style.display = '';
+            document.getElementById('default-fee-input').value = doctor.default_consultation_fee ?? '';
+        }
 
         let dashData = null;
         let allPatients = [];
-        const SECTIONS = ['overview', 'patients', 'consultations', 'medicines', 'tests', 'demographics'];
+        const SECTIONS = ['overview', 'patients', 'consultations', 'medicines', 'tests', 'demographics', 'billing'];
 
         function showSection(name) {
             SECTIONS.forEach(s => {
@@ -394,7 +434,33 @@
                 const nav = document.getElementById(`nav-${s}`);
                 if (nav) nav.classList.toggle('active', s === name);
             });
+            if (name === 'billing') { loadBilling(); return; }
             if (dashData) renderSection(name);
+        }
+
+        async function loadBilling() {
+            try {
+                const b = await api("GET", "/admin/billing/today");
+                document.getElementById('stat-collected-today').textContent = `₹${b.total_collected.toFixed(2)}`;
+                document.getElementById('stat-paid-count').textContent = `${b.paid_count} paid`;
+                document.getElementById('stat-unpaid-today').textContent = `₹${b.unpaid_amount.toFixed(2)}`;
+                document.getElementById('stat-unpaid-count').textContent = `${b.unpaid_count} unpaid`;
+            } catch (e) {
+                toast(e.message, "error");
+            }
+        }
+
+        async function saveDefaultFee() {
+            const val = parseFloat(document.getElementById('default-fee-input').value);
+            if (isNaN(val) || val < 0) { toast('Enter a valid fee amount.', 'error'); return; }
+            try {
+                await api("PATCH", `/admin/hospital/fee-settings?default_consultation_fee=${val}`);
+                toast('Default consultation fee updated.', 'success');
+                const d = getDoctor();
+                if (d) { d.default_consultation_fee = val; saveSession(getToken(), d); }
+            } catch (e) {
+                toast(e.message, "error");
+            }
         }
 
         function timeAgo(iso) {

@@ -66,12 +66,13 @@ def create_hospital(
         city=city,
         state=state,
         hospital_code=hospital_code,
-        hospital_type=hospital_type
+        hospital_type=hospital_type,
+        billing_enabled=(hospital_type == "private")
     )
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
-    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type}
+    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type, "billing_enabled": hospital.billing_enabled}
 
 @router.post("/create-admin", status_code=201)
 def create_admin(
@@ -140,6 +141,7 @@ def create_doctor(
     title: str = "Dr.",
     registration_number: str = "",
     role: str = "doctor",
+    consultation_fee: float = None,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -180,7 +182,8 @@ def create_doctor(
         role=UserRole(role),
         hospital_id=hospital_id,
         is_active=True,
-        created_by=current_doctor.id
+        created_by=current_doctor.id,
+        consultation_fee=consultation_fee if role in ["doctor", "sub_admin"] else None
     )
     db.add(doctor)
     db.commit()
@@ -202,6 +205,50 @@ def create_doctor(
         "role": doctor.role.value,
         "hospital": hospital.name
     }
+
+@router.get("/billing/today")
+def billing_today(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from app.models.checkin import Checkin
+    checkins = db.query(Checkin).filter(
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == datetime.utcnow().date()
+    ).all()
+
+    paid = [c for c in checkins if c.is_paid]
+    unpaid = [c for c in checkins if not c.is_paid]
+
+    total_collected = sum((c.consultation_fee or 0) + (c.test_fee or 0) for c in paid)
+    total_unpaid = sum((c.consultation_fee or 0) + (c.test_fee or 0) for c in unpaid)
+
+    return {
+        "total_collected": total_collected,
+        "paid_count": len(paid),
+        "unpaid_count": len(unpaid),
+        "unpaid_amount": total_unpaid
+    }
+
+@router.patch("/hospital/fee-settings")
+def update_fee_settings(
+    default_consultation_fee: float,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    hospital.default_consultation_fee = default_consultation_fee
+    db.commit()
+    return {"default_consultation_fee": hospital.default_consultation_fee}
 
 @router.get("/doctors")
 def list_doctors(
@@ -248,6 +295,7 @@ def list_doctors(
             "registration_number": d.registration_number or "",
             "is_active": d.is_active,
             "role": d.role.value,
+            "consultation_fee": d.consultation_fee,
             "consultations_today": today,
             "consultations_week": week,
             "consultations_total": total
@@ -439,11 +487,40 @@ def list_hospitals_jwt(
             "name": h.name,
             "hospital_code": h.hospital_code,
             "hospital_type": h.hospital_type,
+            "billing_enabled": h.billing_enabled,
             "city": h.city,
             "is_active": h.is_active
         }
         for h in hospitals
     ]
+
+@router.patch("/hospitals/{hospital_id}/toggle-billing")
+def toggle_hospital_billing(
+    hospital_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    hospital.billing_enabled = not hospital.billing_enabled
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="billing_enabled_toggled",
+        target_type="hospital",
+        target_id=hospital.id,
+        target_label=hospital.name,
+        details=f"Billing {'enabled' if hospital.billing_enabled else 'disabled'}",
+        hospital_id=hospital.id
+    )
+
+    return {"id": hospital.id, "billing_enabled": hospital.billing_enabled}
 
 @router.patch("/hospitals/{hospital_id}/toggle-active")
 def toggle_hospital_active(
@@ -496,7 +573,10 @@ def create_hospital_jwt(
     while db.query(Hospital).filter(Hospital.hospital_code == hospital_code).first():
         hospital_code = f"{code_base}-{secrets.token_hex(3).upper()}"
 
-    hospital = Hospital(name=name, address=address, city=city, state=state, hospital_code=hospital_code, hospital_type=hospital_type)
+    hospital = Hospital(
+        name=name, address=address, city=city, state=state, hospital_code=hospital_code,
+        hospital_type=hospital_type, billing_enabled=(hospital_type == "private")
+    )
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
@@ -509,7 +589,7 @@ def create_hospital_jwt(
         target_label=hospital.name,
         hospital_id=hospital.id
     )
-    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type}
+    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type, "billing_enabled": hospital.billing_enabled}
 
 @router.post("/create-admin-jwt", status_code=201)
 def create_admin_jwt(
@@ -627,6 +707,7 @@ def hospital_detail(
         "address": hospital.address,
         "hospital_code": hospital.hospital_code,
         "hospital_type": hospital.hospital_type,
+        "billing_enabled": hospital.billing_enabled,
         "is_active": hospital.is_active,
         "created_at": hospital.created_at.isoformat(),
         "admins": [

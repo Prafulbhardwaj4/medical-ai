@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Attendance — MedScribe</title>
+  <link rel="stylesheet" href="../css/style.css?v=3" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-brand">Med<span>Scribe</span></div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Navigation</div>
+      <a class="nav-item" href="analytics.html">Analytics</a>
+      <a class="nav-item" href="doctors.html">Manage Doctors</a>
+      <div class="nav-item active">Attendance</div>
+    </nav>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+    <main class="main-content">
+      <div class="card">
+        <div class="card-header"><h2>Today's Attendance</h2></div>
+        <div id="attendance-list"><p style="color:var(--slate)">Loading…</p></div>
+      </div>
+    </main>
+  </div>
+  <div id="toast"></div>
+  <script src="../js/api.js?v=3"></script>
+  <script>
+    const doc = getDoctor();
+    if (!doc || !["admin", "sub_admin"].includes(doc.role)) window.location.href = "dashboard.html";
+    if (!requireAuth()) throw new Error("Not authenticated");
+    fillTopbar();
+
+    function badgeFor(status) {
+      if (status === 'present') return '<span class="badge badge-green">Present</span>';
+      if (status === 'on_break') return '<span class="badge badge-amber">On Break</span>';
+      if (status === 'absent') return '<span class="badge badge-red">Absent</span>';
+      return '<span class="badge badge-grey">Not marked</span>';
+    }
+
+    async function loadAttendance() {
+      try {
+        const list = await api("GET", "/doctors/attendance/today");
+        document.getElementById('attendance-list').innerHTML = list.length ? list.map(d => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <strong>${d.name}</strong>
+              <div style="color:var(--slate);font-size:13px;margin-top:2px">${d.specialization}</div>
+            </div>
+            ${badgeFor(d.status)}
+          </div>
+        `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No doctors found.</p>';
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    loadAttendance();
+    setInterval(loadAttendance, 30000);
+  </script>
+</body>
+</html>
