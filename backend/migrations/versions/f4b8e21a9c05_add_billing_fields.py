@@ -19,7 +19,7 @@ def upgrade():
     # Retroactively turn billing off for existing government hospitals (new hospitals
     # get this decided at creation time in admin.py; this just backfills existing rows).
     conn = op.get_bind()
-    conn.execute(sa.text("UPDATE hospitals SET billing_enabled = 0 WHERE hospital_type = 'government'"))
+    conn.execute(sa.text("UPDATE hospitals SET billing_enabled = FALSE WHERE hospital_type = 'government'"))
 
 def downgrade():
     op.drop_column('checkins', 'paid_at')
