@@ -146,9 +146,9 @@ def create_doctor(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     # Only admin/sub_admin can create doctors
-    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
+    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "receptionist"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-
+    
     if role not in ["doctor", "sub_admin", "receptionist", "nurse"]:
         raise HTTPException(status_code=400, detail="Invalid role")
 

@@ -201,6 +201,18 @@ def hospital_doctors(
         ))
     return result
 
+@router.get("/hospital-nurses")
+def hospital_nurses(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    nurses = db.query(Doctor).filter(
+        Doctor.hospital_id == current_doctor.hospital_id,
+        Doctor.role == UserRole.nurse,
+        Doctor.is_active == True
+    ).all()
+    return [{"id": n.id, "name": n.name} for n in nurses]
+
 @router.get("/resolve/{token}")
 def resolve_patient_token(
     token: str,

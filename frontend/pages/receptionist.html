@@ -348,9 +348,8 @@
         updateFeeForSelectedDoctor();
         // Hide nurse checkbox if no nurses available
         try {
-          const staff = await api("GET", "/admin/doctors");
-          const hasNurses = staff.some(s => s.role === 'nurse' && s.is_active);
-          document.getElementById('send-to-nurse').parentElement.style.display = hasNurses ? '' : 'none';
+          const nurses = await api("GET", "/patients/hospital-nurses");
+          document.getElementById('send-to-nurse').parentElement.style.display = nurses.length > 0 ? '' : 'none';
         } catch(e) {
           document.getElementById('send-to-nurse').parentElement.style.display = 'none';
         }
