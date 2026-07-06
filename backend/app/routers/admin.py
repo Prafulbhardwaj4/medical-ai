@@ -655,14 +655,14 @@ def superadmin_stats(
 
     total_hospitals = db.query(Hospital).filter(Hospital.is_active == True).count()
     total_doctors = db.query(Doctor).filter(
-        Doctor.role == UserRole.doctor,
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
         Doctor.is_active == True
     ).count()
     new_hospitals_this_month = db.query(Hospital).filter(
         Hospital.created_at >= month_start
     ).count()
     new_doctors_this_month = db.query(Doctor).filter(
-        Doctor.role == UserRole.doctor,
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
         Doctor.created_at >= month_start
     ).count()
 
@@ -675,6 +675,157 @@ def superadmin_stats(
         "new_doctors_this_month": new_doctors_this_month,
         "monthly_revenue": monthly_revenue
     }
+
+@router.patch("/hospital/{hospital_id}/details")
+def update_hospital(
+    hospital_id: int,
+    name: str,
+    city: str,
+    state: str,
+    address: str = "",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    hospital.name = name
+    hospital.city = city
+    hospital.state = state
+    hospital.address = address
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="hospital_updated",
+        target_type="hospital",
+        target_id=hospital.id,
+        target_label=hospital.name,
+        hospital_id=hospital.id
+    )
+    return {"id": hospital.id, "name": hospital.name, "city": hospital.city, "state": hospital.state, "address": hospital.address}
+
+@router.patch("/accounts/{doctor_id}")
+def update_account(
+    doctor_id: int,
+    name: str,
+    email: str,
+    phone: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    account = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    email = email.lower().strip()
+    existing = db.query(Doctor).filter(Doctor.email == email, Doctor.id != doctor_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    account.name = name
+    account.email = email
+    account.phone = phone
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="account_updated",
+        target_type="doctor",
+        target_id=account.id,
+        target_label=f"{account.title} {account.name}",
+        hospital_id=account.hospital_id
+    )
+    return {"id": account.id, "name": account.name, "email": account.email, "phone": account.phone}
+
+@router.post("/accounts/{doctor_id}/reset-password")
+def reset_account_password(
+    doctor_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    account = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    import string
+    alphabet = string.ascii_letters + string.digits
+    new_password = "A1" + "".join(secrets.choice(alphabet) for _ in range(8))
+
+    account.hashed_password = hash_password(new_password)
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="password_reset",
+        target_type="doctor",
+        target_id=account.id,
+        target_label=f"{account.title} {account.name}",
+        hospital_id=account.hospital_id
+    )
+    return {"id": account.id, "new_password": new_password}
+
+@router.get("/test-catalog")
+def list_test_catalog(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from app.models.test_catalog import TestCatalogItem
+    items = db.query(TestCatalogItem).filter(
+        TestCatalogItem.hospital_id == current_doctor.hospital_id
+    ).all()
+    return [{"id": i.id, "name": i.name, "fee": i.fee, "is_active": i.is_active} for i in items]
+
+@router.post("/test-catalog")
+def create_test_catalog_item(
+    name: str,
+    fee: float,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from app.models.test_catalog import TestCatalogItem
+    item = TestCatalogItem(hospital_id=current_doctor.hospital_id, name=name, fee=fee, is_active=True)
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {"id": item.id, "name": item.name, "fee": item.fee, "is_active": item.is_active}
+
+@router.patch("/test-catalog/{item_id}/toggle-active")
+def toggle_test_catalog_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from app.models.test_catalog import TestCatalogItem
+    item = db.query(TestCatalogItem).filter(
+        TestCatalogItem.id == item_id,
+        TestCatalogItem.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    item.is_active = not item.is_active
+    db.commit()
+    return {"id": item.id, "is_active": item.is_active}
 
 @router.get("/hospital/{hospital_id}")
 def hospital_detail(
@@ -696,7 +847,7 @@ def hospital_detail(
 
     doctors = db.query(Doctor).filter(
         Doctor.hospital_id == hospital_id,
-        Doctor.role == UserRole.doctor
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
     ).all()
 
     return {

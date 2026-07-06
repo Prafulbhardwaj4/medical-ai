@@ -18,6 +18,7 @@ from app.models.blacklisted_token import BlacklistedToken
 from app.models.audit_log import AuditLog
 from app.models.checkin import Checkin
 from app.models.attendance import AttendanceRecord
+from app.models.test_catalog import TestCatalogItem
 from app.config import settings
 import warnings
 import os

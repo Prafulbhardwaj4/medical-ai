@@ -294,6 +294,11 @@
           </div>
         </div>
 
+        <div class="section-block" id="test-catalog-block" style="display:none">
+          <div class="section-title">Recommended Tests (Billable)</div>
+          <div id="test-catalog-list" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+
         <div class="section-block">
           <div class="section-title">Doctor's Advice</div>
           <textarea class="form-control" id="f-advice" rows="2" placeholder="General advice to patient"></textarea>
@@ -380,13 +385,12 @@
     fillTopbar();
     if (getDoctor()?.role === 'receptionist') window.location.href = 'receptionist.html';
 
-    const params = new URLSearchParams(location.search);
-    const patientToken = params.get("token");
+    const patientToken = location.search.slice(1);
     if (!patientToken) window.location.href = "/pages/dashboard.html";
     let patientId = null;
 
-    document.getElementById("sidebar-patient-link").href = `patient.html?token=${patientToken}`;
-    document.getElementById("mobile-back-link").href = `patient.html?token=${patientToken}`;
+    document.getElementById("sidebar-patient-link").href = `patient.html?${patientToken}`;
+    document.getElementById("mobile-back-link").href = `patient.html?${patientToken}`;
 
     let consultationId = null;
     let mediaRecorder = null;
@@ -712,7 +716,8 @@
           return;
         }
 
-        const data = await api("POST", `/consultations/confirm/${consultationId}`);
+        const checkedTestIds = Array.from(document.querySelectorAll('#test-catalog-list input:checked')).map(i => parseInt(i.value));
+        const data = await api("POST", `/consultations/confirm/${consultationId}`, { recommended_test_ids: checkedTestIds });
         window._tokenNumber = data.token_number;
         window._verifyHash = data.verify_hash;
         document.getElementById("token-display").textContent = window._tokenNumber;
@@ -780,7 +785,7 @@
     }
 
     function goBack() {
-      window.location.href = `/pages/patient.html?token=${patientToken}`;
+      window.location.href = `/pages/patient.html?${patientToken}`;
     }
 
     function openNurseTaskModal() {
@@ -821,12 +826,27 @@
       });
     }
 
+    async function loadTestCatalog() {
+      if (!getDoctor()?.billing_enabled) return;
+      try {
+        const items = await api("GET", "/consultations/test-catalog");
+        if (!items.length) return;
+        document.getElementById('test-catalog-block').style.display = '';
+        document.getElementById('test-catalog-list').innerHTML = items.map(i => `
+          <label style="display:flex;align-items:center;gap:8px;font-size:14px">
+            <input type="checkbox" value="${i.id}" style="width:auto" /> ${i.name} — ₹${i.fee}
+          </label>
+        `).join('');
+      } catch (e) { }
+    }
+
     (async () => {
       try {
         const r = await api("GET", `/patients/resolve/${patientToken}`);
         patientId = r.id;
         loadPatient();
         loadLastVisit();
+        loadTestCatalog();
       } catch (e) {
         window.location.href = "/pages/dashboard.html";
       }

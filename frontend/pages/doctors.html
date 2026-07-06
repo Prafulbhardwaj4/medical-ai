@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Manage Doctors — MedScribe</title>
+  <title>Manage Staff — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=3" />
 </head>
 
@@ -76,7 +76,7 @@
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
         </svg>
-        Manage Doctors
+        Manage Staff
       </a>
       <a class="nav-item" href="#" onclick="toast('Complaints & Suggestions — Coming Soon','info');return false;">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -131,7 +131,7 @@
 
     <main class="main-content">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
-        <h2 style="margin:0">Manage Doctors</h2>
+        <h2 style="margin:0">Manage Staff</h2>
         <button class="btn btn-primary" onclick="openAddModal()">+ Add Doctor</button>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:20px">
@@ -152,7 +152,18 @@
   <div id="modal-overlay"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
     <div class="card" style="width:100%;max-width:480px;margin:24px;max-height:90vh;overflow-y:auto">
-      <h3 style="margin-bottom:20px">Add Doctor</h3>
+      <h3 style="margin-bottom:20px">Add</h3>
+
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Role</label>
+      <select class="form-control" id="d-role" style="margin-bottom:20px" onchange="onRoleChange()">
+        <option value="doctor">Doctor</option>
+        <option value="sub_admin">Sub Admin</option>
+        <option value="receptionist">Receptionist</option>
+        <option value="nurse">Nurse</option>
+        <option value="test_center">Test Center (Coming Soon)</option>
+        <option value="pharmacy">Pharmacy (Coming Soon)</option>
+      </select>
+
       <div style="display:flex;gap:12px;margin-bottom:14px">
         <select class="form-control" id="d-title" style="width:100px">
           <option>Dr.</option>
@@ -196,16 +207,6 @@
 
       <input class="form-control" id="d-confirm-password" type="password" placeholder="Confirm Password"
         style="margin-bottom:14px" />
-
-      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Role</label>
-      <select class="form-control" id="d-role" style="margin-bottom:20px" onchange="toggleRoleFields()">
-        <option value="doctor">Doctor</option>
-        <option value="sub_admin">Sub Admin</option>
-        <option value="receptionist">Receptionist</option>
-        <option value="nurse">Nurse</option>
-        <option value="test_center">Test Center (Coming Soon)</option>
-        <option value="pharmacy">Pharmacy (Coming Soon)</option>
-      </select>
 
       <div class="err-msg" id="modal-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
@@ -255,7 +256,8 @@
       let data = allDoctorsCache;
       if (doctorFilter !== 'all') data = data.filter(d => d.role === doctorFilter);
       if (!data.length) {
-        container.innerHTML = '<p style="color:var(--slate);padding:12px">No doctors found.</p>';
+        const labels = { all: 'staff', doctor: 'doctors', sub_admin: 'sub admins', receptionist: 'receptionists', nurse: 'nurses' };
+        container.innerHTML = `<p style="color:var(--slate);padding:12px">No ${labels[doctorFilter] || 'staff'} found.</p>`;
         return;
       }
       container.innerHTML = data.map(d => `
@@ -330,10 +332,11 @@
       document.getElementById('d-phone').value = '';
       document.getElementById('d-specialization').value = '';
       document.getElementById('d-reg').value = '';
-      document.getElementById('d-fee').value = '';
+      document.getElementById('d-fee').value = getDoctor()?.default_consultation_fee ?? '';
       document.getElementById('d-password').value = '';
       document.getElementById('d-confirm-password').value = '';
       document.getElementById('d-role').value = 'doctor';
+      document.getElementById('d-title').value = 'Dr.';
       toggleRoleFields();
       document.getElementById('modal-err').textContent = '';
       ['check-length', 'check-number', 'check-upper'].forEach(id => {
@@ -355,6 +358,15 @@
       const isDoctorRole = (role === 'doctor' || role === 'sub_admin');
       document.getElementById('doctor-only-fields').style.display = isDoctorRole ? '' : 'none';
       document.getElementById('d-fee').style.display = (isDoctorRole && getDoctor()?.billing_enabled) ? '' : 'none';
+    }
+
+    function onRoleChange() {
+      const role = document.getElementById('d-role').value;
+      document.getElementById('d-title').value = (role === 'doctor') ? 'Dr.' : 'Mr.';
+      toggleRoleFields();
+      if (role === 'doctor' || role === 'sub_admin') {
+        document.getElementById('d-fee').value = getDoctor()?.default_consultation_fee ?? '';
+      }
     }
 
     async function submitAddDoctor() {

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.attendance import AttendanceRecord
-from app.models.doctor import Doctor
+from app.models.doctor import Doctor, UserRole
 from app.utils.auth import get_current_doctor
 
 router = APIRouter(prefix="/doctors", tags=["attendance"])
@@ -57,7 +57,7 @@ def attendance_today(
 
     staff = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_(["doctor", "sub_admin"]),
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
         Doctor.is_active == True
     ).all()
 

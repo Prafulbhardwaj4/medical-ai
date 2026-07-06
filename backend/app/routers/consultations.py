@@ -17,6 +17,8 @@ from app.services.sarvam_stream import stream_transcribe
 from app.models.doctor import Doctor as DoctorModel
 from app.models.checkin import Checkin
 from app.models.hospital import Hospital
+from app.models.test_catalog import TestCatalogItem
+from app.schemas.consultation import ConfirmPrescriptionPayload
 from app.config import settings
 from sqlalchemy import exists, func
 import json
@@ -373,6 +375,17 @@ async def websocket_transcribe(
             pass
 
 
+@router.get("/test-catalog")
+def get_test_catalog(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    items = db.query(TestCatalogItem).filter(
+        TestCatalogItem.hospital_id == current_doctor.hospital_id,
+        TestCatalogItem.is_active == True
+    ).all()
+    return [{"id": i.id, "name": i.name, "fee": i.fee} for i in items]
+
 @router.get("/history/{patient_id}", response_model=List[ConsultationHistoryItem])
 def get_history(
     patient_id: int,
@@ -580,6 +593,7 @@ async def structure(
 def confirm_prescription(
     request: Request,
     consultation_id: int,
+    payload: ConfirmPrescriptionPayload = ConfirmPrescriptionPayload(),
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -647,6 +661,19 @@ def confirm_prescription(
             consultation.vitals = json.dumps({**nurse_vitals, **existing_vitals})
         except Exception:
             pass
+
+    if payload.recommended_test_ids:
+        test_items = db.query(TestCatalogItem).filter(
+            TestCatalogItem.id.in_(payload.recommended_test_ids),
+            TestCatalogItem.hospital_id == current_doctor.hospital_id
+        ).all()
+        consultation.recommended_test_ids = json.dumps([t.id for t in test_items])
+        total_test_fee = sum(t.fee for t in test_items)
+        if total_test_fee > 0:
+            billing_target = todays_checkin if todays_checkin else fallback_checkin
+            billing_target.test_fee = total_test_fee
+            if billing_target.is_paid:
+                billing_target.is_paid = False
 
     consultation.token_number = token_number
 
@@ -892,17 +919,27 @@ def admin_dashboard(
     for chk in all_checkins:
         patient_checkin_count[chk.patient_id] = patient_checkin_count.get(chk.patient_id, 0) + 1
 
+    # Build a map of patient_id -> most recent checkin's doctor_id
+    from app.models.checkin import Checkin as CheckinModel
+    latest_checkin_doctor = {}
+    recent_checkins = db.query(CheckinModel).filter(
+        CheckinModel.hospital_id == current_doctor.hospital_id
+    ).order_by(CheckinModel.created_at.desc()).all()
+    for chk in recent_checkins:
+        if chk.patient_id not in latest_checkin_doctor:
+            latest_checkin_doctor[chk.patient_id] = chk.doctor_id
+
     # Patients list
     patients_list = []
     for p in sorted(all_patients, key=lambda x: x.created_at, reverse=True):
-        doctor = doctor_map.get(p.created_by)
+        last_checkin = patient_checkins.get(p.id)
+        doctor = doctor_map.get(last_checkin.doctor_id) if last_checkin else None
         consult_count = max(patient_consult_count.get(p.id, 0), patient_checkin_count.get(p.id, 0))
         last_consult = max(
             [c for c in all_consults if c.patient_id == p.id],
             key=lambda c: c.created_at,
             default=None
         )
-        last_checkin = patient_checkins.get(p.id)
 
         candidates = []
         if last_consult:
@@ -1056,7 +1093,8 @@ def admin_dashboard(
         })
 
     gender_patterns = []
-    for g, total in gender_counts.items():
+    for g in ["Male", "Female", "Other"]:
+        total = gender_counts.get(g, 0)
         diags = gender_diagnosis.get(g, {})
         top = max(diags.items(), key=lambda x: x[1]) if diags else ("—", 0)
         gender_patterns.append({
@@ -1097,7 +1135,7 @@ def admin_dashboard(
         "demographics": {
             "age_groups": age_groups,
             "gender": gender_counts,
-            "blood_groups": blood_groups,
+            "blood_groups": {bg: blood_groups.get(bg, 0) for bg in ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]},
             "age_patterns": age_patterns,
             "gender_patterns": gender_patterns
         },

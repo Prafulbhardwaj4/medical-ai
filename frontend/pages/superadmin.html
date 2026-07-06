@@ -348,6 +348,60 @@
       }
     }
 
+    function openEditHospital(h) {
+      const name = prompt('Hospital name:', h.name);
+      if (name === null) return;
+      const city = prompt('City:', h.city || '');
+      if (city === null) return;
+      const state = prompt('State:', h.state || '');
+      if (state === null) return;
+      const address = prompt('Address (optional):', h.address || '');
+      if (address === null) return;
+      saveHospitalEdit(h.id, name, city, state, address);
+    }
+
+    async function saveHospitalEdit(id, name, city, state, address) {
+      try {
+        const params = new URLSearchParams({ name, city, state, address });
+        await api('PATCH', `/admin/hospital/${id}/details?${params.toString()}`);
+        toast('Hospital details updated.', 'success');
+        openDetail(id);
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    function openEditAccount(a) {
+      const name = prompt('Name:', a.name.replace(/^(Dr\.|Mr\.|Ms\.)\s*/, ''));
+      if (name === null) return;
+      const email = prompt('Email:', a.email);
+      if (email === null) return;
+      const phone = prompt('Phone:', a.phone);
+      if (phone === null) return;
+      saveAccountEdit(a.id, name, email, phone);
+    }
+
+    async function saveAccountEdit(id, name, email, phone) {
+      try {
+        const params = new URLSearchParams({ name, email, phone });
+        await api('PATCH', `/admin/accounts/${id}?${params.toString()}`);
+        toast('Account updated.', 'success');
+        openDetail(currentHospitalId);
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    async function resetAccountPassword(id) {
+      try {
+        const data = await api('POST', `/admin/accounts/${id}/reset-password`, {});
+        alert(`New password: ${data.new_password}\n\nShare this with the account holder now — it will not be shown again.`);
+        toast('Password reset.', 'success');
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
     async function loadHospitals() {
       const container = document.getElementById('hospitals-list');
       document.getElementById('hospital-detail').style.display = 'none';
@@ -383,6 +437,7 @@
             <div><span style="color:var(--slate);font-size:13px">Status</span><div><span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span></div></div>
             <div><span style="color:var(--slate);font-size:13px">Doctors</span><div style="font-weight:500">${h.doctor_count}</div></div>
             <div><span style="color:var(--slate);font-size:13px">Monthly Revenue</span><div style="font-weight:600;color:var(--teal)">₹${h.monthly_revenue.toLocaleString('en-IN')}</div></div>
+            <button class="btn btn-outline btn-sm" style="width:fit-content" onclick='openEditHospital(${JSON.stringify({id:h.id,name:h.name,city:h.city,state:h.state,address:h.address})})'>Edit Hospital Details</button>
           </div>
         `;
 
@@ -393,6 +448,10 @@
               <div style="font-weight:600">${sanitize(a.name)} <span class="badge badge-navy" style="font-size:11px">${a.role}</span></div>
               <div style="color:var(--slate);font-size:13px">${sanitize(a.email)}</div>
               <div style="color:var(--slate);font-size:13px">${sanitize(a.phone)}</div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button class="btn btn-outline btn-sm" onclick='openEditAccount(${JSON.stringify({id:a.id,name:a.name,email:a.email,phone:a.phone})})'>Edit</button>
+                <button class="btn btn-outline btn-sm" onclick="resetAccountPassword(${a.id})">Reset Password</button>
+              </div>
             </div>
           `).join('');
 

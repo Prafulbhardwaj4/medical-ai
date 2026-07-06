@@ -25,6 +25,7 @@ def vitals_queue(
     _require_nurse(current_doctor)
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.nurse_id == current_doctor.id,
         Checkin.vitals_status == "pending",
         Checkin.visit_date == date.today()
     ).order_by(Checkin.created_at.asc()).all()
@@ -88,6 +89,35 @@ def submit_vitals(
     )
     return {"status": "done"}
 
+@router.get("/history")
+def nurse_history(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    _require_nurse(current_doctor)
+    checkins = db.query(Checkin).filter(
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.vitals_recorded_by == current_doctor.id,
+        Checkin.visit_date == date.today()
+    ).order_by(Checkin.vitals_recorded_at.desc()).all()
+
+    patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
+
+    result = []
+    for c in checkins:
+        p = patients.get(c.patient_id)
+        if not p:
+            continue
+        result.append({
+            "checkin_id": c.id,
+            "patient_name": p.name,
+            "patient_uid": p.patient_uid,
+            "token_number": c.token_number,
+            "vitals_data": json.loads(c.vitals_data) if c.vitals_data else {},
+            "recorded_at": c.vitals_recorded_at.isoformat() if c.vitals_recorded_at else None
+        })
+    return result
+
 @router.get("/post-consult-queue")
 def post_consult_queue(
     db: Session = Depends(get_db),
@@ -96,6 +126,7 @@ def post_consult_queue(
     _require_nurse(current_doctor)
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.nurse_id == current_doctor.id,
         Checkin.post_consult_status == "pending",
         Checkin.visit_date == date.today()
     ).order_by(Checkin.created_at.asc()).all()

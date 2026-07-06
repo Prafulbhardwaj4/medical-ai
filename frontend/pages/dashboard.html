@@ -365,7 +365,7 @@
       try {
         const status = await api("GET", `/patients/${id}/checkin-today`);
         if (status.exists) {
-          window.location.href = `/pages/patient.html?token=${token}`;
+          window.location.href = `/pages/patient.html?${token}`;
         } else {
           pendingPatientId = id;
           pendingPatientToken = token;
@@ -397,7 +397,7 @@
           issue_category: "General OPD",
           doctor_id: getDoctor().id
         });
-        window.location.href = `/pages/patient.html?token=${pendingPatientToken}`;
+        window.location.href = `/pages/patient.html?${pendingPatientToken}`;
       } catch (e) {
         toast(e.message, "error");
         btn.disabled = false;

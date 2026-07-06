@@ -8,7 +8,7 @@ import random
 from app.database import get_db
 from app.models.patient import Patient
 from app.models.consultation import Consultation
-from app.models.doctor import Doctor
+from app.models.doctor import Doctor, UserRole
 from app.models.hospital import Hospital
 from app.models.checkin import Checkin
 from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate
@@ -39,7 +39,7 @@ def generate_url_token(db: Session) -> str:
 def pick_random_nurse(db: Session, hospital_id: int):
     nurses = db.query(Doctor).filter(
         Doctor.hospital_id == hospital_id,
-        Doctor.role == "nurse",
+        Doctor.role == UserRole.nurse,
         Doctor.is_active == True
     ).all()
     return random.choice(nurses) if nurses else None
@@ -180,7 +180,7 @@ def hospital_doctors(
     from app.models.attendance import AttendanceRecord
     doctors = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_(["doctor", "sub_admin"]),
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
         Doctor.is_active == True
     ).all()
 
@@ -196,6 +196,7 @@ def hospital_doctors(
     for d in doctors:
         result.append(DoctorLite(
             id=d.id, title=d.title, name=d.name, specialization=d.specialization,
+            consultation_fee=d.consultation_fee,
             on_duty_today=d.id in present_ids
         ))
     return result
@@ -258,7 +259,17 @@ def checkin_today(
         return {"exists": False}
 
     doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first()
-    nurse = db.query(Doctor).filter(Doctor.id == checkin.nurse_id).first() if checkin.nurse_id else None
+
+    if checkin.vitals_status == "done" and checkin.vitals_recorded_by:
+        attending_nurse = db.query(Doctor).filter(Doctor.id == checkin.vitals_recorded_by).first()
+    else:
+        attending_nurse = db.query(Doctor).filter(Doctor.id == checkin.nurse_id).first() if checkin.nurse_id else None
+
+    if checkin.post_consult_status == "done" and checkin.post_consult_recorded_by:
+        post_consult_nurse = db.query(Doctor).filter(Doctor.id == checkin.post_consult_recorded_by).first()
+    else:
+        post_consult_nurse = db.query(Doctor).filter(Doctor.id == checkin.nurse_id).first() if checkin.nurse_id else None
+
     return {
         "exists": True,
         "token_number": checkin.token_number,
@@ -268,9 +279,10 @@ def checkin_today(
         "visit_date": checkin.visit_date.isoformat(),
         "vitals_status": checkin.vitals_status,
         "vitals_data": json.loads(checkin.vitals_data) if checkin.vitals_data else None,
-        "nurse_name": f"{nurse.title} {nurse.name}" if nurse else None,
+        "nurse_name": f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
         "post_consult_status": checkin.post_consult_status,
         "post_consult_note": checkin.post_consult_note,
+        "post_consult_nurse_name": f"{post_consult_nurse.title} {post_consult_nurse.name}" if post_consult_nurse else None,
         "checkin_id": checkin.id,
         "consultation_fee": checkin.consultation_fee,
         "test_fee": checkin.test_fee,
@@ -435,7 +447,7 @@ def checkin_patient(
     doctor = db.query(Doctor).filter(
         Doctor.id == payload.doctor_id,
         Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_(["doctor", "sub_admin"])
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
     ).first()
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")

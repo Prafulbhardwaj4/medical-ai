@@ -46,6 +46,9 @@ class ConsultationOut(BaseModel):
     class Config:
         from_attributes = True
 
+class ConfirmPrescriptionPayload(BaseModel):
+    recommended_test_ids: Optional[List[int]] = []
+
 class ConsultationHistoryItem(BaseModel):
     id: int
     token_number: Optional[str]

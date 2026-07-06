@@ -16,7 +16,14 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="topbar-brand">Med<span>Scribe</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="topbar-brand">Med<span>Scribe</span></div>
+      </div>
       <div class="topbar-doctor">
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
@@ -88,10 +95,6 @@
             <div class="form-group">
               <label class="form-label">Consultation Fee (₹)</label>
               <input type="number" min="0" step="1" class="form-control" id="consultation-fee" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Test Fee (₹, optional)</label>
-              <input type="number" min="0" step="1" class="form-control" id="test-fee" placeholder="0" />
             </div>
           </div>
           <button class="btn btn-primary" id="btn-generate-token" style="width:100%" onclick="generateToken()">Generate Token</button>
@@ -343,6 +346,14 @@
         ).join('');
         document.getElementById('fee-group').style.display = getDoctor()?.billing_enabled ? '' : 'none';
         updateFeeForSelectedDoctor();
+        // Hide nurse checkbox if no nurses available
+        try {
+          const staff = await api("GET", "/admin/doctors");
+          const hasNurses = staff.some(s => s.role === 'nurse' && s.is_active);
+          document.getElementById('send-to-nurse').parentElement.style.display = hasNurses ? '' : 'none';
+        } catch(e) {
+          document.getElementById('send-to-nurse').parentElement.style.display = 'none';
+        }
         document.getElementById('step-category').style.display = 'none';
         document.getElementById('step-doctor').style.display = '';
       } catch (e) { toast(e.message, "error"); }
@@ -370,8 +381,7 @@
           issue_category: selectedCategory,
           doctor_id: parseInt(doctorId),
           send_to_nurse: document.getElementById('send-to-nurse').checked,
-          consultation_fee: billingOn ? (parseFloat(document.getElementById('consultation-fee').value) || null) : null,
-          test_fee: billingOn ? (parseFloat(document.getElementById('test-fee').value) || null) : null
+          consultation_fee: billingOn ? (parseFloat(document.getElementById('consultation-fee').value) || null) : null
         });
         document.getElementById('slip-hospital').textContent = getDoctor()?.clinic_name || '';
         document.getElementById('slip-token').textContent = result.token_number;

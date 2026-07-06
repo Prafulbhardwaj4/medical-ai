@@ -8,7 +8,14 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="topbar-brand">Med<span>Scribe</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="topbar-brand">Med<span>Scribe</span></div>
+      </div>
       <div class="topbar-doctor">
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
@@ -30,6 +37,8 @@
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <main class="main-content">
+      <div style="text-align:right;color:var(--slate);font-size:12px;margin-bottom:8px" id="last-refreshed"></div>
+
       <div class="card">
         <div class="card-header"><h2>Vitals Queue</h2></div>
         <div id="vitals-list"><p style="color:var(--slate)">Loading…</p></div>
@@ -38,6 +47,11 @@
       <div class="card" style="margin-top:20px">
         <div class="card-header"><h2>Post-Consultation Tasks</h2></div>
         <div id="postconsult-list"><p style="color:var(--slate)">Loading…</p></div>
+      </div>
+
+      <div class="card" style="margin-top:20px">
+        <div class="card-header"><h2>Recently Recorded</h2></div>
+        <div id="history-list"><p style="color:var(--slate)">Loading…</p></div>
       </div>
     </main>
   </div>
@@ -111,7 +125,25 @@
       return data;
     }
 
+    async function loadHistory() {
+      try {
+        const history = await api("GET", "/nurses/history");
+        document.getElementById('history-list').innerHTML = history.length ? history.map(h => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <strong>${h.patient_name}</strong>
+              <span class="badge badge-navy" style="margin-left:8px">${h.patient_uid}</span>
+              <div style="color:var(--slate);font-size:13px;margin-top:4px">Token ${h.token_number} · ${new Date(h.recorded_at).toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit'})}</div>
+              <div style="color:var(--slate);font-size:13px;margin-top:2px">${Object.entries(h.vitals_data).map(([k,v]) => `${k}: ${v}`).join(' · ')}</div>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick='openVitalsModal(${h.checkin_id}, ${JSON.stringify(h.patient_name)}, ${JSON.stringify(h.vitals_data)})'>Edit</button>
+          </div>
+        `).join('') : '<p style="color:var(--slate-light);padding:12px 0">Nothing recorded yet today.</p>';
+      } catch (e) { toast(e.message, "error"); }
+    }
+
     async function loadQueues() {
+      document.getElementById('last-refreshed').textContent = `Last checked: ${new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', second:'2-digit'})}`;
       try {
         const vitals = await api("GET", "/nurses/vitals-queue");
         document.getElementById('vitals-list').innerHTML = vitals.length ? vitals.map(v => `
@@ -142,10 +174,19 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
-    function openVitalsModal(checkinId, patientName) {
+    function openVitalsModal(checkinId, patientName, existingData) {
       activeCheckinId = checkinId;
       document.getElementById('vitals-modal-sub').textContent = patientName;
-      document.getElementById('vitals-fields').innerHTML = STANDARD_VITALS.map(label => fieldRow(label, '')).join('');
+      const data = existingData || {};
+      const usedLabels = new Set();
+      const rows = STANDARD_VITALS.map(label => {
+        usedLabels.add(label);
+        return fieldRow(label, data[label] || '');
+      });
+      Object.keys(data).forEach(label => {
+        if (!usedLabels.has(label)) rows.push(fieldRow(label, data[label]));
+      });
+      document.getElementById('vitals-fields').innerHTML = rows.join('');
       document.getElementById('modal-vitals').classList.add('open');
     }
     function closeVitalsModal() {
@@ -164,6 +205,7 @@
         toast('Vitals recorded.', 'success');
         closeVitalsModal();
         loadQueues();
+        loadHistory();
       } catch (e) {
         toast(e.message, 'error');
       } finally {
@@ -202,7 +244,8 @@
     }
 
     loadQueues();
-    setInterval(loadQueues, 15000);
+    loadHistory();
+    setInterval(() => { loadQueues(); loadHistory(); }, 15000);
   </script>
 </body>
 </html>
