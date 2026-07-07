@@ -40,7 +40,7 @@
       </a>
       <div class="nav-divider"></div>
       <div class="sidebar-section-label">Quick Actions</div>
-      <div class="nav-item" onclick="closeSidebar(); setTimeout(openAddPatient, 150)">
+      <div class="nav-item" onclick="closeSidebar(); setTimeout(() => { if(requirePresent()) openAddPatient(); }, 150)">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
@@ -90,11 +90,6 @@
           <button class="btn btn-outline btn-sm" id="btn-mark-break" onclick="markAttendance('on_break')" style="display:none">On Break</button>
           <button class="btn btn-outline btn-sm" id="btn-mark-offduty" onclick="markAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
         </div>
-      </div>
-
-      <!-- Attendance required overlay -->
-      <div id="attendance-required" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:16px;margin-bottom:24px;text-align:center;color:#856404">
-        <strong>Please mark yourself as Present to start seeing patients.</strong>
       </div>
 
       <!-- Today's Queue -->
@@ -278,8 +273,6 @@
       const btnPresent = document.getElementById('btn-mark-present');
       const btnBreak = document.getElementById('btn-mark-break');
       const btnOffDuty = document.getElementById('btn-mark-offduty');
-      const attendanceRequired = document.getElementById('attendance-required');
-      const queueCard = document.getElementById('queue-card');
 
       if (status === 'present') {
         badge.className = 'badge badge-green';
@@ -287,8 +280,6 @@
         btnPresent.style.display = 'none';
         btnBreak.style.display = '';
         btnOffDuty.style.display = '';
-        attendanceRequired.style.display = 'none';
-        if (queueCard) queueCard.style.display = '';
       } else if (status === 'on_break') {
         badge.className = 'badge badge-amber';
         badge.textContent = 'On Break';
@@ -299,8 +290,6 @@
         // Show "Resume" button instead
         btnPresent.textContent = 'Resume';
         btnPresent.style.display = '';
-        attendanceRequired.style.display = 'none';
-        if (queueCard) queueCard.style.display = '';
       } else if (status === 'off_duty') {
         badge.className = 'badge badge-red';
         badge.textContent = 'Off Duty';
@@ -308,8 +297,6 @@
         btnPresent.style.display = '';
         btnBreak.style.display = 'none';
         btnOffDuty.style.display = 'none';
-        attendanceRequired.style.display = '';
-        if (queueCard) queueCard.style.display = 'none';
       } else {
         badge.className = 'badge badge-grey';
         badge.textContent = 'Not marked';
@@ -317,8 +304,6 @@
         btnPresent.style.display = '';
         btnBreak.style.display = 'none';
         btnOffDuty.style.display = 'none';
-        attendanceRequired.style.display = '';
-        if (queueCard) queueCard.style.display = 'none';
       }
     }
 
@@ -404,6 +389,7 @@
     let pendingPatientToken = null;
 
     async function goToPatient(id, token) {
+      if (!requirePresent()) return;
       try {
         const status = await api("GET", `/patients/${id}/checkin-today`);
         if (status.exists) {
@@ -447,7 +433,23 @@
       }
     }
 
-    function openAddPatient() { document.getElementById("modal-add").classList.add("open"); }
+    function isPresent() {
+      const badge = document.getElementById('attendance-badge');
+      return badge && (badge.textContent === 'Present' || badge.textContent === 'On Break');
+    }
+
+    function requirePresent() {
+      if (!isPresent()) {
+        toast("Please mark yourself as Present before starting work.", "error");
+        return false;
+      }
+      return true;
+    }
+
+    function openAddPatient() {
+      if (!requirePresent()) return;
+      document.getElementById("modal-add").classList.add("open");
+    }
     function closeAddPatient() { document.getElementById("modal-add").classList.remove("open"); }
 
     async function savePatient() {
