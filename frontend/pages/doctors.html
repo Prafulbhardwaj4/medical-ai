@@ -217,6 +217,49 @@
     </div>
   </div>
 
+  <!-- Edit Staff Modal -->
+  <div class="modal-overlay" id="modal-edit-staff">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Edit Staff</h2>
+        <button class="modal-close" onclick="closeEditModal()">×</button>
+      </div>
+      <input type="hidden" id="edit-staff-id" />
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input class="form-control" id="edit-name" type="text" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-control" id="edit-email" type="email" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="padding:9px 12px;background:var(--smoke-mid);border:1.5px solid var(--border);border-radius:var(--radius);font-size:0.9rem;color:var(--slate);white-space:nowrap;font-weight:500">+91</span>
+          <input class="form-control" id="edit-phone" type="tel" maxlength="10" style="flex:1" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Specialization</label>
+        <input class="form-control" id="edit-specialization" type="text" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Room Number</label>
+        <input class="form-control" id="edit-room" type="text" placeholder="e.g. 101 (optional)" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Consultation Fee (₹)</label>
+        <input class="form-control" id="edit-fee" type="number" min="0" placeholder="Leave blank to use hospital default" />
+      </div>
+      <div class="err-msg" id="edit-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" id="btn-save-edit" onclick="submitEditStaff()">Save Changes</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeEditModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <script src="../js/api.js?v=3"></script>
   <script>
@@ -277,17 +320,18 @@
               <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(d.specialization)}</div>
               <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(d.email)} · ${sanitize(d.phone)}</div>
               ${d.registration_number ? `<div style="color:var(--slate-light);font-size:12px;margin-top:2px">Reg: ${sanitize(d.registration_number)}</div>` : ''}
+              ${d.role === 'doctor' || d.role === 'sub_admin' ? `
               <div style="display:flex;gap:16px;margin-top:8px">
                 <div style="font-size:12px;color:var(--slate)">Today's Consultations: <strong style="color:var(--navy)">${d.consultations_today}</strong></div>
                 <div style="font-size:12px;color:var(--slate)">This Week: <strong style="color:var(--navy)">${d.consultations_week}</strong></div>
                 <div style="font-size:12px;color:var(--slate)">All Time: <strong style="color:var(--navy)">${d.consultations_total}</strong></div>
-              </div>
+              </div>` : ''}
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               ${d.id !== getDoctor()?.id && getDoctor()?.role === 'admin' && d.role !== 'receptionist' && d.role !== 'nurse' ? `<button class="btn btn-outline btn-sm" id="role-btn-${d.id}" onclick="toggleRole(${d.id})">
                 ${d.role === 'sub_admin' ? 'Demote to Doctor' : 'Promote to Sub Admin'}
               </button>` : ''}
-              <button class="btn btn-outline btn-sm" onclick="toast('Staff edit — Coming Soon', 'info')">Edit</button>
+              <button class="btn btn-outline btn-sm" onclick="openEditModal(${d.id}, ${JSON.stringify(d.name)}, ${JSON.stringify(d.email)}, ${JSON.stringify(d.phone)}, ${JSON.stringify(d.specialization)}, ${JSON.stringify(d.room_number || '')}, ${d.consultation_fee || 0})">Edit</button>
               <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" id="active-btn-${d.id}" onclick="toggleActive(${d.id})">
                 ${d.is_active ? 'Deactivate' : 'Activate'}
               </button>
@@ -458,6 +502,58 @@
         btn.disabled = false;
         btn.textContent = original;
         toast(e.message, 'error');
+      }
+    }
+
+    function openEditModal(id, name, email, phone, specialization, room, fee) {
+      document.getElementById('edit-staff-id').value = id;
+      document.getElementById('edit-name').value = name;
+      document.getElementById('edit-email').value = email;
+      document.getElementById('edit-phone').value = phone.replace('+91', '');
+      document.getElementById('edit-specialization').value = specialization;
+      document.getElementById('edit-room').value = room;
+      document.getElementById('edit-fee').value = fee || '';
+      document.getElementById('edit-err').textContent = '';
+      document.getElementById('modal-edit-staff').classList.add('open');
+    }
+
+    function closeEditModal() {
+      document.getElementById('modal-edit-staff').classList.remove('open');
+    }
+
+    async function submitEditStaff() {
+      const btn = document.getElementById('btn-save-edit');
+      const err = document.getElementById('edit-err');
+      const id = document.getElementById('edit-staff-id').value;
+      const name = document.getElementById('edit-name').value.trim();
+      const email = document.getElementById('edit-email').value.trim();
+      const phone = document.getElementById('edit-phone').value.trim();
+      const specialization = document.getElementById('edit-specialization').value.trim();
+      const room = document.getElementById('edit-room').value.trim();
+      const fee = document.getElementById('edit-fee').value;
+
+      if (!name || !email || !phone) { err.textContent = 'Name, email and phone are required.'; return; }
+      if (phone.length !== 10 || !/^\d{10}$/.test(phone)) { err.textContent = 'Enter valid 10-digit phone.'; return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+
+      const params = new URLSearchParams({
+        name, email, phone: '+91' + phone, specialization,
+        room_number: room
+      });
+      if (fee) params.append('consultation_fee', fee);
+
+      try {
+        await api('PATCH', `/admin/accounts/${id}?${params.toString()}`);
+        toast('Staff updated successfully.', 'success');
+        closeEditModal();
+        loadDoctors();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Changes';
       }
     }
   </script>

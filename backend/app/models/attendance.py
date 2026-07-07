@@ -12,4 +12,5 @@ class AttendanceRecord(Base):
     date = Column(Date, nullable=False, index=True)
     status = Column(String, nullable=False, default="present")  # present / on_break / absent
     marked_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
+    room_number = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -118,8 +118,12 @@
         <button class="btn btn-outline btn-sm" onclick="setStaffFilter('receptionist')" id="sf-receptionist">Receptionists</button>
         <button class="btn btn-outline btn-sm" onclick="setStaffFilter('nurse')" id="sf-nurse">Nurses</button>
       </div>
-      <div class="card">
-        <div class="card-header"><h2>Today's Attendance</h2></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h2 style="margin:0">Today's Attendance</h2>
+          <button class="btn btn-outline btn-sm" onclick="toast('Attendance History — Coming Soon', 'info')">View History</button>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Today's Attendance</h2></div>
         <div id="attendance-list"><p style="color:var(--slate)">Loading…</p></div>
       </div>
     </main>

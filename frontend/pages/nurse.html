@@ -163,7 +163,7 @@
               <span class="badge badge-navy" style="margin-left:8px">${v.patient_uid}</span>
               <div style="color:var(--slate);font-size:13px;margin-top:4px">Token ${v.token_number} · ${v.issue_category} · For ${v.doctor_name}</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick='openVitalsModal(${v.checkin_id}, ${JSON.stringify(v.patient_name)})'>Record Vitals</button>
+            <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openVitalsModal(${v.checkin_id}, ${JSON.stringify(v.patient_name)})'>Record Vitals</button>
           </div>
         `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No patients waiting for vitals.</p>';
       } catch (e) { toast(e.message, "error"); }
@@ -178,7 +178,7 @@
               <div style="color:var(--slate);font-size:13px;margin-top:4px">Token ${t.token_number} · From ${t.doctor_name}</div>
               <div style="color:var(--navy);font-size:13px;margin-top:4px;font-weight:600">${t.note || ''}</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick='openPostConsultModal(${t.checkin_id}, ${JSON.stringify(t.note || "")})'>Mark Done</button>
+            <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openPostConsultModal(${t.checkin_id}, ${JSON.stringify(t.note || "")})'>Mark Done</button>
           </div>
         `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No pending tasks.</p>';
       } catch (e) { toast(e.message, "error"); }
@@ -292,6 +292,11 @@
         const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
         toast(labels[status] || "Status updated.", "success");
       } catch (e) { toast(e.message, "error"); }
+    }
+
+    function isNursePresent() {
+      const badge = document.getElementById('nurse-attendance-badge');
+      return badge && (badge.textContent === 'Present' || badge.textContent === 'On Break');
     }
 
     loadNurseAttendance();

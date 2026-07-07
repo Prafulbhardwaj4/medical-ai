@@ -86,7 +86,8 @@
           <span class="badge badge-grey" id="attendance-badge" style="margin-left:8px">Not marked</span>
           <span id="room-display" style="margin-left:10px;font-size:13px;color:var(--slate)"></span>
         </div>
-        <div style="display:flex;gap:8px" id="attendance-btns">
+        <div style="display:flex;gap:8px;align-items:center" id="attendance-btns">
+          <input class="form-control" id="room-input" placeholder="Room No. (optional)" style="width:150px;font-size:13px" />
           <button class="btn btn-primary btn-sm" id="btn-mark-present" onclick="markAttendance('present')">Mark Present</button>
           <button class="btn btn-outline btn-sm" id="btn-mark-break" onclick="markAttendance('on_break')" style="display:none">On Break</button>
           <button class="btn btn-outline btn-sm" id="btn-mark-offduty" onclick="markAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
@@ -310,7 +311,8 @@
 
     async function markAttendance(status) {
       try {
-        await api("POST", "/doctors/attendance", { status });
+        const room = document.getElementById('room-input')?.value.trim() || null;
+        await api("POST", "/doctors/attendance", { status, room_number: room });
         renderAttendanceBadge(status);
         const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
         toast(labels[status] || "Status updated.", "success");
@@ -445,7 +447,7 @@
 
     function requirePresent() {
       if (!isPresent()) {
-        toast("Please mark yourself as Present before starting work.", "error");
+        toast("Please mark yourself as Present before starting work.", "info");
         return false;
       }
       return true;

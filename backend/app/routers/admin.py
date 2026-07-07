@@ -727,13 +727,20 @@ def update_account(
     name: str,
     email: str,
     phone: str,
+    specialization: str = "",
+    room_number: str = "",
+    consultation_fee: float = None,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value != "super_admin":
+    if current_doctor.role.value not in ["super_admin", "admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    account = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    query = db.query(Doctor).filter(Doctor.id == doctor_id)
+    if current_doctor.role.value == "admin":
+        query = query.filter(Doctor.hospital_id == current_doctor.hospital_id)
+
+    account = query.first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
@@ -745,6 +752,12 @@ def update_account(
     account.name = name
     account.email = email
     account.phone = phone
+    if specialization:
+        account.specialization = specialization
+    if room_number is not None:
+        account.room_number = room_number or None
+    if consultation_fee is not None:
+        account.consultation_fee = consultation_fee
     db.commit()
 
     log_action(

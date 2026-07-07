@@ -30,6 +30,7 @@ class DoctorOut(BaseModel):
     specialization: str
     registration_number: Optional[str] = ""
     clinic_name: Optional[str] = ""
+    room_number: Optional[str] = None
     role: str = "doctor"
     is_active: bool = True
     created_at: datetime

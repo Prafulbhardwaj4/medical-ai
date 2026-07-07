@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date, datetime
@@ -14,6 +15,7 @@ VALID_STATUSES = {"present", "on_break", "off_duty"}
 
 class AttendanceMark(BaseModel):
     status: str
+    room_number: Optional[str] = None
 
 def get_today_attendance(db: Session, doctor_id: int):
     return db.query(AttendanceRecord).filter(
@@ -48,12 +50,15 @@ def mark_attendance(
             record.status = "present"
             record.marked_by = current_doctor.id
             record.created_at = datetime.utcnow()
+            if payload.room_number:
+                record.room_number = payload.room_number
         else:
             record = AttendanceRecord(
                 doctor_id=current_doctor.id,
                 hospital_id=current_doctor.hospital_id,
                 date=date.today(),
                 status="present",
+                room_number=payload.room_number,
                 marked_by=current_doctor.id
             )
             db.add(record)
@@ -88,12 +93,19 @@ def attendance_today(
         ).all()
     }
 
+    room_numbers = {
+        r.doctor_id: r.room_number for r in db.query(AttendanceRecord).filter(
+            AttendanceRecord.hospital_id == current_doctor.hospital_id,
+            AttendanceRecord.date == date.today()
+        ).all()
+    }
+
     return [
         {
             "doctor_id": d.id,
             "name": f"{d.title} {d.name}",
             "specialization": d.specialization,
-            "room_number": d.room_number or "—",
+            "room_number": room_numbers.get(d.id) or "—",
             "role": d.role.value,
             "status": records.get(d.id, "not_marked")
         }

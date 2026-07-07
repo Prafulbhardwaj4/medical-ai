@@ -329,7 +329,13 @@
       toast('Already checked in today — showing existing token.', 'info');
     }
 
+    function isRecPresent() {
+      const badge = document.getElementById('rec-attendance-badge');
+      return badge && (badge.textContent === 'Present' || badge.textContent === 'On Break');
+    }
+
     function goToStepCategory() {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       document.getElementById('step-search').style.display = 'none';
       document.getElementById('step-token').style.display = 'none';
       document.getElementById('step-doctor').style.display = 'none';
