@@ -43,7 +43,8 @@
           <span class="badge badge-grey" id="nurse-attendance-badge" style="margin-left:8px">Not marked</span>
           <span id="nurse-room-display" style="margin-left:10px;font-size:13px;color:var(--slate)"></span>
         </div>
-        <div style="display:flex;gap:8px" id="nurse-attendance-btns">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center" id="nurse-attendance-btns">
+          <select class="form-control" id="nurse-room-select" style="width:170px;font-size:13px;display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
           <button class="btn btn-primary btn-sm" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
           <button class="btn btn-outline btn-sm" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
           <button class="btn btn-outline btn-sm" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
@@ -253,23 +254,32 @@
       }
     }
 
-    const nurseDoc = getDoctor();
-    if (nurseDoc?.room_number) {
-      document.getElementById('nurse-room-display').textContent = `Room ${nurseDoc.room_number}`;
+    let nurseCurrentStatus = 'not_marked';
+
+    async function loadNurseRoomOptions(selectedId) {
+      try {
+        const rooms = await api("GET", "/admin/rooms");
+        document.getElementById('nurse-room-select').innerHTML =
+          '<option value="">No room</option>' +
+          rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.name}</option>`).join('');
+      } catch (e) { }
     }
 
     async function loadNurseAttendance() {
       try {
         const data = await api("GET", "/doctors/attendance/my-status");
         renderNurseBadge(data.status);
+        await loadNurseRoomOptions(data.room_id);
       } catch(e) {}
     }
 
     function renderNurseBadge(status) {
+      nurseCurrentStatus = status;
       const badge = document.getElementById('nurse-attendance-badge');
       const btnPresent = document.getElementById('nurse-btn-present');
       const btnBreak = document.getElementById('nurse-btn-break');
       const btnOffDuty = document.getElementById('nurse-btn-offduty');
+      document.getElementById('nurse-room-select').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';
         btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
@@ -287,10 +297,17 @@
 
     async function markNurseAttendance(status) {
       try {
-        await api("POST", "/doctors/attendance", { status });
+        const roomVal = document.getElementById('nurse-room-select').value;
+        const room_id = roomVal ? parseInt(roomVal) : null;
+        const wasAlreadyPresent = nurseCurrentStatus === status;
+        await api("POST", "/doctors/attendance", { status, room_id });
         renderNurseBadge(status);
-        const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
-        toast(labels[status] || "Status updated.", "success");
+        if (!wasAlreadyPresent) {
+          const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
+          toast(labels[status] || "Status updated.", "success");
+        } else {
+          toast("Room updated.", "success");
+        }
       } catch (e) { toast(e.message, "error"); }
     }
 

@@ -251,6 +251,59 @@ def update_fee_settings(
     db.commit()
     return {"default_consultation_fee": hospital.default_consultation_fee}
 
+@router.get("/rooms")
+def list_rooms(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    from app.models.room import Room
+    rooms = db.query(Room).filter(
+        Room.hospital_id == current_doctor.hospital_id,
+        Room.is_active == True
+    ).all()
+    return [{"id": r.id, "name": r.name} for r in rooms]
+
+@router.post("/rooms")
+def create_room(
+    name: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Room name is required")
+
+    from app.models.room import Room
+    room = Room(hospital_id=current_doctor.hospital_id, name=name, is_active=True)
+    db.add(room)
+    db.commit()
+    db.refresh(room)
+    return {"id": room.id, "name": room.name}
+
+@router.delete("/rooms/{room_id}")
+def delete_room(
+    room_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from app.models.room import Room
+    room = db.query(Room).filter(
+        Room.id == room_id,
+        Room.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    room.is_active = False
+    db.commit()
+    return {"deleted": True}
+
 @router.get("/doctors")
 def list_doctors(
     db: Session = Depends(get_db),

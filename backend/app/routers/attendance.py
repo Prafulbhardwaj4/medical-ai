@@ -15,7 +15,7 @@ VALID_STATUSES = {"present", "on_break", "off_duty"}
 
 class AttendanceMark(BaseModel):
     status: str
-    room_number: Optional[str] = None
+    room_id: Optional[int] = None
 
 def get_today_attendance(db: Session, doctor_id: int):
     return db.query(AttendanceRecord).filter(
@@ -41,24 +41,32 @@ def mark_attendance(
     if status not in VALID_STATUSES:
         raise HTTPException(status_code=400, detail=f"status must be one of {', '.join(VALID_STATUSES)}")
 
+    if payload.room_id is not None:
+        from app.models.room import Room
+        room = db.query(Room).filter(
+            Room.id == payload.room_id,
+            Room.hospital_id == current_doctor.hospital_id,
+            Room.is_active == True
+        ).first()
+        if not room:
+            raise HTTPException(status_code=404, detail="Room not found")
+
     record = get_today_attendance(db, current_doctor.id)
 
     if status == "present":
-        if record and record.status == "present":
-            raise HTTPException(status_code=400, detail="Already marked present for today.")
         if record:
             record.status = "present"
             record.marked_by = current_doctor.id
             record.created_at = datetime.utcnow()
-            if payload.room_number:
-                record.room_number = payload.room_number
+            if payload.room_id is not None:
+                record.room_id = payload.room_id
         else:
             record = AttendanceRecord(
                 doctor_id=current_doctor.id,
                 hospital_id=current_doctor.hospital_id,
                 date=date.today(),
                 status="present",
-                room_number=payload.room_number,
+                room_id=payload.room_id,
                 marked_by=current_doctor.id
             )
             db.add(record)
@@ -68,9 +76,11 @@ def mark_attendance(
         record.status = status
         record.marked_by = current_doctor.id
         record.created_at = datetime.utcnow()
+        if payload.room_id is not None:
+            record.room_id = payload.room_id
 
     db.commit()
-    return {"status": record.status}
+    return {"status": record.status, "room_id": record.room_id}
 
 @router.get("/attendance/today")
 def attendance_today(
@@ -93,19 +103,21 @@ def attendance_today(
         ).all()
     }
 
-    room_numbers = {
-        r.doctor_id: r.room_number for r in db.query(AttendanceRecord).filter(
-            AttendanceRecord.hospital_id == current_doctor.hospital_id,
-            AttendanceRecord.date == date.today()
-        ).all()
-    }
+    from app.models.room import Room
+    today_records = db.query(AttendanceRecord).filter(
+        AttendanceRecord.hospital_id == current_doctor.hospital_id,
+        AttendanceRecord.date == date.today()
+    ).all()
+    room_ids_by_doctor = {r.doctor_id: r.room_id for r in today_records}
+    room_names = {r.id: r.name for r in db.query(Room).filter(Room.hospital_id == current_doctor.hospital_id).all()}
 
     return [
         {
             "doctor_id": d.id,
             "name": f"{d.title} {d.name}",
             "specialization": d.specialization,
-            "room_number": room_numbers.get(d.id) or "—",
+            "room_id": room_ids_by_doctor.get(d.id),
+            "room_name": room_names.get(room_ids_by_doctor.get(d.id)) or "—",
             "role": d.role.value,
             "status": records.get(d.id, "not_marked")
         }
@@ -118,4 +130,6 @@ def my_attendance_status(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     record = get_today_attendance(db, current_doctor.id)
-    return {"status": record.status if record else "not_marked"}
+    if not record:
+        return {"status": "not_marked", "room_id": None}
+    return {"status": record.status, "room_id": record.room_id}

@@ -19,6 +19,7 @@ from app.models.audit_log import AuditLog
 from app.models.checkin import Checkin
 from app.models.attendance import AttendanceRecord
 from app.models.test_catalog import TestCatalogItem
+from app.models.room import Room
 from app.config import settings
 import warnings
 import os

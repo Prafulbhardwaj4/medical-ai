@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rooms — MedScribe</title>
+  <link rel="stylesheet" href="../css/style.css?v=3" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="topbar-brand">Med<span>Scribe</span></div>
+      </div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Navigation</div>
+      <a class="nav-item" href="analytics.html">Analytics</a>
+      <a class="nav-item" href="doctors.html">Manage Staff</a>
+      <a class="nav-item" href="attendance.html">Attendance</a>
+      <div class="nav-item active">Rooms</div>
+    </nav>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+    <main class="main-content">
+      <div class="card">
+        <div class="card-header"><h2>Rooms</h2></div>
+        <div style="display:flex;gap:10px;margin-bottom:20px;max-width:420px">
+          <input class="form-control" id="room-name" placeholder="e.g. OPD, Room 101, Emergency" />
+          <button class="btn btn-primary" onclick="addRoom()">Add Room</button>
+        </div>
+        <div id="rooms-list"><p style="color:var(--slate)">Loading…</p></div>
+      </div>
+    </main>
+  </div>
+  <div id="toast"></div>
+  <script src="../js/api.js?v=3"></script>
+  <script>
+    const doc = getDoctor();
+    if (!doc || !["admin", "sub_admin"].includes(doc.role)) window.location.href = "dashboard.html";
+    if (!requireAuth()) throw new Error("Not authenticated");
+    fillTopbar();
+
+    async function loadRooms() {
+      try {
+        const rooms = await api("GET", "/admin/rooms");
+        document.getElementById('rooms-list').innerHTML = rooms.length ? rooms.map(r => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)">
+            <strong>${r.name}</strong>
+            <button class="btn btn-outline btn-sm" onclick="deleteRoom(${r.id})">Delete</button>
+          </div>
+        `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No rooms added yet.</p>';
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function addRoom() {
+      const input = document.getElementById('room-name');
+      const name = input.value.trim();
+      if (!name) { toast('Enter a room name.', 'error'); return; }
+      try {
+        await api("POST", `/admin/rooms?name=${encodeURIComponent(name)}`);
+        input.value = '';
+        toast('Room added.', 'success');
+        loadRooms();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteRoom(id) {
+      try {
+        await api("DELETE", `/admin/rooms/${id}`);
+        toast('Room removed.', 'success');
+        loadRooms();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    loadRooms();
+  </script>
+</body>
+</html>

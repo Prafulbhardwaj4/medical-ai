@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, UniqueConstraint, Integer as Int
 from datetime import datetime
 from app.database import Base
 
@@ -13,4 +13,5 @@ class AttendanceRecord(Base):
     status = Column(String, nullable=False, default="present")  # present / on_break / absent
     marked_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     room_number = Column(String, nullable=True)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

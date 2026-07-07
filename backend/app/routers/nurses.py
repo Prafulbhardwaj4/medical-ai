@@ -61,6 +61,9 @@ def submit_vitals(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     _require_nurse(current_doctor)
+    from app.routers.attendance import require_present
+    require_present(db, current_doctor)
+
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
         Checkin.hospital_id == current_doctor.hospital_id
@@ -160,6 +163,9 @@ def complete_post_consult(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     _require_nurse(current_doctor)
+    from app.routers.attendance import require_present
+    require_present(db, current_doctor)
+
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
         Checkin.hospital_id == current_doctor.hospital_id
