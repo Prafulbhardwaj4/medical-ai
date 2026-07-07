@@ -134,6 +134,7 @@ class DoctorLite(BaseModel):
     specialization: str
     on_duty_today: bool = False
     consultation_fee: Optional[float] = None
+    room_number: Optional[str] = None
 
     class Config:
         from_attributes = True

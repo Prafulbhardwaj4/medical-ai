@@ -197,7 +197,8 @@ def hospital_doctors(
         result.append(DoctorLite(
             id=d.id, title=d.title, name=d.name, specialization=d.specialization,
             consultation_fee=d.consultation_fee,
-            on_duty_today=d.id in present_ids
+            on_duty_today=d.id in present_ids,
+            room_number=d.room_number
         ))
     return result
 

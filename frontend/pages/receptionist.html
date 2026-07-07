@@ -342,7 +342,7 @@
           defaultId = doctors[Math.floor(Math.random() * doctors.length)].id;
         }
         sel.innerHTML = doctors.map(d =>
-          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}</option>`
+          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}${d.room_number ? ` (Room ${d.room_number})` : ''}</option>`
         ).join('');
         document.getElementById('fee-group').style.display = getDoctor()?.billing_enabled ? '' : 'none';
         updateFeeForSelectedDoctor();

@@ -33,6 +33,7 @@ class Doctor(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     consultation_fee = Column(Float, nullable=True)
+    room_number = Column(String, nullable=True)
 
     patients = relationship("Patient", foreign_keys="Patient.created_by", back_populates="doctor")
     hospital = relationship("Hospital", backref="doctors")

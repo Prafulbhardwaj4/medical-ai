@@ -130,7 +130,6 @@ def list_hospitals(
     hospitals = db.query(Hospital).all()
     return [{"id": h.id, "name": h.name, "hospital_code": h.hospital_code, "hospital_type": h.hospital_type, "city": h.city, "is_active": h.is_active} for h in hospitals]
 
-@router.post("/doctors", status_code=201)
 def create_doctor(
     hospital_id: int,
     name: str,
@@ -141,6 +140,7 @@ def create_doctor(
     title: str = "Dr.",
     registration_number: str = "",
     role: str = "doctor",
+    room_number: str = "",
     consultation_fee: float = None,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
@@ -177,6 +177,7 @@ def create_doctor(
         phone=phone,
         specialization=specialization,
         registration_number=registration_number,
+        room_number=room_number or None,
         clinic_name=hospital.name,
         hashed_password=hash_password(password),
         role=UserRole(role),
