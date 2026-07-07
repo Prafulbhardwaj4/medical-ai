@@ -352,8 +352,13 @@
 
     async function loadDoctorsAndGoNext() {
       try {
-        const doctors = await api("GET", "/patients/hospital-doctors");
+        const allDoctors = await api("GET", "/patients/hospital-doctors");
+        const doctors = allDoctors.filter(d => d.on_duty_today);
         hospitalDoctors = doctors;
+        if (!doctors.length) {
+          toast('No doctors are marked Present today.', 'error');
+          return;
+        }
         const sel = document.getElementById('doc-select');
         let defaultId = preferredDoctorId;
         if (!defaultId && doctors.length) {

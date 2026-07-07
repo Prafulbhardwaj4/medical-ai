@@ -577,11 +577,11 @@
         document.getElementById("f-nurse-instructions").value = s.nurse_instructions || "";
 
         const v = s.vitals || {};
-        document.getElementById("v-bp").value = v.bp || "";
-        document.getElementById("v-temp").value = v.temperature || "";
-        document.getElementById("v-pulse").value = v.pulse || "";
-        document.getElementById("v-weight").value = v.weight || "";
-        document.getElementById("v-spo2").value = v.spo2 || "";
+        document.getElementById("v-bp").value = v.bp || document.getElementById("v-bp").value;
+        document.getElementById("v-temp").value = v.temperature || document.getElementById("v-temp").value;
+        document.getElementById("v-pulse").value = v.pulse || document.getElementById("v-pulse").value;
+        document.getElementById("v-weight").value = v.weight || document.getElementById("v-weight").value;
+        document.getElementById("v-spo2").value = v.spo2 || document.getElementById("v-spo2").value;
 
         renderMedRows(s.medicines || []);
         tests = s.tests || [];
@@ -729,6 +729,16 @@
         window._tokenNumber = data.token_number;
         window._verifyHash = data.verify_hash;
         document.getElementById("token-display").textContent = window._tokenNumber;
+
+        if (editedData.nurse_instructions) {
+          try {
+            const nr = await api("POST", `/patients/${patientId}/send-to-nurse-postconsult`, { note: editedData.nurse_instructions });
+            toast(`Post-consultation tasks auto-sent to ${nr.nurse_name}.`, 'success');
+          } catch (e) {
+            toast('Could not auto-assign nurse: ' + e.message, 'error');
+          }
+        }
+
         goStep(3);
         toast("Prescription confirmed. Token: " + window._tokenNumber, "success");
       } catch (e) {
@@ -798,7 +808,8 @@
     }
 
     function openNurseTaskModal() {
-      document.getElementById('nurse-task-note').value = '';
+      const instructions = document.getElementById('f-nurse-instructions').value.trim();
+      document.getElementById('nurse-task-note').value = instructions;
       document.getElementById('modal-nurse-task').classList.add('open');
     }
     function closeNurseTaskModal() {
