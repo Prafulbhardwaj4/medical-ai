@@ -278,15 +278,16 @@
               <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(d.email)} · ${sanitize(d.phone)}</div>
               ${d.registration_number ? `<div style="color:var(--slate-light);font-size:12px;margin-top:2px">Reg: ${sanitize(d.registration_number)}</div>` : ''}
               <div style="display:flex;gap:16px;margin-top:8px">
-                <div style="font-size:12px;color:var(--slate)">Today: <strong style="color:var(--navy)">${d.consultations_today}</strong></div>
-                <div style="font-size:12px;color:var(--slate)">This week: <strong style="color:var(--navy)">${d.consultations_week}</strong></div>
-                <div style="font-size:12px;color:var(--slate)">Total: <strong style="color:var(--navy)">${d.consultations_total}</strong></div>
+                <div style="font-size:12px;color:var(--slate)">Today's Consultations: <strong style="color:var(--navy)">${d.consultations_today}</strong></div>
+                <div style="font-size:12px;color:var(--slate)">This Week: <strong style="color:var(--navy)">${d.consultations_week}</strong></div>
+                <div style="font-size:12px;color:var(--slate)">All Time: <strong style="color:var(--navy)">${d.consultations_total}</strong></div>
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              ${d.id !== getDoctor()?.id && getDoctor()?.role === 'admin' && d.role !== 'receptionist' ? `<button class="btn btn-outline btn-sm" id="role-btn-${d.id}" onclick="toggleRole(${d.id})">
+              ${d.id !== getDoctor()?.id && getDoctor()?.role === 'admin' && d.role !== 'receptionist' && d.role !== 'nurse' ? `<button class="btn btn-outline btn-sm" id="role-btn-${d.id}" onclick="toggleRole(${d.id})">
                 ${d.role === 'sub_admin' ? 'Demote to Doctor' : 'Promote to Sub Admin'}
               </button>` : ''}
+              <button class="btn btn-outline btn-sm" onclick="toast('Staff edit — Coming Soon', 'info')">Edit</button>
               <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" id="active-btn-${d.id}" onclick="toggleActive(${d.id})">
                 ${d.is_active ? 'Deactivate' : 'Activate'}
               </button>

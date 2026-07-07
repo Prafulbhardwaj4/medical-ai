@@ -77,7 +77,7 @@ def attendance_today(
 
     staff = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.nurse, UserRole.receptionist]),
         Doctor.is_active == True
     ).all()
 
@@ -94,6 +94,7 @@ def attendance_today(
             "name": f"{d.title} {d.name}",
             "specialization": d.specialization,
             "room_number": d.room_number or "—",
+            "role": d.role.value,
             "status": records.get(d.id, "not_marked")
         }
         for d in staff

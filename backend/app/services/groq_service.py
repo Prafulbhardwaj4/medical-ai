@@ -32,7 +32,8 @@ Return ONLY valid JSON with exactly these fields:
   ],
   "tests": ["string - test name"],
   "advice": "string - all doctor advice, lifestyle instructions, dietary recommendations",
-  "followup": "string - follow up instructions if mentioned, else empty string"
+  "followup": "string - follow up instructions if mentioned, else empty string",
+  "nurse_instructions": "string - any post-consultation tasks for the nurse mentioned by doctor: injections, dressings, IV fluids, wound care, etc. Empty string if not mentioned."
 }
 
 Rules for medicines:
@@ -49,6 +50,7 @@ Rules for schedule field:
 Other rules:
 - medicines and tests must always be arrays (empty array [] if none mentioned)
 - vitals fields must be empty strings if not mentioned — never invent values
+- nurse_instructions: capture if doctor mentions nurse tasks — 'dressing karna hai', 'injection dena', 'IV lagana', 'wound dress karo', etc. Translate to English.
 - Do not add any fields not listed above
 - Do not include any explanation or markdown — only the raw JSON object
 - If a field is not mentioned, use empty string or empty array

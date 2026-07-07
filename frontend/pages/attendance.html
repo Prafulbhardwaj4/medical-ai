@@ -147,11 +147,13 @@
     }
     function renderStaffList() {
       const list = staffFilter === 'all' ? allStaff : allStaff.filter(d => d.role === staffFilter);
+      const roleLabels = { doctor: 'Doctor', sub_admin: 'Sub Admin', nurse: 'Nurse', receptionist: 'Receptionist' };
       document.getElementById('attendance-list').innerHTML = list.length ? list.map(d => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
             <div>
               <strong>${d.name}</strong>
-              <div style="color:var(--slate);font-size:13px;margin-top:2px">${d.specialization}</div>
+              <span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:#f1f5f9;color:#64748b;margin-left:6px">${roleLabels[d.role] || d.role}</span>
+              <div style="color:var(--slate);font-size:13px;margin-top:2px">${d.specialization}${d.room_number && d.room_number !== '—' ? ` · Room ${d.room_number}` : ''}</div>
             </div>
             ${badgeFor(d.status)}
           </div>
@@ -161,6 +163,7 @@
     function badgeFor(status) {
       if (status === 'present') return '<span class="badge badge-green">Present</span>';
       if (status === 'on_break') return '<span class="badge badge-amber">On Break</span>';
+      if (status === 'off_duty') return '<span class="badge badge-red">Off Duty</span>';
       if (status === 'absent') return '<span class="badge badge-red">Absent</span>';
       return '<span class="badge badge-grey">Not marked</span>';
     }

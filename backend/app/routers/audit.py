@@ -85,7 +85,8 @@ def get_audit_summary(
 
     query = db.query(AuditLog).filter(
         AuditLog.hospital_id == current_doctor.hospital_id,
-        AuditLog.actor_role != "super_admin"
+        AuditLog.actor_role != "super_admin",
+        AuditLog.action.notin_(["hospital_created", "hospital_activated", "hospital_deactivated"])
     )
 
     total = query.count()

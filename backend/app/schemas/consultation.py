@@ -41,6 +41,7 @@ class ConsultationOut(BaseModel):
     tests: Optional[str] = None
     advice: Optional[str] = None
     followup: Optional[str] = None
+    nurse_instructions: Optional[str] = None
     has_pending_tests: bool
     pdf_path: Optional[str] = None
     whatsapp_status: str

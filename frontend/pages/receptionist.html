@@ -46,6 +46,17 @@
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <main class="main-content">
+      <div class="card" style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <strong>Today's Status:</strong>
+          <span class="badge badge-grey" id="rec-attendance-badge" style="margin-left:8px">Not marked</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" id="rec-btn-present" onclick="markRecAttendance('present')">Mark Present</button>
+          <button class="btn btn-outline btn-sm" id="rec-btn-break" onclick="markRecAttendance('on_break')" style="display:none">On Break</button>
+          <button class="btn btn-outline btn-sm" id="rec-btn-offduty" onclick="markRecAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+        </div>
+      </div>
       <div class="card">
 
         <!-- STEP 1: Search / Select / New -->
@@ -429,11 +440,20 @@
     }
 
     async function markPaid() {
+      if (!currentCheckinId) {
+        toast('No active check-in found. Please regenerate the token.', 'error');
+        return;
+      }
       const btn = document.getElementById('btn-mark-paid');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
       try {
-        await api("PATCH", `/patients/checkin/${currentCheckinId}/mark-paid`, {});
+        const result = await api("PATCH", `/patients/checkin/${currentCheckinId}/mark-paid`, {});
+        if (!result) {
+          btn.disabled = false;
+          btn.innerHTML = 'Mark as Paid';
+          return;
+        }
         toast('Marked as paid.', 'success');
         renderBillingRow(true, parseFloat(document.getElementById('slip-fee').textContent), true);
       } catch (e) {
@@ -563,6 +583,44 @@
       clearTimeout(listSearchTimer);
       listSearchTimer = setTimeout(() => loadAllPatients(val), 350);
     }
+
+    async function loadRecAttendance() {
+      try {
+        const data = await api("GET", "/doctors/attendance/my-status");
+        renderRecBadge(data.status);
+      } catch(e) {}
+    }
+
+    function renderRecBadge(status) {
+      const badge = document.getElementById('rec-attendance-badge');
+      const btnPresent = document.getElementById('rec-btn-present');
+      const btnBreak = document.getElementById('rec-btn-break');
+      const btnOffDuty = document.getElementById('rec-btn-offduty');
+      if (status === 'present') {
+        badge.className = 'badge badge-green'; badge.textContent = 'Present';
+        btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
+      } else if (status === 'on_break') {
+        badge.className = 'badge badge-amber'; badge.textContent = 'On Break';
+        btnPresent.textContent = 'Resume'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = '';
+      } else if (status === 'off_duty') {
+        badge.className = 'badge badge-red'; badge.textContent = 'Off Duty';
+        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
+      } else {
+        badge.className = 'badge badge-grey'; badge.textContent = 'Not marked';
+        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
+      }
+    }
+
+    async function markRecAttendance(status) {
+      try {
+        await api("POST", "/doctors/attendance", { status });
+        renderRecBadge(status);
+        const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
+        toast(labels[status] || "Status updated.", "success");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    loadRecAttendance();
 
     loadAllPatients();
   </script>

@@ -37,6 +37,19 @@
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <main class="main-content">
+      <div class="card" style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <strong>Today's Status:</strong>
+          <span class="badge badge-grey" id="nurse-attendance-badge" style="margin-left:8px">Not marked</span>
+          <span id="nurse-room-display" style="margin-left:10px;font-size:13px;color:var(--slate)"></span>
+        </div>
+        <div style="display:flex;gap:8px" id="nurse-attendance-btns">
+          <button class="btn btn-primary btn-sm" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
+          <button class="btn btn-outline btn-sm" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
+          <button class="btn btn-outline btn-sm" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-header"><h2>Vitals Queue</h2></div>
         <div id="vitals-list"><p style="color:var(--slate)">Loading…</p></div>
@@ -240,6 +253,48 @@
       }
     }
 
+    const nurseDoc = getDoctor();
+    if (nurseDoc?.room_number) {
+      document.getElementById('nurse-room-display').textContent = `Room ${nurseDoc.room_number}`;
+    }
+
+    async function loadNurseAttendance() {
+      try {
+        const data = await api("GET", "/doctors/attendance/my-status");
+        renderNurseBadge(data.status);
+      } catch(e) {}
+    }
+
+    function renderNurseBadge(status) {
+      const badge = document.getElementById('nurse-attendance-badge');
+      const btnPresent = document.getElementById('nurse-btn-present');
+      const btnBreak = document.getElementById('nurse-btn-break');
+      const btnOffDuty = document.getElementById('nurse-btn-offduty');
+      if (status === 'present') {
+        badge.className = 'badge badge-green'; badge.textContent = 'Present';
+        btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
+      } else if (status === 'on_break') {
+        badge.className = 'badge badge-amber'; badge.textContent = 'On Break';
+        btnPresent.textContent = 'Resume'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = '';
+      } else if (status === 'off_duty') {
+        badge.className = 'badge badge-red'; badge.textContent = 'Off Duty';
+        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
+      } else {
+        badge.className = 'badge badge-grey'; badge.textContent = 'Not marked';
+        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
+      }
+    }
+
+    async function markNurseAttendance(status) {
+      try {
+        await api("POST", "/doctors/attendance", { status });
+        renderNurseBadge(status);
+        const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
+        toast(labels[status] || "Status updated.", "success");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    loadNurseAttendance();
     loadQueues();
     loadHistory();
     setInterval(() => { loadQueues(); loadHistory(); }, 15000);

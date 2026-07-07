@@ -84,6 +84,7 @@
         <div>
           <strong>Today's Status:</strong>
           <span class="badge badge-grey" id="attendance-badge" style="margin-left:8px">Not marked</span>
+          <span id="room-display" style="margin-left:10px;font-size:13px;color:var(--slate)"></span>
         </div>
         <div style="display:flex;gap:8px" id="attendance-btns">
           <button class="btn btn-primary btn-sm" id="btn-mark-present" onclick="markAttendance('present')">Mark Present</button>
@@ -314,6 +315,10 @@
         const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
         toast(labels[status] || "Status updated.", "success");
       } catch (e) { toast(e.message, "error"); }
+    }
+
+    if (doc?.room_number) {
+      document.getElementById('room-display').textContent = `Room ${doc.room_number}`;
     }
 
     loadAttendance();
