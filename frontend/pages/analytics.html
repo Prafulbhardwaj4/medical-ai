@@ -685,7 +685,8 @@
             if (doctorId) params.append('doctor_id', doctorId);
             try {
                 const data = await api('GET', `/consultations/admin-consultations?${params.toString()}`);
-                let consults = data.consultations;
+                if (!data) return;
+                let consults = data.consultations || [];
                 if (search) {
                     const q = search.toLowerCase();
                     consults = consults.filter(c =>

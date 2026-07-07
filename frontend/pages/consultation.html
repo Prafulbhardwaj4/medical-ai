@@ -561,7 +561,8 @@
       btn.innerHTML = '<span class="spinner"></span> Analysing…';
 
       try {
-        const data = await api("POST", `/consultations/structure/${consultationId}`);
+        const transcript = document.getElementById("transcript").value.trim();
+        const data = await api("POST", `/consultations/structure/${consultationId}`, { transcript });
         const s = data.structured;
 
         document.getElementById("f-complaint").value = s.chief_complaint || "";
