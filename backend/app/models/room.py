@@ -6,5 +6,6 @@ class Room(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
-    name = Column(String, nullable=False)
+    room_number = Column(String, nullable=True)
+    name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)

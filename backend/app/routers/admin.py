@@ -261,27 +261,45 @@ def list_rooms(
         Room.hospital_id == current_doctor.hospital_id,
         Room.is_active == True
     ).all()
-    return [{"id": r.id, "name": r.name} for r in rooms]
+    return [
+        {
+            "id": r.id,
+            "room_number": r.room_number or "",
+            "name": r.name or "",
+            "display": f"{r.name or ''}{' (' + r.room_number + ')' if r.room_number else ''}".strip()
+        }
+        for r in rooms
+    ]
 
 @router.post("/rooms")
 def create_room(
-    name: str,
+    room_number: str = "",
+    name: str = "",
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     if current_doctor.role.value not in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    name = name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Room name is required")
+    if not room_number.strip() and not name.strip():
+        raise HTTPException(status_code=400, detail="At least a room number or name is required")
 
     from app.models.room import Room
-    room = Room(hospital_id=current_doctor.hospital_id, name=name, is_active=True)
+    room = Room(
+        hospital_id=current_doctor.hospital_id,
+        room_number=room_number.strip() or None,
+        name=name.strip() or None,
+        is_active=True
+    )
     db.add(room)
     db.commit()
     db.refresh(room)
-    return {"id": room.id, "name": room.name}
+    return {
+        "id": room.id,
+        "room_number": room.room_number or "",
+        "name": room.name or "",
+        "display": f"{room.name or ''}{' (' + room.room_number + ')' if room.room_number else ''}".strip()
+    }
 
 @router.delete("/rooms/{room_id}")
 def delete_room(
