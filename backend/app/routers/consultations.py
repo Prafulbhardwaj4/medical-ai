@@ -663,8 +663,18 @@ def confirm_prescription(
     if todays_checkin and todays_checkin.vitals_data:
         try:
             nurse_vitals = json.loads(todays_checkin.vitals_data)
+            label_to_key = {
+                "Blood Pressure": "bp",
+                "Pulse": "pulse",
+                "Temperature": "temperature",
+                "Weight": "weight",
+                "SpO2": "spo2",
+            }
+            normalized_nurse_vitals = {}
+            for k, v in nurse_vitals.items():
+                normalized_nurse_vitals[label_to_key.get(k, k)] = v
             existing_vitals = json.loads(consultation.vitals or "{}")
-            consultation.vitals = json.dumps({**nurse_vitals, **existing_vitals})
+            consultation.vitals = json.dumps({**normalized_nurse_vitals, **existing_vitals})
         except Exception:
             pass
 
