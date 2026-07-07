@@ -273,6 +273,7 @@
   <script>
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
+    const doc = getDoctor();
 
     if (doc?.billing_enabled) document.getElementById('doctors-billing-link').style.display = '';
 
