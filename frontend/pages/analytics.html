@@ -295,6 +295,10 @@
                             <input type="text" id="filter-search" class="form-control"
                                 placeholder="Name, UID or token..." />
                         </div>
+                        <div>
+                            <label style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">Doctor</label>
+                            <select id="filter-doctor" class="form-control"><option value="">All Doctors</option></select>
+                        </div>
                         <button class="btn btn-primary" onclick="loadConsultations(1)">Search</button>
                     </div>
                 </div>
@@ -435,7 +439,18 @@
                 if (nav) nav.classList.toggle('active', s === name);
             });
             if (name === 'billing') { loadBilling(); return; }
+            if (name === 'consultations') { loadConsultationDoctors(); loadConsultations(1); return; }
             if (dashData) renderSection(name);
+        }
+
+        async function loadConsultationDoctors() {
+            const sel = document.getElementById('filter-doctor');
+            if (sel.dataset.loaded) return;
+            try {
+                const doctors = await api("GET", "/patients/hospital-doctors");
+                sel.innerHTML = '<option value="">All Doctors</option>' + doctors.map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
+                sel.dataset.loaded = "1";
+            } catch (e) { }
         }
 
         async function loadBilling() {
@@ -663,9 +678,11 @@
             const from = document.getElementById('filter-from')?.value || '';
             const to = document.getElementById('filter-to')?.value || '';
             const search = document.getElementById('filter-search')?.value.trim() || '';
+            const doctorId = document.getElementById('filter-doctor')?.value || '';
             const params = new URLSearchParams({ page, limit: 50 });
             if (from) params.append('from_date', from);
             if (to) params.append('to_date', to);
+            if (doctorId) params.append('doctor_id', doctorId);
             try {
                 const data = await api('GET', `/consultations/admin-consultations?${params.toString()}`);
                 let consults = data.consultations;

@@ -267,25 +267,36 @@ def list_doctors(
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = now - timedelta(days=7)
 
+    from app.models.checkin import Checkin
+
     result = []
     for d in doctors:
-        total = db.query(Consultation).filter(
-            Consultation.doctor_id == d.id,
-            Consultation.token_number != None,
-            Consultation.is_voided == False
-        ).count()
-        today = db.query(Consultation).filter(
-            Consultation.doctor_id == d.id,
-            Consultation.token_number != None,
-            Consultation.is_voided == False,
-            Consultation.created_at >= today_start
-        ).count()
-        week = db.query(Consultation).filter(
-            Consultation.doctor_id == d.id,
-            Consultation.token_number != None,
-            Consultation.is_voided == False,
-            Consultation.created_at >= week_start
-        ).count()
+        if d.role.value == "nurse":
+            total = db.query(Checkin).filter(Checkin.vitals_recorded_by == d.id).count()
+            today = db.query(Checkin).filter(Checkin.vitals_recorded_by == d.id, Checkin.vitals_recorded_at >= today_start).count()
+            week = db.query(Checkin).filter(Checkin.vitals_recorded_by == d.id, Checkin.vitals_recorded_at >= week_start).count()
+        elif d.role.value == "receptionist":
+            total = db.query(Checkin).filter(Checkin.created_by == d.id).count()
+            today = db.query(Checkin).filter(Checkin.created_by == d.id, Checkin.created_at >= today_start).count()
+            week = db.query(Checkin).filter(Checkin.created_by == d.id, Checkin.created_at >= week_start).count()
+        else:
+            total = db.query(Consultation).filter(
+                Consultation.doctor_id == d.id,
+                Consultation.token_number != None,
+                Consultation.is_voided == False
+            ).count()
+            today = db.query(Consultation).filter(
+                Consultation.doctor_id == d.id,
+                Consultation.token_number != None,
+                Consultation.is_voided == False,
+                Consultation.created_at >= today_start
+            ).count()
+            week = db.query(Consultation).filter(
+                Consultation.doctor_id == d.id,
+                Consultation.token_number != None,
+                Consultation.is_voided == False,
+                Consultation.created_at >= week_start
+            ).count()
         result.append({
             "id": d.id,
             "name": f"{d.title} {d.name}",

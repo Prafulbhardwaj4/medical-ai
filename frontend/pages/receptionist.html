@@ -415,6 +415,8 @@
       document.getElementById('slip-fee').textContent = (totalFee || 0).toFixed(2);
       const badge = document.getElementById('slip-paid-badge');
       const btn = document.getElementById('btn-mark-paid');
+      btn.disabled = false;
+      btn.innerHTML = 'Mark as Paid';
       if (isPaid) {
         badge.className = 'badge badge-green';
         badge.textContent = 'Paid ✓';
@@ -511,7 +513,7 @@
 
     function formatDate(iso) {
       const d = new Date(iso);
-      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
     }
     function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 

@@ -826,6 +826,29 @@
       });
     }
 
+    async function loadNurseVitals() {
+      try {
+        const c = await api("GET", `/patients/${patientId}/checkin-today`);
+        if (c.vitals_status !== 'done' || !c.vitals_data) return;
+        const map = { "Blood Pressure": "v-bp", "Pulse": "v-pulse", "Temperature": "v-temp", "Weight": "v-weight", "SpO2": "v-spo2" };
+        const extras = [];
+        Object.entries(c.vitals_data).forEach(([label, value]) => {
+          if (map[label] && document.getElementById(map[label])) {
+            document.getElementById(map[label]).value = value;
+          } else {
+            extras.push(`${label}: ${value}`);
+          }
+        });
+        if (extras.length) {
+          const note = document.createElement('div');
+          note.style.cssText = '';
+          note.style.cssText = 'font-size:13px;color:var(--slate);margin-top:8px';
+          note.textContent = `Also recorded by nurse: ${extras.join(' · ')}`;
+          document.querySelector('.vitals-grid')?.after(note) || document.getElementById('v-bp').closest('.section-block')?.appendChild(note);
+        }
+      } catch (e) { }
+    }
+
     async function loadTestCatalog() {
       if (!getDoctor()?.billing_enabled) return;
       try {
@@ -847,6 +870,7 @@
         loadPatient();
         loadLastVisit();
         loadTestCatalog();
+        loadNurseVitals();
       } catch (e) {
         window.location.href = "/pages/dashboard.html";
       }

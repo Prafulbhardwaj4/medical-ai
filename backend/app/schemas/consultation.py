@@ -17,6 +17,9 @@ class Vitals(BaseModel):
     weight: str = ""
     spo2: str = ""
 
+class StructureRequest(BaseModel):
+    transcript: Optional[str] = None
+
 class ConsultationStructured(BaseModel):
     chief_complaint: Optional[str] = ""
     diagnosis: Optional[str] = ""

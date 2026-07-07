@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models.consultation import Consultation
 from app.models.patient import Patient
 from app.models.doctor import Doctor, UserRole
-from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem
+from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem, StructureRequest
 from app.utils.auth import get_current_doctor, now_ist, decode_access_token, is_token_blacklisted
 from app.utils.audit import log_action
 from app.services.whisper import transcribe_audio
@@ -534,6 +534,7 @@ def mark_dispensed(
 async def structure(
     request: Request,
     consultation_id: int,
+    payload: StructureRequest = StructureRequest(),
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -543,6 +544,11 @@ async def structure(
     ).first()
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
+
+    if payload.transcript and payload.transcript.strip():
+        consultation.raw_transcript = payload.transcript.strip()
+        db.commit()
+
     if not consultation.raw_transcript:
         raise HTTPException(status_code=400, detail="No transcript found for this consultation")
 

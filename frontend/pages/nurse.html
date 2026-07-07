@@ -37,8 +37,6 @@
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <main class="main-content">
-      <div style="text-align:right;color:var(--slate);font-size:12px;margin-bottom:8px" id="last-refreshed"></div>
-
       <div class="card">
         <div class="card-header"><h2>Vitals Queue</h2></div>
         <div id="vitals-list"><p style="color:var(--slate)">Loading…</p></div>
@@ -143,7 +141,6 @@
     }
 
     async function loadQueues() {
-      document.getElementById('last-refreshed').textContent = `Last checked: ${new Date().toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', second:'2-digit'})}`;
       try {
         const vitals = await api("GET", "/nurses/vitals-queue");
         document.getElementById('vitals-list').innerHTML = vitals.length ? vitals.map(v => `
