@@ -27,6 +27,7 @@ class MedicineIn(BaseModel):
     brand_names: Optional[str] = ""
     category: Optional[str] = ""
     dosage_forms: Optional[str] = ""
+    strength: Optional[str] = ""
     schedule: Optional[str] = "otc"
     pack_size: Optional[int] = 1
     price_per_pack: Optional[float] = None
@@ -55,6 +56,7 @@ def serialize(m: HospitalMedicine):
         "brand_names": m.brand_names or "",
         "category": m.category or "",
         "dosage_forms": m.dosage_forms or "",
+        "strength": m.strength or "",
         "schedule": m.schedule,
         "pack_size": m.pack_size,
         "price_per_pack": m.price_per_pack,
@@ -122,6 +124,7 @@ def create_medicine(
         brand_names=(payload.brand_names or "").strip(),
         category=(payload.category or "").strip(),
         dosage_forms=(payload.dosage_forms or "").strip(),
+        strength=(payload.strength or "").strip(),
         schedule=schedule,
         pack_size=pack_size,
         price_per_pack=payload.price_per_pack,
@@ -178,6 +181,7 @@ def update_medicine(
     medicine.brand_names = (payload.brand_names or "").strip()
     medicine.category = (payload.category or "").strip()
     medicine.dosage_forms = (payload.dosage_forms or "").strip()
+    medicine.strength = (payload.strength or "").strip()
     medicine.schedule = schedule
     medicine.pack_size = pack_size
     medicine.price_per_pack = payload.price_per_pack
@@ -306,6 +310,7 @@ def bulk_confirm_medicines(
             brand_names=(item.brand_names or "").strip(),
             category=(item.category or "").strip(),
             dosage_forms=(item.dosage_forms or "").strip(),
+            strength=(item.strength or "").strip(),
             schedule=schedule,
             pack_size=pack_size,
             price_per_pack=item.price_per_pack,

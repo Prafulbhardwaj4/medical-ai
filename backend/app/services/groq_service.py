@@ -108,6 +108,7 @@ Return ONLY a valid JSON array. Each element must have exactly these fields:
   "brand_names": "string - comma separated brand names if present, else empty string",
   "category": "string - drug category e.g. Antibiotic, Analgesic, empty string if unclear",
   "dosage_forms": "string - e.g. Tablet, Syrup, Injection, empty string if unclear",
+  "strength": "string - the concentration/strength as printed, e.g. '500mg' for a tablet or '125mg/5ml' for a syrup, empty string if unclear",
   "schedule": "string - one of: otc, h, h1, x. Default to 'h' if unclear, 'otc' for common OTC drugs.",
   "pack_size": "number - units per strip/pack (e.g. 10 tablets per strip). Default to 1 if the source only gives a single item like a syrup bottle or injection vial, or if unclear.",
   "price_per_pack": "number or null - price for the whole strip/pack/bottle as printed in the source, else null",

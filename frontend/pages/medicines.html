@@ -5,6 +5,80 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Medicine Catalog — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=3" />
+  <style>
+    /* Scoped to this page only — medicine catalog card layout */
+    .item-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      margin-bottom: 12px;
+      transition: box-shadow 0.15s, border-color 0.15s;
+    }
+    .item-card:hover {
+      box-shadow: var(--shadow-sm);
+      border-color: var(--border-mid);
+    }
+    .item-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .item-card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--navy);
+    }
+    .item-card-subtitle {
+      font-size: 0.8rem;
+      color: var(--slate);
+      margin-top: 2px;
+    }
+    .item-card-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .item-card-fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 10px 16px;
+      padding: 12px 0;
+      border-top: 1px solid var(--smoke-mid);
+      border-bottom: 1px solid var(--smoke-mid);
+      margin-bottom: 12px;
+    }
+    .item-field-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--slate-light);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 3px;
+    }
+    .item-field-value {
+      font-size: 0.88rem;
+      color: var(--navy);
+      font-weight: 500;
+    }
+    .item-field-value.mono {
+      font-family: 'DM Mono', monospace;
+    }
+    .item-card-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    @media (max-width: 640px) {
+      .item-card-fields { grid-template-columns: repeat(2, 1fr); }
+      .item-card-actions { justify-content: stretch; }
+      .item-card-actions .btn { flex: 1; }
+    }
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -79,6 +153,12 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
         </svg>
         Medicine Catalog
+      </a>
+      <a class="nav-item" href="tests-catalog.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
+        </svg>
+        Test Catalog
       </a>
       <a class="nav-item" href="#" onclick="toast('Complaints & Suggestions — Coming Soon','info');return false;">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -206,13 +286,23 @@
       </div>
 
       <div style="display:flex;gap:12px;margin-bottom:14px">
-        <select class="form-control" id="m-schedule" style="flex:1">
-          <option value="otc">OTC</option>
-          <option value="h">H</option>
-          <option value="h1">H1</option>
-          <option value="x">X</option>
-        </select>
-        <input class="form-control" id="m-stock" type="number" min="0" step="1" placeholder="Stock Qty (base units)" style="flex:1" />
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Strength</label>
+          <input class="form-control" id="m-strength" placeholder="e.g. 500mg" />
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Schedule</label>
+          <select class="form-control" id="m-schedule">
+            <option value="otc">OTC</option>
+            <option value="h">H</option>
+            <option value="h1">H1</option>
+            <option value="x">X</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Stock Qty (base units)</label>
+          <input class="form-control" id="m-stock" type="number" min="0" step="1" placeholder="e.g. 150" />
+        </div>
       </div>
 
       <div id="pricing-fields-strip" style="display:flex;gap:12px;margin-bottom:6px">
@@ -284,6 +374,16 @@
     // Forms that are divisible into countable units sold in strips/packs
     const DIVISIBLE_FORMS = ['Tablet', 'Capsule', 'Sachet', 'Suppository', 'Patch'];
 
+    const STRENGTH_PLACEHOLDER = {
+      'Tablet': 'e.g. 500mg', 'Capsule': 'e.g. 250mg', 'Sachet': 'e.g. 5g',
+      'Suppository': 'e.g. 10mg', 'Patch': 'e.g. 25mcg/hr',
+      'Syrup': 'e.g. 125mg/5ml', 'Suspension': 'e.g. 250mg/5ml', 'Drops': 'e.g. 10mg/ml',
+      'Injection': 'e.g. 40mg/ml or 1g/vial',
+      'Ointment': 'e.g. 1% w/w', 'Cream': 'e.g. 1% w/w', 'Gel': 'e.g. 1% w/w', 'Lotion': 'e.g. 1% w/w',
+      'Inhaler': 'e.g. 100mcg/dose', 'Spray': 'e.g. 50mcg/dose', 'Powder': 'e.g. 250mg/sachet',
+      'Other': 'e.g. 500mg or 5mg/ml'
+    };
+
     let previewData = [];
 
     function onCategorySelectChange() {
@@ -312,6 +412,7 @@
         freeInput.value = select.value;
         showStripPricing(DIVISIBLE_FORMS.includes(select.value));
       }
+      document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER[select.value] || 'e.g. 500mg';
       updateComputedPrice();
     }
 
@@ -386,7 +487,7 @@
       el.innerHTML = items.map(m => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
           <div style="flex:1;min-width:220px">
-            <strong>${sanitize(m.generic_name)}</strong>
+            <strong>${sanitize(m.generic_name)}${m.strength ? ' ' + sanitize(m.strength) : ''}</strong>
             ${m.brand_names ? `<div style="font-size:12px;color:var(--slate)">${sanitize(m.brand_names)}</div>` : ''}
           </div>
           <div style="font-size:12px;color:var(--slate);min-width:100px">${sanitize(m.category || '—')} · ${sanitize(m.dosage_forms || '—')}</div>
@@ -412,6 +513,8 @@
       document.getElementById('m-form-select').value = 'Tablet';
       document.getElementById('m-form').style.display = 'none';
       document.getElementById('m-form').value = '';
+      document.getElementById('m-strength').value = '';
+      document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER['Tablet'];
       document.getElementById('m-schedule').value = 'otc';
       document.getElementById('m-stock').value = '';
       document.getElementById('m-pack-size').value = '';
@@ -452,6 +555,8 @@
         document.getElementById('m-form').value = m.dosage_forms || '';
       }
       showStripPricing(isDivisible);
+      document.getElementById('m-strength').value = m.strength || '';
+      document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER[document.getElementById('m-form-select').value] || 'e.g. 500mg';
 
       document.getElementById('m-schedule').value = m.schedule || 'otc';
       document.getElementById('m-stock').value = m.stock_quantity != null ? m.stock_quantity : '';
@@ -480,6 +585,7 @@
 
       const formSelect = document.getElementById('m-form-select').value;
       const dosage_forms = formSelect === 'Other' ? document.getElementById('m-form').value.trim() : formSelect;
+      const strength = document.getElementById('m-strength').value.trim();
 
       const isDivisible = isCurrentFormDivisible();
       const pack_size = isDivisible ? (parseInt(document.getElementById('m-pack-size').value) || 1) : 1;
@@ -494,6 +600,7 @@
         brand_names: document.getElementById('m-brands').value.trim(),
         category,
         dosage_forms,
+        strength,
         schedule: document.getElementById('m-schedule').value,
         pack_size,
         price_per_pack,
@@ -546,8 +653,11 @@
           brand_names: m.brand_names || '',
           category: m.category || '',
           dosage_forms: m.dosage_forms || '',
+          strength: m.strength || '',
           schedule: m.schedule || 'h',
-          price: m.price != null ? m.price : '',
+          pack_size: m.pack_size || 1,
+          price_per_pack: m.price_per_pack != null ? m.price_per_pack : '',
+          gst_percent: m.gst_percent != null ? m.gst_percent : '',
           stock_quantity: m.stock_quantity != null ? m.stock_quantity : ''
         }));
         renderPreviewTable();
@@ -565,19 +675,22 @@
         return;
       }
       el.innerHTML = `
-        <div style="display:grid;grid-template-columns:2fr 2fr 1.2fr 1.2fr 0.8fr 0.8fr 0.8fr 40px;gap:6px;font-size:12px;color:var(--slate);padding:0 0 8px;font-weight:600">
-          <div>Generic Name</div><div>Brand Names</div><div>Category</div><div>Form</div><div>Schedule</div><div>Price</div><div>Stock</div><div></div>
+        <div style="display:grid;grid-template-columns:1.6fr 1.4fr 1fr 0.9fr 0.9fr 0.7fr 0.7fr 0.9fr 0.7fr 0.7fr 40px;gap:6px;font-size:11px;color:var(--slate);padding:0 0 8px;font-weight:600">
+          <div>Generic Name</div><div>Brand Names</div><div>Category</div><div>Form</div><div>Strength</div><div>Sched.</div><div>Pack</div><div>Price/Pack</div><div>GST%</div><div>Stock</div><div></div>
         </div>
         ${previewData.map((m, i) => `
-          <div style="display:grid;grid-template-columns:2fr 2fr 1.2fr 1.2fr 0.8fr 0.8fr 0.8fr 40px;gap:6px;margin-bottom:6px">
+          <div style="display:grid;grid-template-columns:1.6fr 1.4fr 1fr 0.9fr 0.9fr 0.7fr 0.7fr 0.9fr 0.7fr 0.7fr 40px;gap:6px;margin-bottom:6px">
             <input class="form-control" value="${sanitize(m.generic_name)}" oninput="previewData[${i}].generic_name=this.value" />
             <input class="form-control" value="${sanitize(m.brand_names)}" oninput="previewData[${i}].brand_names=this.value" />
             <input class="form-control" value="${sanitize(m.category)}" oninput="previewData[${i}].category=this.value" />
             <input class="form-control" value="${sanitize(m.dosage_forms)}" oninput="previewData[${i}].dosage_forms=this.value" />
+            <input class="form-control" value="${sanitize(m.strength)}" oninput="previewData[${i}].strength=this.value" />
             <select class="form-control" onchange="previewData[${i}].schedule=this.value">
               ${['otc','h','h1','x'].map(s => `<option value="${s}" ${m.schedule === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}
             </select>
-            <input class="form-control" type="number" value="${m.price}" oninput="previewData[${i}].price=this.value" />
+            <input class="form-control" type="number" value="${m.pack_size}" oninput="previewData[${i}].pack_size=this.value" />
+            <input class="form-control" type="number" value="${m.price_per_pack}" oninput="previewData[${i}].price_per_pack=this.value" />
+            <input class="form-control" type="number" value="${m.gst_percent}" oninput="previewData[${i}].gst_percent=this.value" />
             <input class="form-control" type="number" value="${m.stock_quantity}" oninput="previewData[${i}].stock_quantity=this.value" />
             <button class="btn btn-outline btn-sm" onclick="removePreviewRow(${i})" title="Remove">×</button>
           </div>
@@ -606,8 +719,11 @@
           brand_names: m.brand_names || '',
           category: m.category || '',
           dosage_forms: m.dosage_forms || '',
+          strength: m.strength || '',
           schedule: m.schedule || 'h',
-          price: m.price !== '' && m.price != null ? parseFloat(m.price) : null,
+          pack_size: m.pack_size !== '' && m.pack_size != null ? parseInt(m.pack_size) : 1,
+          price_per_pack: m.price_per_pack !== '' && m.price_per_pack != null ? parseFloat(m.price_per_pack) : null,
+          gst_percent: m.gst_percent !== '' && m.gst_percent != null ? parseFloat(m.gst_percent) : null,
           stock_quantity: m.stock_quantity !== '' && m.stock_quantity != null ? parseInt(m.stock_quantity) : null
         }));
 

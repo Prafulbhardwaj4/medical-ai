@@ -11,6 +11,7 @@ class HospitalMedicine(Base):
     brand_names = Column(Text, nullable=True)
     category = Column(String, nullable=True)
     dosage_forms = Column(String, nullable=True)
+    strength = Column(String, nullable=True)  # e.g. "500mg" for tablets, "125mg/5ml" for syrups
     schedule = Column(String, nullable=False, default="otc")
     price = Column(Float, nullable=True)  # computed: price_per_pack / pack_size, kept for backward compat
     pack_size = Column(Integer, nullable=False, default=1)  # e.g. 10 tablets per strip; 1 for syrup/injection/etc
