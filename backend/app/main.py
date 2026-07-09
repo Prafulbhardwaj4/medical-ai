@@ -13,6 +13,10 @@ from app.routers import admin as admin_router
 from app.routers import audit as audit_router
 from app.routers import nurses as nurses_router
 from app.routers import attendance as attendance_router
+from app.routers import medicines as medicines_router
+from app.routers import tests as tests_router
+from app.routers import lab as lab_router
+from app.routers import pharmacy as pharmacy_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 from app.models.audit_log import AuditLog
@@ -20,6 +24,8 @@ from app.models.checkin import Checkin
 from app.models.attendance import AttendanceRecord
 from app.models.test_catalog import TestCatalogItem
 from app.models.room import Room
+from app.models.hospital_medicine import HospitalMedicine
+from app.models.test_order import TestOrder
 from app.config import settings
 import warnings
 import os
@@ -61,6 +67,10 @@ app.include_router(admin_router.router)
 app.include_router(audit_router.router)
 app.include_router(nurses_router.router)
 app.include_router(attendance_router.router)
+app.include_router(medicines_router.router)
+app.include_router(tests_router.router)
+app.include_router(lab_router.router)
+app.include_router(pharmacy_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
 

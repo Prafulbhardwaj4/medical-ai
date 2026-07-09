@@ -97,3 +97,135 @@ async def structure_transcript(transcript: str, patient_history: str = "") -> di
         return json.loads(content)
     except json.JSONDecodeError:
         raise Exception(f"Groq returned invalid JSON: {content}")
+
+
+MEDICINE_EXTRACTION_PROMPT = """You are extracting a hospital's medicine formulary from raw text taken from a PDF or Excel file.
+The text may be messy, tabular, or inconsistently formatted.
+
+Return ONLY a valid JSON array. Each element must have exactly these fields:
+{
+  "generic_name": "string - generic/chemical name, required",
+  "brand_names": "string - comma separated brand names if present, else empty string",
+  "category": "string - drug category e.g. Antibiotic, Analgesic, empty string if unclear",
+  "dosage_forms": "string - e.g. Tablet, Syrup, Injection, empty string if unclear",
+  "schedule": "string - one of: otc, h, h1, x. Default to 'h' if unclear, 'otc' for common OTC drugs.",
+  "price": "number or null - unit price if present in source, else null",
+  "stock_quantity": "number or null - stock count if present in source, else null"
+}
+
+Rules:
+- Skip rows that are clearly headers, blank, or not medicines.
+- Do not invent prices or stock values that are not present in the source text.
+- Do not include any explanation or markdown — only the raw JSON array.
+"""
+
+
+async def extract_medicines(raw_text: str) -> list:
+    """Send raw extracted text (from PDF/Excel) to Groq and return a structured medicine list."""
+
+    truncated = raw_text[:15000]
+
+    headers = {
+        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": MEDICINE_EXTRACTION_PROMPT},
+            {"role": "user", "content": f"Source text:\n{truncated}"}
+        ],
+        "temperature": 0.1,
+        "max_tokens": 4000
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(GROQ_API_URL, headers=headers, json=payload)
+
+    if response.status_code != 200:
+        raise Exception(f"Groq API error {response.status_code}: {response.text}")
+
+    content = response.json()["choices"][0]["message"]["content"].strip()
+
+    if content.startswith("```"):
+        content = content.split("```")[1]
+        if content.startswith("json"):
+            content = content[4:]
+        content = content.strip()
+
+    try:
+        result = json.loads(content)
+    except json.JSONDecodeError:
+        raise Exception(f"Groq returned invalid JSON: {content}")
+
+    if not isinstance(result, list):
+        raise Exception("Groq did not return a JSON array")
+
+    return result
+
+
+TEST_EXTRACTION_PROMPT = """You are extracting a hospital's diagnostic test/lab catalog from raw text taken from a PDF or Excel file.
+The text may be messy, tabular, or inconsistently formatted.
+
+Return ONLY a valid JSON array. Each element must have exactly these fields:
+{
+  "test_name": "string - name of the test, required",
+  "category": "string - e.g. Hematology, Biochemistry, Radiology, empty string if unclear",
+  "price": "number or null - test fee if present in source, else null",
+  "reference_range_male": "string - normal reference range for male patients, empty string if not present",
+  "reference_range_female": "string - normal reference range for female patients, empty string if not present",
+  "unit": "string - unit of measurement e.g. mg/dL, empty string if not present",
+  "turnaround_hours": "number or null - turnaround time in hours if present, else null"
+}
+
+Rules:
+- Skip rows that are clearly headers, blank, or not tests.
+- Do not invent prices, ranges, or turnaround times that are not present in the source text.
+- Do not include any explanation or markdown — only the raw JSON array.
+"""
+
+
+async def extract_tests(raw_text: str) -> list:
+    """Send raw extracted text (from PDF/Excel) to Groq and return a structured test list."""
+
+    truncated = raw_text[:15000]
+
+    headers = {
+        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": TEST_EXTRACTION_PROMPT},
+            {"role": "user", "content": f"Source text:\n{truncated}"}
+        ],
+        "temperature": 0.1,
+        "max_tokens": 4000
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(GROQ_API_URL, headers=headers, json=payload)
+
+    if response.status_code != 200:
+        raise Exception(f"Groq API error {response.status_code}: {response.text}")
+
+    content = response.json()["choices"][0]["message"]["content"].strip()
+
+    if content.startswith("```"):
+        content = content.split("```")[1]
+        if content.startswith("json"):
+            content = content[4:]
+        content = content.strip()
+
+    try:
+        result = json.loads(content)
+    except json.JSONDecodeError:
+        raise Exception(f"Groq returned invalid JSON: {content}")
+
+    if not isinstance(result, list):
+        raise Exception("Groq did not return a JSON array")
+
+    return result

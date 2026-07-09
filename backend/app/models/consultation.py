@@ -23,6 +23,7 @@ class Consultation(Base):
     nurse_instructions = Column(Text, nullable=True)
     vitals = Column(Text, nullable=True)  # JSON: {bp, temperature, pulse, weight, spo2}
     recommended_test_ids = Column(Text, nullable=True)  # JSON list of TestCatalogItem ids
+    ordered_tests = Column(Text, nullable=True)  # JSON list of {test_id, test_name, price, status}
     is_voided = Column(Boolean, default=False)
 
     has_pending_tests = Column(Boolean, default=False)

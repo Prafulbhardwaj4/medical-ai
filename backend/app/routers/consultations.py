@@ -18,6 +18,7 @@ from app.models.doctor import Doctor as DoctorModel
 from app.models.checkin import Checkin
 from app.models.hospital import Hospital
 from app.models.test_catalog import TestCatalogItem
+from app.models.test_order import TestOrder
 from app.schemas.consultation import ConfirmPrescriptionPayload
 from app.config import settings
 from sqlalchemy import exists, func
@@ -425,6 +426,7 @@ def get_history(
             followup=c.followup,
             whatsapp_status=c.whatsapp_status,
             vitals=c.vitals,
+            ordered_tests=c.ordered_tests,
             doctor_name=f"{doctor.title} {doctor.name}" if doctor else "—",
             doctor_specialization=doctor.specialization if doctor else None
         )
@@ -684,12 +686,27 @@ def confirm_prescription(
             TestCatalogItem.hospital_id == current_doctor.hospital_id
         ).all()
         consultation.recommended_test_ids = json.dumps([t.id for t in test_items])
+        consultation.ordered_tests = json.dumps([
+            {"test_id": t.id, "test_name": t.name, "price": t.fee, "status": "payment_pending"}
+            for t in test_items
+        ])
         total_test_fee = sum(t.fee for t in test_items)
         if total_test_fee > 0:
             billing_target = todays_checkin if todays_checkin else fallback_checkin
             billing_target.test_fee = total_test_fee
             if billing_target.is_paid:
                 billing_target.is_paid = False
+
+        for t in test_items:
+            db.add(TestOrder(
+                consultation_id=consultation.id,
+                patient_id=consultation.patient_id,
+                hospital_id=current_doctor.hospital_id,
+                test_id=t.id,
+                test_name=t.name,
+                price=t.fee,
+                status="payment_pending"
+            ))
 
     consultation.token_number = token_number
 

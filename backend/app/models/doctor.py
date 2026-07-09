@@ -11,6 +11,8 @@ class UserRole(enum.Enum):
     doctor = "doctor"
     receptionist = "receptionist"
     nurse = "nurse"
+    lab = "lab"
+    pharmacy = "pharmacy"
 
 class Doctor(Base):
     __tablename__ = "doctors"

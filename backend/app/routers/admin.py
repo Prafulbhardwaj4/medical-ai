@@ -149,7 +149,7 @@ def create_doctor(
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "receptionist"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    if role not in ["doctor", "sub_admin", "receptionist", "nurse"]:
+    if role not in ["doctor", "sub_admin", "receptionist", "nurse", "lab", "pharmacy"]:
         raise HTTPException(status_code=400, detail="Invalid role")
 
     if current_doctor.role.value == "sub_admin" and role != "doctor":
@@ -332,7 +332,7 @@ def list_doctors(
 
     doctors = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.receptionist, UserRole.nurse])
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.receptionist, UserRole.nurse, UserRole.lab, UserRole.pharmacy])
     ).all()
 
     now = datetime.utcnow()

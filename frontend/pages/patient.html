@@ -371,8 +371,22 @@
       }
     }
 
+    let testOrdersByConsultation = {};
+
+    async function loadTestOrders() {
+      try {
+        const orders = await api("GET", `/patients/${patientId}/test-orders`);
+        testOrdersByConsultation = {};
+        orders.forEach(o => {
+          if (!testOrdersByConsultation[o.consultation_id]) testOrdersByConsultation[o.consultation_id] = [];
+          testOrdersByConsultation[o.consultation_id].push(o);
+        });
+      } catch (e) { }
+    }
+
     async function loadHistory() {
       try {
+        await loadTestOrders();
         const visits = await api("GET", `/consultations/history/${patientId}`);
         if (!visits) return;
         document.getElementById("visit-count").textContent = `${visits.length} visit${visits.length !== 1 ? "s" : ""}`;
@@ -442,6 +456,19 @@
               <div class="detail-label">Tests</div>
               <div>${tests.map(t => `<span class="test-pill">${t}</span>`).join("")}</div>
             </div>` : ""}
+            ${(testOrdersByConsultation[v.id] || []).length ? `<div class="detail-section">
+              <div class="detail-label">Lab Reports</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                ${(testOrdersByConsultation[v.id] || []).map(o => `
+                  <span class="test-pill" style="display:flex;align-items:center;gap:6px">
+                    ${o.test_name}
+                    ${o.status === 'completed'
+                      ? `<button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick="downloadTestReport(${o.id})">View Report</button>`
+                      : `<span class="badge badge-grey" style="font-size:10px">${o.status.replace('_',' ')}</span>`}
+                  </span>
+                `).join("")}
+              </div>
+            </div>` : ""}
             ${v.advice ? `<div class="detail-section"><div class="detail-label">Advice</div><div class="detail-value">${v.advice}</div></div>` : ""}
             ${v.followup ? `<div class="detail-section"><div class="detail-label">Follow-up</div><div class="detail-value">${v.followup}</div></div>` : ""}
           </div>
@@ -450,6 +477,20 @@
 
       } catch (e) {
         toast(e.message, "error");
+      }
+    }
+
+    async function downloadTestReport(orderId) {
+      try {
+        const response = await fetch(`${BASE}/lab/orders/${orderId}/report`, {
+          headers: { "Authorization": `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error("Report not found");
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+      } catch (e) {
+        toast("Could not load report", "error");
       }
     }
 

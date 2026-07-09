@@ -134,6 +134,11 @@
             </p>
             <button class="btn btn-primary btn-sm" id="btn-mark-paid" style="width:100%;margin-top:8px" onclick="markPaid()">Mark as Paid</button>
           </div>
+          <div id="pending-tests-row" class="no-print" style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
+            <p style="font-weight:600;margin-bottom:8px">Pending Test Fees</p>
+            <div id="pending-tests-list"></div>
+            <p style="margin-top:8px"><strong>Total Test Fees:</strong> ₹<span id="pending-tests-total">0</span></p>
+          </div>
           <div style="display:flex;gap:10px" class="no-print">
             <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
             <button class="btn btn-primary" style="flex:1" onclick="goToStep('search')">New Check-In</button>
@@ -303,6 +308,7 @@
         const today = await api("GET", `/patients/${p.id}/checkin-today`);
         if (today.exists) {
           showExistingToken(today);
+          loadPendingTestFees(p.id);
           return;
         }
       } catch (e) {}
@@ -420,6 +426,7 @@
         }
         currentCheckinId = result.checkin_id;
         renderBillingRow(billingOn, result.total_fee, result.is_paid);
+        loadPendingTestFees(selectedPatient.id);
         document.getElementById('step-doctor').style.display = 'none';
         document.getElementById('step-token').style.display = '';
         loadAllPatients();
@@ -449,6 +456,36 @@
         badge.textContent = 'Unpaid';
         btn.style.display = '';
       }
+    }
+
+    async function loadPendingTestFees(patientId) {
+      try {
+        const orders = await api("GET", `/patients/${patientId}/pending-test-fees`);
+        renderPendingTestFees(orders, patientId);
+      } catch (e) { }
+    }
+
+    function renderPendingTestFees(orders, patientId) {
+      const row = document.getElementById('pending-tests-row');
+      const list = document.getElementById('pending-tests-list');
+      if (!orders.length) { row.style.display = 'none'; return; }
+      row.style.display = '';
+      list.innerHTML = orders.map(o => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;gap:10px">
+          <span>${o.test_name} — ₹${o.price}</span>
+          <button class="btn btn-outline btn-sm" onclick="markTestFeePaid(${o.id}, ${patientId})">Mark Paid</button>
+        </div>
+      `).join('');
+      const total = orders.reduce((s, o) => s + (o.price || 0), 0);
+      document.getElementById('pending-tests-total').textContent = total.toFixed(2);
+    }
+
+    async function markTestFeePaid(orderId, patientId) {
+      try {
+        await api("POST", `/patients/test-orders/${orderId}/mark-paid`, {});
+        toast('Test fee marked paid.', 'success');
+        loadPendingTestFees(patientId);
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     async function markPaid() {

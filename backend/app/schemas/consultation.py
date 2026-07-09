@@ -67,6 +67,7 @@ class ConsultationHistoryItem(BaseModel):
     doctor_name: Optional[str] = None
     doctor_specialization: Optional[str] = None
     vitals: Optional[str] = None
+    ordered_tests: Optional[str] = None
 
     class Config:
         from_attributes = True

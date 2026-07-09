@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Medicine Catalog — MedScribe</title>
+  <link rel="stylesheet" href="../css/style.css?v=3" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="topbar-brand">Med<span>Scribe</span></div>
+      </div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Hospital Admin</div>
+      <a class="nav-item" href="analytics.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Overview
+      </a>
+      <a class="nav-item" href="analytics.html?section=patients">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+        Patients
+      </a>
+      <a class="nav-item" href="analytics.html?section=consultations">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        Consultations
+      </a>
+      <a class="nav-item" href="analytics.html?section=medicines">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+        Medicines
+      </a>
+      <a class="nav-item" href="analytics.html?section=tests">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+        </svg>
+        Tests & Diagnoses
+      </a>
+      <a class="nav-item" href="analytics.html?section=demographics">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Demographics
+      </a>
+      <a class="nav-item" id="medicines-billing-link" href="analytics.html?section=billing" style="display:none">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Billing
+      </a>
+      <a class="nav-item" href="doctors.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+        Manage Staff
+      </a>
+      <a class="nav-item active" href="medicines.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+        Medicine Catalog
+      </a>
+      <a class="nav-item" href="#" onclick="toast('Complaints & Suggestions — Coming Soon','info');return false;">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+        </svg>
+        Complaints
+      </a>
+      <a class="nav-item" href="attendance.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+        Attendance
+      </a>
+      <a class="nav-item" href="rooms.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2M19 21H5m0 0H3m9-9h.01" />
+        </svg>
+        Rooms
+      </a>
+      <a class="nav-item" href="#" onclick="toast('Reports — Coming Soon','info');return false;">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        Reports
+      </a>
+      <a class="nav-item" href="audit.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+        Audit Log
+      </a>
+    </nav>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+    <main class="main-content">
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <h2 style="margin:0">Medicine Catalog</h2>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="triggerUpload()">Upload PDF/Excel</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddModal()">Add Medicine</button>
+          </div>
+        </div>
+        <input type="file" id="upload-input" accept=".pdf,.xlsx,.xls" style="display:none" onchange="handleFileSelected(event)" />
+
+        <div style="display:grid;grid-template-columns:1fr 180px 160px;gap:10px;margin:16px 0 20px">
+          <input class="form-control" id="med-search" placeholder="Search by generic or brand name…" oninput="loadMedicines()" />
+          <select class="form-control" id="med-category-filter" onchange="loadMedicines()">
+            <option value="">All Categories</option>
+          </select>
+          <select class="form-control" id="med-schedule-filter" onchange="loadMedicines()">
+            <option value="">All Schedules</option>
+            <option value="otc">OTC</option>
+            <option value="h">H</option>
+            <option value="h1">H1</option>
+            <option value="x">X</option>
+          </select>
+        </div>
+
+        <div id="medicines-list"><p style="color:var(--slate)">Loading…</p></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add/Edit Medicine Modal -->
+  <div class="modal-overlay" id="modal-medicine">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="medicine-modal-title">Add Medicine</h2>
+        <button class="modal-close" onclick="closeMedicineModal()">×</button>
+      </div>
+      <input type="hidden" id="m-id" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Generic Name</label>
+      <input class="form-control" id="m-generic" placeholder="e.g. Paracetamol" style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Brand Names</label>
+      <input class="form-control" id="m-brands" placeholder="Comma separated, e.g. Crocin, Dolo" style="margin-bottom:14px" />
+      <div style="display:flex;gap:12px;margin-bottom:14px">
+        <input class="form-control" id="m-category" placeholder="Category" style="flex:1" />
+        <input class="form-control" id="m-form" placeholder="Dosage Form (Tablet, Syrup…)" style="flex:1" />
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:14px">
+        <select class="form-control" id="m-schedule" style="flex:1">
+          <option value="otc">OTC</option>
+          <option value="h">H</option>
+          <option value="h1">H1</option>
+          <option value="x">X</option>
+        </select>
+        <input class="form-control" id="m-price" type="number" min="0" step="0.01" placeholder="Price (₹)" style="flex:1" />
+        <input class="form-control" id="m-stock" type="number" min="0" step="1" placeholder="Stock Qty" style="flex:1" />
+      </div>
+      <div class="err-msg" id="medicine-modal-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="submitMedicineForm()">Save</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeMedicineModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Preview Modal -->
+  <div class="modal-overlay" id="modal-upload-preview">
+    <div class="modal" style="max-width:900px;width:95%">
+      <div class="modal-header">
+        <h2>Review Extracted Medicines</h2>
+        <button class="modal-close" onclick="closeUploadPreview()">×</button>
+      </div>
+      <p style="color:var(--slate);font-size:13px;margin-bottom:14px">Edit any field before confirming. Rows are not saved until you click Confirm & Save All.</p>
+      <div id="upload-loading" style="display:none;padding:30px;text-align:center;color:var(--slate)">Extracting medicines, please wait…</div>
+      <div id="upload-preview-table" style="max-height:50vh;overflow-y:auto"></div>
+      <div class="err-msg" id="upload-modal-err" style="margin:12px 0"></div>
+      <div style="display:flex;gap:12px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmBulkImport()">Confirm & Save All</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeUploadPreview()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="../js/api.js?v=3"></script>
+  <script>
+    const doc = getDoctor();
+    if (!doc || !["admin", "sub_admin"].includes(doc.role)) window.location.href = "dashboard.html";
+    if (!requireAuth()) throw new Error("Not authenticated");
+    fillTopbar();
+
+    if (doc?.billing_enabled) document.getElementById('medicines-billing-link').style.display = '';
+
+    const SCHEDULE_BADGE = { otc: 'badge-green', h: 'badge-amber', h1: 'badge-warn', x: 'badge-red' };
+
+    let previewData = [];
+
+    function scheduleBadge(schedule) {
+      const cls = SCHEDULE_BADGE[schedule] || 'badge-grey';
+      return `<span class="badge ${cls}">${(schedule || '').toUpperCase()}</span>`;
+    }
+
+    async function loadMedicines() {
+      try {
+        const params = new URLSearchParams();
+        const search = document.getElementById('med-search').value.trim();
+        const category = document.getElementById('med-category-filter').value;
+        const schedule = document.getElementById('med-schedule-filter').value;
+        if (search) params.append('search', search);
+        if (category) params.append('category', category);
+        if (schedule) params.append('schedule', schedule);
+
+        const items = await api("GET", `/admin/medicines?${params.toString()}`);
+        renderMedicines(items);
+        populateCategoryFilter(items);
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function populateCategoryFilter(items) {
+      const select = document.getElementById('med-category-filter');
+      const current = select.value;
+      const categories = [...new Set(items.map(i => i.category).filter(Boolean))].sort();
+      select.innerHTML = '<option value="">All Categories</option>' +
+        categories.map(c => `<option value="${sanitize(c)}">${sanitize(c)}</option>`).join('');
+      select.value = current;
+    }
+
+    function renderMedicines(items) {
+      const el = document.getElementById('medicines-list');
+      if (!items.length) {
+        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No medicines added yet.</p>';
+        return;
+      }
+      el.innerHTML = items.map(m => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:220px">
+            <strong>${sanitize(m.generic_name)}</strong>
+            ${m.brand_names ? `<div style="font-size:12px;color:var(--slate)">${sanitize(m.brand_names)}</div>` : ''}
+          </div>
+          <div style="font-size:12px;color:var(--slate);min-width:100px">${sanitize(m.category || '—')}</div>
+          <div>${scheduleBadge(m.schedule)}</div>
+          <div style="min-width:80px;font-size:13px">${m.price != null ? '₹' + m.price : '—'}</div>
+          <div style="min-width:70px;font-size:13px">Stock: ${m.stock_quantity != null ? m.stock_quantity : '—'}</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m)})'>Edit</button>
+            <button class="btn btn-outline btn-sm" onclick="deactivateMedicine(${m.id})">Deactivate</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openAddModal() {
+      document.getElementById('medicine-modal-title').textContent = 'Add Medicine';
+      document.getElementById('m-id').value = '';
+      document.getElementById('m-generic').value = '';
+      document.getElementById('m-brands').value = '';
+      document.getElementById('m-category').value = '';
+      document.getElementById('m-form').value = '';
+      document.getElementById('m-schedule').value = 'otc';
+      document.getElementById('m-price').value = '';
+      document.getElementById('m-stock').value = '';
+      document.getElementById('medicine-modal-err').textContent = '';
+      document.getElementById('modal-medicine').classList.add('open');
+    }
+
+    function openEditModal(m) {
+      document.getElementById('medicine-modal-title').textContent = 'Edit Medicine';
+      document.getElementById('m-id').value = m.id;
+      document.getElementById('m-generic').value = m.generic_name || '';
+      document.getElementById('m-brands').value = m.brand_names || '';
+      document.getElementById('m-category').value = m.category || '';
+      document.getElementById('m-form').value = m.dosage_forms || '';
+      document.getElementById('m-schedule').value = m.schedule || 'otc';
+      document.getElementById('m-price').value = m.price != null ? m.price : '';
+      document.getElementById('m-stock').value = m.stock_quantity != null ? m.stock_quantity : '';
+      document.getElementById('medicine-modal-err').textContent = '';
+      document.getElementById('modal-medicine').classList.add('open');
+    }
+
+    function closeMedicineModal() {
+      document.getElementById('modal-medicine').classList.remove('open');
+    }
+
+    async function submitMedicineForm() {
+      const id = document.getElementById('m-id').value;
+      const generic_name = document.getElementById('m-generic').value.trim();
+      const errEl = document.getElementById('medicine-modal-err');
+      if (!generic_name) { errEl.textContent = 'Generic name is required.'; return; }
+
+      const payload = {
+        generic_name,
+        brand_names: document.getElementById('m-brands').value.trim(),
+        category: document.getElementById('m-category').value.trim(),
+        dosage_forms: document.getElementById('m-form').value.trim(),
+        schedule: document.getElementById('m-schedule').value,
+        price: document.getElementById('m-price').value ? parseFloat(document.getElementById('m-price').value) : null,
+        stock_quantity: document.getElementById('m-stock').value ? parseInt(document.getElementById('m-stock').value) : null
+      };
+
+      try {
+        if (id) {
+          await api("PATCH", `/admin/medicines/${id}`, payload);
+          toast('Medicine updated.', 'success');
+        } else {
+          await api("POST", `/admin/medicines`, payload);
+          toast('Medicine added.', 'success');
+        }
+        closeMedicineModal();
+        loadMedicines();
+      } catch (e) { errEl.textContent = e.message; }
+    }
+
+    async function deactivateMedicine(id) {
+      try {
+        await api("DELETE", `/admin/medicines/${id}`);
+        toast('Medicine deactivated.', 'success');
+        loadMedicines();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function triggerUpload() {
+      document.getElementById('upload-input').click();
+    }
+
+    async function handleFileSelected(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      event.target.value = '';
+
+      document.getElementById('modal-upload-preview').classList.add('open');
+      document.getElementById('upload-loading').style.display = 'block';
+      document.getElementById('upload-preview-table').innerHTML = '';
+      document.getElementById('upload-modal-err').textContent = '';
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const result = await api("POST", "/admin/medicines/upload", formData, true);
+        previewData = (result.medicines || []).map(m => ({
+          generic_name: m.generic_name || '',
+          brand_names: m.brand_names || '',
+          category: m.category || '',
+          dosage_forms: m.dosage_forms || '',
+          schedule: m.schedule || 'h',
+          price: m.price != null ? m.price : '',
+          stock_quantity: m.stock_quantity != null ? m.stock_quantity : ''
+        }));
+        renderPreviewTable();
+      } catch (e) {
+        document.getElementById('upload-modal-err').textContent = e.message;
+      } finally {
+        document.getElementById('upload-loading').style.display = 'none';
+      }
+    }
+
+    function renderPreviewTable() {
+      const el = document.getElementById('upload-preview-table');
+      if (!previewData.length) {
+        el.innerHTML = '<p style="color:var(--slate-light)">No medicines extracted from this file.</p>';
+        return;
+      }
+      el.innerHTML = `
+        <div style="display:grid;grid-template-columns:2fr 2fr 1.2fr 1.2fr 0.8fr 0.8fr 0.8fr 40px;gap:6px;font-size:12px;color:var(--slate);padding:0 0 8px;font-weight:600">
+          <div>Generic Name</div><div>Brand Names</div><div>Category</div><div>Form</div><div>Schedule</div><div>Price</div><div>Stock</div><div></div>
+        </div>
+        ${previewData.map((m, i) => `
+          <div style="display:grid;grid-template-columns:2fr 2fr 1.2fr 1.2fr 0.8fr 0.8fr 0.8fr 40px;gap:6px;margin-bottom:6px">
+            <input class="form-control" value="${sanitize(m.generic_name)}" oninput="previewData[${i}].generic_name=this.value" />
+            <input class="form-control" value="${sanitize(m.brand_names)}" oninput="previewData[${i}].brand_names=this.value" />
+            <input class="form-control" value="${sanitize(m.category)}" oninput="previewData[${i}].category=this.value" />
+            <input class="form-control" value="${sanitize(m.dosage_forms)}" oninput="previewData[${i}].dosage_forms=this.value" />
+            <select class="form-control" onchange="previewData[${i}].schedule=this.value">
+              ${['otc','h','h1','x'].map(s => `<option value="${s}" ${m.schedule === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}
+            </select>
+            <input class="form-control" type="number" value="${m.price}" oninput="previewData[${i}].price=this.value" />
+            <input class="form-control" type="number" value="${m.stock_quantity}" oninput="previewData[${i}].stock_quantity=this.value" />
+            <button class="btn btn-outline btn-sm" onclick="removePreviewRow(${i})" title="Remove">×</button>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    function removePreviewRow(i) {
+      previewData.splice(i, 1);
+      renderPreviewTable();
+    }
+
+    function closeUploadPreview() {
+      document.getElementById('modal-upload-preview').classList.remove('open');
+      previewData = [];
+    }
+
+    async function confirmBulkImport() {
+      const errEl = document.getElementById('upload-modal-err');
+      if (!previewData.length) { errEl.textContent = 'No rows to save.'; return; }
+
+      const medicines = previewData
+        .filter(m => m.generic_name && m.generic_name.trim())
+        .map(m => ({
+          generic_name: m.generic_name.trim(),
+          brand_names: m.brand_names || '',
+          category: m.category || '',
+          dosage_forms: m.dosage_forms || '',
+          schedule: m.schedule || 'h',
+          price: m.price !== '' && m.price != null ? parseFloat(m.price) : null,
+          stock_quantity: m.stock_quantity !== '' && m.stock_quantity != null ? parseInt(m.stock_quantity) : null
+        }));
+
+      try {
+        await api("POST", "/admin/medicines/bulk-confirm", { medicines });
+        toast(`${medicines.length} medicines saved.`, 'success');
+        closeUploadPreview();
+        loadMedicines();
+      } catch (e) { errEl.textContent = e.message; }
+    }
+
+    loadMedicines();
+  </script>
+</body>
+</html>

@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test Catalog — MedScribe</title>
+  <link rel="stylesheet" href="../css/style.css?v=3" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="topbar-brand">Med<span>Scribe</span></div>
+      </div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Hospital Admin</div>
+      <a class="nav-item" href="analytics.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Overview
+      </a>
+      <a class="nav-item" href="analytics.html?section=patients">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+        Patients
+      </a>
+      <a class="nav-item" href="analytics.html?section=consultations">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        Consultations
+      </a>
+      <a class="nav-item" href="analytics.html?section=medicines">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+        Medicines
+      </a>
+      <a class="nav-item" href="analytics.html?section=tests">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+        </svg>
+        Tests & Diagnoses
+      </a>
+      <a class="nav-item" href="analytics.html?section=demographics">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Demographics
+      </a>
+      <a class="nav-item" id="tests-billing-link" href="analytics.html?section=billing" style="display:none">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Billing
+      </a>
+      <a class="nav-item" href="doctors.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+        Manage Staff
+      </a>
+      <a class="nav-item" href="medicines.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+        Medicine Catalog
+      </a>
+      <a class="nav-item active" href="tests-catalog.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
+        </svg>
+        Test Catalog
+      </a>
+      <a class="nav-item" href="#" onclick="toast('Complaints & Suggestions — Coming Soon','info');return false;">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+        </svg>
+        Complaints
+      </a>
+      <a class="nav-item" href="attendance.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+        Attendance
+      </a>
+      <a class="nav-item" href="rooms.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2M19 21H5m0 0H3m9-9h.01" />
+        </svg>
+        Rooms
+      </a>
+      <a class="nav-item" href="#" onclick="toast('Reports — Coming Soon','info');return false;">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        Reports
+      </a>
+      <a class="nav-item" href="audit.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+        Audit Log
+      </a>
+    </nav>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+    <main class="main-content">
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <h2 style="margin:0">Test Catalog</h2>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="triggerUpload()">Upload PDF/Excel</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddModal()">Add Test</button>
+          </div>
+        </div>
+        <input type="file" id="upload-input" accept=".pdf,.xlsx,.xls" style="display:none" onchange="handleFileSelected(event)" />
+
+        <div style="display:grid;grid-template-columns:1fr 200px;gap:10px;margin:16px 0 20px">
+          <input class="form-control" id="test-search" placeholder="Search by test name…" oninput="loadTests()" />
+          <select class="form-control" id="test-category-filter" onchange="loadTests()">
+            <option value="">All Categories</option>
+          </select>
+        </div>
+
+        <div id="tests-list"><p style="color:var(--slate)">Loading…</p></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add/Edit Test Modal -->
+  <div class="modal-overlay" id="modal-test">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="test-modal-title">Add Test</h2>
+        <button class="modal-close" onclick="closeTestModal()">×</button>
+      </div>
+      <input type="hidden" id="t-id" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Test Name</label>
+      <input class="form-control" id="t-name" placeholder="e.g. Complete Blood Count" style="margin-bottom:14px" />
+      <div style="display:flex;gap:12px;margin-bottom:14px">
+        <input class="form-control" id="t-category" placeholder="Category" style="flex:1" />
+        <input class="form-control" id="t-price" type="number" min="0" step="0.01" placeholder="Price (₹)" style="flex:1" />
+        <input class="form-control" id="t-turnaround" type="number" min="0" step="1" placeholder="Turnaround (hrs)" style="flex:1" />
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:14px">
+        <input class="form-control" id="t-range-male" placeholder="Reference Range (Male)" style="flex:1" />
+        <input class="form-control" id="t-range-female" placeholder="Reference Range (Female)" style="flex:1" />
+        <input class="form-control" id="t-unit" placeholder="Unit (e.g. mg/dL)" style="flex:1" />
+      </div>
+      <div class="err-msg" id="test-modal-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="submitTestForm()">Save</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeTestModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Preview Modal -->
+  <div class="modal-overlay" id="modal-upload-preview">
+    <div class="modal" style="max-width:1000px;width:95%">
+      <div class="modal-header">
+        <h2>Review Extracted Tests</h2>
+        <button class="modal-close" onclick="closeUploadPreview()">×</button>
+      </div>
+      <p style="color:var(--slate);font-size:13px;margin-bottom:14px">Edit any field before confirming. Rows are not saved until you click Confirm & Save All.</p>
+      <div id="upload-loading" style="display:none;padding:30px;text-align:center;color:var(--slate)">Extracting tests, please wait…</div>
+      <div id="upload-preview-table" style="max-height:50vh;overflow-y:auto"></div>
+      <div class="err-msg" id="upload-modal-err" style="margin:12px 0"></div>
+      <div style="display:flex;gap:12px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmBulkImport()">Confirm & Save All</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeUploadPreview()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="../js/api.js?v=3"></script>
+  <script>
+    const doc = getDoctor();
+    if (!doc || !["admin", "sub_admin"].includes(doc.role)) window.location.href = "dashboard.html";
+    if (!requireAuth()) throw new Error("Not authenticated");
+    fillTopbar();
+
+    if (doc?.billing_enabled) document.getElementById('tests-billing-link').style.display = '';
+
+    let previewData = [];
+
+    async function loadTests() {
+      try {
+        const params = new URLSearchParams();
+        const search = document.getElementById('test-search').value.trim();
+        const category = document.getElementById('test-category-filter').value;
+        if (search) params.append('search', search);
+        if (category) params.append('category', category);
+
+        const items = await api("GET", `/admin/tests?${params.toString()}`);
+        renderTests(items);
+        populateCategoryFilter(items);
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function populateCategoryFilter(items) {
+      const select = document.getElementById('test-category-filter');
+      const current = select.value;
+      const categories = [...new Set(items.map(i => i.category).filter(Boolean))].sort();
+      select.innerHTML = '<option value="">All Categories</option>' +
+        categories.map(c => `<option value="${sanitize(c)}">${sanitize(c)}</option>`).join('');
+      select.value = current;
+    }
+
+    function renderTests(items) {
+      const el = document.getElementById('tests-list');
+      if (!items.length) {
+        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No tests added yet.</p>';
+        return;
+      }
+      el.innerHTML = items.map(t => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:220px">
+            <strong>${sanitize(t.test_name)}</strong>
+            ${(t.reference_range_male || t.reference_range_female) ? `<div style="font-size:12px;color:var(--slate)">M: ${sanitize(t.reference_range_male || '—')} · F: ${sanitize(t.reference_range_female || '—')}${t.unit ? ' ' + sanitize(t.unit) : ''}</div>` : ''}
+          </div>
+          <div style="font-size:12px;color:var(--slate);min-width:100px">${sanitize(t.category || '—')}</div>
+          <div style="min-width:80px;font-size:13px">₹${t.price}</div>
+          <div style="min-width:90px;font-size:13px">${t.turnaround_hours != null ? t.turnaround_hours + ' hrs' : '—'}</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(t)})'>Edit</button>
+            <button class="btn btn-outline btn-sm" onclick="deactivateTest(${t.id})">Deactivate</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openAddModal() {
+      document.getElementById('test-modal-title').textContent = 'Add Test';
+      document.getElementById('t-id').value = '';
+      document.getElementById('t-name').value = '';
+      document.getElementById('t-category').value = '';
+      document.getElementById('t-price').value = '';
+      document.getElementById('t-turnaround').value = '';
+      document.getElementById('t-range-male').value = '';
+      document.getElementById('t-range-female').value = '';
+      document.getElementById('t-unit').value = '';
+      document.getElementById('test-modal-err').textContent = '';
+      document.getElementById('modal-test').classList.add('open');
+    }
+
+    function openEditModal(t) {
+      document.getElementById('test-modal-title').textContent = 'Edit Test';
+      document.getElementById('t-id').value = t.id;
+      document.getElementById('t-name').value = t.test_name || '';
+      document.getElementById('t-category').value = t.category || '';
+      document.getElementById('t-price').value = t.price != null ? t.price : '';
+      document.getElementById('t-turnaround').value = t.turnaround_hours != null ? t.turnaround_hours : '';
+      document.getElementById('t-range-male').value = t.reference_range_male || '';
+      document.getElementById('t-range-female').value = t.reference_range_female || '';
+      document.getElementById('t-unit').value = t.unit || '';
+      document.getElementById('test-modal-err').textContent = '';
+      document.getElementById('modal-test').classList.add('open');
+    }
+
+    function closeTestModal() {
+      document.getElementById('modal-test').classList.remove('open');
+    }
+
+    async function submitTestForm() {
+      const id = document.getElementById('t-id').value;
+      const test_name = document.getElementById('t-name').value.trim();
+      const errEl = document.getElementById('test-modal-err');
+      if (!test_name) { errEl.textContent = 'Test name is required.'; return; }
+      const priceVal = document.getElementById('t-price').value;
+      if (priceVal === '') { errEl.textContent = 'Price is required.'; return; }
+
+      const payload = {
+        test_name,
+        category: document.getElementById('t-category').value.trim(),
+        price: parseFloat(priceVal),
+        turnaround_hours: document.getElementById('t-turnaround').value ? parseInt(document.getElementById('t-turnaround').value) : null,
+        reference_range_male: document.getElementById('t-range-male').value.trim(),
+        reference_range_female: document.getElementById('t-range-female').value.trim(),
+        unit: document.getElementById('t-unit').value.trim()
+      };
+
+      try {
+        if (id) {
+          await api("PATCH", `/admin/tests/${id}`, payload);
+          toast('Test updated.', 'success');
+        } else {
+          await api("POST", `/admin/tests`, payload);
+          toast('Test added.', 'success');
+        }
+        closeTestModal();
+        loadTests();
+      } catch (e) { errEl.textContent = e.message; }
+    }
+
+    async function deactivateTest(id) {
+      try {
+        await api("DELETE", `/admin/tests/${id}`);
+        toast('Test deactivated.', 'success');
+        loadTests();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function triggerUpload() {
+      document.getElementById('upload-input').click();
+    }
+
+    async function handleFileSelected(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      event.target.value = '';
+
+      document.getElementById('modal-upload-preview').classList.add('open');
+      document.getElementById('upload-loading').style.display = 'block';
+      document.getElementById('upload-preview-table').innerHTML = '';
+      document.getElementById('upload-modal-err').textContent = '';
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const result = await api("POST", "/admin/tests/upload", formData, true);
+        previewData = (result.tests || []).map(t => ({
+          test_name: t.test_name || '',
+          category: t.category || '',
+          price: t.price != null ? t.price : '',
+          turnaround_hours: t.turnaround_hours != null ? t.turnaround_hours : '',
+          reference_range_male: t.reference_range_male || '',
+          reference_range_female: t.reference_range_female || '',
+          unit: t.unit || ''
+        }));
+        renderPreviewTable();
+      } catch (e) {
+        document.getElementById('upload-modal-err').textContent = e.message;
+      } finally {
+        document.getElementById('upload-loading').style.display = 'none';
+      }
+    }
+
+    function renderPreviewTable() {
+      const el = document.getElementById('upload-preview-table');
+      if (!previewData.length) {
+        el.innerHTML = '<p style="color:var(--slate-light)">No tests extracted from this file.</p>';
+        return;
+      }
+      el.innerHTML = `
+        <div style="display:grid;grid-template-columns:1.6fr 1fr 0.8fr 0.8fr 1fr 1fr 0.8fr 40px;gap:6px;font-size:12px;color:var(--slate);padding:0 0 8px;font-weight:600">
+          <div>Test Name</div><div>Category</div><div>Price</div><div>Turnaround (hrs)</div><div>Range (M)</div><div>Range (F)</div><div>Unit</div><div></div>
+        </div>
+        ${previewData.map((t, i) => `
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 0.8fr 0.8fr 1fr 1fr 0.8fr 40px;gap:6px;margin-bottom:6px">
+            <input class="form-control" value="${sanitize(t.test_name)}" oninput="previewData[${i}].test_name=this.value" />
+            <input class="form-control" value="${sanitize(t.category)}" oninput="previewData[${i}].category=this.value" />
+            <input class="form-control" type="number" value="${t.price}" oninput="previewData[${i}].price=this.value" />
+            <input class="form-control" type="number" value="${t.turnaround_hours}" oninput="previewData[${i}].turnaround_hours=this.value" />
+            <input class="form-control" value="${sanitize(t.reference_range_male)}" oninput="previewData[${i}].reference_range_male=this.value" />
+            <input class="form-control" value="${sanitize(t.reference_range_female)}" oninput="previewData[${i}].reference_range_female=this.value" />
+            <input class="form-control" value="${sanitize(t.unit)}" oninput="previewData[${i}].unit=this.value" />
+            <button class="btn btn-outline btn-sm" onclick="removePreviewRow(${i})" title="Remove">×</button>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    function removePreviewRow(i) {
+      previewData.splice(i, 1);
+      renderPreviewTable();
+    }
+
+    function closeUploadPreview() {
+      document.getElementById('modal-upload-preview').classList.remove('open');
+      previewData = [];
+    }
+
+    async function confirmBulkImport() {
+      const errEl = document.getElementById('upload-modal-err');
+      if (!previewData.length) { errEl.textContent = 'No rows to save.'; return; }
+
+      const tests = previewData
+        .filter(t => t.test_name && t.test_name.trim())
+        .map(t => ({
+          test_name: t.test_name.trim(),
+          category: t.category || '',
+          price: t.price !== '' && t.price != null ? parseFloat(t.price) : null,
+          turnaround_hours: t.turnaround_hours !== '' && t.turnaround_hours != null ? parseInt(t.turnaround_hours) : null,
+          reference_range_male: t.reference_range_male || '',
+          reference_range_female: t.reference_range_female || '',
+          unit: t.unit || ''
+        }));
+
+      try {
+        await api("POST", "/admin/tests/bulk-confirm", { tests });
+        toast(`${tests.length} tests saved.`, 'success');
+        closeUploadPreview();
+        loadTests();
+      } catch (e) { errEl.textContent = e.message; }
+    }
+
+    loadTests();
+  </script>
+</body>
+</html>

@@ -296,7 +296,14 @@
 
         <div class="section-block" id="test-catalog-block" style="display:none">
           <div class="section-title">Recommended Tests (Billable)</div>
-          <div id="test-catalog-list" style="display:flex;flex-direction:column;gap:8px"></div>
+          <div style="position:relative;max-width:400px">
+            <input class="form-control" id="test-catalog-search" placeholder="Search tests to order…"
+              autocomplete="off" oninput="renderTestSuggestions()" onfocus="renderTestSuggestions()" />
+            <div id="test-suggestions" style="display:none;position:absolute;z-index:20;background:#fff;border:1px solid var(--border);
+              border-radius:8px;max-height:220px;overflow-y:auto;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.08);margin-top:4px"></div>
+          </div>
+          <div id="test-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
+          <div id="test-total-fee" style="margin-top:10px;font-size:14px;font-weight:600;display:none"></div>
         </div>
 
         <div class="section-block">
@@ -724,7 +731,7 @@
           return;
         }
 
-        const checkedTestIds = Array.from(document.querySelectorAll('#test-catalog-list input:checked')).map(i => parseInt(i.value));
+        const checkedTestIds = selectedTests.map(t => t.id);
         const data = await api("POST", `/consultations/confirm/${consultationId}`, { recommended_test_ids: checkedTestIds });
         window._tokenNumber = data.token_number;
         window._verifyHash = data.verify_hash;
@@ -869,19 +876,78 @@
       } catch (e) { }
     }
 
+    let hospitalTests = [];
+    let selectedTests = [];
+
     async function loadTestCatalog() {
       if (!getDoctor()?.billing_enabled) return;
       try {
-        const items = await api("GET", "/consultations/test-catalog");
+        const items = await api("GET", "/patients/hospital-tests");
         if (!items.length) return;
+        hospitalTests = items;
         document.getElementById('test-catalog-block').style.display = '';
-        document.getElementById('test-catalog-list').innerHTML = items.map(i => `
-          <label style="display:flex;align-items:center;gap:8px;font-size:14px">
-            <input type="checkbox" value="${i.id}" style="width:auto" /> ${i.name} — ₹${i.fee}
-          </label>
-        `).join('');
       } catch (e) { }
     }
+
+    function renderTestSuggestions() {
+      const box = document.getElementById('test-suggestions');
+      const query = document.getElementById('test-catalog-search').value.trim().toLowerCase();
+      const selectedIds = new Set(selectedTests.map(t => t.id));
+      const matches = hospitalTests
+        .filter(t => !selectedIds.has(t.id))
+        .filter(t => !query || t.test_name.toLowerCase().includes(query))
+        .slice(0, 20);
+
+      if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+
+      box.innerHTML = matches.map(t => `
+        <div onclick="selectTest(${t.id})" style="padding:8px 12px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between"
+          onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">
+          <span>${t.test_name}</span><span style="color:var(--slate)">₹${t.price}</span>
+        </div>
+      `).join('');
+      box.style.display = 'block';
+    }
+
+    function selectTest(id) {
+      const test = hospitalTests.find(t => t.id === id);
+      if (!test || selectedTests.some(t => t.id === id)) return;
+      selectedTests.push(test);
+      document.getElementById('test-catalog-search').value = '';
+      document.getElementById('test-suggestions').style.display = 'none';
+      renderTestChips();
+    }
+
+    function removeTest(id) {
+      selectedTests = selectedTests.filter(t => t.id !== id);
+      renderTestChips();
+    }
+
+    function renderTestChips() {
+      const chipsEl = document.getElementById('test-chips');
+      chipsEl.innerHTML = selectedTests.map(t => `
+        <span class="badge badge-teal" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
+          ${t.test_name} — ₹${t.price}
+          <span onclick="removeTest(${t.id})" style="cursor:pointer;font-weight:700">×</span>
+        </span>
+      `).join('');
+
+      const totalEl = document.getElementById('test-total-fee');
+      const total = selectedTests.reduce((sum, t) => sum + (t.price || 0), 0);
+      if (selectedTests.length) {
+        totalEl.style.display = 'block';
+        totalEl.textContent = `Total Test Fee: ₹${total}`;
+      } else {
+        totalEl.style.display = 'none';
+      }
+    }
+
+    document.addEventListener('click', (e) => {
+      const wrap = document.getElementById('test-catalog-block');
+      if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('test-suggestions').style.display = 'none';
+      }
+    });
 
     (async () => {
       try {

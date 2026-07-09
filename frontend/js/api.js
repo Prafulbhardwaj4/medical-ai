@@ -147,6 +147,10 @@ function redirectByRole(role) {
     window.location.href = '/pages/receptionist.html';
   } else if (role === 'nurse') {
     window.location.href = '/pages/nurse.html';
+  } else if (role === 'lab') {
+    window.location.href = '/pages/lab.html';
+  } else if (role === 'pharmacy') {
+    window.location.href = '/pages/pharmacy.html';
   } else {
     window.location.href = '/pages/dashboard.html';
   }

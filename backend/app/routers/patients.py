@@ -11,6 +11,8 @@ from app.models.consultation import Consultation
 from app.models.doctor import Doctor, UserRole
 from app.models.hospital import Hospital
 from app.models.checkin import Checkin
+from app.models.test_catalog import TestCatalogItem
+from app.models.test_order import TestOrder
 from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
@@ -585,3 +587,106 @@ def todays_queue(
             "status": "done" if c.token_number in confirmed_tokens else "waiting"
         })
     return result
+
+@router.get("/hospital-tests")
+def get_hospital_tests(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    items = db.query(TestCatalogItem).filter(
+        TestCatalogItem.hospital_id == current_doctor.hospital_id,
+        TestCatalogItem.is_active == True
+    ).order_by(TestCatalogItem.name).all()
+    return [
+        {"id": t.id, "test_name": t.name, "price": t.fee}
+        for t in items
+    ]
+
+@router.get("/{patient_id}/pending-test-fees")
+def get_pending_test_fees(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_end = datetime.combine(date.today(), datetime.max.time())
+
+    orders = db.query(TestOrder).filter(
+        TestOrder.patient_id == patient_id,
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.status == "payment_pending",
+        TestOrder.created_at >= today_start,
+        TestOrder.created_at <= today_end
+    ).order_by(TestOrder.created_at).all()
+
+    return [
+        {"id": o.id, "test_name": o.test_name, "price": o.price, "status": o.status}
+        for o in orders
+    ]
+
+
+@router.post("/test-orders/{order_id}/mark-paid")
+def mark_test_order_paid(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    order = db.query(TestOrder).filter(
+        TestOrder.id == order_id,
+        TestOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Test order not found")
+
+    if order.status != "payment_pending":
+        raise HTTPException(status_code=400, detail="Test order is not pending payment")
+
+    order.status = "paid"
+    order.paid_at = datetime.utcnow()
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="test_fee_paid",
+        target_type="test_order",
+        target_id=order.id,
+        target_label=order.test_name,
+        hospital_id=current_doctor.hospital_id
+    )
+
+    return {"id": order.id, "status": order.status, "paid_at": order.paid_at.isoformat()}
+
+@router.get("/{patient_id}/test-orders")
+def get_patient_test_orders(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    orders = db.query(TestOrder).filter(
+        TestOrder.patient_id == patient_id,
+        TestOrder.hospital_id == current_doctor.hospital_id
+    ).all()
+
+    return [
+        {
+            "id": o.id,
+            "consultation_id": o.consultation_id,
+            "test_name": o.test_name,
+            "status": o.status
+        }
+        for o in orders
+    ]

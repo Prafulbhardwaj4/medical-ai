@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lab — MedScribe</title>
+  <link rel="stylesheet" href="../css/style.css?v=3" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="topbar-brand">Med<span>Scribe</span></div>
+      </div>
+      <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
+        <div class="topbar-divider"></div>
+        <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
+      </div>
+    </header>
+
+    <nav class="sidebar">
+      <div class="sidebar-section-label">Navigation</div>
+      <div class="nav-item active">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
+        </svg>
+        Lab Queue
+      </div>
+    </nav>
+
+    <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+    <main class="main-content">
+      <div class="card" style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <strong>Today's Status:</strong>
+          <span class="badge badge-grey" id="lab-attendance-badge" style="margin-left:8px">Not marked</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-primary btn-sm" id="lab-btn-present" onclick="markLabAttendance('present')">Mark Present</button>
+          <button class="btn btn-outline btn-sm" id="lab-btn-break" onclick="markLabAttendance('on_break')" style="display:none">On Break</button>
+          <button class="btn btn-outline btn-sm" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>Lab Queue</h2>
+          <button class="btn btn-outline btn-sm" onclick="loadQueue()">Refresh</button>
+        </div>
+        <div id="lab-queue-list"><p style="color:var(--slate)">Loading…</p></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Result Entry Modal -->
+  <div class="modal-overlay" id="modal-result">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Enter Results</h2>
+        <button class="modal-close" onclick="closeResultModal()">×</button>
+      </div>
+      <p style="font-size:14px;color:var(--slate);margin-bottom:14px" id="result-test-label"></p>
+      <div id="result-fields"></div>
+      <div class="err-msg" id="result-modal-err" style="margin:12px 0"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="submitResult()">Save Results</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeResultModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="../js/api.js?v=3"></script>
+  <script>
+    if (!requireAuth()) throw new Error("Not authenticated");
+    if (getDoctor()?.role !== 'lab') window.location.href = 'login.html';
+    fillTopbar();
+
+    let labCurrentStatus = 'not_marked';
+    let currentOrderId = null;
+
+    async function loadLabAttendance() {
+      try {
+        const data = await api("GET", "/doctors/attendance/my-status");
+        renderLabBadge(data.status);
+      } catch (e) {}
+    }
+
+    function renderLabBadge(status) {
+      labCurrentStatus = status;
+      const badge = document.getElementById('lab-attendance-badge');
+      const btnPresent = document.getElementById('lab-btn-present');
+      const btnBreak = document.getElementById('lab-btn-break');
+      const btnOffDuty = document.getElementById('lab-btn-offduty');
+      if (status === 'present') {
+        badge.className = 'badge badge-green'; badge.textContent = 'Present';
+        btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
+      } else if (status === 'on_break') {
+        badge.className = 'badge badge-amber'; badge.textContent = 'On Break';
+        btnPresent.textContent = 'Resume'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = '';
+      } else if (status === 'off_duty') {
+        badge.className = 'badge badge-red'; badge.textContent = 'Off Duty';
+        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
+      } else {
+        badge.className = 'badge badge-grey'; badge.textContent = 'Not marked';
+        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
+      }
+    }
+
+    async function markLabAttendance(status) {
+      try {
+        const wasAlreadyPresent = labCurrentStatus === status;
+        await api("POST", "/doctors/attendance", { status, room_id: null });
+        renderLabBadge(status);
+        if (!wasAlreadyPresent) {
+          const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
+          toast(labels[status] || "Status updated.", "success");
+        }
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function loadQueue() {
+      try {
+        const items = await api("GET", "/lab/queue");
+        renderQueue(items);
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    const STATUS_LABEL = {
+        paid: "Payment Received",
+        sample_collected: "Sample Collected",
+        processing: "Processing",
+        completed: "Completed"
+      };
+      const STATUS_BADGE = {
+        paid: "badge-amber",
+        sample_collected: "badge-navy",
+        processing: "badge-teal",
+        completed: "badge-green"
+      };
+
+    function renderQueue(items) {
+      const el = document.getElementById('lab-queue-list');
+      if (!items.length) {
+        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No tests waiting in queue.</p>';
+        return;
+      }
+      el.innerHTML = items.map(o => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <strong>${sanitize(o.patient_name)}</strong>
+            <div style="font-size:12px;color:var(--slate)">Token ${sanitize(o.token_number)} · ${sanitize(o.test_name)}</div>
+          </div>
+          <div style="font-size:12px;color:var(--slate);min-width:100px">${o.waiting_minutes != null ? o.waiting_minutes + ' min waiting' : '—'}</div>
+          <div><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}">${STATUS_LABEL[o.status] || o.status}</span></div>
+          <div style="display:flex;gap:8px">
+            ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="advanceStatus(${o.id}, 'sample_collected')">Collect Sample</button>` : ''}
+            ${o.status === 'sample_collected' ? `<button class="btn btn-outline btn-sm" onclick="advanceStatus(${o.id}, 'processing')">Mark Processing</button>` : ''}
+            ${o.status === 'processing' ? `<button class="btn btn-primary btn-sm" onclick="openResultModal(${o.id}, '${sanitize(o.test_name)}')">Enter Results</button>` : ''}
+            ${o.status === 'completed' ? `<button class="btn btn-outline btn-sm" onclick="downloadReport(${o.id})">Download Report</button>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function downloadReport(orderId) {
+      try {
+        const response = await fetch(`${BASE}/lab/orders/${orderId}/report`, {
+          headers: { "Authorization": `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error("Report not found");
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+      } catch (e) {
+        toast("Could not load report", "error");
+      }
+    }
+
+    async function advanceStatus(orderId, status) {
+      try {
+        await api("PATCH", `/lab/orders/${orderId}/status`, { status });
+        toast('Status updated.', 'success');
+        loadQueue();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function openResultModal(orderId, testLabel) {
+      currentOrderId = orderId;
+      document.getElementById('result-test-label').textContent = testLabel;
+      document.getElementById('result-fields').innerHTML = `
+        <div class="form-group">
+          <label class="form-label">Result Value</label>
+          <input class="form-control" id="result-value" placeholder="e.g. 13.5 g/dL" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Flag</label>
+          <select class="form-control" id="result-flag">
+            <option value="N">Normal</option>
+            <option value="H">High</option>
+            <option value="L">Low</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes (optional)</label>
+          <input class="form-control" id="result-notes" placeholder="Any observations…" />
+        </div>
+      `;
+      document.getElementById('result-modal-err').textContent = '';
+      document.getElementById('modal-result').classList.add('open');
+    }
+
+    function closeResultModal() {
+      document.getElementById('modal-result').classList.remove('open');
+      currentOrderId = null;
+    }
+
+    async function submitResult() {
+      const value = document.getElementById('result-value').value.trim();
+      const errEl = document.getElementById('result-modal-err');
+      if (!value) { errEl.textContent = 'Result value is required.'; return; }
+
+      const results = {
+        value,
+        flag: document.getElementById('result-flag').value,
+        notes: document.getElementById('result-notes').value.trim()
+      };
+
+      try {
+        await api("POST", `/lab/orders/${currentOrderId}/result`, { results });
+        await api("PATCH", `/lab/orders/${currentOrderId}/status`, { status: "completed" });
+        toast('Results saved. Marked complete.', 'success');
+        closeResultModal();
+        loadQueue();
+      } catch (e) { errEl.textContent = e.message; }
+    }
+
+    loadLabAttendance();
+    loadQueue();
+  </script>
+</body>
+</html>

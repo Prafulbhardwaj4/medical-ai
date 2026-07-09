@@ -11,3 +11,8 @@ class TestCatalogItem(Base):
     fee = Column(Float, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    category = Column(String, nullable=True)
+    reference_range_male = Column(String, nullable=True)
+    reference_range_female = Column(String, nullable=True)
+    unit = Column(String, nullable=True)
+    turnaround_hours = Column(Integer, nullable=True)
