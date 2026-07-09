@@ -130,6 +130,7 @@ def list_hospitals(
     hospitals = db.query(Hospital).all()
     return [{"id": h.id, "name": h.name, "hospital_code": h.hospital_code, "hospital_type": h.hospital_type, "city": h.city, "is_active": h.is_active} for h in hospitals]
 
+@router.post("/doctors", status_code=201)
 def create_doctor(
     hospital_id: int,
     name: str,
