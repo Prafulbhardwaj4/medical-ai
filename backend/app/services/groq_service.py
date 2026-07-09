@@ -109,13 +109,15 @@ Return ONLY a valid JSON array. Each element must have exactly these fields:
   "category": "string - drug category e.g. Antibiotic, Analgesic, empty string if unclear",
   "dosage_forms": "string - e.g. Tablet, Syrup, Injection, empty string if unclear",
   "schedule": "string - one of: otc, h, h1, x. Default to 'h' if unclear, 'otc' for common OTC drugs.",
-  "price": "number or null - unit price if present in source, else null",
+  "pack_size": "number - units per strip/pack (e.g. 10 tablets per strip). Default to 1 if the source only gives a single item like a syrup bottle or injection vial, or if unclear.",
+  "price_per_pack": "number or null - price for the whole strip/pack/bottle as printed in the source, else null",
+  "gst_percent": "number or null - GST rate if explicitly present in source, else null",
   "stock_quantity": "number or null - stock count if present in source, else null"
 }
 
 Rules:
 - Skip rows that are clearly headers, blank, or not medicines.
-- Do not invent prices or stock values that are not present in the source text.
+- Do not invent prices, pack sizes, or stock values that are not present in the source text.
 - Do not include any explanation or markdown — only the raw JSON array.
 """
 

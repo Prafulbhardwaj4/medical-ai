@@ -154,10 +154,57 @@
       <input class="form-control" id="m-generic" placeholder="e.g. Paracetamol" style="margin-bottom:14px" />
       <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Brand Names</label>
       <input class="form-control" id="m-brands" placeholder="Comma separated, e.g. Crocin, Dolo" style="margin-bottom:14px" />
-      <div style="display:flex;gap:12px;margin-bottom:14px">
-        <input class="form-control" id="m-category" placeholder="Category" style="flex:1" />
-        <input class="form-control" id="m-form" placeholder="Dosage Form (Tablet, Syrup…)" style="flex:1" />
+
+      <div style="display:flex;gap:12px;margin-bottom:6px">
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Category</label>
+          <select class="form-control" id="m-category-select" onchange="onCategorySelectChange()">
+            <option value="Analgesic">Analgesic</option>
+            <option value="Antibiotic">Antibiotic</option>
+            <option value="Antipyretic">Antipyretic</option>
+            <option value="Antihistamine">Antihistamine</option>
+            <option value="Antacid/PPI">Antacid/PPI</option>
+            <option value="Antidiabetic">Antidiabetic</option>
+            <option value="Antihypertensive">Antihypertensive</option>
+            <option value="Antiviral">Antiviral</option>
+            <option value="Antifungal">Antifungal</option>
+            <option value="Anxiolytic/Sedative">Anxiolytic/Sedative</option>
+            <option value="Cardiac">Cardiac</option>
+            <option value="Corticosteroid">Corticosteroid</option>
+            <option value="NSAID">NSAID</option>
+            <option value="Vitamin/Supplement">Vitamin/Supplement</option>
+            <option value="Vaccine">Vaccine</option>
+            <option value="Other">Other (type below)</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Dosage Form</label>
+          <select class="form-control" id="m-form-select" onchange="onDosageFormChange()">
+            <option value="Tablet">Tablet</option>
+            <option value="Capsule">Capsule</option>
+            <option value="Sachet">Sachet</option>
+            <option value="Suppository">Suppository</option>
+            <option value="Patch">Patch</option>
+            <option value="Syrup">Syrup</option>
+            <option value="Suspension">Suspension</option>
+            <option value="Injection">Injection</option>
+            <option value="Drops">Drops</option>
+            <option value="Ointment">Ointment</option>
+            <option value="Cream">Cream</option>
+            <option value="Gel">Gel</option>
+            <option value="Lotion">Lotion</option>
+            <option value="Inhaler">Inhaler</option>
+            <option value="Spray">Spray</option>
+            <option value="Powder">Powder</option>
+            <option value="Other">Other (type below)</option>
+          </select>
+        </div>
       </div>
+      <div style="display:flex;gap:12px;margin-bottom:14px">
+        <input class="form-control" id="m-category" placeholder="Type category…" style="flex:1;display:none" />
+        <input class="form-control" id="m-form" placeholder="Type dosage form…" style="flex:1;display:none" />
+      </div>
+
       <div style="display:flex;gap:12px;margin-bottom:14px">
         <select class="form-control" id="m-schedule" style="flex:1">
           <option value="otc">OTC</option>
@@ -165,9 +212,37 @@
           <option value="h1">H1</option>
           <option value="x">X</option>
         </select>
-        <input class="form-control" id="m-price" type="number" min="0" step="0.01" placeholder="Price (₹)" style="flex:1" />
-        <input class="form-control" id="m-stock" type="number" min="0" step="1" placeholder="Stock Qty" style="flex:1" />
+        <input class="form-control" id="m-stock" type="number" min="0" step="1" placeholder="Stock Qty (base units)" style="flex:1" />
       </div>
+
+      <div id="pricing-fields-strip" style="display:flex;gap:12px;margin-bottom:6px">
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Units per Strip</label>
+          <input class="form-control" id="m-pack-size" type="number" min="1" step="1" placeholder="e.g. 10" oninput="updateComputedPrice()" />
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Price per Strip (₹)</label>
+          <input class="form-control" id="m-price-per-pack" type="number" min="0" step="0.01" placeholder="e.g. 25" oninput="updateComputedPrice()" />
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Bill By</label>
+          <select class="form-control" id="m-billing-mode">
+            <option value="per_unit">Per Tablet</option>
+            <option value="per_pack">Per Full Strip</option>
+          </select>
+        </div>
+      </div>
+      <div id="pricing-fields-single" style="display:none;margin-bottom:6px">
+        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Price (₹)</label>
+        <input class="form-control" id="m-price-per-pack-single" type="number" min="0" step="0.01" placeholder="e.g. 60" oninput="updateComputedPrice()" />
+      </div>
+      <p id="computed-price-hint" style="font-size:12px;color:var(--slate);margin:0 0 14px"></p>
+
+      <div style="margin-bottom:14px">
+        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GST % (optional — leave blank if not applicable)</label>
+        <input class="form-control" id="m-gst" type="number" min="0" step="0.01" placeholder="e.g. 12 — leave blank for none" style="max-width:200px" />
+      </div>
+
       <div class="err-msg" id="medicine-modal-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
         <button class="btn btn-primary" style="flex:1" onclick="submitMedicineForm()">Save</button>
@@ -206,7 +281,63 @@
 
     const SCHEDULE_BADGE = { otc: 'badge-green', h: 'badge-amber', h1: 'badge-warn', x: 'badge-red' };
 
+    // Forms that are divisible into countable units sold in strips/packs
+    const DIVISIBLE_FORMS = ['Tablet', 'Capsule', 'Sachet', 'Suppository', 'Patch'];
+
     let previewData = [];
+
+    function onCategorySelectChange() {
+      const select = document.getElementById('m-category-select');
+      const freeInput = document.getElementById('m-category');
+      if (select.value === 'Other') {
+        freeInput.style.display = '';
+        freeInput.value = '';
+        freeInput.focus();
+      } else {
+        freeInput.style.display = 'none';
+        freeInput.value = select.value;
+      }
+    }
+
+    function onDosageFormChange() {
+      const select = document.getElementById('m-form-select');
+      const freeInput = document.getElementById('m-form');
+      if (select.value === 'Other') {
+        freeInput.style.display = '';
+        freeInput.value = '';
+        freeInput.focus();
+        showStripPricing(true); // default to strip-style fields for unknown forms; admin can still set pack size to 1
+      } else {
+        freeInput.style.display = 'none';
+        freeInput.value = select.value;
+        showStripPricing(DIVISIBLE_FORMS.includes(select.value));
+      }
+      updateComputedPrice();
+    }
+
+    function showStripPricing(isDivisible) {
+      document.getElementById('pricing-fields-strip').style.display = isDivisible ? 'flex' : 'none';
+      document.getElementById('pricing-fields-single').style.display = isDivisible ? 'none' : 'block';
+    }
+
+    function isCurrentFormDivisible() {
+      return document.getElementById('pricing-fields-strip').style.display !== 'none';
+    }
+
+    function updateComputedPrice() {
+      const hint = document.getElementById('computed-price-hint');
+      if (isCurrentFormDivisible()) {
+        const packSize = parseInt(document.getElementById('m-pack-size').value) || 0;
+        const pricePerPack = parseFloat(document.getElementById('m-price-per-pack').value) || 0;
+        if (packSize > 0 && pricePerPack > 0) {
+          hint.textContent = `≈ ₹${(pricePerPack / packSize).toFixed(2)} per unit`;
+        } else {
+          hint.textContent = '';
+        }
+      } else {
+        hint.textContent = '';
+      }
+    }
 
     function scheduleBadge(schedule) {
       const cls = SCHEDULE_BADGE[schedule] || 'badge-grey';
@@ -238,6 +369,14 @@
       select.value = current;
     }
 
+    function priceLabel(m) {
+      if (m.price_per_pack == null) return '—';
+      if (m.pack_size > 1) {
+        return `₹${m.price_per_pack} / strip of ${m.pack_size} <span style="color:var(--slate-light)">(₹${m.price}/unit)</span>`;
+      }
+      return `₹${m.price_per_pack}`;
+    }
+
     function renderMedicines(items) {
       const el = document.getElementById('medicines-list');
       if (!items.length) {
@@ -250,9 +389,9 @@
             <strong>${sanitize(m.generic_name)}</strong>
             ${m.brand_names ? `<div style="font-size:12px;color:var(--slate)">${sanitize(m.brand_names)}</div>` : ''}
           </div>
-          <div style="font-size:12px;color:var(--slate);min-width:100px">${sanitize(m.category || '—')}</div>
+          <div style="font-size:12px;color:var(--slate);min-width:100px">${sanitize(m.category || '—')} · ${sanitize(m.dosage_forms || '—')}</div>
           <div>${scheduleBadge(m.schedule)}</div>
-          <div style="min-width:80px;font-size:13px">${m.price != null ? '₹' + m.price : '—'}</div>
+          <div style="min-width:120px;font-size:13px">${priceLabel(m)}${m.gst_percent != null ? ` <span class="badge badge-grey" style="font-size:10px">+${m.gst_percent}% GST</span>` : ''}</div>
           <div style="min-width:70px;font-size:13px">Stock: ${m.stock_quantity != null ? m.stock_quantity : '—'}</div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m)})'>Edit</button>
@@ -267,11 +406,21 @@
       document.getElementById('m-id').value = '';
       document.getElementById('m-generic').value = '';
       document.getElementById('m-brands').value = '';
+      document.getElementById('m-category-select').value = 'Analgesic';
+      document.getElementById('m-category').style.display = 'none';
       document.getElementById('m-category').value = '';
+      document.getElementById('m-form-select').value = 'Tablet';
+      document.getElementById('m-form').style.display = 'none';
       document.getElementById('m-form').value = '';
       document.getElementById('m-schedule').value = 'otc';
-      document.getElementById('m-price').value = '';
       document.getElementById('m-stock').value = '';
+      document.getElementById('m-pack-size').value = '';
+      document.getElementById('m-price-per-pack').value = '';
+      document.getElementById('m-price-per-pack-single').value = '';
+      document.getElementById('m-billing-mode').value = 'per_unit';
+      document.getElementById('m-gst').value = '';
+      showStripPricing(true);
+      updateComputedPrice();
       document.getElementById('medicine-modal-err').textContent = '';
       document.getElementById('modal-medicine').classList.add('open');
     }
@@ -281,11 +430,37 @@
       document.getElementById('m-id').value = m.id;
       document.getElementById('m-generic').value = m.generic_name || '';
       document.getElementById('m-brands').value = m.brand_names || '';
-      document.getElementById('m-category').value = m.category || '';
-      document.getElementById('m-form').value = m.dosage_forms || '';
+
+      const knownCategories = Array.from(document.getElementById('m-category-select').options).map(o => o.value);
+      if (m.category && knownCategories.includes(m.category)) {
+        document.getElementById('m-category-select').value = m.category;
+        document.getElementById('m-category').style.display = 'none';
+      } else {
+        document.getElementById('m-category-select').value = 'Other';
+        document.getElementById('m-category').style.display = '';
+        document.getElementById('m-category').value = m.category || '';
+      }
+
+      const knownForms = Array.from(document.getElementById('m-form-select').options).map(o => o.value);
+      const isDivisible = DIVISIBLE_FORMS.includes(m.dosage_forms);
+      if (m.dosage_forms && knownForms.includes(m.dosage_forms)) {
+        document.getElementById('m-form-select').value = m.dosage_forms;
+        document.getElementById('m-form').style.display = 'none';
+      } else {
+        document.getElementById('m-form-select').value = 'Other';
+        document.getElementById('m-form').style.display = '';
+        document.getElementById('m-form').value = m.dosage_forms || '';
+      }
+      showStripPricing(isDivisible);
+
       document.getElementById('m-schedule').value = m.schedule || 'otc';
-      document.getElementById('m-price').value = m.price != null ? m.price : '';
       document.getElementById('m-stock').value = m.stock_quantity != null ? m.stock_quantity : '';
+      document.getElementById('m-pack-size').value = m.pack_size || '';
+      document.getElementById('m-price-per-pack').value = m.price_per_pack != null ? m.price_per_pack : '';
+      document.getElementById('m-price-per-pack-single').value = m.price_per_pack != null ? m.price_per_pack : '';
+      document.getElementById('m-billing-mode').value = m.billing_mode || 'per_unit';
+      document.getElementById('m-gst').value = m.gst_percent != null ? m.gst_percent : '';
+      updateComputedPrice();
       document.getElementById('medicine-modal-err').textContent = '';
       document.getElementById('modal-medicine').classList.add('open');
     }
@@ -300,13 +475,30 @@
       const errEl = document.getElementById('medicine-modal-err');
       if (!generic_name) { errEl.textContent = 'Generic name is required.'; return; }
 
+      const categorySelect = document.getElementById('m-category-select').value;
+      const category = categorySelect === 'Other' ? document.getElementById('m-category').value.trim() : categorySelect;
+
+      const formSelect = document.getElementById('m-form-select').value;
+      const dosage_forms = formSelect === 'Other' ? document.getElementById('m-form').value.trim() : formSelect;
+
+      const isDivisible = isCurrentFormDivisible();
+      const pack_size = isDivisible ? (parseInt(document.getElementById('m-pack-size').value) || 1) : 1;
+      const price_per_pack = isDivisible
+        ? (document.getElementById('m-price-per-pack').value ? parseFloat(document.getElementById('m-price-per-pack').value) : null)
+        : (document.getElementById('m-price-per-pack-single').value ? parseFloat(document.getElementById('m-price-per-pack-single').value) : null);
+      const billing_mode = isDivisible ? document.getElementById('m-billing-mode').value : 'per_pack';
+      const gst_percent = document.getElementById('m-gst').value ? parseFloat(document.getElementById('m-gst').value) : null;
+
       const payload = {
         generic_name,
         brand_names: document.getElementById('m-brands').value.trim(),
-        category: document.getElementById('m-category').value.trim(),
-        dosage_forms: document.getElementById('m-form').value.trim(),
+        category,
+        dosage_forms,
         schedule: document.getElementById('m-schedule').value,
-        price: document.getElementById('m-price').value ? parseFloat(document.getElementById('m-price').value) : null,
+        pack_size,
+        price_per_pack,
+        billing_mode,
+        gst_percent,
         stock_quantity: document.getElementById('m-stock').value ? parseInt(document.getElementById('m-stock').value) : null
       };
 

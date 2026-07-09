@@ -28,8 +28,20 @@ class MedicineIn(BaseModel):
     category: Optional[str] = ""
     dosage_forms: Optional[str] = ""
     schedule: Optional[str] = "otc"
-    price: Optional[float] = None
+    pack_size: Optional[int] = 1
+    price_per_pack: Optional[float] = None
+    billing_mode: Optional[str] = "per_unit"
+    gst_percent: Optional[float] = None
     stock_quantity: Optional[int] = None
+
+
+VALID_BILLING_MODES = {"per_unit", "per_pack"}
+
+
+def compute_unit_price(price_per_pack, pack_size):
+    if price_per_pack is None or not pack_size or pack_size < 1:
+        return None
+    return round(price_per_pack / pack_size, 2)
 
 
 class MedicineBulkConfirm(BaseModel):
@@ -44,7 +56,11 @@ def serialize(m: HospitalMedicine):
         "category": m.category or "",
         "dosage_forms": m.dosage_forms or "",
         "schedule": m.schedule,
-        "price": m.price,
+        "pack_size": m.pack_size,
+        "price_per_pack": m.price_per_pack,
+        "billing_mode": m.billing_mode,
+        "gst_percent": m.gst_percent,
+        "price": m.price,  # computed unit price
         "stock_quantity": m.stock_quantity,
         "is_active": m.is_active
     }
@@ -92,6 +108,14 @@ def create_medicine(
     if schedule not in VALID_SCHEDULES:
         raise HTTPException(status_code=400, detail="Invalid schedule")
 
+    billing_mode = (payload.billing_mode or "per_unit").lower()
+    if billing_mode not in VALID_BILLING_MODES:
+        raise HTTPException(status_code=400, detail="Invalid billing mode")
+
+    pack_size = payload.pack_size or 1
+    if pack_size < 1:
+        raise HTTPException(status_code=400, detail="Pack size must be at least 1")
+
     medicine = HospitalMedicine(
         hospital_id=current_doctor.hospital_id,
         generic_name=payload.generic_name.strip(),
@@ -99,7 +123,11 @@ def create_medicine(
         category=(payload.category or "").strip(),
         dosage_forms=(payload.dosage_forms or "").strip(),
         schedule=schedule,
-        price=payload.price,
+        pack_size=pack_size,
+        price_per_pack=payload.price_per_pack,
+        billing_mode=billing_mode,
+        gst_percent=payload.gst_percent,
+        price=compute_unit_price(payload.price_per_pack, pack_size),
         stock_quantity=payload.stock_quantity,
         is_active=True
     )
@@ -138,12 +166,24 @@ def update_medicine(
     if schedule not in VALID_SCHEDULES:
         raise HTTPException(status_code=400, detail="Invalid schedule")
 
+    billing_mode = (payload.billing_mode or "per_unit").lower()
+    if billing_mode not in VALID_BILLING_MODES:
+        raise HTTPException(status_code=400, detail="Invalid billing mode")
+
+    pack_size = payload.pack_size or 1
+    if pack_size < 1:
+        raise HTTPException(status_code=400, detail="Pack size must be at least 1")
+
     medicine.generic_name = payload.generic_name.strip()
     medicine.brand_names = (payload.brand_names or "").strip()
     medicine.category = (payload.category or "").strip()
     medicine.dosage_forms = (payload.dosage_forms or "").strip()
     medicine.schedule = schedule
-    medicine.price = payload.price
+    medicine.pack_size = pack_size
+    medicine.price_per_pack = payload.price_per_pack
+    medicine.billing_mode = billing_mode
+    medicine.gst_percent = payload.gst_percent
+    medicine.price = compute_unit_price(payload.price_per_pack, pack_size)
     medicine.stock_quantity = payload.stock_quantity
     db.commit()
 
@@ -252,6 +292,14 @@ def bulk_confirm_medicines(
         if schedule not in VALID_SCHEDULES:
             schedule = "h"
 
+        billing_mode = (item.billing_mode or "per_unit").lower()
+        if billing_mode not in VALID_BILLING_MODES:
+            billing_mode = "per_unit"
+
+        pack_size = item.pack_size or 1
+        if pack_size < 1:
+            pack_size = 1
+
         medicine = HospitalMedicine(
             hospital_id=current_doctor.hospital_id,
             generic_name=item.generic_name.strip(),
@@ -259,7 +307,11 @@ def bulk_confirm_medicines(
             category=(item.category or "").strip(),
             dosage_forms=(item.dosage_forms or "").strip(),
             schedule=schedule,
-            price=item.price,
+            pack_size=pack_size,
+            price_per_pack=item.price_per_pack,
+            billing_mode=billing_mode,
+            gst_percent=item.gst_percent,
+            price=compute_unit_price(item.price_per_pack, pack_size),
             stock_quantity=item.stock_quantity,
             is_active=True
         )
