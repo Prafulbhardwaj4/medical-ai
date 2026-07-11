@@ -172,6 +172,8 @@
         <button class="btn btn-outline btn-sm" id="df-sub_admin" onclick="setDoctorFilter('sub_admin')">Sub Admins</button>
         <button class="btn btn-outline btn-sm" id="df-receptionist" onclick="setDoctorFilter('receptionist')">Receptionists</button>
         <button class="btn btn-outline btn-sm" id="df-nurse" onclick="setDoctorFilter('nurse')">Nurses</button>
+        <button class="btn btn-outline btn-sm" id="df-lab" onclick="setDoctorFilter('lab')">Lab Staff</button>
+        <button class="btn btn-outline btn-sm" id="df-pharmacy" onclick="setDoctorFilter('pharmacy')">Pharmacists</button>
       </div>
       <div class="card" id="doctors-list">
         <p>Loading...</p>
@@ -331,6 +333,16 @@
       renderDoctors();
     }
 
+    const ROLE_LABEL = { sub_admin: 'Sub Admin', receptionist: 'Receptionist', nurse: 'Nurse', lab: 'Lab Staff', pharmacy: 'Pharmacist', doctor: 'Doctor' };
+    const ROLE_BADGE_STYLE = {
+      sub_admin: 'background:#ccfbf1;color:#0d9488',
+      receptionist: 'background:#fef3c7;color:#b45309',
+      nurse: 'background:#ede9fe;color:#6d28d9',
+      lab: 'background:#dbeafe;color:#1e40af',
+      pharmacy: 'background:#fce7f3;color:#be185d',
+      doctor: 'background:#f1f5f9;color:#64748b'
+    };
+
     function renderDoctors() {
       const container = document.getElementById('doctors-list');
       let data = allDoctorsCache;
@@ -338,7 +350,7 @@
       staffMap = {};
       data.forEach(d => { staffMap[d.id] = d; });
       if (!data.length) {
-        const labels = { all: 'staff', doctor: 'doctors', sub_admin: 'sub admins', receptionist: 'receptionists', nurse: 'nurses' };
+        const labels = { all: 'staff', doctor: 'doctors', sub_admin: 'sub admins', receptionist: 'receptionists', nurse: 'nurses', lab: 'lab staff', pharmacy: 'pharmacists' };
         container.innerHTML = `<p style="color:var(--slate);padding:12px">No ${labels[doctorFilter] || 'staff'} found.</p>`;
         return;
       }
@@ -348,8 +360,8 @@
             <div>
               <div style="font-weight:600;font-size:15px">
                 ${sanitize(d.name)}
-                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:6px;${d.role === 'sub_admin' ? 'background:#ccfbf1;color:#0d9488' : d.role === 'receptionist' ? 'background:#fef3c7;color:#b45309' : d.role === 'nurse' ? 'background:#ede9fe;color:#6d28d9' : 'background:#f1f5f9;color:#64748b'}">
-                  ${d.role === 'sub_admin' ? 'Sub Admin' : d.role === 'receptionist' ? 'Receptionist' : d.role === 'nurse' ? 'Nurse' : 'Doctor'}
+                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:6px;${ROLE_BADGE_STYLE[d.role] || 'background:#f1f5f9;color:#64748b'}">
+                  ${ROLE_LABEL[d.role] || 'Doctor'}
                 </span>
                 <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:4px;${d.is_active ? 'background:#dcfce7;color:#16a34a' : 'background:#fee2e2;color:#dc2626'}">
                   ${d.is_active ? 'Active' : 'Inactive'}
@@ -497,9 +509,11 @@
         params.set('consultation_fee', fee);
       }
 
+      const roleLabels = { doctor: 'Doctor', sub_admin: 'Sub Admin', receptionist: 'Receptionist', nurse: 'Nurse', lab: 'Lab Staff', pharmacy: 'Pharmacist' };
+
       try {
         await api('POST', `/admin/doctors?${params.toString()}`);
-        toast('Doctor account created successfully.', 'success');
+        toast(`${roleLabels[role] || 'Staff'} account created successfully.`, 'success');
         closeModal();
         loadDoctors();
       } catch (e) {

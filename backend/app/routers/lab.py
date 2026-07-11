@@ -13,6 +13,7 @@ from app.models.patient import Patient
 from app.models.test_catalog import TestCatalogItem
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
+from app.routers.attendance import require_present
 from app.services.pdf_service import generate_test_report_pdf
 from fastapi.responses import FileResponse
 import os
@@ -82,6 +83,7 @@ def update_order_status(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_lab(current_doctor)
+    require_present(db, current_doctor)
 
     status = payload.status.strip().lower()
     if status not in VALID_TRANSITIONS:
@@ -122,6 +124,7 @@ def save_order_result(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_lab(current_doctor)
+    require_present(db, current_doctor)
 
     order = db.query(TestOrder).filter(
         TestOrder.id == order_id,

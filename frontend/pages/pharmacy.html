@@ -298,6 +298,11 @@
       }
     }
 
+    function isPharmPresent() {
+      const badge = document.getElementById('pharm-attendance-badge');
+      return badge && (badge.textContent === 'Present' || badge.textContent === 'On Break');
+    }
+
     async function markPharmAttendance(status) {
       try {
         const wasAlreadyPresent = pharmCurrentStatus === status;
@@ -365,6 +370,7 @@
     let linkingOrderId = null;
 
     async function openPrescription(tokenNumber) {
+      if (!isPharmPresent()) { toast('Mark yourself Present first.', 'info'); return; }
       try {
         const rx = await api("GET", `/pharmacy/prescription/${tokenNumber}`);
         currentRxToken = rx.token_number;
@@ -556,9 +562,8 @@
     }
 
     function sanitize(s) {
-      if (window.sanitize) return window.sanitize(s);
       const div = document.createElement('div');
-      div.textContent = s;
+      div.textContent = String(s ?? '');
       return div.innerHTML;
     }
 

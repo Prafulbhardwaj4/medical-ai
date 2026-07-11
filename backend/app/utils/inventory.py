@@ -8,15 +8,25 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int) -> di
     Deducts `quantity_needed` units from a medicine's stock, consuming the
     soonest-expiring batches first (FEFO — First-Expiry-First-Out).
 
-    The aggregate stock_quantity always drops by the full quantity dispensed,
-    floored at 0. Batch rows are decremented for as much as they can cover;
-    any shortfall just means older/legacy stock (added before batch tracking
-    existed) is being consumed — it's reported back for visibility, but never
-    blocks the dispense. Patient care should never wait on inventory bookkeeping.
+    If the medicine is billed per_pack (whole strips only, never split), the
+    deduction is rounded UP to the next full pack_size before touching stock —
+    e.g. dispensing 9 tablets from a 10-per-strip per_pack medicine removes a
+    full strip of 10, not 9, since that strip physically can't go back once opened.
+    per_unit-billed medicines deduct the exact quantity, unchanged.
+
+    The aggregate stock_quantity always drops by the full (possibly rounded)
+    quantity, floored at 0. Batch rows are decremented for as much as they can
+    cover; any shortfall just means older/legacy stock (added before batch
+    tracking existed) is being consumed — reported back for visibility, but
+    never blocks the dispense. Patient care should never wait on inventory bookkeeping.
     """
     medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == medicine_id).first()
     if not medicine:
         return {"medicine_id": medicine_id, "medicine_name": None, "deducted_from_batches": 0, "shortfall": quantity_needed}
+
+    if medicine.billing_mode == "per_pack" and medicine.pack_size and medicine.pack_size > 1:
+        pack_size = medicine.pack_size
+        quantity_needed = ((quantity_needed + pack_size - 1) // pack_size) * pack_size  # round up to next full strip
 
     remaining = quantity_needed
     deducted_from_batches = 0

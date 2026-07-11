@@ -52,7 +52,6 @@
           <span class="badge badge-grey" id="rec-attendance-badge" style="margin-left:8px">Not marked</span>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <select class="form-control" id="rec-room-select" style="width:170px;font-size:13px;display:none" onchange="markRecAttendance(recCurrentStatus)"></select>
           <button class="btn btn-primary btn-sm" id="rec-btn-present" onclick="markRecAttendance('present')">Mark Present</button>
           <button class="btn btn-outline btn-sm" id="rec-btn-break" onclick="markRecAttendance('on_break')" style="display:none">On Break</button>
           <button class="btn btn-outline btn-sm" id="rec-btn-offduty" onclick="markRecAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
@@ -140,12 +139,12 @@
             <p style="margin-top:8px"><strong>Total:</strong> ₹<span id="pending-tests-total">0</span></p>
             <button class="btn btn-primary btn-sm" id="pending-tests-collect-wrap" style="width:100%;margin-top:8px">Collect Payment</button>
           </div>
-          <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px">
-            <button class="btn btn-primary btn-sm" style="width:100%" onclick="generateBill()">Generate Bill</button>
-          </div>
-          <div style="display:flex;gap:10px" class="no-print">
-            <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
-            <button class="btn btn-primary" style="flex:1" onclick="goToStep('search')">New Check-In</button>
+          <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-primary btn-sm" style="width:100%" onclick="generateBill()">🧾 Generate Bill</button>
+            <div style="display:flex;gap:10px">
+              <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
+              <button class="btn btn-outline" style="flex:1" onclick="goToStep('search')">New Check-In</button>
+            </div>
           </div>
         </div>
 
@@ -743,20 +742,10 @@
 
     let recCurrentStatus = 'not_marked';
 
-    async function loadRecRoomOptions(selectedId) {
-      try {
-        const rooms = await api("GET", "/admin/rooms");
-        document.getElementById('rec-room-select').innerHTML =
-          '<option value="">No room</option>' +
-          rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.name}</option>`).join('');
-      } catch (e) { }
-    }
-
     async function loadRecAttendance() {
       try {
         const data = await api("GET", "/doctors/attendance/my-status");
         renderRecBadge(data.status);
-        await loadRecRoomOptions(data.room_id);
       } catch(e) {}
     }
 
@@ -766,7 +755,6 @@
       const btnPresent = document.getElementById('rec-btn-present');
       const btnBreak = document.getElementById('rec-btn-break');
       const btnOffDuty = document.getElementById('rec-btn-offduty');
-      document.getElementById('rec-room-select').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';
         btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
@@ -784,16 +772,12 @@
 
     async function markRecAttendance(status) {
       try {
-        const roomVal = document.getElementById('rec-room-select').value;
-        const room_id = roomVal ? parseInt(roomVal) : null;
         const wasAlreadyPresent = recCurrentStatus === status;
-        await api("POST", "/doctors/attendance", { status, room_id });
+        await api("POST", "/doctors/attendance", { status, room_id: null });
         renderRecBadge(status);
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
           toast(labels[status] || "Status updated.", "success");
-        } else {
-          toast("Room updated.", "success");
         }
       } catch (e) { toast(e.message, "error"); }
     }

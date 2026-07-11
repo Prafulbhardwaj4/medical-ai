@@ -29,7 +29,7 @@ def list_notifications(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy"]:
+    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "lab"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     sync_stock_notifications(db, current_doctor.hospital_id)
@@ -51,7 +51,7 @@ def get_unread_count(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy"]:
+    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "lab"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     sync_stock_notifications(db, current_doctor.hospital_id)

@@ -651,6 +651,16 @@
       return m.pack_size > 1 ? `₹${m.price} / unit` : '—';
     }
 
+    function stockDisplay(m) {
+      const total = m.stock_quantity != null ? m.stock_quantity : 0;
+      if (m.pack_size > 1) {
+        const strips = Math.floor(total / m.pack_size);
+        const loose = total % m.pack_size;
+        return `${strips} strip${strips === 1 ? '' : 's'}${loose ? ` + ${loose} loose` : ''} <span style="color:var(--slate-light)">(${total} total units)</span>`;
+      }
+      return `${total} units`;
+    }
+
     function renderMedicines(items) {
       const el = document.getElementById('medicines-list');
       if (!items.length) {
@@ -691,7 +701,7 @@
             </div>
             <div>
               <div class="item-field-label">Stock</div>
-              <div class="item-field-value mono">${m.stock_quantity != null ? m.stock_quantity : '—'}</div>
+              <div class="item-field-value mono">${stockDisplay(m)}</div>
             </div>
           </div>
           <div class="item-card-actions">

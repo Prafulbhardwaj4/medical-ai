@@ -14,6 +14,7 @@ from app.models.medicine_order import MedicineOrder
 from app.models.hospital_medicine import HospitalMedicine
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
+from app.routers.attendance import require_present
 
 router = APIRouter(prefix="/pharmacy", tags=["pharmacy"])
 
@@ -136,6 +137,7 @@ def toggle_medicine_order_include(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
 
     order = db.query(MedicineOrder).filter(
         MedicineOrder.id == order_id,
@@ -159,6 +161,7 @@ def set_medicine_order_quantity(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
 
     if payload.quantity <= 0:
         raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
@@ -185,6 +188,7 @@ def link_medicine_order_catalog(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
 
     order = db.query(MedicineOrder).filter(
         MedicineOrder.id == order_id,
@@ -239,6 +243,7 @@ def collect_medicine_payment(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
 
     consultation = db.query(Consultation).filter(
         Consultation.token_number == token_number,

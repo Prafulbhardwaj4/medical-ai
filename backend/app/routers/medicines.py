@@ -387,10 +387,20 @@ def add_batch(
     if not medicine:
         raise HTTPException(status_code=404, detail="Medicine not found")
 
+    batch_number = (payload.batch_number or "").strip()
+    if batch_number:
+        duplicate = db.query(MedicineBatch).filter(
+            MedicineBatch.medicine_id == medicine_id,
+            MedicineBatch.batch_number == batch_number,
+            MedicineBatch.quantity > 0
+        ).first()
+        if duplicate:
+            raise HTTPException(status_code=400, detail=f"Batch/Lot '{batch_number}' already exists for this medicine. Edit the existing batch instead, or use a different lot number.")
+
     batch = MedicineBatch(
         medicine_id=medicine_id,
         hospital_id=current_doctor.hospital_id,
-        batch_number=(payload.batch_number or "").strip(),
+        batch_number=batch_number or None,
         quantity=payload.quantity,
         expiry_date=payload.expiry_date,
         received_date=date.today()
@@ -410,6 +420,51 @@ def add_batch(
         target_label=f"{medicine.generic_name} +{payload.quantity}",
         hospital_id=current_doctor.hospital_id
     )
+    return serialize_batch(batch)
+
+
+@router.patch("/batches/{batch_id}")
+def edit_batch(
+    batch_id: int,
+    payload: BatchIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_admin_or_pharmacy(current_doctor)
+
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+
+    batch = db.query(MedicineBatch).filter(
+        MedicineBatch.id == batch_id,
+        MedicineBatch.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    batch_number = (payload.batch_number or "").strip()
+    if batch_number:
+        duplicate = db.query(MedicineBatch).filter(
+            MedicineBatch.medicine_id == batch.medicine_id,
+            MedicineBatch.batch_number == batch_number,
+            MedicineBatch.id != batch_id,
+            MedicineBatch.quantity > 0
+        ).first()
+        if duplicate:
+            raise HTTPException(status_code=400, detail=f"Batch/Lot '{batch_number}' already exists for this medicine.")
+
+    medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == batch.medicine_id).first()
+    if medicine:
+        # keep the aggregate stock in sync with the quantity change on this batch
+        medicine.stock_quantity = max(0, (medicine.stock_quantity or 0) - batch.quantity + payload.quantity)
+
+    batch.quantity = payload.quantity
+    batch.expiry_date = payload.expiry_date
+    batch.batch_number = batch_number or None
+    db.commit()
+    db.refresh(batch)
+    sync_stock_notifications(db, current_doctor.hospital_id)
+
     return serialize_batch(batch)
 
 

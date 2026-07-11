@@ -214,6 +214,14 @@
           </div>
         </div>
 
+        <div id="nurse-vitals-wrap"
+          style="display:none;margin-bottom:16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:14px 16px">
+          <div style="font-size:0.75rem;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">
+            Vitals Recorded by Nurse
+          </div>
+          <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)"></div>
+        </div>
+
         <div class="recorder-wrap" id="recorder-wrap">
           <button class="record-btn idle" id="record-btn" onclick="toggleRecording()">🎙</button>
           <div class="timer" id="timer">00:00</div>
@@ -594,6 +602,8 @@
         tests = s.tests || [];
         renderTests();
 
+        await loadNurseVitals();
+
         goStep(2);
         toast("AI structuring complete — review and edit before confirming.", "success");
       } catch (e) {
@@ -857,6 +867,7 @@
       try {
         const c = await api("GET", `/patients/${patientId}/checkin-today`);
         if (c.vitals_status !== 'done' || !c.vitals_data) return;
+
         const map = { "Blood Pressure": "v-bp", "Pulse": "v-pulse", "Temperature": "v-temp", "Weight": "v-weight", "SpO2": "v-spo2" };
         const extras = [];
         Object.entries(c.vitals_data).forEach(([label, value]) => {
@@ -866,9 +877,13 @@
             extras.push(`${label}: ${value}`);
           }
         });
+
+        const summaryParts = Object.entries(c.vitals_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);
+        document.getElementById('nurse-vitals-summary').innerHTML = summaryParts.join(' &nbsp;·&nbsp; ');
+        document.getElementById('nurse-vitals-wrap').style.display = 'block';
+
         if (extras.length) {
           const note = document.createElement('div');
-          note.style.cssText = '';
           note.style.cssText = 'font-size:13px;color:var(--slate);margin-top:8px';
           note.textContent = `Also recorded by nurse: ${extras.join(' · ')}`;
           document.querySelector('.vitals-grid')?.after(note) || document.getElementById('v-bp').closest('.section-block')?.appendChild(note);
