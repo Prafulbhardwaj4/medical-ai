@@ -515,9 +515,15 @@
           category: t.category || '',
           price: t.price != null ? t.price : '',
           turnaround_hours: t.turnaround_hours != null ? t.turnaround_hours : '',
+          is_panel: !!t.is_panel,
           reference_range_male: t.reference_range_male || '',
           reference_range_female: t.reference_range_female || '',
-          unit: t.unit || ''
+          unit: t.unit || '',
+          parameters: (t.parameters || []).map(p => ({
+            name: p.name || '', unit: p.unit || '',
+            reference_range_male: p.reference_range_male || '',
+            reference_range_female: p.reference_range_female || ''
+          }))
         }));
         renderPreviewTable();
       } catch (e) {
@@ -533,23 +539,61 @@
         el.innerHTML = '<p style="color:var(--slate-light)">No tests extracted from this file.</p>';
         return;
       }
-      el.innerHTML = `
-        <div style="display:grid;grid-template-columns:1.6fr 1fr 0.8fr 0.8fr 1fr 1fr 0.8fr 40px;gap:6px;font-size:12px;color:var(--slate);padding:0 0 8px;font-weight:600">
-          <div>Test Name</div><div>Category</div><div>Price</div><div>Turnaround (hrs)</div><div>Range (M)</div><div>Range (F)</div><div>Unit</div><div></div>
-        </div>
-        ${previewData.map((t, i) => `
-          <div style="display:grid;grid-template-columns:1.6fr 1fr 0.8fr 0.8fr 1fr 1fr 0.8fr 40px;gap:6px;margin-bottom:6px">
-            <input class="form-control" value="${sanitize(t.test_name)}" oninput="previewData[${i}].test_name=this.value" />
-            <input class="form-control" value="${sanitize(t.category)}" oninput="previewData[${i}].category=this.value" />
-            <input class="form-control" type="number" value="${t.price}" oninput="previewData[${i}].price=this.value" />
-            <input class="form-control" type="number" value="${t.turnaround_hours}" oninput="previewData[${i}].turnaround_hours=this.value" />
-            <input class="form-control" value="${sanitize(t.reference_range_male)}" oninput="previewData[${i}].reference_range_male=this.value" />
-            <input class="form-control" value="${sanitize(t.reference_range_female)}" oninput="previewData[${i}].reference_range_female=this.value" />
-            <input class="form-control" value="${sanitize(t.unit)}" oninput="previewData[${i}].unit=this.value" />
+      el.innerHTML = previewData.map((t, i) => `
+        <div style="border:1px solid var(--border, #e2e8f0);border-radius:8px;padding:10px;margin-bottom:8px">
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 0.8fr 0.8fr 40px;gap:6px;margin-bottom:6px">
+            <input class="form-control" placeholder="Test Name" value="${sanitize(t.test_name)}" oninput="previewData[${i}].test_name=this.value" />
+            <input class="form-control" placeholder="Category" value="${sanitize(t.category)}" oninput="previewData[${i}].category=this.value" />
+            <input class="form-control" type="number" placeholder="Price" value="${t.price}" oninput="previewData[${i}].price=this.value" />
+            <input class="form-control" type="number" placeholder="TAT hrs" value="${t.turnaround_hours}" oninput="previewData[${i}].turnaround_hours=this.value" />
             <button class="btn btn-outline btn-sm" onclick="removePreviewRow(${i})" title="Remove">×</button>
           </div>
-        `).join('')}
-      `;
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;font-size:13px;color:var(--slate)">
+            <input type="checkbox" ${t.is_panel ? 'checked' : ''} onchange="togglePreviewPanel(${i}, this.checked)" style="width:15px;height:15px" />
+            This is a panel with sub-parameters (e.g. CBC, LFT, KFT)
+          </label>
+          ${!t.is_panel ? `
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+              <input class="form-control" placeholder="Range (M)" value="${sanitize(t.reference_range_male)}" oninput="previewData[${i}].reference_range_male=this.value" />
+              <input class="form-control" placeholder="Range (F)" value="${sanitize(t.reference_range_female)}" oninput="previewData[${i}].reference_range_female=this.value" />
+              <input class="form-control" placeholder="Unit" value="${sanitize(t.unit)}" oninput="previewData[${i}].unit=this.value" />
+            </div>
+          ` : `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <label style="font-size:12px;color:var(--slate)">Sub-parameters</label>
+              <button class="btn btn-outline btn-sm" onclick="addPreviewParam(${i})">+ Add Parameter</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1.4fr 0.7fr 0.9fr 0.9fr 30px;gap:6px;font-size:11px;color:var(--slate);padding:0 0 4px;font-weight:600">
+              <div>Parameter Name</div><div>Unit</div><div>Range (M)</div><div>Range (F)</div><div></div>
+            </div>
+            ${t.parameters.map((p, j) => `
+              <div style="display:grid;grid-template-columns:1.4fr 0.7fr 0.9fr 0.9fr 30px;gap:6px;margin-bottom:4px">
+                <input class="form-control" placeholder="e.g. Hemoglobin" value="${sanitize(p.name)}" oninput="previewData[${i}].parameters[${j}].name=this.value" />
+                <input class="form-control" placeholder="g/dL" value="${sanitize(p.unit)}" oninput="previewData[${i}].parameters[${j}].unit=this.value" />
+                <input class="form-control" placeholder="13.0-17.0" value="${sanitize(p.reference_range_male)}" oninput="previewData[${i}].parameters[${j}].reference_range_male=this.value" />
+                <input class="form-control" placeholder="12.0-15.5" value="${sanitize(p.reference_range_female)}" oninput="previewData[${i}].parameters[${j}].reference_range_female=this.value" />
+                <button class="btn btn-outline btn-sm" onclick="removePreviewParam(${i}, ${j})" title="Remove">×</button>
+              </div>
+            `).join('')}
+          `}
+        </div>
+      `).join('');
+    }
+
+    function togglePreviewPanel(i, checked) {
+      previewData[i].is_panel = checked;
+      if (checked && previewData[i].parameters.length === 0) addPreviewParam(i);
+      renderPreviewTable();
+    }
+
+    function addPreviewParam(i) {
+      previewData[i].parameters.push({ name: '', unit: '', reference_range_male: '', reference_range_female: '' });
+      renderPreviewTable();
+    }
+
+    function removePreviewParam(i, j) {
+      previewData[i].parameters.splice(j, 1);
+      renderPreviewTable();
     }
 
     function removePreviewRow(i) {
@@ -573,9 +617,11 @@
           category: t.category || '',
           price: t.price !== '' && t.price != null ? parseFloat(t.price) : null,
           turnaround_hours: t.turnaround_hours !== '' && t.turnaround_hours != null ? parseInt(t.turnaround_hours) : null,
-          reference_range_male: t.reference_range_male || '',
-          reference_range_female: t.reference_range_female || '',
-          unit: t.unit || ''
+          is_panel: !!t.is_panel,
+          reference_range_male: t.is_panel ? '' : (t.reference_range_male || ''),
+          reference_range_female: t.is_panel ? '' : (t.reference_range_female || ''),
+          unit: t.is_panel ? '' : (t.unit || ''),
+          parameters: t.is_panel ? t.parameters.filter(p => p.name && p.name.trim()) : null
         }));
 
       try {

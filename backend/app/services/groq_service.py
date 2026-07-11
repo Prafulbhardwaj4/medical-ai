@@ -174,20 +174,27 @@ async def extract_medicines(raw_text: str) -> list:
 TEST_EXTRACTION_PROMPT = """You are extracting a hospital's diagnostic test/lab catalog from raw text taken from a PDF or Excel file.
 The text may be messy, tabular, or inconsistently formatted.
 
+Some tests are PANELS — one billed item (e.g. CBC, LFT, KFT, Lipid Profile) that reports multiple sub-parameters
+(e.g. CBC includes Hemoglobin, RBC Count, WBC Count, Platelet Count, etc.), each with its own range/unit. If a
+test name is followed by a list of parameter rows instead of having one range itself, it is a panel.
+
 Return ONLY a valid JSON array. Each element must have exactly these fields:
 {
   "test_name": "string - name of the test, required",
   "category": "string - e.g. Hematology, Biochemistry, Radiology, empty string if unclear",
   "price": "number or null - test fee if present in source, else null",
-  "reference_range_male": "string - normal reference range for male patients, empty string if not present",
-  "reference_range_female": "string - normal reference range for female patients, empty string if not present",
-  "unit": "string - unit of measurement e.g. mg/dL, empty string if not present",
-  "turnaround_hours": "number or null - turnaround time in hours if present, else null"
+  "is_panel": "boolean - true if this test has sub-parameters, false for a simple single-value test",
+  "reference_range_male": "string - empty string if is_panel is true or not present",
+  "reference_range_female": "string - empty string if is_panel is true or not present",
+  "unit": "string - empty string if is_panel is true or not present",
+  "turnaround_hours": "number or null - turnaround time in hours if present, else null",
+  "parameters": "array - only when is_panel is true, else empty array. Each element: {\"name\": string, \"unit\": string, \"reference_range_male\": string, \"reference_range_female\": string}"
 }
 
 Rules:
 - Skip rows that are clearly headers, blank, or not tests.
 - Do not invent prices, ranges, or turnaround times that are not present in the source text.
+- A panel's price belongs on the parent test_name row only, never on its parameters.
 - Do not include any explanation or markdown — only the raw JSON array.
 """
 

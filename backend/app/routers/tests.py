@@ -328,18 +328,40 @@ def bulk_confirm_tests(
         if not item.test_name or not item.test_name.strip():
             continue
 
+        is_panel = bool(item.is_panel)
+
         test = TestCatalogItem(
             hospital_id=current_doctor.hospital_id,
             name=item.test_name.strip(),
             fee=item.price if item.price is not None else 0,
             category=(item.category or "").strip(),
-            reference_range_male=(item.reference_range_male or "").strip(),
-            reference_range_female=(item.reference_range_female or "").strip(),
-            unit=(item.unit or "").strip(),
+            purpose=(item.purpose or "").strip(),
+            is_panel=is_panel,
+            reference_range_male="" if is_panel else (item.reference_range_male or "").strip(),
+            reference_range_female="" if is_panel else (item.reference_range_female or "").strip(),
+            unit="" if is_panel else (item.unit or "").strip(),
             turnaround_hours=item.turnaround_hours,
             is_active=True
         )
         db.add(test)
+        db.flush()
+
+        if is_panel and item.parameters:
+            for i, p in enumerate(item.parameters):
+                if not p.name or not p.name.strip():
+                    continue
+                db.add(TestCatalogParameter(
+                    test_catalog_item_id=test.id,
+                    hospital_id=current_doctor.hospital_id,
+                    name=p.name.strip(),
+                    unit=(p.unit or "").strip(),
+                    reference_range_male=(p.reference_range_male or "").strip(),
+                    reference_range_female=(p.reference_range_female or "").strip(),
+                    purpose=(p.purpose or "").strip(),
+                    display_order=i,
+                    is_active=True
+                ))
+
         created.append(test)
 
     db.commit()
@@ -354,4 +376,4 @@ def bulk_confirm_tests(
         target_label=f"{len(created)} tests",
         hospital_id=current_doctor.hospital_id
     )
-    return [serialize(t) for t in created]
+    return [serialize(t, db) for t in created]
