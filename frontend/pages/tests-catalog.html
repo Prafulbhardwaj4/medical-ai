@@ -18,12 +18,32 @@
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
       <div class="topbar-doctor">
-        <span><strong id="topbar-doctor-name"></strong></span>
-        <div class="topbar-divider"></div>
-        <span id="topbar-clinic" style="color:var(--slate)"></span>
-        <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
-      </div>
-    </header>
+                <span><strong id="topbar-doctor-name"></strong></span>
+                <div class="topbar-divider"></div>
+                <span id="topbar-clinic" style="color:var(--slate)"></span>
+                <button class="notif-bell-btn" id="notif-bell-btn" onclick="toggleNotifPanel()" style="display:none">
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    <span class="notif-badge" id="notif-badge">0</span>
+                </button>
+                <button class="btn-logout" onclick="logout()">Sign out</button>
+            </div>
+        </header>
+
+        <div class="notif-backdrop" id="notif-backdrop" onclick="closeNotifPanel()"></div>
+        <div class="notif-panel" id="notif-panel">
+            <div class="notif-panel-header">
+                <h3 style="margin:0;font-size:15px">Notifications</h3>
+                <div style="display:flex;gap:10px;align-items:center">
+                    <button class="btn btn-outline btn-sm" onclick="markAllNotifsRead()">Mark all read</button>
+                    <button class="modal-close" onclick="closeNotifPanel()">×</button>
+                </div>
+            </div>
+            <div class="notif-panel-body" id="notif-panel-body">
+                <p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">Loading…</p>
+            </div>
+        </div>
     <nav class="sidebar">
       <div class="sidebar-section-label">Hospital Admin</div>
       <a class="nav-item" href="analytics.html">
@@ -194,6 +214,84 @@
     if (!doc || !["admin", "sub_admin"].includes(doc.role)) window.location.href = "dashboard.html";
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
+
+    if (["admin", "sub_admin", "pharmacy"].includes(getDoctor()?.role)) {
+      document.getElementById('notif-bell-btn').style.display = '';
+      loadNotifUnreadCount();
+      setInterval(loadNotifUnreadCount, 30000);
+    }
+
+    async function loadNotifUnreadCount() {
+      try {
+        const data = await api("GET", "/notifications/unread-count");
+        const badge = document.getElementById('notif-badge');
+        if (data.unread_count > 0) {
+          badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+          badge.style.display = 'flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (e) { }
+    }
+
+    async function toggleNotifPanel() {
+      const panel = document.getElementById('notif-panel');
+      const backdrop = document.getElementById('notif-backdrop');
+      if (panel.classList.contains('open')) {
+        closeNotifPanel();
+      } else {
+        panel.classList.add('open');
+        backdrop.classList.add('open');
+        await loadNotifList();
+      }
+    }
+
+    function closeNotifPanel() {
+      document.getElementById('notif-panel').classList.remove('open');
+      document.getElementById('notif-backdrop').classList.remove('open');
+    }
+
+    const NOTIF_ICON = { critical: 'critical', warning: 'warning', info: 'info' };
+
+    async function loadNotifList() {
+      const body = document.getElementById('notif-panel-body');
+      try {
+        const data = await api("GET", "/notifications");
+        loadNotifUnreadCount();
+        if (!data.notifications.length) {
+          body.innerHTML = '<p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">You\'re all caught up.</p>';
+          return;
+        }
+        body.innerHTML = data.notifications.map(n => `
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
+            <div class="notif-item-title">
+              <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
+              ${sanitize(n.title)}
+            </div>
+            <div class="notif-item-message">${sanitize(n.message)}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        body.innerHTML = '<p style="color:var(--danger);padding:20px;text-align:center;font-size:13px">Could not load notifications.</p>';
+      }
+    }
+
+    async function onNotifClick(id, linkType, linkId) {
+      try {
+        await api("PATCH", `/notifications/${id}/read`, {});
+        loadNotifUnreadCount();
+        if (linkType === 'medicine') {
+          window.location.href = 'medicines.html';
+        }
+      } catch (e) { }
+    }
+
+    async function markAllNotifsRead() {
+      try {
+        await api("POST", "/notifications/mark-all-read", {});
+        loadNotifList();
+      } catch (e) { }
+    }
 
     if (doc?.billing_enabled) document.getElementById('tests-billing-link').style.display = '';
 

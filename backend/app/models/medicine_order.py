@@ -1,0 +1,24 @@
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
+from datetime import datetime
+from app.database import Base
+
+class MedicineOrder(Base):
+    __tablename__ = "medicine_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    consultation_id = Column(Integer, ForeignKey("consultations.id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
+    catalog_medicine_id = Column(Integer, ForeignKey("hospital_medicines.id"), nullable=True)
+    medicine_name = Column(String, nullable=False)
+    brand_name = Column(String, nullable=True)
+    dosage = Column(String, nullable=True)
+    frequency = Column(String, nullable=True)
+    duration = Column(String, nullable=True)
+    unit_price = Column(Float, nullable=True)
+    quantity = Column(Integer, nullable=True)
+    included = Column(Boolean, default=True, nullable=False)
+    status = Column(String, nullable=False, default="advised")  # advised -> paid -> dispensed
+    paid_at = Column(DateTime, nullable=True)
+    dispensed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

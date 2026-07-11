@@ -31,3 +31,6 @@ class Checkin(Base):
     test_fee = Column(Float, nullable=True)
     is_paid = Column(Boolean, default=False, nullable=False)
     paid_at = Column(DateTime, nullable=True)
+
+    is_finalized = Column(Boolean, default=False, nullable=False)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)

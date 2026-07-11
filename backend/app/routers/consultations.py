@@ -19,6 +19,10 @@ from app.models.checkin import Checkin
 from app.models.hospital import Hospital
 from app.models.test_catalog import TestCatalogItem
 from app.models.test_order import TestOrder
+from app.models.medicine_order import MedicineOrder
+from app.models.hospital_medicine import HospitalMedicine
+from app.utils.inventory import deduct_stock_fefo
+from app.utils.notify import sync_stock_notifications
 from app.schemas.consultation import ConfirmPrescriptionPayload
 from app.config import settings
 from sqlalchemy import exists, func
@@ -517,6 +521,27 @@ def mark_dispensed(
 
     consultation.is_dispensed = True
     consultation.dispensed_at = now_ist()
+
+    paid_medicine_orders = db.query(MedicineOrder).filter(
+        MedicineOrder.consultation_id == consultation.id,
+        MedicineOrder.status == "paid"
+    ).all()
+    for mo in paid_medicine_orders:
+        mo.status = "dispensed"
+        mo.dispensed_at = now_ist()
+
+        if mo.catalog_medicine_id and mo.quantity:
+            result = deduct_stock_fefo(db, mo.catalog_medicine_id, mo.quantity)
+            db.commit()
+            sync_stock_notifications(db, mo.hospital_id)
+            log_action(
+                db, None,
+                action="medicine_dispensed",
+                target_type="hospital_medicine",
+                target_id=mo.catalog_medicine_id,
+                target_label=f"{result['medicine_name']} -{mo.quantity}" + (f" (shortfall {result['shortfall']})" if result["shortfall"] > 0 else ""),
+                hospital_id=mo.hospital_id
+            )
     db.commit()
 
     log_action(
@@ -706,6 +731,48 @@ def confirm_prescription(
                 test_name=t.name,
                 price=t.fee,
                 status="payment_pending"
+            ))
+
+    try:
+        prescribed_medicines = json.loads(consultation.medicines or "[]")
+    except Exception:
+        prescribed_medicines = []
+
+    if prescribed_medicines:
+        catalog_medicines = db.query(HospitalMedicine).filter(
+            HospitalMedicine.hospital_id == current_doctor.hospital_id,
+            HospitalMedicine.is_active == True
+        ).all()
+
+        def match_catalog(name, brand):
+            search_terms = [t for t in [(name or "").strip().lower(), (brand or "").strip().lower()] if t]
+            for cm in catalog_medicines:
+                cm_generic = (cm.generic_name or "").strip().lower()
+                cm_brands = [b.strip().lower() for b in (cm.brand_names or "").split(",") if b.strip()]
+                for term in search_terms:
+                    if term and (term == cm_generic or term in cm_brands or cm_generic in term):
+                        return cm
+            return None
+
+        for med in prescribed_medicines:
+            name = med.get("name", "")
+            brand = med.get("brand_name", "")
+            matched = match_catalog(name, brand)
+
+            db.add(MedicineOrder(
+                consultation_id=consultation.id,
+                patient_id=consultation.patient_id,
+                hospital_id=current_doctor.hospital_id,
+                catalog_medicine_id=matched.id if matched else None,
+                medicine_name=name,
+                brand_name=brand,
+                dosage=med.get("dosage", ""),
+                frequency=med.get("frequency", ""),
+                duration=med.get("duration", ""),
+                unit_price=matched.price if matched else None,
+                quantity=None,
+                included=True,
+                status="advised"
             ))
 
     consultation.token_number = token_number

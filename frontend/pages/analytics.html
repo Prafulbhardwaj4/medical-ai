@@ -111,9 +111,29 @@
                 <span><strong id="topbar-doctor-name"></strong></span>
                 <div class="topbar-divider"></div>
                 <span id="topbar-clinic" style="color:var(--slate)"></span>
+                <button class="notif-bell-btn" id="notif-bell-btn" onclick="toggleNotifPanel()" style="display:none">
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    <span class="notif-badge" id="notif-badge">0</span>
+                </button>
                 <button class="btn-logout" onclick="logout()">Sign out</button>
             </div>
         </header>
+
+        <div class="notif-backdrop" id="notif-backdrop" onclick="closeNotifPanel()"></div>
+        <div class="notif-panel" id="notif-panel">
+            <div class="notif-panel-header">
+                <h3 style="margin:0;font-size:15px">Notifications</h3>
+                <div style="display:flex;gap:10px;align-items:center">
+                    <button class="btn btn-outline btn-sm" onclick="markAllNotifsRead()">Mark all read</button>
+                    <button class="modal-close" onclick="closeNotifPanel()">×</button>
+                </div>
+            </div>
+            <div class="notif-panel-body" id="notif-panel-body">
+                <p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">Loading…</p>
+            </div>
+        </div>
 
         <nav class="sidebar">
             <div class="sidebar-section-label">Hospital Admin</div>
@@ -419,8 +439,12 @@
                     <div class="card-header">
                         <h2>Billing History</h2>
                     </div>
-                    <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Coming Soon — day-wise collection, date range filters, per-transaction log.</p>
-                    <button class="btn btn-primary" style="background:var(--teal);border-color:var(--teal)" onclick="toast('Billing History — Coming Soon', 'info')">📊 View Billing History</button>
+                    <div style="display:grid;grid-template-columns:1fr 160px 160px;gap:10px;margin-bottom:16px">
+                        <input class="form-control" id="billing-search" placeholder="Search by patient name or token…" oninput="loadBillingHistory()" />
+                        <input class="form-control" id="billing-from-date" type="date" onchange="loadBillingHistory()" />
+                        <input class="form-control" id="billing-to-date" type="date" onchange="loadBillingHistory()" />
+                    </div>
+                    <div id="billing-history-list"><p style="color:var(--slate)">Loading…</p></div>
                 </div>
                 <div class="card">
                     <div class="card-header">
@@ -431,6 +455,39 @@
                         <input type="number" min="0" step="1" class="form-control" id="default-fee-input" placeholder="₹" />
                         <button class="btn btn-primary" onclick="saveDefaultFee()">Save</button>
                     </div>
+                </div>
+                <div class="card" style="margin-top:20px">
+                    <div class="card-header">
+                        <h2>Hospital Details</h2>
+                    </div>
+                    <p style="color:var(--slate);font-size:13px;margin-bottom:14px">Name, city, and state are set by your super admin and can't be changed here. Address and GSTIN are yours to manage — used on printed invoices.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:600px;margin-bottom:14px">
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Hospital Name</label>
+                            <input class="form-control" id="hd-name" disabled style="background:var(--smoke-mid);color:var(--slate)" />
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Hospital Code</label>
+                            <input class="form-control" id="hd-code" disabled style="background:var(--smoke-mid);color:var(--slate)" />
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">City</label>
+                            <input class="form-control" id="hd-city" disabled style="background:var(--smoke-mid);color:var(--slate)" />
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">State</label>
+                            <input class="form-control" id="hd-state" disabled style="background:var(--smoke-mid);color:var(--slate)" />
+                        </div>
+                    </div>
+                    <div style="max-width:600px;margin-bottom:12px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Address</label>
+                        <input class="form-control" id="hd-address" placeholder="Street, area, pincode…" />
+                    </div>
+                    <div style="max-width:280px;margin-bottom:14px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GSTIN <span style="color:var(--slate-light);font-weight:400">(optional)</span></label>
+                        <input class="form-control" id="hd-gstin" placeholder="e.g. 07AAAAA0000A1Z5" />
+                    </div>
+                    <button class="btn btn-primary" onclick="saveHospitalDetails()">Save</button>
                 </div>
             </div>
 
@@ -444,6 +501,84 @@
         if (doc && doc.role === 'doctor') window.location.href = 'dashboard.html';
         if (!requireAuth()) throw new Error();
         fillTopbar();
+
+    if (["admin", "sub_admin", "pharmacy"].includes(getDoctor()?.role)) {
+      document.getElementById('notif-bell-btn').style.display = '';
+      loadNotifUnreadCount();
+      setInterval(loadNotifUnreadCount, 30000);
+    }
+
+    async function loadNotifUnreadCount() {
+      try {
+        const data = await api("GET", "/notifications/unread-count");
+        const badge = document.getElementById('notif-badge');
+        if (data.unread_count > 0) {
+          badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+          badge.style.display = 'flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (e) { }
+    }
+
+    async function toggleNotifPanel() {
+      const panel = document.getElementById('notif-panel');
+      const backdrop = document.getElementById('notif-backdrop');
+      if (panel.classList.contains('open')) {
+        closeNotifPanel();
+      } else {
+        panel.classList.add('open');
+        backdrop.classList.add('open');
+        await loadNotifList();
+      }
+    }
+
+    function closeNotifPanel() {
+      document.getElementById('notif-panel').classList.remove('open');
+      document.getElementById('notif-backdrop').classList.remove('open');
+    }
+
+    const NOTIF_ICON = { critical: 'critical', warning: 'warning', info: 'info' };
+
+    async function loadNotifList() {
+      const body = document.getElementById('notif-panel-body');
+      try {
+        const data = await api("GET", "/notifications");
+        loadNotifUnreadCount();
+        if (!data.notifications.length) {
+          body.innerHTML = '<p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">You\'re all caught up.</p>';
+          return;
+        }
+        body.innerHTML = data.notifications.map(n => `
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
+            <div class="notif-item-title">
+              <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
+              ${sanitize(n.title)}
+            </div>
+            <div class="notif-item-message">${sanitize(n.message)}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        body.innerHTML = '<p style="color:var(--danger);padding:20px;text-align:center;font-size:13px">Could not load notifications.</p>';
+      }
+    }
+
+    async function onNotifClick(id, linkType, linkId) {
+      try {
+        await api("PATCH", `/notifications/${id}/read`, {});
+        loadNotifUnreadCount();
+        if (linkType === 'medicine') {
+          window.location.href = 'medicines.html';
+        }
+      } catch (e) { }
+    }
+
+    async function markAllNotifsRead() {
+      try {
+        await api("POST", "/notifications/mark-all-read", {});
+        loadNotifList();
+      } catch (e) { }
+    }
 
         const doctor = getDoctor();
         if (doctor && doctor.clinic_name) {
@@ -489,9 +624,86 @@
             } catch (e) {
                 toast(e.message, "error");
             }
+            loadBillingHistory();
+            loadHospitalDetails();
         }
 
-        async function saveDefaultFee() {
+        async function loadBillingHistory() {
+      try {
+        const params = new URLSearchParams();
+        const search = document.getElementById('billing-search').value.trim();
+        const fromDate = document.getElementById('billing-from-date').value;
+        const toDate = document.getElementById('billing-to-date').value;
+        if (search) params.append('search', search);
+        if (fromDate) params.append('from_date', fromDate);
+        if (toDate) params.append('to_date', toDate);
+
+        const invoices = await api("GET", `/billing/invoices?${params.toString()}`);
+        renderBillingHistory(invoices);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function renderBillingHistory(invoices) {
+      const el = document.getElementById('billing-history-list');
+      if (!invoices.length) {
+        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No invoices found.</p>';
+        return;
+      }
+      el.innerHTML = invoices.map(inv => {
+        const dt = new Date(inv.generated_at.endsWith("Z") ? inv.generated_at : inv.generated_at + "Z");
+        const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:200px">
+              <strong>${sanitize(inv.patient_name)}</strong>
+              <span class="badge badge-navy" style="margin-left:6px">${sanitize(inv.token_number)}</span>
+            </div>
+            <div style="font-size:12px;color:var(--slate);min-width:150px">${dateStr} · ${timeStr}</div>
+            <div style="font-size:12px;color:var(--slate);min-width:90px">${inv.item_count} item${inv.item_count === 1 ? '' : 's'}</div>
+            <div style="font-weight:600;min-width:80px">₹${inv.grand_total}</div>
+            <button class="btn btn-outline btn-sm" onclick="downloadInvoicePdf(${inv.id})">View PDF</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function downloadInvoicePdf(invoiceId) {
+      try {
+        const response = await fetch(`${BASE}/billing/invoices/${invoiceId}/pdf`, {
+          headers: { "Authorization": `Bearer ${getToken()}` }
+        });
+        const blob = await response.blob();
+        window.open(URL.createObjectURL(blob), "_blank");
+      } catch (e) { toast('Could not load invoice', 'error'); }
+    }
+
+    async function loadHospitalDetails() {
+        try {
+            const h = await api("GET", "/admin/hospital/details");
+            document.getElementById('hd-name').value = h.name || '';
+            document.getElementById('hd-code').value = h.hospital_code || '';
+            document.getElementById('hd-city').value = h.city || '';
+            document.getElementById('hd-state').value = h.state || '';
+            document.getElementById('hd-address').value = h.address || '';
+            document.getElementById('hd-gstin').value = h.gstin || '';
+            if (h.default_consultation_fee != null) {
+                document.getElementById('default-fee-input').value = h.default_consultation_fee;
+            }
+        } catch (e) { }
+    }
+
+    async function saveHospitalDetails() {
+        try {
+            await api("PATCH", "/admin/hospital/details", {
+                address: document.getElementById('hd-address').value.trim(),
+                gstin: document.getElementById('hd-gstin').value.trim()
+            });
+            toast('Hospital details saved.', 'success');
+        } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function saveDefaultFee() {
             const val = parseFloat(document.getElementById('default-fee-input').value);
             if (isNaN(val) || val < 0) { toast('Enter a valid fee amount.', 'error'); return; }
             try {

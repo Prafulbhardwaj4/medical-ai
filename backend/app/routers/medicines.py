@@ -3,14 +3,17 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional
 from pydantic import BaseModel
+from datetime import date, datetime, timedelta
 import io
 
 from app.database import get_db
 from app.models.doctor import Doctor
 from app.models.hospital_medicine import HospitalMedicine
+from app.models.medicine_batch import MedicineBatch
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 from app.services.groq_service import extract_medicines
+from app.utils.notify import sync_stock_notifications
 
 router = APIRouter(prefix="/admin/medicines", tags=["medicines"])
 
@@ -22,6 +25,13 @@ def require_admin(current_doctor: Doctor):
         raise HTTPException(status_code=403, detail="Not authorized")
 
 
+def require_admin_or_pharmacy(current_doctor: Doctor):
+    # Stock viewing/adding is an operational pharmacy task, not catalog curation —
+    # pharmacy can view and add stock, but cannot create/edit/deactivate medicines.
+    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
 class MedicineIn(BaseModel):
     generic_name: str
     brand_names: Optional[str] = ""
@@ -29,6 +39,7 @@ class MedicineIn(BaseModel):
     dosage_forms: Optional[str] = ""
     strength: Optional[str] = ""
     schedule: Optional[str] = "otc"
+    low_stock_threshold: Optional[int] = 25
     pack_size: Optional[int] = 1
     price_per_pack: Optional[float] = None
     billing_mode: Optional[str] = "per_unit"
@@ -58,6 +69,7 @@ def serialize(m: HospitalMedicine):
         "dosage_forms": m.dosage_forms or "",
         "strength": m.strength or "",
         "schedule": m.schedule,
+        "low_stock_threshold": m.low_stock_threshold,
         "pack_size": m.pack_size,
         "price_per_pack": m.price_per_pack,
         "billing_mode": m.billing_mode,
@@ -76,7 +88,7 @@ def list_medicines(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    require_admin(current_doctor)
+    require_admin_or_pharmacy(current_doctor)
 
     query = db.query(HospitalMedicine).filter(
         HospitalMedicine.hospital_id == current_doctor.hospital_id,
@@ -126,6 +138,7 @@ def create_medicine(
         dosage_forms=(payload.dosage_forms or "").strip(),
         strength=(payload.strength or "").strip(),
         schedule=schedule,
+        low_stock_threshold=payload.low_stock_threshold or 25,
         pack_size=pack_size,
         price_per_pack=payload.price_per_pack,
         billing_mode=billing_mode,
@@ -183,6 +196,7 @@ def update_medicine(
     medicine.dosage_forms = (payload.dosage_forms or "").strip()
     medicine.strength = (payload.strength or "").strip()
     medicine.schedule = schedule
+    medicine.low_stock_threshold = payload.low_stock_threshold or 25
     medicine.pack_size = pack_size
     medicine.price_per_pack = payload.price_per_pack
     medicine.billing_mode = billing_mode
@@ -336,3 +350,169 @@ def bulk_confirm_medicines(
         hospital_id=current_doctor.hospital_id
     )
     return [serialize(m) for m in created]
+
+class BatchIn(BaseModel):
+    quantity: int
+    expiry_date: Optional[date] = None
+    batch_number: Optional[str] = ""
+
+
+def serialize_batch(b: MedicineBatch):
+    return {
+        "id": b.id,
+        "medicine_id": b.medicine_id,
+        "batch_number": b.batch_number or "",
+        "quantity": b.quantity,
+        "expiry_date": b.expiry_date.isoformat() if b.expiry_date else None,
+        "received_date": b.received_date.isoformat() if b.received_date else None
+    }
+
+
+@router.post("/{medicine_id}/batches", status_code=201)
+def add_batch(
+    medicine_id: int,
+    payload: BatchIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_admin_or_pharmacy(current_doctor)
+
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+
+    medicine = db.query(HospitalMedicine).filter(
+        HospitalMedicine.id == medicine_id,
+        HospitalMedicine.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not medicine:
+        raise HTTPException(status_code=404, detail="Medicine not found")
+
+    batch = MedicineBatch(
+        medicine_id=medicine_id,
+        hospital_id=current_doctor.hospital_id,
+        batch_number=(payload.batch_number or "").strip(),
+        quantity=payload.quantity,
+        expiry_date=payload.expiry_date,
+        received_date=date.today()
+    )
+    db.add(batch)
+
+    medicine.stock_quantity = (medicine.stock_quantity or 0) + payload.quantity
+    db.commit()
+    db.refresh(batch)
+    sync_stock_notifications(db, current_doctor.hospital_id)
+
+    log_action(
+        db, current_doctor,
+        action="medicine_stock_added",
+        target_type="medicine_batch",
+        target_id=batch.id,
+        target_label=f"{medicine.generic_name} +{payload.quantity}",
+        hospital_id=current_doctor.hospital_id
+    )
+    return serialize_batch(batch)
+
+
+@router.get("/{medicine_id}/batches")
+def list_batches(
+    medicine_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_admin_or_pharmacy(current_doctor)
+
+    batches = db.query(MedicineBatch).filter(
+        MedicineBatch.medicine_id == medicine_id,
+        MedicineBatch.hospital_id == current_doctor.hospital_id
+    ).order_by(MedicineBatch.expiry_date.asc().nullslast()).all()
+
+    return [serialize_batch(b) for b in batches]
+
+
+@router.delete("/batches/{batch_id}")
+def delete_batch(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_admin_or_pharmacy(current_doctor)
+
+    batch = db.query(MedicineBatch).filter(
+        MedicineBatch.id == batch_id,
+        MedicineBatch.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+
+    medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == batch.medicine_id).first()
+    if medicine:
+        medicine.stock_quantity = max(0, (medicine.stock_quantity or 0) - batch.quantity)
+
+    db.delete(batch)
+    db.commit()
+    sync_stock_notifications(db, current_doctor.hospital_id)
+
+    return {"deleted": True}
+
+
+@router.get("/expiring")
+def get_expiring_batches(
+    within_days: int = 30,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_admin_or_pharmacy(current_doctor)
+
+    cutoff = date.today() + timedelta(days=within_days)
+
+    batches = db.query(MedicineBatch).filter(
+        MedicineBatch.hospital_id == current_doctor.hospital_id,
+        MedicineBatch.expiry_date != None,
+        MedicineBatch.expiry_date <= cutoff,
+        MedicineBatch.quantity > 0
+    ).order_by(MedicineBatch.expiry_date.asc()).all()
+
+    result = []
+    for b in batches:
+        medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == b.medicine_id).first()
+        if not medicine or not medicine.is_active:
+            continue
+        days_left = (b.expiry_date - date.today()).days
+        result.append({
+            "batch_id": b.id,
+            "medicine_id": b.medicine_id,
+            "medicine_name": f"{medicine.generic_name}{' ' + medicine.strength if medicine.strength else ''}",
+            "batch_number": b.batch_number or "",
+            "quantity": b.quantity,
+            "expiry_date": b.expiry_date.isoformat(),
+            "days_left": days_left,
+            "is_expired": days_left < 0
+        })
+    return result
+
+@router.get("/low-stock")
+def get_low_stock_medicines(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_admin_or_pharmacy(current_doctor)
+
+    medicines = db.query(HospitalMedicine).filter(
+        HospitalMedicine.hospital_id == current_doctor.hospital_id,
+        HospitalMedicine.is_active == True
+    ).all()
+
+    result = []
+    for m in medicines:
+        stock = m.stock_quantity or 0
+        if stock <= m.low_stock_threshold:
+            result.append({
+                "medicine_id": m.id,
+                "medicine_name": f"{m.generic_name}{' ' + m.strength if m.strength else ''}",
+                "stock_quantity": stock,
+                "low_stock_threshold": m.low_stock_threshold,
+                "is_out_of_stock": stock == 0
+            })
+
+    result.sort(key=lambda r: r["stock_quantity"])
+    return result

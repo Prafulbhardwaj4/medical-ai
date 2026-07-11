@@ -14,5 +14,6 @@ class Hospital(Base):
     hospital_type = Column(String, default="private", nullable=False)
     billing_enabled = Column(Boolean, default=True, nullable=False)
     default_consultation_fee = Column(Float, nullable=True)
+    gstin = Column(String, nullable=True)  # optional — hospital adds this later if/when they need GST on invoices
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)

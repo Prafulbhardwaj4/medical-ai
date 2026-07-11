@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.hospital import Hospital
@@ -251,6 +253,62 @@ def update_fee_settings(
     hospital.default_consultation_fee = default_consultation_fee
     db.commit()
     return {"default_consultation_fee": hospital.default_consultation_fee}
+
+
+@router.get("/hospital/details")
+def get_hospital_details(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    return {
+        # Read-only — set by super admin only, tied to billing/plan tracking, never editable here
+        "name": hospital.name,
+        "hospital_code": hospital.hospital_code,
+        "hospital_type": hospital.hospital_type,
+        "city": hospital.city,
+        "state": hospital.state,
+        # Editable by hospital admin
+        "address": hospital.address,
+        "gstin": hospital.gstin,
+        "default_consultation_fee": hospital.default_consultation_fee
+    }
+
+
+class HospitalDetailsUpdate(BaseModel):
+    address: Optional[str] = None
+    gstin: Optional[str] = None
+    # Deliberately no name/city/state/hospital_code/hospital_type here —
+    # those are set once by super admin at hospital creation and tied to
+    # billing/plan tracking. Admin cannot touch them even via direct API call.
+
+
+@router.patch("/hospital/details")
+def update_hospital_details(
+    payload: HospitalDetailsUpdate,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    if payload.address is not None:
+        hospital.address = payload.address.strip()
+    if payload.gstin is not None:
+        hospital.gstin = payload.gstin.strip() or None
+
+    db.commit()
+    return {"address": hospital.address, "gstin": hospital.gstin}
 
 @router.get("/rooms")
 def list_rooms(

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
 from datetime import datetime
 from app.database import Base
 
@@ -12,6 +12,7 @@ class TestOrder(Base):
     test_id = Column(Integer, ForeignKey("test_catalog_items.id"), nullable=True)
     test_name = Column(String, nullable=False)
     price = Column(Float, nullable=False, default=0)
+    included = Column(Boolean, default=True, nullable=False)
     status = Column(String, nullable=False, default="payment_pending")
     # payment_pending -> paid -> sample_collected -> processing -> completed
 

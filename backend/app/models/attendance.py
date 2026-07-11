@@ -14,4 +14,5 @@ class AttendanceRecord(Base):
     marked_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     room_number = Column(String, nullable=True)
     room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
+    shift_started_at = Column(DateTime, nullable=True)  # set once, the first time they mark Present each day — never overwritten by later status changes that same day
     created_at = Column(DateTime, default=datetime.utcnow)

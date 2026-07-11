@@ -73,6 +73,12 @@
       gap: 8px;
       justify-content: flex-end;
     }
+    .preview-field-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px 14px;
+      margin-bottom: 10px;
+    }
     @media (max-width: 640px) {
       .item-card-fields { grid-template-columns: repeat(2, 1fr); }
       .item-card-actions { justify-content: stretch; }
@@ -92,12 +98,32 @@
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
       <div class="topbar-doctor">
-        <span><strong id="topbar-doctor-name"></strong></span>
-        <div class="topbar-divider"></div>
-        <span id="topbar-clinic" style="color:var(--slate)"></span>
-        <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
-      </div>
-    </header>
+                <span><strong id="topbar-doctor-name"></strong></span>
+                <div class="topbar-divider"></div>
+                <span id="topbar-clinic" style="color:var(--slate)"></span>
+                <button class="notif-bell-btn" id="notif-bell-btn" onclick="toggleNotifPanel()" style="display:none">
+                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    <span class="notif-badge" id="notif-badge">0</span>
+                </button>
+                <button class="btn-logout" onclick="logout()">Sign out</button>
+            </div>
+        </header>
+
+        <div class="notif-backdrop" id="notif-backdrop" onclick="closeNotifPanel()"></div>
+        <div class="notif-panel" id="notif-panel">
+            <div class="notif-panel-header">
+                <h3 style="margin:0;font-size:15px">Notifications</h3>
+                <div style="display:flex;gap:10px;align-items:center">
+                    <button class="btn btn-outline btn-sm" onclick="markAllNotifsRead()">Mark all read</button>
+                    <button class="modal-close" onclick="closeNotifPanel()">×</button>
+                </div>
+            </div>
+            <div class="notif-panel-body" id="notif-panel-body">
+                <p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">Loading…</p>
+            </div>
+        </div>
     <nav class="sidebar">
       <div class="sidebar-section-label">Hospital Admin</div>
       <a class="nav-item" href="analytics.html">
@@ -217,6 +243,20 @@
           </select>
         </div>
 
+        <div id="low-stock-panel" style="display:none;margin-bottom:14px;border:1px solid #fde68a;background:#fffbeb;border-radius:var(--radius);padding:14px 16px">
+          <div style="font-weight:700;color:#92400e;font-size:14px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+            📉 Low Stock
+          </div>
+          <div id="low-stock-list"></div>
+        </div>
+
+        <div id="expiring-soon-panel" style="display:none;margin-bottom:20px;border:1px solid #fecaca;background:#fef2f2;border-radius:var(--radius);padding:14px 16px">
+          <div style="font-weight:700;color:#991b1b;font-size:14px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+            ⚠ Expiring Soon / Expired Stock
+          </div>
+          <div id="expiring-soon-list"></div>
+        </div>
+
         <div id="medicines-list"><p style="color:var(--slate)">Loading…</p></div>
       </div>
     </main>
@@ -299,9 +339,12 @@
             <option value="x">X</option>
           </select>
         </div>
-        <div style="flex:1">
-          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Stock Qty (base units)</label>
-          <input class="form-control" id="m-stock" type="number" min="0" step="1" placeholder="e.g. 150" />
+        <div style="flex:1" id="m-stock-display-wrap">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Current Stock</label>
+          <div style="display:flex;align-items:center;gap:8px;height:38px">
+            <span id="m-stock-display" style="font-weight:600;font-family:'DM Mono',monospace">0</span>
+            <button type="button" class="btn btn-outline btn-sm" id="m-add-stock-btn" style="display:none" onclick="openAddStockModal()">+ Add Stock</button>
+          </div>
         </div>
       </div>
 
@@ -328,9 +371,15 @@
       </div>
       <p id="computed-price-hint" style="font-size:12px;color:var(--slate);margin:0 0 14px"></p>
 
-      <div style="margin-bottom:14px">
-        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GST % (optional — leave blank if not applicable)</label>
-        <input class="form-control" id="m-gst" type="number" min="0" step="0.01" placeholder="e.g. 12 — leave blank for none" style="max-width:200px" />
+      <div style="display:flex;gap:12px;margin-bottom:14px">
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GST % (optional)</label>
+          <input class="form-control" id="m-gst" type="number" min="0" step="0.01" placeholder="e.g. 12 — leave blank for none" />
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Low Stock Alert At</label>
+          <input class="form-control" id="m-low-stock-threshold" type="number" min="0" step="1" placeholder="25" />
+        </div>
       </div>
 
       <div class="err-msg" id="medicine-modal-err" style="margin-bottom:12px"></div>
@@ -359,6 +408,38 @@
     </div>
   </div>
 
+  <!-- Add Stock Modal -->
+  <div class="modal-overlay" id="modal-add-stock">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Add Stock — <span id="stock-medicine-name"></span></h2>
+        <button class="modal-close" onclick="closeAddStockModal()">×</button>
+      </div>
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Quantity Received</label>
+      <input class="form-control" id="stock-qty" type="number" min="1" step="1" placeholder="e.g. 100" style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Expiry Date</label>
+      <input class="form-control" id="stock-expiry" type="date" style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Batch / Lot Number (optional)</label>
+      <input class="form-control" id="stock-batch-number" placeholder="e.g. B4521" style="margin-bottom:14px" />
+      <div class="err-msg" id="stock-modal-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="submitAddStock()">Add Stock</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeAddStockModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batches Modal -->
+  <div class="modal-overlay" id="modal-batches">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Stock Batches — <span id="batches-medicine-name"></span></h2>
+        <button class="modal-close" onclick="closeBatchesModal()">×</button>
+      </div>
+      <div id="batches-list" style="max-height:50vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <script src="../js/api.js?v=3"></script>
   <script>
@@ -366,6 +447,84 @@
     if (!doc || !["admin", "sub_admin"].includes(doc.role)) window.location.href = "dashboard.html";
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
+
+    if (["admin", "sub_admin", "pharmacy"].includes(getDoctor()?.role)) {
+      document.getElementById('notif-bell-btn').style.display = '';
+      loadNotifUnreadCount();
+      setInterval(loadNotifUnreadCount, 30000);
+    }
+
+    async function loadNotifUnreadCount() {
+      try {
+        const data = await api("GET", "/notifications/unread-count");
+        const badge = document.getElementById('notif-badge');
+        if (data.unread_count > 0) {
+          badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+          badge.style.display = 'flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (e) { }
+    }
+
+    async function toggleNotifPanel() {
+      const panel = document.getElementById('notif-panel');
+      const backdrop = document.getElementById('notif-backdrop');
+      if (panel.classList.contains('open')) {
+        closeNotifPanel();
+      } else {
+        panel.classList.add('open');
+        backdrop.classList.add('open');
+        await loadNotifList();
+      }
+    }
+
+    function closeNotifPanel() {
+      document.getElementById('notif-panel').classList.remove('open');
+      document.getElementById('notif-backdrop').classList.remove('open');
+    }
+
+    const NOTIF_ICON = { critical: 'critical', warning: 'warning', info: 'info' };
+
+    async function loadNotifList() {
+      const body = document.getElementById('notif-panel-body');
+      try {
+        const data = await api("GET", "/notifications");
+        loadNotifUnreadCount();
+        if (!data.notifications.length) {
+          body.innerHTML = '<p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">You\'re all caught up.</p>';
+          return;
+        }
+        body.innerHTML = data.notifications.map(n => `
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
+            <div class="notif-item-title">
+              <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
+              ${sanitize(n.title)}
+            </div>
+            <div class="notif-item-message">${sanitize(n.message)}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        body.innerHTML = '<p style="color:var(--danger);padding:20px;text-align:center;font-size:13px">Could not load notifications.</p>';
+      }
+    }
+
+    async function onNotifClick(id, linkType, linkId) {
+      try {
+        await api("PATCH", `/notifications/${id}/read`, {});
+        loadNotifUnreadCount();
+        if (linkType === 'medicine') {
+          window.location.href = 'medicines.html';
+        }
+      } catch (e) { }
+    }
+
+    async function markAllNotifsRead() {
+      try {
+        await api("POST", "/notifications/mark-all-read", {});
+        loadNotifList();
+      } catch (e) { }
+    }
 
     if (doc?.billing_enabled) document.getElementById('medicines-billing-link').style.display = '';
 
@@ -445,6 +604,9 @@
       return `<span class="badge ${cls}">${(schedule || '').toUpperCase()}</span>`;
     }
 
+    let expiringMedicineIds = new Set();
+    let lowStockMedicineIds = new Set();
+
     async function loadMedicines() {
       try {
         const params = new URLSearchParams();
@@ -455,7 +617,13 @@
         if (category) params.append('category', category);
         if (schedule) params.append('schedule', schedule);
 
-        const items = await api("GET", `/admin/medicines?${params.toString()}`);
+        const [items, expiring, lowStock] = await Promise.all([
+          api("GET", `/admin/medicines?${params.toString()}`),
+          api("GET", "/admin/medicines/expiring?within_days=30").catch(() => []),
+          api("GET", "/admin/medicines/low-stock").catch(() => [])
+        ]);
+        expiringMedicineIds = new Set(expiring.map(e => e.medicine_id));
+        lowStockMedicineIds = new Set(lowStock.map(l => l.medicine_id));
         renderMedicines(items);
         populateCategoryFilter(items);
       } catch (e) { toast(e.message, "error"); }
@@ -478,6 +646,11 @@
       return `₹${m.price_per_pack}`;
     }
 
+    function unitPriceLabel(m) {
+      if (m.price == null) return '—';
+      return m.pack_size > 1 ? `₹${m.price} / unit` : '—';
+    }
+
     function renderMedicines(items) {
       const el = document.getElementById('medicines-list');
       if (!items.length) {
@@ -485,16 +658,44 @@
         return;
       }
       el.innerHTML = items.map(m => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
-          <div style="flex:1;min-width:220px">
-            <strong>${sanitize(m.generic_name)}${m.strength ? ' ' + sanitize(m.strength) : ''}</strong>
-            ${m.brand_names ? `<div style="font-size:12px;color:var(--slate)">${sanitize(m.brand_names)}</div>` : ''}
+        <div class="item-card">
+          <div class="item-card-top">
+            <div>
+              <div class="item-card-title">${sanitize(m.generic_name)}${m.strength ? ' ' + sanitize(m.strength) : ''}</div>
+              <div class="item-card-subtitle">${m.brand_names ? sanitize(m.brand_names) : 'No brand names listed'}</div>
+            </div>
+            <div class="item-card-badges">
+              ${scheduleBadge(m.schedule)}
+              ${m.gst_percent != null ? `<span class="badge badge-grey">+${m.gst_percent}% GST</span>` : ''}
+              ${expiringMedicineIds.has(m.id) ? `<span class="badge badge-amber">Expiring Soon</span>` : ''}
+              ${lowStockMedicineIds.has(m.id) ? `<span class="badge badge-warn">Low Stock</span>` : ''}
+              ${!m.is_active ? `<span class="badge badge-red">Inactive</span>` : ''}
+            </div>
           </div>
-          <div style="font-size:12px;color:var(--slate);min-width:100px">${sanitize(m.category || '—')} · ${sanitize(m.dosage_forms || '—')}</div>
-          <div>${scheduleBadge(m.schedule)}</div>
-          <div style="min-width:120px;font-size:13px">${priceLabel(m)}${m.gst_percent != null ? ` <span class="badge badge-grey" style="font-size:10px">+${m.gst_percent}% GST</span>` : ''}</div>
-          <div style="min-width:70px;font-size:13px">Stock: ${m.stock_quantity != null ? m.stock_quantity : '—'}</div>
-          <div style="display:flex;gap:8px">
+          <div class="item-card-fields">
+            <div>
+              <div class="item-field-label">Category</div>
+              <div class="item-field-value">${sanitize(m.category || '—')}</div>
+            </div>
+            <div>
+              <div class="item-field-label">Form</div>
+              <div class="item-field-value">${sanitize(m.dosage_forms || '—')}</div>
+            </div>
+            <div>
+              <div class="item-field-label">Price</div>
+              <div class="item-field-value mono">${priceLabel(m)}</div>
+            </div>
+            <div>
+              <div class="item-field-label">Unit Price</div>
+              <div class="item-field-value mono">${unitPriceLabel(m)}</div>
+            </div>
+            <div>
+              <div class="item-field-label">Stock</div>
+              <div class="item-field-value mono">${m.stock_quantity != null ? m.stock_quantity : '—'}</div>
+            </div>
+          </div>
+          <div class="item-card-actions">
+            <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">View Batches</button>
             <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m)})'>Edit</button>
             <button class="btn btn-outline btn-sm" onclick="deactivateMedicine(${m.id})">Deactivate</button>
           </div>
@@ -516,14 +717,17 @@
       document.getElementById('m-strength').value = '';
       document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER['Tablet'];
       document.getElementById('m-schedule').value = 'otc';
-      document.getElementById('m-stock').value = '';
       document.getElementById('m-pack-size').value = '';
       document.getElementById('m-price-per-pack').value = '';
       document.getElementById('m-price-per-pack-single').value = '';
       document.getElementById('m-billing-mode').value = 'per_unit';
       document.getElementById('m-gst').value = '';
+      document.getElementById('m-low-stock-threshold').value = '25';
       showStripPricing(true);
       updateComputedPrice();
+      document.getElementById('m-stock-display').textContent = '0 (save first, then add stock)';
+      document.getElementById('m-add-stock-btn').style.display = 'none';
+      currentEditMedicineId = null;
       document.getElementById('medicine-modal-err').textContent = '';
       document.getElementById('modal-medicine').classList.add('open');
     }
@@ -559,12 +763,15 @@
       document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER[document.getElementById('m-form-select').value] || 'e.g. 500mg';
 
       document.getElementById('m-schedule').value = m.schedule || 'otc';
-      document.getElementById('m-stock').value = m.stock_quantity != null ? m.stock_quantity : '';
+      document.getElementById('m-stock-display').textContent = m.stock_quantity != null ? m.stock_quantity : '0';
+      document.getElementById('m-add-stock-btn').style.display = '';
+      currentEditMedicineId = m.id;
       document.getElementById('m-pack-size').value = m.pack_size || '';
       document.getElementById('m-price-per-pack').value = m.price_per_pack != null ? m.price_per_pack : '';
       document.getElementById('m-price-per-pack-single').value = m.price_per_pack != null ? m.price_per_pack : '';
       document.getElementById('m-billing-mode').value = m.billing_mode || 'per_unit';
       document.getElementById('m-gst').value = m.gst_percent != null ? m.gst_percent : '';
+      document.getElementById('m-low-stock-threshold').value = m.low_stock_threshold != null ? m.low_stock_threshold : 25;
       updateComputedPrice();
       document.getElementById('medicine-modal-err').textContent = '';
       document.getElementById('modal-medicine').classList.add('open');
@@ -573,6 +780,8 @@
     function closeMedicineModal() {
       document.getElementById('modal-medicine').classList.remove('open');
     }
+
+    let currentEditMedicineId = null;
 
     async function submitMedicineForm() {
       const id = document.getElementById('m-id').value;
@@ -594,6 +803,7 @@
         : (document.getElementById('m-price-per-pack-single').value ? parseFloat(document.getElementById('m-price-per-pack-single').value) : null);
       const billing_mode = isDivisible ? document.getElementById('m-billing-mode').value : 'per_pack';
       const gst_percent = document.getElementById('m-gst').value ? parseFloat(document.getElementById('m-gst').value) : null;
+      const low_stock_threshold = document.getElementById('m-low-stock-threshold').value ? parseInt(document.getElementById('m-low-stock-threshold').value) : 25;
 
       const payload = {
         generic_name,
@@ -606,7 +816,7 @@
         price_per_pack,
         billing_mode,
         gst_percent,
-        stock_quantity: document.getElementById('m-stock').value ? parseInt(document.getElementById('m-stock').value) : null
+        low_stock_threshold
       };
 
       try {
@@ -620,6 +830,141 @@
         closeMedicineModal();
         loadMedicines();
       } catch (e) { errEl.textContent = e.message; }
+    }
+
+    function openAddStockModal() {
+      if (!currentEditMedicineId) return;
+      document.getElementById('stock-medicine-name').textContent = document.getElementById('m-generic').value;
+      document.getElementById('stock-qty').value = '';
+      document.getElementById('stock-expiry').value = '';
+      document.getElementById('stock-batch-number').value = '';
+      document.getElementById('stock-modal-err').textContent = '';
+      document.getElementById('modal-add-stock').classList.add('open');
+    }
+
+    function closeAddStockModal() {
+      document.getElementById('modal-add-stock').classList.remove('open');
+    }
+
+    async function submitAddStock() {
+      const errEl = document.getElementById('stock-modal-err');
+      const qty = parseInt(document.getElementById('stock-qty').value);
+      if (!qty || qty <= 0) { errEl.textContent = 'Enter a valid quantity.'; return; }
+
+      const payload = {
+        quantity: qty,
+        expiry_date: document.getElementById('stock-expiry').value || null,
+        batch_number: document.getElementById('stock-batch-number').value.trim()
+      };
+
+      try {
+        await api("POST", `/admin/medicines/${currentEditMedicineId}/batches`, payload);
+        toast('Stock added.', 'success');
+        closeAddStockModal();
+        closeMedicineModal();
+        loadMedicines();
+        loadExpiringSoon();
+      } catch (e) { errEl.textContent = e.message; }
+    }
+
+    async function openBatchesModal(medicineId, medicineName) {
+      document.getElementById('batches-medicine-name').textContent = medicineName;
+      document.getElementById('batches-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+      document.getElementById('modal-batches').classList.add('open');
+      try {
+        const batches = await api("GET", `/admin/medicines/${medicineId}/batches`);
+        renderBatches(batches, medicineId, medicineName);
+      } catch (e) {
+        document.getElementById('batches-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+      }
+    }
+
+    function renderBatches(batches, medicineId, medicineName) {
+      const el = document.getElementById('batches-list');
+      if (!batches.length) {
+        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No stock batches recorded yet.</p>';
+        return;
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      el.innerHTML = batches.map(b => {
+        let badge = '';
+        if (b.expiry_date) {
+          const daysLeft = Math.floor((new Date(b.expiry_date) - new Date(today)) / 86400000);
+          if (daysLeft < 0) badge = '<span class="badge badge-red">Expired</span>';
+          else if (daysLeft <= 30) badge = `<span class="badge badge-amber">${daysLeft}d left</span>`;
+        }
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+            <div>
+              <strong>${b.quantity} units</strong>
+              ${b.batch_number ? ` · Lot ${sanitize(b.batch_number)}` : ''}
+              <div style="font-size:12px;color:var(--slate)">Expiry: ${b.expiry_date || 'Not set'} · Received: ${b.received_date || '—'}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              ${badge}
+              <button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}')">Remove</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function deleteBatch(batchId, medicineId, medicineName) {
+      try {
+        await api("DELETE", `/admin/medicines/batches/${batchId}`);
+        toast('Batch removed.', 'success');
+        openBatchesModal(medicineId, medicineName);
+        loadMedicines();
+        loadExpiringSoon();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function closeBatchesModal() {
+      document.getElementById('modal-batches').classList.remove('open');
+    }
+
+    async function loadExpiringSoon() {
+      try {
+        const items = await api("GET", "/admin/medicines/expiring?within_days=30");
+        renderExpiringSoon(items);
+      } catch (e) { }
+    }
+
+    async function loadLowStock() {
+      try {
+        const items = await api("GET", "/admin/medicines/low-stock");
+        renderLowStock(items);
+      } catch (e) { }
+    }
+
+    function renderLowStock(items) {
+      const panel = document.getElementById('low-stock-panel');
+      const list = document.getElementById('low-stock-list');
+      if (!items.length) { panel.style.display = 'none'; return; }
+      panel.style.display = 'block';
+      list.innerHTML = items.map(i => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px">
+          <span>${sanitize(i.medicine_name)}</span>
+          <span style="font-weight:600;color:${i.is_out_of_stock ? '#991b1b' : '#92400e'}">
+            ${i.is_out_of_stock ? 'Out of stock' : `${i.stock_quantity} left (alert at ${i.low_stock_threshold})`}
+          </span>
+        </div>
+      `).join('');
+    }
+
+    function renderExpiringSoon(items) {
+      const panel = document.getElementById('expiring-soon-panel');
+      const list = document.getElementById('expiring-soon-list');
+      if (!items.length) { panel.style.display = 'none'; return; }
+      panel.style.display = 'block';
+      list.innerHTML = items.map(i => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px">
+          <span>${sanitize(i.medicine_name)}${i.batch_number ? ' · Lot ' + sanitize(i.batch_number) : ''} — ${i.quantity} units</span>
+          <span style="font-weight:600;color:${i.is_expired ? '#991b1b' : '#b45309'}">
+            ${i.is_expired ? 'Expired' : `${i.days_left} day${i.days_left === 1 ? '' : 's'} left`}
+          </span>
+        </div>
+      `).join('');
     }
 
     async function deactivateMedicine(id) {
@@ -657,8 +1002,7 @@
           schedule: m.schedule || 'h',
           pack_size: m.pack_size || 1,
           price_per_pack: m.price_per_pack != null ? m.price_per_pack : '',
-          gst_percent: m.gst_percent != null ? m.gst_percent : '',
-          stock_quantity: m.stock_quantity != null ? m.stock_quantity : ''
+          gst_percent: m.gst_percent != null ? m.gst_percent : ''
         }));
         renderPreviewTable();
       } catch (e) {
@@ -668,34 +1012,45 @@
       }
     }
 
+    function previewFieldRow(labels) {
+      // labels: [ [label, inputHtml], ... ] rendered as a responsive grid, no truncation
+      return `<div class="preview-field-grid">${labels.map(([label, html]) => `
+        <div>
+          <div class="item-field-label">${label}</div>
+          ${html}
+        </div>
+      `).join('')}</div>`;
+    }
+
     function renderPreviewTable() {
       const el = document.getElementById('upload-preview-table');
       if (!previewData.length) {
         el.innerHTML = '<p style="color:var(--slate-light)">No medicines extracted from this file.</p>';
         return;
       }
-      el.innerHTML = `
-        <div style="display:grid;grid-template-columns:1.6fr 1.4fr 1fr 0.9fr 0.9fr 0.7fr 0.7fr 0.9fr 0.7fr 0.7fr 40px;gap:6px;font-size:11px;color:var(--slate);padding:0 0 8px;font-weight:600">
-          <div>Generic Name</div><div>Brand Names</div><div>Category</div><div>Form</div><div>Strength</div><div>Sched.</div><div>Pack</div><div>Price/Pack</div><div>GST%</div><div>Stock</div><div></div>
-        </div>
-        ${previewData.map((m, i) => `
-          <div style="display:grid;grid-template-columns:1.6fr 1.4fr 1fr 0.9fr 0.9fr 0.7fr 0.7fr 0.9fr 0.7fr 0.7fr 40px;gap:6px;margin-bottom:6px">
-            <input class="form-control" value="${sanitize(m.generic_name)}" oninput="previewData[${i}].generic_name=this.value" />
-            <input class="form-control" value="${sanitize(m.brand_names)}" oninput="previewData[${i}].brand_names=this.value" />
-            <input class="form-control" value="${sanitize(m.category)}" oninput="previewData[${i}].category=this.value" />
-            <input class="form-control" value="${sanitize(m.dosage_forms)}" oninput="previewData[${i}].dosage_forms=this.value" />
-            <input class="form-control" value="${sanitize(m.strength)}" oninput="previewData[${i}].strength=this.value" />
-            <select class="form-control" onchange="previewData[${i}].schedule=this.value">
-              ${['otc','h','h1','x'].map(s => `<option value="${s}" ${m.schedule === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}
-            </select>
-            <input class="form-control" type="number" value="${m.pack_size}" oninput="previewData[${i}].pack_size=this.value" />
-            <input class="form-control" type="number" value="${m.price_per_pack}" oninput="previewData[${i}].price_per_pack=this.value" />
-            <input class="form-control" type="number" value="${m.gst_percent}" oninput="previewData[${i}].gst_percent=this.value" />
-            <input class="form-control" type="number" value="${m.stock_quantity}" oninput="previewData[${i}].stock_quantity=this.value" />
-            <button class="btn btn-outline btn-sm" onclick="removePreviewRow(${i})" title="Remove">×</button>
+      el.innerHTML = previewData.map((m, i) => `
+        <div class="item-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <span style="font-size:12px;color:var(--slate-light);font-weight:700">ROW ${i + 1}</span>
+            <button class="btn btn-outline btn-sm" onclick="removePreviewRow(${i})">Remove Row</button>
           </div>
-        `).join('')}
-      `;
+          ${previewFieldRow([
+            ['Generic Name', `<input class="form-control" value="${sanitize(m.generic_name)}" oninput="previewData[${i}].generic_name=this.value" />`],
+            ['Brand Names', `<input class="form-control" value="${sanitize(m.brand_names)}" oninput="previewData[${i}].brand_names=this.value" />`]
+          ])}
+          ${previewFieldRow([
+            ['Category', `<input class="form-control" value="${sanitize(m.category)}" oninput="previewData[${i}].category=this.value" />`],
+            ['Dosage Form', `<input class="form-control" value="${sanitize(m.dosage_forms)}" oninput="previewData[${i}].dosage_forms=this.value" />`],
+            ['Strength', `<input class="form-control" value="${sanitize(m.strength)}" oninput="previewData[${i}].strength=this.value" />`]
+          ])}
+          ${previewFieldRow([
+            ['Schedule', `<select class="form-control" onchange="previewData[${i}].schedule=this.value">${['otc','h','h1','x'].map(s => `<option value="${s}" ${m.schedule === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}</select>`],
+            ['Units per Pack', `<input class="form-control" type="number" value="${m.pack_size}" oninput="previewData[${i}].pack_size=this.value" />`],
+            ['Price per Pack (₹)', `<input class="form-control" type="number" value="${m.price_per_pack}" oninput="previewData[${i}].price_per_pack=this.value" />`],
+            ['GST %', `<input class="form-control" type="number" value="${m.gst_percent}" oninput="previewData[${i}].gst_percent=this.value" />`]
+          ])}
+        </div>
+      `).join('');
     }
 
     function removePreviewRow(i) {
@@ -723,8 +1078,7 @@
           schedule: m.schedule || 'h',
           pack_size: m.pack_size !== '' && m.pack_size != null ? parseInt(m.pack_size) : 1,
           price_per_pack: m.price_per_pack !== '' && m.price_per_pack != null ? parseFloat(m.price_per_pack) : null,
-          gst_percent: m.gst_percent !== '' && m.gst_percent != null ? parseFloat(m.gst_percent) : null,
-          stock_quantity: m.stock_quantity !== '' && m.stock_quantity != null ? parseInt(m.stock_quantity) : null
+          gst_percent: m.gst_percent !== '' && m.gst_percent != null ? parseFloat(m.gst_percent) : null
         }));
 
       try {
@@ -736,6 +1090,8 @@
     }
 
     loadMedicines();
+    loadExpiringSoon();
+    loadLowStock();
   </script>
 </body>
 </html>

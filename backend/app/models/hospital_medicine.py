@@ -19,5 +19,6 @@ class HospitalMedicine(Base):
     billing_mode = Column(String, nullable=False, default="per_unit")  # "per_unit" or "per_pack"
     gst_percent = Column(Float, nullable=True)  # optional, applied on top of price at billing time — blank = no GST
     stock_quantity = Column(Integer, nullable=True, default=0)
+    low_stock_threshold = Column(Integer, nullable=False, default=25)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

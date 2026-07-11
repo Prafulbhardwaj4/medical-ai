@@ -13,6 +13,8 @@ from app.models.hospital import Hospital
 from app.models.checkin import Checkin
 from app.models.test_catalog import TestCatalogItem
 from app.models.test_order import TestOrder
+from app.models.checkin import Checkin
+import os
 from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
@@ -627,9 +629,69 @@ def get_pending_test_fees(
     ).order_by(TestOrder.created_at).all()
 
     return [
-        {"id": o.id, "test_name": o.test_name, "price": o.price, "status": o.status}
+        {"id": o.id, "test_name": o.test_name, "price": o.price, "status": o.status, "included": o.included}
         for o in orders
     ]
+
+
+@router.patch("/test-orders/{order_id}/toggle-include")
+def toggle_test_order_include(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    order = db.query(TestOrder).filter(
+        TestOrder.id == order_id,
+        TestOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Test order not found")
+    if order.status != "payment_pending":
+        raise HTTPException(status_code=400, detail="Cannot change inclusion after payment")
+
+    order.included = not order.included
+    db.commit()
+    return {"id": order.id, "included": order.included}
+
+
+@router.post("/{patient_id}/collect-test-payment")
+def collect_test_payment(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_end = datetime.combine(date.today(), datetime.max.time())
+
+    orders = db.query(TestOrder).filter(
+        TestOrder.patient_id == patient_id,
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.status == "payment_pending",
+        TestOrder.included == True,
+        TestOrder.created_at >= today_start,
+        TestOrder.created_at <= today_end
+    ).all()
+
+    if not orders:
+        raise HTTPException(status_code=400, detail="No included tests pending payment")
+
+    total = 0
+    for o in orders:
+        o.status = "paid"
+        o.paid_at = datetime.utcnow()
+        total += o.price
+
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="test_fees_collected",
+        target_type="patient",
+        target_id=patient_id,
+        target_label=f"₹{total} for {len(orders)} tests",
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"charged": total, "count": len(orders)}
 
 
 @router.post("/test-orders/{order_id}/mark-paid")
@@ -690,3 +752,111 @@ def get_patient_test_orders(
         }
         for o in orders
     ]
+
+@router.get("/checkin-by-token/{token_number}")
+def get_checkin_by_token(
+    token_number: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    checkin = db.query(Checkin).filter(
+        Checkin.token_number == token_number,
+        Checkin.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not checkin:
+        raise HTTPException(status_code=404, detail="Visit not found for this token")
+    return {"checkin_id": checkin.id}
+
+@router.get("/{patient_id}/documents")
+def get_patient_documents(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    documents = []
+
+    checkins = db.query(Checkin).filter(
+        Checkin.patient_id == patient_id,
+        Checkin.hospital_id == current_doctor.hospital_id
+    ).order_by(Checkin.created_at.desc()).all()
+
+    for c in checkins:
+        documents.append({
+            "type": "token_slip",
+            "label": f"Token Slip — {c.token_number}",
+            "ref_id": c.id,
+            "extra": c.token_number,
+            "date": c.created_at.isoformat() if c.created_at else None
+        })
+        if c.invoice_id:
+            documents.append({
+                "type": "invoice",
+                "label": f"Invoice — Token {c.token_number}",
+                "ref_id": c.invoice_id,
+                "extra": None,
+                "date": c.created_at.isoformat() if c.created_at else None
+            })
+
+    consultations = db.query(Consultation).filter(
+        Consultation.patient_id == patient_id,
+        Consultation.pdf_path != None,
+        Consultation.is_voided == False
+    ).order_by(Consultation.created_at.desc()).all()
+
+    for c in consultations:
+        documents.append({
+            "type": "prescription",
+            "label": f"Prescription — {c.token_number or 'Draft'}",
+            "ref_id": c.id,
+            "extra": None,
+            "date": c.created_at.isoformat() if c.created_at else None
+        })
+
+    test_orders = db.query(TestOrder).filter(
+        TestOrder.patient_id == patient_id,
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.status == "completed"
+    ).order_by(TestOrder.completed_at.desc()).all()
+
+    for t in test_orders:
+        documents.append({
+            "type": "test_report",
+            "label": f"Test Report — {t.test_name}",
+            "ref_id": t.id,
+            "extra": None,
+            "date": t.completed_at.isoformat() if t.completed_at else None
+        })
+
+    documents.sort(key=lambda d: d["date"] or "", reverse=True)
+    return documents
+
+
+@router.get("/prescriptions/{consultation_id}/download")
+def download_prescription_staff(
+    consultation_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+    if not consultation or not consultation.pdf_path:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    patient = db.query(Patient).filter(
+        Patient.id == consultation.patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    if not os.path.exists(consultation.pdf_path):
+        raise HTTPException(status_code=404, detail="Prescription file not found")
+
+    from fastapi.responses import FileResponse
+    return FileResponse(consultation.pdf_path, media_type="application/pdf", filename=os.path.basename(consultation.pdf_path))

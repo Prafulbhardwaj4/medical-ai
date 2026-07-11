@@ -135,9 +135,13 @@
             <button class="btn btn-primary btn-sm" id="btn-mark-paid" style="width:100%;margin-top:8px" onclick="markPaid()">Mark as Paid</button>
           </div>
           <div id="pending-tests-row" class="no-print" style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
-            <p style="font-weight:600;margin-bottom:8px">Pending Test Fees</p>
+            <p style="font-weight:600;margin-bottom:8px">Pending Test Fees <span style="font-weight:400;font-size:12px;color:var(--slate)">(uncheck what the patient won't be getting here)</span></p>
             <div id="pending-tests-list"></div>
-            <p style="margin-top:8px"><strong>Total Test Fees:</strong> ₹<span id="pending-tests-total">0</span></p>
+            <p style="margin-top:8px"><strong>Total:</strong> ₹<span id="pending-tests-total">0</span></p>
+            <button class="btn btn-primary btn-sm" id="pending-tests-collect-wrap" style="width:100%;margin-top:8px">Collect Payment</button>
+          </div>
+          <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px">
+            <button class="btn btn-primary btn-sm" style="width:100%" onclick="generateBill()">Generate Bill</button>
           </div>
           <div style="display:flex;gap:10px" class="no-print">
             <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
@@ -241,6 +245,17 @@
         <button class="btn btn-outline" onclick="closeAddPatient()">Cancel</button>
         <button class="btn btn-primary" id="btn-save-patient" onclick="savePatient()">Save Patient</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Document History Modal -->
+  <div class="modal-overlay" id="modal-documents">
+    <div class="modal" style="max-width:600px">
+      <div class="modal-header">
+        <h2>Documents — <span id="doc-patient-name"></span></h2>
+        <button class="modal-close" onclick="closeDocumentsModal()">×</button>
+      </div>
+      <div id="documents-list" style="max-height:60vh;overflow-y:auto"></div>
     </div>
   </div>
 
@@ -471,20 +486,109 @@
       if (!orders.length) { row.style.display = 'none'; return; }
       row.style.display = '';
       list.innerHTML = orders.map(o => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;gap:10px">
-          <span>${o.test_name} — ₹${o.price}</span>
-          <button class="btn btn-outline btn-sm" onclick="markTestFeePaid(${o.id}, ${patientId})">Mark Paid</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;gap:10px;${o.included ? '' : 'opacity:0.45'}">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" ${o.included ? 'checked' : ''} onchange="toggleTestInclude(${o.id}, ${patientId})" style="width:16px;height:16px" />
+            <span>${o.test_name} — ₹${o.price}</span>
+          </label>
         </div>
       `).join('');
-      const total = orders.reduce((s, o) => s + (o.price || 0), 0);
+      const total = orders.filter(o => o.included).reduce((s, o) => s + (o.price || 0), 0);
       document.getElementById('pending-tests-total').textContent = total.toFixed(2);
+
+      const btnWrap = document.getElementById('pending-tests-collect-wrap');
+      const includedCount = orders.filter(o => o.included).length;
+      if (btnWrap) {
+        btnWrap.style.display = includedCount ? '' : 'none';
+        btnWrap.onclick = () => collectTestPayment(patientId);
+      }
     }
 
-    async function markTestFeePaid(orderId, patientId) {
+    async function toggleTestInclude(orderId, patientId) {
       try {
-        await api("POST", `/patients/test-orders/${orderId}/mark-paid`, {});
-        toast('Test fee marked paid.', 'success');
+        await api("PATCH", `/patients/test-orders/${orderId}/toggle-include`, {});
         loadPendingTestFees(patientId);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function generateBill() {
+      if (!currentCheckinId) { toast('No active visit to bill.', 'error'); return; }
+      try {
+        const invoice = await api("POST", `/billing/checkins/${currentCheckinId}/finalize-invoice`, {});
+        toast(`Bill generated — ₹${invoice.grand_total}`, 'success');
+        const response = await fetch(`${BASE}/billing/invoices/${invoice.id}/pdf`, {
+          headers: { "Authorization": `Bearer ${getToken()}` }
+        });
+        const blob = await response.blob();
+        window.open(URL.createObjectURL(blob), "_blank");
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function collectTestPayment(patientId) {
+      try {
+        const result = await api("POST", `/patients/${patientId}/collect-test-payment`, {});
+        toast(`₹${result.charged} collected for ${result.count} test(s).`, 'success');
+        loadPendingTestFees(patientId);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    const DOC_TYPE_LABEL = {
+      token_slip: "🎫 Token Slip",
+      prescription: "📋 Prescription",
+      test_report: "🧪 Test Report",
+      invoice: "🧾 Invoice"
+    };
+
+    async function openDocumentsModal(patientId, patientName) {
+      document.getElementById('doc-patient-name').textContent = patientName;
+      document.getElementById('documents-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+      document.getElementById('modal-documents').classList.add('open');
+      try {
+        const docs = await api("GET", `/patients/${patientId}/documents`);
+        renderDocuments(docs);
+      } catch (e) {
+        document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+      }
+    }
+
+    function closeDocumentsModal() {
+      document.getElementById('modal-documents').classList.remove('open');
+    }
+
+    function renderDocuments(docs) {
+      const el = document.getElementById('documents-list');
+      if (!docs.length) {
+        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No documents yet for this patient.</p>';
+        return;
+      }
+      el.innerHTML = docs.map(d => {
+        const dt = new Date(d.date && d.date.endsWith("Z") ? d.date : d.date + "Z");
+        const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+            <div>
+              <strong>${DOC_TYPE_LABEL[d.type] || d.label}</strong>
+              <div style="font-size:12px;color:var(--slate)">${dateStr} · ${timeStr}</div>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', ${d.ref_id})">View / Print</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function viewDocument(type, refId) {
+      try {
+        let url = null;
+        if (type === 'prescription') url = `${BASE}/patients/prescriptions/${refId}/download`;
+        else if (type === 'test_report') url = `${BASE}/lab/orders/${refId}/report`;
+        else if (type === 'invoice') url = `${BASE}/billing/invoices/${refId}/pdf`;
+        else if (type === 'token_slip') { toast('Reopen this token from the patient list to reprint the slip.', 'info'); return; }
+
+        const response = await fetch(url, { headers: { "Authorization": `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error("Could not load document");
+        const blob = await response.blob();
+        window.open(URL.createObjectURL(blob), "_blank");
       } catch (e) { toast(e.message, 'error'); }
     }
 
@@ -613,7 +717,10 @@
           <td style="color:var(--slate)">${p.phone}</td>
           <td>${p.age}y / ${capitalize(p.gender)}</td>
           <td>${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
-          <td><button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openEditPatient(${JSON.stringify(p)})'>✏️ Edit</button></td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openEditPatient(${JSON.stringify(p)})'>✏️ Edit</button>
+            <button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openDocumentsModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>📄 Docs</button>
+          </td>
         </tr>
       `).join('');
     }

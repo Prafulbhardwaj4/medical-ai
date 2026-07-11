@@ -426,3 +426,65 @@ def generate_test_report_pdf(
 
     doc.build(elements)
     return filepath
+
+def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient) -> str:
+    ensure_reports_dir()
+    invoices_dir = os.path.join(os.path.dirname(__file__), "..", "..", "invoices")
+    os.makedirs(invoices_dir, exist_ok=True)
+
+    filepath = os.path.join(invoices_dir, f"invoice_{invoice_id}.pdf")
+
+    doc = SimpleDocTemplate(
+        filepath, pagesize=A4,
+        rightMargin=20*mm, leftMargin=20*mm, topMargin=15*mm, bottomMargin=15*mm
+    )
+    styles = getSampleStyleSheet()
+    elements = []
+
+    header_style = ParagraphStyle("header", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"))
+    sub_style = ParagraphStyle("sub", fontSize=9, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
+
+    elements.append(Paragraph(hospital.name, header_style))
+    if hospital.address:
+        elements.append(Paragraph(hospital.address, sub_style))
+    if hospital.gstin:
+        elements.append(Paragraph(f"GSTIN: {hospital.gstin}", sub_style))
+    elements.append(Spacer(1, 3*mm))
+    elements.append(Paragraph("INVOICE", ParagraphStyle("inv", fontSize=13, fontName="Helvetica-Bold", alignment=TA_CENTER)))
+    elements.append(Spacer(1, 4*mm))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#1a237e")))
+    elements.append(Spacer(1, 4*mm))
+
+    elements.append(Paragraph(f"<b>Patient:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Invoice #:</b> INV-{invoice_id} &nbsp;&nbsp; <b>Date:</b> {now_ist().strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
+    elements.append(Spacer(1, 5*mm))
+
+    table_data = [["Description", "Qty", "Unit Price", "Amount"]]
+    for item in items:
+        table_data.append([
+            item["name"],
+            str(item.get("qty", 1)),
+            f"₹{item['unit_price']:.2f}",
+            f"₹{item['line_total']:.2f}"
+        ])
+    table_data.append(["", "", "Grand Total", f"₹{grand_total:.2f}"])
+
+    t = Table(table_data, colWidths=[85*mm, 20*mm, 30*mm, 30*mm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        ("GRID", (0, 0), (-1, -2), 0.4, colors.lightgrey),
+        ("LINEABOVE", (0, -1), (-1, -1), 1, colors.HexColor("#1a237e")),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(t)
+    elements.append(Spacer(1, 8*mm))
+    elements.append(Paragraph("Thank you for visiting.", ParagraphStyle("thanks", fontSize=9, alignment=TA_CENTER, textColor=colors.grey)))
+
+    doc.build(elements)
+    return filepath
