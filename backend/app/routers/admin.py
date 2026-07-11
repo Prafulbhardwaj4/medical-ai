@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.hospital import Hospital
 from app.models.doctor import Doctor, UserRole
-from app.utils.auth import hash_password
 from app.config import settings
 import secrets
 from app.utils.auth import hash_password, get_current_doctor
@@ -20,8 +19,6 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 def verify_super_admin_key(x_super_admin_key: str = Header(...)):
     if x_super_admin_key != settings.SUPER_ADMIN_KEY:
         raise HTTPException(status_code=403, detail="Invalid super admin key")
-
-import re
 
 def validate_fields(name, email, phone, password):
     if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
