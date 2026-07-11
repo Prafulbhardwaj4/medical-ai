@@ -307,30 +307,42 @@ def update_hospital_details(
     db.commit()
     return {"address": hospital.address, "gstin": hospital.gstin}
 
+ROOM_TYPE_PICKER_MAP = {"doctor": "Doctor", "nurse": "Nurse"}
+
+def serialize_room(r):
+    return {
+        "id": r.id,
+        "room_number": r.room_number or "",
+        "name": r.name or "",
+        "room_type": r.room_type or "General",
+        "type_confirmed": r.type_confirmed,
+        "display": f"{r.name or ''}{' (' + r.room_number + ')' if r.room_number else ''}".strip()
+    }
+
 @router.get("/rooms")
 def list_rooms(
+    for_picker: str = "",
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     from app.models.room import Room
-    rooms = db.query(Room).filter(
+    query = db.query(Room).filter(
         Room.hospital_id == current_doctor.hospital_id,
         Room.is_active == True
-    ).all()
-    return [
-        {
-            "id": r.id,
-            "room_number": r.room_number or "",
-            "name": r.name or "",
-            "display": f"{r.name or ''}{' (' + r.room_number + ')' if r.room_number else ''}".strip()
-        }
-        for r in rooms
-    ]
+    )
+    picker_type = ROOM_TYPE_PICKER_MAP.get(for_picker.strip().lower())
+    if picker_type:
+        # Doctor picker only shows Doctor-type rooms, nurse picker only Nurse-type —
+        # General/Emergency/Other are deliberately excluded from both staff pickers.
+        query = query.filter(Room.room_type == picker_type)
+    rooms = query.all()
+    return [serialize_room(r) for r in rooms]
 
 @router.post("/rooms")
 def create_room(
     room_number: str = "",
     name: str = "",
+    room_type: str = "General",
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -345,17 +357,41 @@ def create_room(
         hospital_id=current_doctor.hospital_id,
         room_number=room_number.strip() or None,
         name=name.strip() or None,
+        room_type=room_type.strip() or "General",
+        type_confirmed=True,
         is_active=True
     )
     db.add(room)
     db.commit()
     db.refresh(room)
-    return {
-        "id": room.id,
-        "room_number": room.room_number or "",
-        "name": room.name or "",
-        "display": f"{room.name or ''}{' (' + room.room_number + ')' if room.room_number else ''}".strip()
-    }
+    return serialize_room(room)
+
+@router.patch("/rooms/{room_id}")
+def update_room_type(
+    room_id: int,
+    room_type: str = "",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not room_type.strip():
+        raise HTTPException(status_code=400, detail="Room type is required")
+
+    from app.models.room import Room
+    room = db.query(Room).filter(
+        Room.id == room_id,
+        Room.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    room.room_type = room_type.strip()
+    room.type_confirmed = True
+    db.commit()
+    db.refresh(room)
+    return serialize_room(room)
 
 @router.delete("/rooms/{room_id}")
 def delete_room(

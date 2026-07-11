@@ -104,7 +104,7 @@
           </div>
           <div id="fee-group" style="display:none">
             <div class="form-group">
-              <label class="form-label">Consultation Fee (₹)</label>
+              <label class="form-label">Consultation Fee (Rs.)</label>
               <input type="number" min="0" step="1" class="form-control" id="consultation-fee" />
             </div>
           </div>
@@ -128,7 +128,7 @@
             </div>
           </div>
           <div id="slip-billing-row" class="no-print" style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
-            <p><strong>Fee:</strong> ₹<span id="slip-fee">0</span>
+            <p><strong>Fee:</strong> Rs.<span id="slip-fee">0</span>
               <span id="slip-paid-badge" class="badge badge-amber" style="margin-left:6px">Unpaid</span>
             </p>
             <button class="btn btn-primary btn-sm" id="btn-mark-paid" style="width:100%;margin-top:8px" onclick="markPaid()">Mark as Paid</button>
@@ -136,7 +136,7 @@
           <div id="pending-tests-row" class="no-print" style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
             <p style="font-weight:600;margin-bottom:8px">Pending Test Fees <span style="font-weight:400;font-size:12px;color:var(--slate)">(uncheck what the patient won't be getting here)</span></p>
             <div id="pending-tests-list"></div>
-            <p style="margin-top:8px"><strong>Total:</strong> ₹<span id="pending-tests-total">0</span></p>
+            <p style="margin-top:8px"><strong>Total:</strong> Rs.<span id="pending-tests-total">0</span></p>
             <button class="btn btn-primary btn-sm" id="pending-tests-collect-wrap" style="width:100%;margin-top:8px">Collect Payment</button>
           </div>
           <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:10px">
@@ -488,7 +488,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;gap:10px;${o.included ? '' : 'opacity:0.45'}">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" ${o.included ? 'checked' : ''} onchange="toggleTestInclude(${o.id}, ${patientId})" style="width:16px;height:16px" />
-            <span>${o.test_name} — ₹${o.price}</span>
+            <span>${o.test_name} — Rs.${o.price}</span>
           </label>
         </div>
       `).join('');
@@ -514,7 +514,7 @@
       if (!currentCheckinId) { toast('No active visit to bill.', 'error'); return; }
       try {
         const invoice = await api("POST", `/billing/checkins/${currentCheckinId}/finalize-invoice`, {});
-        toast(`Bill generated — ₹${invoice.grand_total}`, 'success');
+        toast(`Bill generated — Rs.${invoice.grand_total}`, 'success');
         const response = await fetch(`${BASE}/billing/invoices/${invoice.id}/pdf`, {
           headers: { "Authorization": `Bearer ${getToken()}` }
         });
@@ -526,7 +526,7 @@
     async function collectTestPayment(patientId) {
       try {
         const result = await api("POST", `/patients/${patientId}/collect-test-payment`, {});
-        toast(`₹${result.charged} collected for ${result.count} test(s).`, 'success');
+        toast(`Rs.${result.charged} collected for ${result.count} test(s).`, 'success');
         loadPendingTestFees(patientId);
       } catch (e) { toast(e.message, 'error'); }
     }

@@ -130,7 +130,7 @@ def finalize_invoice(
         action="invoice_generated",
         target_type="invoice",
         target_id=invoice.id,
-        target_label=f"₹{grand_total} for checkin {checkin_id}",
+        target_label=f"Rs.{grand_total} for checkin {checkin_id}",
         hospital_id=current_doctor.hospital_id
     )
     return serialize_invoice(invoice)

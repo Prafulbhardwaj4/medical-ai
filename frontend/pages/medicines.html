@@ -354,7 +354,7 @@
           <input class="form-control" id="m-pack-size" type="number" min="1" step="1" placeholder="e.g. 10" oninput="updateComputedPrice()" />
         </div>
         <div style="flex:1">
-          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Price per Strip (₹)</label>
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Price per Strip (Rs.)</label>
           <input class="form-control" id="m-price-per-pack" type="number" min="0" step="0.01" placeholder="e.g. 25" oninput="updateComputedPrice()" />
         </div>
         <div style="flex:1">
@@ -366,7 +366,7 @@
         </div>
       </div>
       <div id="pricing-fields-single" style="display:none;margin-bottom:6px">
-        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Price (₹)</label>
+        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Price (Rs.)</label>
         <input class="form-control" id="m-price-per-pack-single" type="number" min="0" step="0.01" placeholder="e.g. 60" oninput="updateComputedPrice()" />
       </div>
       <p id="computed-price-hint" style="font-size:12px;color:var(--slate);margin:0 0 14px"></p>
@@ -590,7 +590,7 @@
         const packSize = parseInt(document.getElementById('m-pack-size').value) || 0;
         const pricePerPack = parseFloat(document.getElementById('m-price-per-pack').value) || 0;
         if (packSize > 0 && pricePerPack > 0) {
-          hint.textContent = `≈ ₹${(pricePerPack / packSize).toFixed(2)} per unit`;
+          hint.textContent = `≈ Rs.${(pricePerPack / packSize).toFixed(2)} per unit`;
         } else {
           hint.textContent = '';
         }
@@ -641,14 +641,14 @@
     function priceLabel(m) {
       if (m.price_per_pack == null) return '—';
       if (m.pack_size > 1) {
-        return `₹${m.price_per_pack} / strip of ${m.pack_size} <span style="color:var(--slate-light)">(₹${m.price}/unit)</span>`;
+        return `Rs.${m.price_per_pack} / strip of ${m.pack_size} <span style="color:var(--slate-light)">(Rs.${m.price}/unit)</span>`;
       }
-      return `₹${m.price_per_pack}`;
+      return `Rs.${m.price_per_pack}`;
     }
 
     function unitPriceLabel(m) {
       if (m.price == null) return '—';
-      return m.pack_size > 1 ? `₹${m.price} / unit` : '—';
+      return m.pack_size > 1 ? `Rs.${m.price} / unit` : '—';
     }
 
     function stockDisplay(m) {
@@ -1056,7 +1056,7 @@
           ${previewFieldRow([
             ['Schedule', `<select class="form-control" onchange="previewData[${i}].schedule=this.value">${['otc','h','h1','x'].map(s => `<option value="${s}" ${m.schedule === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}</select>`],
             ['Units per Pack', `<input class="form-control" type="number" value="${m.pack_size}" oninput="previewData[${i}].pack_size=this.value" />`],
-            ['Price per Pack (₹)', `<input class="form-control" type="number" value="${m.price_per_pack}" oninput="previewData[${i}].price_per_pack=this.value" />`],
+            ['Price per Pack (Rs.)', `<input class="form-control" type="number" value="${m.price_per_pack}" oninput="previewData[${i}].price_per_pack=this.value" />`],
             ['GST %', `<input class="form-control" type="number" value="${m.gst_percent}" oninput="previewData[${i}].gst_percent=this.value" />`]
           ])}
         </div>

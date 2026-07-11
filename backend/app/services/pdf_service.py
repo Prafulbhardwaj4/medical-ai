@@ -211,7 +211,7 @@ def generate_prescription_pdf(
         test_data = [["#", "Test Name", "Fee"]]
         for i, t in enumerate(ordered_tests, 1):
             price = t.get("price")
-            price_str = f"₹{price:.2f}" if isinstance(price, (int, float)) else "₹0.00"
+            price_str = f"Rs.{price:.2f}" if isinstance(price, (int, float)) else "Rs.0.00"
             test_data.append([str(i), cap_sentence(t.get("test_name", "")), price_str])
         test_table = Table(test_data, colWidths=[15*mm, 115*mm, 40*mm])
         test_table.setStyle(TableStyle([
@@ -465,10 +465,10 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
         table_data.append([
             item["name"],
             str(item.get("qty", 1)),
-            f"₹{item['unit_price']:.2f}",
-            f"₹{item['line_total']:.2f}"
+            f"Rs.{item['unit_price']:.2f}",
+            f"Rs.{item['line_total']:.2f}"
         ])
-    table_data.append(["", "", "Grand Total", f"₹{grand_total:.2f}"])
+    table_data.append(["", "", "Grand Total", f"Rs.{grand_total:.2f}"])
 
     t = Table(table_data, colWidths=[85*mm, 20*mm, 30*mm, 30*mm])
     t.setStyle(TableStyle([

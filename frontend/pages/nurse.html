@@ -258,10 +258,10 @@
 
     async function loadNurseRoomOptions(selectedId) {
       try {
-        const rooms = await api("GET", "/admin/rooms");
+        const rooms = await api("GET", "/admin/rooms?for_picker=nurse");
         document.getElementById('nurse-room-select').innerHTML =
           '<option value="">No room</option>' +
-          rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.name}</option>`).join('');
+          rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.display || r.name || r.room_number}</option>`).join('');
       } catch (e) { }
     }
 

@@ -8,4 +8,6 @@ class Room(Base):
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     room_number = Column(String, nullable=True)
     name = Column(String, nullable=True)
+    room_type = Column(String, nullable=True, default="General")
+    type_confirmed = Column(Boolean, default=True, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)

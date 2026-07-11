@@ -412,7 +412,7 @@
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;padding-left:24px">
             ${m.catalog_medicine_id
-              ? `<span style="font-size:13px;color:var(--slate)">₹${m.unit_price}/unit</span>`
+              ? `<span style="font-size:13px;color:var(--slate)">Rs.${m.unit_price}/unit</span>`
               : `<button class="btn btn-outline btn-sm" ${locked ? 'disabled' : ''} onclick="openLinkCatalogModal(${m.id})">Link to Catalog for Price</button>`}
             <label style="font-size:13px;color:var(--slate);display:flex;align-items:center;gap:6px">
               Qty:
@@ -420,7 +420,7 @@
                 value="${m.quantity != null ? m.quantity : ''}" ${locked ? 'disabled' : ''}
                 onchange="updateMedicineQuantity(${m.id}, this.value)" />
             </label>
-            ${m.line_total != null ? `<span style="font-size:13px;font-weight:600">= ₹${m.line_total}</span>` : ''}
+            ${m.line_total != null ? `<span style="font-size:13px;font-weight:600">= Rs.${m.line_total}</span>` : ''}
           </div>
         </div>
       `}).join('');
@@ -470,7 +470,7 @@
                 <div style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;cursor:pointer"
                   onclick="linkCatalogMedicine(${r.id})">
                   <span>${sanitize(r.generic_name)}${r.strength ? ' ' + sanitize(r.strength) : ''} ${r.brand_names ? `<span style="color:var(--slate);font-size:12px">(${sanitize(r.brand_names)})</span>` : ''}</span>
-                  <span style="font-size:13px;color:var(--slate)">${r.price != null ? '₹' + r.price : 'no price'}</span>
+                  <span style="font-size:13px;color:var(--slate)">${r.price != null ? 'Rs.' + r.price : 'no price'}</span>
                 </div>
               `).join('')
             : '<p style="color:var(--slate-light);font-size:13px">No matches.</p>';
@@ -517,7 +517,7 @@
       try {
         const checkinLookup = await api("GET", `/patients/checkin-by-token/${currentRxToken}`);
         const invoice = await api("POST", `/billing/checkins/${checkinLookup.checkin_id}/finalize-invoice`, {});
-        toast(`Bill generated — ₹${invoice.grand_total}`, 'success');
+        toast(`Bill generated — Rs.${invoice.grand_total}`, 'success');
         const response = await fetch(`${BASE}/billing/invoices/${invoice.id}/pdf`, {
           headers: { "Authorization": `Bearer ${getToken()}` }
         });
@@ -531,7 +531,7 @@
     async function collectMedicinePayment() {
       try {
         const result = await api("POST", `/pharmacy/prescription/${currentRxToken}/collect-payment`, {});
-        toast(`₹${result.charged} collected for ${result.count} medicine(s).`, 'success');
+        toast(`Rs.${result.charged} collected for ${result.count} medicine(s).`, 'success');
         openPrescription(currentRxToken);
       } catch (e) {
         document.getElementById('rx-modal-err').textContent = e.message;

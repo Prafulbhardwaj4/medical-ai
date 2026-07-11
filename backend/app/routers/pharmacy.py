@@ -282,7 +282,7 @@ def collect_medicine_payment(
         action="medicine_fees_collected",
         target_type="consultation",
         target_id=consultation.id,
-        target_label=f"₹{total} for {len(orders)} medicines",
+        target_label=f"Rs.{total} for {len(orders)} medicines",
         hospital_id=current_doctor.hospital_id
     )
     return {"charged": total, "count": len(orders)}

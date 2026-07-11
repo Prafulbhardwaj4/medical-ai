@@ -71,7 +71,7 @@
           <div class="stat-card">
             <div class="stat-label">Monthly Revenue</div>
             <div class="stat-value" id="stat-revenue">—</div>
-            <div class="stat-sub">@ ₹499/doctor</div>
+            <div class="stat-sub">@ Rs.499/doctor</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">Annual Run Rate</div>
@@ -241,8 +241,8 @@
         const data = await api('GET', '/admin/stats');
         document.getElementById('stat-hospitals').textContent = data.total_hospitals;
         document.getElementById('stat-doctors').textContent = data.total_doctors;
-        document.getElementById('stat-revenue').textContent = `₹${data.monthly_revenue.toLocaleString('en-IN')}`;
-        document.getElementById('stat-arr').textContent = `₹${(data.monthly_revenue * 12).toLocaleString('en-IN')}`;
+        document.getElementById('stat-revenue').textContent = `Rs.${data.monthly_revenue.toLocaleString('en-IN')}`;
+        document.getElementById('stat-arr').textContent = `Rs.${(data.monthly_revenue * 12).toLocaleString('en-IN')}`;
         document.getElementById('stat-new-hospitals').textContent = `+${data.new_hospitals_this_month} this month`;
         document.getElementById('stat-new-doctors').textContent = `+${data.new_doctors_this_month} this month`;
         loadRevenueList();
@@ -267,8 +267,8 @@
               <div style="color:var(--slate);font-size:13px">${sanitize(h.city)} · ${h.doctor_count} doctor${h.doctor_count !== 1 ? 's' : ''}</div>
             </div>
             <div style="text-align:right">
-              <div style="font-weight:600;color:var(--teal)">₹${(h.monthly_revenue).toLocaleString('en-IN')}/mo</div>
-              <div style="font-size:12px;color:var(--slate)">₹${(h.monthly_revenue * 12).toLocaleString('en-IN')}/yr</div>
+              <div style="font-weight:600;color:var(--teal)">Rs.${(h.monthly_revenue).toLocaleString('en-IN')}/mo</div>
+              <div style="font-size:12px;color:var(--slate)">Rs.${(h.monthly_revenue * 12).toLocaleString('en-IN')}/yr</div>
             </div>
           </div>
         `).join('');
@@ -436,7 +436,7 @@
             </div></div>
             <div><span style="color:var(--slate);font-size:13px">Status</span><div><span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span></div></div>
             <div><span style="color:var(--slate);font-size:13px">Doctors</span><div style="font-weight:500">${h.doctor_count}</div></div>
-            <div><span style="color:var(--slate);font-size:13px">Monthly Revenue</span><div style="font-weight:600;color:var(--teal)">₹${h.monthly_revenue.toLocaleString('en-IN')}</div></div>
+            <div><span style="color:var(--slate);font-size:13px">Monthly Revenue</span><div style="font-weight:600;color:var(--teal)">Rs.${h.monthly_revenue.toLocaleString('en-IN')}</div></div>
             <button class="btn btn-outline btn-sm" style="width:fit-content" onclick='openEditHospital(${JSON.stringify({id:h.id,name:h.name,city:h.city,state:h.state,address:h.address})})'>Edit Hospital Details</button>
           </div>
         `;

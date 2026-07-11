@@ -120,12 +120,20 @@
     <main class="main-content">
       <div class="card">
         <div class="card-header"><h2>Rooms</h2></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin-bottom:20px;max-width:560px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;max-width:720px">
           <input class="form-control" id="room-name" placeholder="Name (e.g. OPD, Emergency)" />
           <input class="form-control" id="room-number" placeholder="Number (e.g. 101, optional)" />
+          <select class="form-control" id="room-type-select" onchange="onRoomTypeChange()">
+            <option value="Doctor">Doctor</option>
+            <option value="Nurse">Nurse</option>
+            <option value="General" selected>General</option>
+            <option value="Emergency">Emergency</option>
+            <option value="Other">Other</option>
+          </select>
           <button class="btn btn-primary" onclick="addRoom()">Add</button>
         </div>
-        <p style="color:var(--slate);font-size:13px;margin-bottom:20px">Both fields are optional — fill whichever applies. Displayed as: General OPD (101)</p>
+        <input class="form-control" id="room-type-other" placeholder="Enter custom room type" style="display:none;max-width:720px;margin-top:10px" />
+        <p style="color:var(--slate);font-size:13px;margin:12px 0 20px">Name/Number are both optional — fill whichever applies. Room Type controls which room shows up in the doctor's or nurse's room picker: only Doctor-type rooms appear for doctors, only Nurse-type for nurses. General/Emergency/Other don't appear in either staff picker.</p>
         <div id="rooms-list"><p style="color:var(--slate)">Loading…</p></div>
       </div>
     </main>
@@ -140,30 +148,80 @@
 
     if (doc?.billing_enabled) document.getElementById('rooms-billing-link').style.display = '';
 
+    const ROOM_TYPE_PRESETS = ['Doctor', 'Nurse', 'General', 'Emergency'];
+
+    function onRoomTypeChange() {
+      const val = document.getElementById('room-type-select').value;
+      document.getElementById('room-type-other').style.display = val === 'Other' ? '' : 'none';
+    }
+
+    function roomTypeBadge(type, confirmed) {
+      if (!confirmed) return `<span class="badge badge-amber" style="margin-left:8px">Needs classification</span>`;
+      return `<span class="badge badge-grey" style="margin-left:8px">${sanitize(type)}</span>`;
+    }
+
     async function loadRooms() {
       try {
         const rooms = await api("GET", "/admin/rooms");
         document.getElementById('rooms-list').innerHTML = rooms.length ? rooms.map(r => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)">
-            <strong>${r.display || r.name}</strong>
-            ${r.room_number || r.name ? `<span style="font-size:12px;color:var(--slate);margin-left:8px">${r.room_number ? 'No. ' + r.room_number : ''}${r.room_number && r.name ? ' · ' : ''}${r.name || ''}</span>` : ''}
-            <button class="btn btn-outline btn-sm" onclick="deleteRoom(${r.id})">Delete</button>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+            <div>
+              <strong>${r.display || r.name}</strong>
+              ${r.room_number || r.name ? `<span style="font-size:12px;color:var(--slate);margin-left:8px">${r.room_number ? 'No. ' + r.room_number : ''}${r.room_number && r.name ? ' · ' : ''}${r.name || ''}</span>` : ''}
+              ${roomTypeBadge(r.room_type, r.type_confirmed)}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select class="form-control" style="width:150px" id="room-type-edit-${r.id}" onchange="onEditTypeChange(${r.id})">
+                ${ROOM_TYPE_PRESETS.map(t => `<option value="${t}" ${r.room_type === t ? 'selected' : ''}>${t}</option>`).join('')}
+                <option value="Other" ${!ROOM_TYPE_PRESETS.includes(r.room_type) ? 'selected' : ''}>Other</option>
+              </select>
+              <input class="form-control" style="width:130px;display:${ROOM_TYPE_PRESETS.includes(r.room_type) ? 'none' : ''}" id="room-type-edit-other-${r.id}" placeholder="Custom type" value="${!ROOM_TYPE_PRESETS.includes(r.room_type) ? sanitize(r.room_type) : ''}" />
+              <button class="btn btn-outline btn-sm" onclick="saveRoomType(${r.id})">Save</button>
+              <button class="btn btn-outline btn-sm" onclick="deleteRoom(${r.id})">Delete</button>
+            </div>
           </div>
         `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No rooms added yet.</p>';
       } catch (e) { toast(e.message, "error"); }
     }
 
+    function onEditTypeChange(roomId) {
+      const val = document.getElementById(`room-type-edit-${roomId}`).value;
+      document.getElementById(`room-type-edit-other-${roomId}`).style.display = val === 'Other' ? '' : 'none';
+    }
+
+    async function saveRoomType(roomId) {
+      const select = document.getElementById(`room-type-edit-${roomId}`).value;
+      const other = document.getElementById(`room-type-edit-other-${roomId}`).value.trim();
+      const finalType = select === 'Other' ? other : select;
+      if (!finalType) { toast('Enter a custom room type.', 'error'); return; }
+      try {
+        const params = new URLSearchParams();
+        params.append('room_type', finalType);
+        await api("PATCH", `/admin/rooms/${roomId}?${params.toString()}`);
+        toast('Room type updated.', 'success');
+        loadRooms();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
     async function addRoom() {
       const name = document.getElementById('room-name').value.trim();
       const number = document.getElementById('room-number').value.trim();
+      const typeSelect = document.getElementById('room-type-select').value;
+      const typeOther = document.getElementById('room-type-other').value.trim();
+      const roomType = typeSelect === 'Other' ? typeOther : typeSelect;
       if (!name && !number) { toast('Enter at least a name or number.', 'error'); return; }
+      if (typeSelect === 'Other' && !typeOther) { toast('Enter a custom room type.', 'error'); return; }
       try {
         const params = new URLSearchParams();
         if (name) params.append('name', name);
         if (number) params.append('room_number', number);
+        params.append('room_type', roomType);
         await api("POST", `/admin/rooms?${params.toString()}`);
         document.getElementById('room-name').value = '';
         document.getElementById('room-number').value = '';
+        document.getElementById('room-type-select').value = 'General';
+        document.getElementById('room-type-other').value = '';
+        document.getElementById('room-type-other').style.display = 'none';
         toast('Room added.', 'success');
         loadRooms();
       } catch (e) { toast(e.message, 'error'); }

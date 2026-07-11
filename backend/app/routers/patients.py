@@ -548,7 +548,7 @@ def mark_checkin_paid(
         target_type="patient",
         target_id=checkin.patient_id,
         target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),
-        details=f"Token {checkin.token_number} · ₹{(checkin.consultation_fee or 0) + (checkin.test_fee or 0):.2f}"
+        details=f"Token {checkin.token_number} · Rs.{(checkin.consultation_fee or 0) + (checkin.test_fee or 0):.2f}"
     )
     return {"is_paid": True, "paid_at": checkin.paid_at.isoformat()}
 
@@ -688,7 +688,7 @@ def collect_test_payment(
         action="test_fees_collected",
         target_type="patient",
         target_id=patient_id,
-        target_label=f"₹{total} for {len(orders)} tests",
+        target_label=f"Rs.{total} for {len(orders)} tests",
         hospital_id=current_doctor.hospital_id
     )
     return {"charged": total, "count": len(orders)}

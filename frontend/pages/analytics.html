@@ -448,7 +448,7 @@
                     </div>
                     <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Used as a fallback when a doctor doesn't have their own fee set.</p>
                     <div style="display:flex;gap:10px;max-width:320px">
-                        <input type="number" min="0" step="1" class="form-control" id="default-fee-input" placeholder="₹" />
+                        <input type="number" min="0" step="1" class="form-control" id="default-fee-input" placeholder="Rs." />
                         <button class="btn btn-primary" onclick="saveDefaultFee()">Save</button>
                     </div>
                 </div>
@@ -631,9 +631,9 @@
         async function loadBilling() {
             try {
                 const b = await api("GET", "/admin/billing/today");
-                document.getElementById('stat-collected-today').textContent = `₹${b.total_collected.toFixed(2)}`;
+                document.getElementById('stat-collected-today').textContent = `Rs.${b.total_collected.toFixed(2)}`;
                 document.getElementById('stat-paid-count').textContent = `${b.paid_count} paid`;
-                document.getElementById('stat-unpaid-today').textContent = `₹${b.unpaid_amount.toFixed(2)}`;
+                document.getElementById('stat-unpaid-today').textContent = `Rs.${b.unpaid_amount.toFixed(2)}`;
                 document.getElementById('stat-unpaid-count').textContent = `${b.unpaid_count} unpaid`;
             } catch (e) {
                 toast(e.message, "error");
@@ -674,7 +674,7 @@
             </div>
             <div style="font-size:12px;color:var(--slate);min-width:150px">${dateStr} · ${timeStr}</div>
             <div style="font-size:12px;color:var(--slate);min-width:90px">${inv.item_count} item${inv.item_count === 1 ? '' : 's'}</div>
-            <div style="font-weight:600;min-width:80px">₹${inv.grand_total}</div>
+            <div style="font-weight:600;min-width:80px">Rs.${inv.grand_total}</div>
             <button class="btn btn-outline btn-sm" onclick="downloadInvoicePdf(${inv.id})">View PDF</button>
           </div>
         `;

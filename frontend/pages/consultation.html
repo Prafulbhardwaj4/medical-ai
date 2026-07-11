@@ -918,7 +918,7 @@
       box.innerHTML = matches.map(t => `
         <div onclick="selectTest(${t.id})" style="padding:8px 12px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between"
           onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">
-          <span>${t.test_name}</span><span style="color:var(--slate)">₹${t.price}</span>
+          <span>${t.test_name}</span><span style="color:var(--slate)">Rs.${t.price}</span>
         </div>
       `).join('');
       box.style.display = 'block';
@@ -942,7 +942,7 @@
       const chipsEl = document.getElementById('test-chips');
       chipsEl.innerHTML = selectedTests.map(t => `
         <span class="badge badge-teal" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
-          ${t.test_name} — ₹${t.price}
+          ${t.test_name} — Rs.${t.price}
           <span onclick="removeTest(${t.id})" style="cursor:pointer;font-weight:700">×</span>
         </span>
       `).join('');
@@ -951,7 +951,7 @@
       const total = selectedTests.reduce((sum, t) => sum + (t.price || 0), 0);
       if (selectedTests.length) {
         totalEl.style.display = 'block';
-        totalEl.textContent = `Total Test Fee: ₹${total}`;
+        totalEl.textContent = `Total Test Fee: Rs.${total}`;
       } else {
         totalEl.style.display = 'none';
       }

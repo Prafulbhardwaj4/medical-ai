@@ -27,6 +27,8 @@ Return ONLY valid JSON with exactly these fields:
       "dosage": "string - strength e.g. 500mg, 10mg",
       "frequency": "string - detailed timing e.g. 'morning and night after food', 'once daily at bedtime', 'three times a day after meals', '30 minutes after first medicine'. Capture exact timing instructions including relative instructions like 'after 30 minutes of X'.",
       "duration": "string - e.g. 5 days, 1 week",
+      "times_per_day": "number or null - how many doses per day, derived from frequency e.g. 'once daily'=1, 'morning and night'=2, 'three times a day'=3. Use null (not 0) if frequency is SOS/PRN/as-needed/ambiguous/has no fixed daily count.",
+      "duration_days": "number or null - duration converted to whole days e.g. '5 days'=5, '1 week'=7, '2 weeks'=14. Use null if duration is not mentioned or has no fixed length (e.g. 'until follow-up').",
       "schedule": "string - either 'otc' or 'controlled'"
     }
   ],
@@ -39,6 +41,7 @@ Return ONLY valid JSON with exactly these fields:
 Rules for medicines:
 - ALWAYS capture exact timing and food instructions in the frequency field — 'morning and night after food', 'at bedtime', 'on empty stomach', '30 minutes after Azithromycin' etc.
 - If two medicines have a timing relationship (take one 30 min after another), capture that in the frequency field of the second medicine.
+- times_per_day / duration_days exist purely so the pharmacy system can pre-calculate a tablet count — never guess these. Only fill them when the frequency/duration genuinely states a fixed daily count and length. Leave both null for SOS/PRN/as-needed medicines, or anything without a clear fixed schedule — a wrong number here silently affects what pharmacy dispenses, so null is always safer than a guess.
 - brand_name: only fill if the doctor explicitly mentions a brand name. Leave empty string if only generic name used.
 - name: always use the generic/chemical name. If only a brand name was said, convert to generic (e.g. Crocin → Paracetamol) and put the brand in brand_name.
 

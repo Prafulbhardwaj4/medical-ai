@@ -8,6 +8,7 @@ import io
 from app.database import get_db
 from app.models.doctor import Doctor
 from app.models.test_catalog import TestCatalogItem
+from app.models.test_catalog_parameter import TestCatalogParameter
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 from app.services.groq_service import extract_tests
@@ -20,33 +21,66 @@ def require_admin(current_doctor: Doctor):
         raise HTTPException(status_code=403, detail="Not authorized")
 
 
+class ParameterIn(BaseModel):
+    name: str
+    unit: Optional[str] = ""
+    reference_range_male: Optional[str] = ""
+    reference_range_female: Optional[str] = ""
+    purpose: Optional[str] = ""
+
+
 class TestIn(BaseModel):
     test_name: str
     category: Optional[str] = ""
     price: Optional[float] = None
+    purpose: Optional[str] = ""
     reference_range_male: Optional[str] = ""
     reference_range_female: Optional[str] = ""
     unit: Optional[str] = ""
     turnaround_hours: Optional[int] = None
+    is_panel: Optional[bool] = False
+    parameters: Optional[list[ParameterIn]] = None
 
 
 class TestBulkConfirm(BaseModel):
     tests: list[TestIn]
 
 
-def serialize(t: TestCatalogItem):
+def serialize_parameter(p: TestCatalogParameter):
+    return {
+        "id": p.id,
+        "name": p.name,
+        "unit": p.unit or "",
+        "reference_range_male": p.reference_range_male or "",
+        "reference_range_female": p.reference_range_female or "",
+        "purpose": p.purpose or "",
+        "display_order": p.display_order
+    }
+
+
+def serialize(t: TestCatalogItem, db: Session = None):
+    parameters = []
+    if t.is_panel and db is not None:
+        rows = db.query(TestCatalogParameter).filter(
+            TestCatalogParameter.test_catalog_item_id == t.id,
+            TestCatalogParameter.is_active == True
+        ).order_by(TestCatalogParameter.display_order).all()
+        parameters = [serialize_parameter(p) for p in rows]
+
     return {
         "id": t.id,
         "test_name": t.name,
         "category": t.category or "",
         "price": t.fee,
+        "purpose": t.purpose or "",
         "reference_range_male": t.reference_range_male or "",
         "reference_range_female": t.reference_range_female or "",
         "unit": t.unit or "",
         "turnaround_hours": t.turnaround_hours,
-        "is_active": t.is_active
+        "is_active": t.is_active,
+        "is_panel": t.is_panel,
+        "parameters": parameters
     }
-
 
 @router.get("")
 def list_tests(
@@ -68,7 +102,7 @@ def list_tests(
         query = query.filter(TestCatalogItem.name.ilike(f"%{search}%"))
 
     items = query.order_by(TestCatalogItem.name).all()
-    return [serialize(t) for t in items]
+    return [serialize(t, db) for t in items]
 
 
 @router.post("", status_code=201)
@@ -82,20 +116,44 @@ def create_test(
     if payload.price is None:
         raise HTTPException(status_code=400, detail="Price is required")
 
+    is_panel = bool(payload.is_panel)
+    if is_panel and (not payload.parameters or len(payload.parameters) == 0):
+        raise HTTPException(status_code=400, detail="A panel needs at least one parameter")
+
     test = TestCatalogItem(
         hospital_id=current_doctor.hospital_id,
         name=payload.test_name.strip(),
         fee=payload.price,
         category=(payload.category or "").strip(),
-        reference_range_male=(payload.reference_range_male or "").strip(),
-        reference_range_female=(payload.reference_range_female or "").strip(),
-        unit=(payload.unit or "").strip(),
+        purpose=(payload.purpose or "").strip(),
+        is_panel=is_panel,
+        # A panel's range/unit live on its parameters, not here — kept blank to avoid confusion.
+        reference_range_male="" if is_panel else (payload.reference_range_male or "").strip(),
+        reference_range_female="" if is_panel else (payload.reference_range_female or "").strip(),
+        unit="" if is_panel else (payload.unit or "").strip(),
         turnaround_hours=payload.turnaround_hours,
         is_active=True
     )
     db.add(test)
     db.commit()
     db.refresh(test)
+
+    if is_panel:
+        for i, p in enumerate(payload.parameters):
+            if not p.name or not p.name.strip():
+                continue
+            db.add(TestCatalogParameter(
+                test_catalog_item_id=test.id,
+                hospital_id=current_doctor.hospital_id,
+                name=p.name.strip(),
+                unit=(p.unit or "").strip(),
+                reference_range_male=(p.reference_range_male or "").strip(),
+                reference_range_female=(p.reference_range_female or "").strip(),
+                purpose=(p.purpose or "").strip(),
+                display_order=i,
+                is_active=True
+            ))
+        db.commit()
 
     log_action(
         db, current_doctor,
@@ -105,7 +163,7 @@ def create_test(
         target_label=test.name,
         hospital_id=current_doctor.hospital_id
     )
-    return serialize(test)
+    return serialize(test, db)
 
 
 @router.patch("/{test_id}")
@@ -127,13 +185,43 @@ def update_test(
     if payload.price is None:
         raise HTTPException(status_code=400, detail="Price is required")
 
+    is_panel = bool(payload.is_panel)
+    if is_panel and (not payload.parameters or len(payload.parameters) == 0):
+        raise HTTPException(status_code=400, detail="A panel needs at least one parameter")
+
     test.name = payload.test_name.strip()
     test.fee = payload.price
     test.category = (payload.category or "").strip()
-    test.reference_range_male = (payload.reference_range_male or "").strip()
-    test.reference_range_female = (payload.reference_range_female or "").strip()
-    test.unit = (payload.unit or "").strip()
+    test.purpose = (payload.purpose or "").strip()
+    test.is_panel = is_panel
+    test.reference_range_male = "" if is_panel else (payload.reference_range_male or "").strip()
+    test.reference_range_female = "" if is_panel else (payload.reference_range_female or "").strip()
+    test.unit = "" if is_panel else (payload.unit or "").strip()
     test.turnaround_hours = payload.turnaround_hours
+
+    # Replace-all: simplest and safest way to sync a small, admin-managed parameter
+    # list without diffing rows. Existing parameter rows for this test are wiped
+    # and rebuilt from the payload every save.
+    db.query(TestCatalogParameter).filter(
+        TestCatalogParameter.test_catalog_item_id == test.id
+    ).delete()
+
+    if is_panel:
+        for i, p in enumerate(payload.parameters):
+            if not p.name or not p.name.strip():
+                continue
+            db.add(TestCatalogParameter(
+                test_catalog_item_id=test.id,
+                hospital_id=current_doctor.hospital_id,
+                name=p.name.strip(),
+                unit=(p.unit or "").strip(),
+                reference_range_male=(p.reference_range_male or "").strip(),
+                reference_range_female=(p.reference_range_female or "").strip(),
+                purpose=(p.purpose or "").strip(),
+                display_order=i,
+                is_active=True
+            ))
+
     db.commit()
 
     log_action(
@@ -144,7 +232,7 @@ def update_test(
         target_label=test.name,
         hospital_id=current_doctor.hospital_id
     )
-    return serialize(test)
+    return serialize(test, db)
 
 
 @router.delete("/{test_id}")

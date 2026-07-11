@@ -21,7 +21,7 @@ from app.models.test_catalog import TestCatalogItem
 from app.models.test_order import TestOrder
 from app.models.medicine_order import MedicineOrder
 from app.models.hospital_medicine import HospitalMedicine
-from app.utils.inventory import deduct_stock_fefo
+from app.utils.inventory import deduct_stock_fefo, calculate_prescribed_quantity
 from app.utils.notify import sync_stock_notifications
 from app.schemas.consultation import ConfirmPrescriptionPayload
 from app.config import settings
@@ -759,6 +759,10 @@ def confirm_prescription(
             brand = med.get("brand_name", "")
             matched = match_catalog(name, brand)
 
+            quantity = calculate_prescribed_quantity(
+                matched, med.get("times_per_day"), med.get("duration_days")
+            )
+
             db.add(MedicineOrder(
                 consultation_id=consultation.id,
                 patient_id=consultation.patient_id,
@@ -770,7 +774,7 @@ def confirm_prescription(
                 frequency=med.get("frequency", ""),
                 duration=med.get("duration", ""),
                 unit_price=matched.price if matched else None,
-                quantity=None,
+                quantity=quantity,
                 included=True,
                 status="advised"
             ))

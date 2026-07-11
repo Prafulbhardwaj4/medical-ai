@@ -163,24 +163,45 @@
 
   <!-- Add/Edit Test Modal -->
   <div class="modal-overlay" id="modal-test">
-    <div class="modal">
+    <div class="modal" style="max-width:720px;width:95%">
       <div class="modal-header">
         <h2 id="test-modal-title">Add Test</h2>
         <button class="modal-close" onclick="closeTestModal()">×</button>
       </div>
       <input type="hidden" id="t-id" />
-      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Test Name</label>
-      <input class="form-control" id="t-name" placeholder="e.g. Complete Blood Count" style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Test / Panel Name (what the doctor orders)</label>
+      <input class="form-control" id="t-name" placeholder="e.g. Complete Blood Count, or Blood Sugar (Fasting)" style="margin-bottom:14px" />
       <div style="display:flex;gap:12px;margin-bottom:14px">
         <input class="form-control" id="t-category" placeholder="Category" style="flex:1" />
-        <input class="form-control" id="t-price" type="number" min="0" step="0.01" placeholder="Price (₹)" style="flex:1" />
+        <input class="form-control" id="t-price" type="number" min="0" step="0.01" placeholder="Price (Rs.)" style="flex:1" />
         <input class="form-control" id="t-turnaround" type="number" min="0" step="1" placeholder="Turnaround (hrs)" style="flex:1" />
       </div>
-      <div style="display:flex;gap:12px;margin-bottom:14px">
-        <input class="form-control" id="t-range-male" placeholder="Reference Range (Male)" style="flex:1" />
-        <input class="form-control" id="t-range-female" placeholder="Reference Range (Female)" style="flex:1" />
-        <input class="form-control" id="t-unit" placeholder="Unit (e.g. mg/dL)" style="flex:1" />
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer;font-size:14px;color:var(--slate)">
+        <input type="checkbox" id="t-is-panel" onchange="onIsPanelChange()" style="width:16px;height:16px" />
+        This is a panel with multiple sub-parameters (e.g. CBC, LFT, KFT — not a single-value test)
+      </label>
+
+      <div id="t-simple-fields">
+        <div style="display:flex;gap:12px;margin-bottom:14px">
+          <input class="form-control" id="t-range-male" placeholder="Reference Range (Male)" style="flex:1" />
+          <input class="form-control" id="t-range-female" placeholder="Reference Range (Female)" style="flex:1" />
+          <input class="form-control" id="t-unit" placeholder="Unit (e.g. mg/dL)" style="flex:1" />
+        </div>
+        <textarea class="form-control" id="t-purpose" placeholder="Purpose (what this test detects, optional)" style="margin-bottom:14px;min-height:50px"></textarea>
       </div>
+
+      <div id="t-panel-fields" style="display:none;margin-bottom:14px">
+        <textarea class="form-control" id="t-panel-purpose" placeholder="Purpose of the overall panel (optional)" style="margin-bottom:14px;min-height:50px"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <label style="font-size:14px;color:var(--slate)">Sub-parameters (e.g. Hemoglobin, RBC Count, Platelet Count…)</label>
+          <button class="btn btn-outline btn-sm" onclick="addParameterRow()">+ Add Parameter</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1.4fr 0.7fr 0.9fr 0.9fr 30px;gap:6px;font-size:12px;color:var(--slate);padding:0 0 6px;font-weight:600">
+          <div>Parameter Name</div><div>Unit</div><div>Range (M)</div><div>Range (F)</div><div></div>
+        </div>
+        <div id="t-parameters-list"></div>
+      </div>
+
       <div class="err-msg" id="test-modal-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
         <button class="btn btn-primary" style="flex:1" onclick="submitTestForm()">Save</button>
@@ -296,6 +317,37 @@
     if (doc?.billing_enabled) document.getElementById('tests-billing-link').style.display = '';
 
     let previewData = [];
+    let currentParameters = [];
+
+    function onIsPanelChange() {
+      const isPanel = document.getElementById('t-is-panel').checked;
+      document.getElementById('t-simple-fields').style.display = isPanel ? 'none' : '';
+      document.getElementById('t-panel-fields').style.display = isPanel ? '' : 'none';
+      if (isPanel && currentParameters.length === 0) addParameterRow();
+    }
+
+    function addParameterRow() {
+      currentParameters.push({ name: '', unit: '', reference_range_male: '', reference_range_female: '', purpose: '' });
+      renderParameterRows();
+    }
+
+    function removeParameterRow(i) {
+      currentParameters.splice(i, 1);
+      renderParameterRows();
+    }
+
+    function renderParameterRows() {
+      const el = document.getElementById('t-parameters-list');
+      el.innerHTML = currentParameters.map((p, i) => `
+        <div style="display:grid;grid-template-columns:1.4fr 0.7fr 0.9fr 0.9fr 30px;gap:6px;margin-bottom:6px">
+          <input class="form-control" placeholder="e.g. Hemoglobin (Hb)" value="${sanitize(p.name)}" oninput="currentParameters[${i}].name=this.value" />
+          <input class="form-control" placeholder="g/dL" value="${sanitize(p.unit)}" oninput="currentParameters[${i}].unit=this.value" />
+          <input class="form-control" placeholder="13.0-17.0" value="${sanitize(p.reference_range_male)}" oninput="currentParameters[${i}].reference_range_male=this.value" />
+          <input class="form-control" placeholder="12.0-15.5" value="${sanitize(p.reference_range_female)}" oninput="currentParameters[${i}].reference_range_female=this.value" />
+          <button class="btn btn-outline btn-sm" onclick="removeParameterRow(${i})" title="Remove">×</button>
+        </div>
+      `).join('');
+    }
 
     async function loadTests() {
       try {
@@ -330,10 +382,12 @@
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
           <div style="flex:1;min-width:220px">
             <strong>${sanitize(t.test_name)}</strong>
-            ${(t.reference_range_male || t.reference_range_female) ? `<div style="font-size:12px;color:var(--slate)">M: ${sanitize(t.reference_range_male || '—')} · F: ${sanitize(t.reference_range_female || '—')}${t.unit ? ' ' + sanitize(t.unit) : ''}</div>` : ''}
+            ${t.is_panel ? `<span class="badge badge-navy" style="margin-left:8px">Panel · ${t.parameters.length} params</span>` : ''}
+            ${(!t.is_panel && (t.reference_range_male || t.reference_range_female)) ? `<div style="font-size:12px;color:var(--slate)">M: ${sanitize(t.reference_range_male || '—')} · F: ${sanitize(t.reference_range_female || '—')}${t.unit ? ' ' + sanitize(t.unit) : ''}</div>` : ''}
+            ${t.is_panel ? `<div style="font-size:12px;color:var(--slate)">${t.parameters.map(p => sanitize(p.name)).join(', ')}</div>` : ''}
           </div>
           <div style="font-size:12px;color:var(--slate);min-width:100px">${sanitize(t.category || '—')}</div>
-          <div style="min-width:80px;font-size:13px">₹${t.price}</div>
+          <div style="min-width:80px;font-size:13px">Rs.${t.price}</div>
           <div style="min-width:90px;font-size:13px">${t.turnaround_hours != null ? t.turnaround_hours + ' hrs' : '—'}</div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(t)})'>Edit</button>
@@ -353,6 +407,11 @@
       document.getElementById('t-range-male').value = '';
       document.getElementById('t-range-female').value = '';
       document.getElementById('t-unit').value = '';
+      document.getElementById('t-purpose').value = '';
+      document.getElementById('t-panel-purpose').value = '';
+      document.getElementById('t-is-panel').checked = false;
+      currentParameters = [];
+      onIsPanelChange();
       document.getElementById('test-modal-err').textContent = '';
       document.getElementById('modal-test').classList.add('open');
     }
@@ -367,6 +426,16 @@
       document.getElementById('t-range-male').value = t.reference_range_male || '';
       document.getElementById('t-range-female').value = t.reference_range_female || '';
       document.getElementById('t-unit').value = t.unit || '';
+      document.getElementById('t-purpose').value = t.is_panel ? '' : (t.purpose || '');
+      document.getElementById('t-panel-purpose').value = t.is_panel ? (t.purpose || '') : '';
+      document.getElementById('t-is-panel').checked = !!t.is_panel;
+      currentParameters = t.is_panel ? (t.parameters || []).map(p => ({
+        name: p.name || '', unit: p.unit || '',
+        reference_range_male: p.reference_range_male || '', reference_range_female: p.reference_range_female || '',
+        purpose: p.purpose || ''
+      })) : [];
+      onIsPanelChange();
+      renderParameterRows();
       document.getElementById('test-modal-err').textContent = '';
       document.getElementById('modal-test').classList.add('open');
     }
@@ -383,14 +452,23 @@
       const priceVal = document.getElementById('t-price').value;
       if (priceVal === '') { errEl.textContent = 'Price is required.'; return; }
 
+      const isPanel = document.getElementById('t-is-panel').checked;
+      if (isPanel && !currentParameters.some(p => p.name.trim())) {
+        errEl.textContent = 'Add at least one sub-parameter for a panel.';
+        return;
+      }
+
       const payload = {
         test_name,
         category: document.getElementById('t-category').value.trim(),
         price: parseFloat(priceVal),
         turnaround_hours: document.getElementById('t-turnaround').value ? parseInt(document.getElementById('t-turnaround').value) : null,
+        is_panel: isPanel,
+        purpose: isPanel ? document.getElementById('t-panel-purpose').value.trim() : document.getElementById('t-purpose').value.trim(),
         reference_range_male: document.getElementById('t-range-male').value.trim(),
         reference_range_female: document.getElementById('t-range-female').value.trim(),
-        unit: document.getElementById('t-unit').value.trim()
+        unit: document.getElementById('t-unit').value.trim(),
+        parameters: isPanel ? currentParameters.filter(p => p.name.trim()) : null
       };
 
       try {

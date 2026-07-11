@@ -1,7 +1,36 @@
+import math
 from sqlalchemy.orm import Session
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.medicine_batch import MedicineBatch
 
+
+def calculate_prescribed_quantity(matched_medicine, times_per_day, duration_days):
+    """
+    Auto-prefill for MedicineOrder.quantity, always editable by pharmacy afterward.
+
+    - If times_per_day and duration_days are both known: raw = times_per_day * duration_days,
+      rounded UP to the nearest full pack_size for per_pack (strip-billed) medicines — matches
+      how deduct_stock_fefo already rounds at dispense time, so the prefill agrees with what
+      actually gets deducted.
+    - If either is missing/null (SOS, ambiguous, not mentioned): prefill one full pack/strip
+      for a matched per_pack medicine, or 1 unit for a matched per_unit medicine — never guess
+      a specific dose count with no basis. Pharmacy must review either way.
+    - If the medicine isn't matched to the catalog at all, pack size is unknown — leave
+      quantity blank like before; pharmacy has to link it to the catalog first regardless.
+    """
+    if not matched_medicine:
+        return None
+
+    pack_size = matched_medicine.pack_size or 1
+    is_per_pack = matched_medicine.billing_mode == "per_pack"
+
+    if times_per_day and duration_days and times_per_day > 0 and duration_days > 0:
+        raw = int(math.ceil(times_per_day * duration_days))
+        if is_per_pack and pack_size > 1:
+            return int(math.ceil(raw / pack_size) * pack_size)
+        return raw
+
+    return pack_size if is_per_pack else 1
 
 def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int) -> dict:
     """

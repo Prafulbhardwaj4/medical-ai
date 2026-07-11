@@ -127,6 +127,42 @@ def sync_idle_staff_notification(db: Session, doctor):
     db.commit()
 
 
+def sync_room_classification_notifications(db: Session, hospital_id: int):
+    """Flags rooms whose type hasn't been explicitly confirmed by an admin yet
+    (legacy rooms auto-defaulted to General during migration). Clears the moment
+    admin saves any type for that room — even General again, since that's now a
+    deliberate choice, not a default."""
+    from app.models.room import Room
+
+    rooms = db.query(Room).filter(
+        Room.hospital_id == hospital_id,
+        Room.is_active == True,
+        Room.type_confirmed == False
+    ).all()
+
+    live_keys = set()
+    for r in rooms:
+        key = f"unclassified_room:{r.id}"
+        live_keys.add(key)
+        label = r.name or (f"Room {r.room_number}" if r.room_number else f"Room #{r.id}")
+        _upsert(
+            db, hospital_id, key, "unclassified_room", "warning",
+            "Room needs a type",
+            f"{label} was auto-set to General during migration and hasn't been classified yet. Set its type in Rooms so doctor/nurse pickers work correctly.",
+            "room", r.id
+        )
+
+    stale = db.query(Notification).filter(
+        Notification.hospital_id == hospital_id,
+        Notification.type == "unclassified_room"
+    ).all()
+    for n in stale:
+        if n.source_key not in live_keys:
+            db.delete(n)
+
+    db.commit()
+
+
 def sync_stock_notifications(db: Session, hospital_id: int):
     """Call this after anything that changes medicine stock or batch expiry data.
     Creates/updates notifications for conditions still true, removes ones that resolved."""
