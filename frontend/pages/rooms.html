@@ -20,7 +20,7 @@
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <span id="topbar-clinic" style="color:var(--slate)"></span>
-        <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
+         
       </div>
     </header>
     <nav class="sidebar">
@@ -120,7 +120,7 @@
     <main class="main-content">
       <div class="card">
         <div class="card-header"><h2>Rooms</h2></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;max-width:720px">
+        <div class="room-add-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;max-width:720px">
           <input class="form-control" id="room-name" placeholder="Name (e.g. OPD, Emergency)" />
           <input class="form-control" id="room-number" placeholder="Number (e.g. 101, optional)" />
           <select class="form-control" id="room-type-select" onchange="onRoomTypeChange()">

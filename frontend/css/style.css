@@ -996,6 +996,7 @@ tbody tr:hover { background: var(--smoke); }
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
+  .room-add-grid { grid-template-columns: 1fr !important; }
   .auth-page { grid-template-columns: 1fr; }
   .auth-left {
     padding: 32px 24px 28px;
@@ -1162,7 +1163,6 @@ tbody tr:hover { background: var(--smoke); }
 
 /* ── Mobile profile button + dropdown ── */
 .topbar-profile-btn {
-  display: none;
   align-items: center;
   justify-content: center;
   width: 34px;
@@ -1174,6 +1174,9 @@ tbody tr:hover { background: var(--smoke); }
   cursor: pointer;
   position: relative;
   flex-shrink: 0;
+}
+@media (min-width: 901px) {
+  .topbar-profile-btn { display: none; }
 }
 
 .topbar-profile-btn .profile-dot {
