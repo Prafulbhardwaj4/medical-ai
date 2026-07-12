@@ -1051,6 +1051,108 @@ tbody tr:hover { background: var(--smoke); }
   .card-header > div:last-child > .btn { width: 100%; }
 }
 
+/* ── Bottom Tab Nav (mobile) ── */
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .hamburger-btn { display: none; }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    background: var(--white);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
+    z-index: 250;
+  }
+
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    color: var(--slate);
+    text-decoration: none;
+    font-size: 0.66rem;
+    font-weight: 500;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    padding: 6px 4px 0;
+  }
+
+  .bottom-nav-item svg { width: 21px; height: 21px; stroke-width: 1.8; }
+
+  .bottom-nav-item.active { color: var(--teal); }
+  .bottom-nav-item.active svg { stroke-width: 2.2; }
+
+  .main-content { padding-bottom: 76px; }
+}
+
+/* ── Responsive data cards (tables → cards on mobile) ── */
+@media (max-width: 700px) {
+  table.responsive-cards,
+  table.responsive-cards thead,
+  table.responsive-cards tbody,
+  table.responsive-cards th,
+  table.responsive-cards td,
+  table.responsive-cards tr {
+    display: block;
+    width: 100%;
+  }
+  table.responsive-cards thead tr {
+    position: absolute;
+    top: -9999px;
+    left: -9999px;
+  }
+  table.responsive-cards tr {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 12px;
+    padding: 4px 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  table.responsive-cards td {
+    border: none;
+    border-bottom: 1px solid var(--smoke-mid);
+    position: relative;
+    padding: 10px 0 10px 46%;
+    text-align: right;
+    white-space: normal;
+    font-size: 0.85rem;
+  }
+  table.responsive-cards td:last-child { border-bottom: none; }
+  table.responsive-cards td:empty { display: none; }
+  table.responsive-cards td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 0;
+    top: 10px;
+    width: 42%;
+    padding-right: 10px;
+    white-space: normal;
+    text-align: left;
+    font-weight: 600;
+    color: var(--slate);
+    font-size: 0.76rem;
+  }
+  table.responsive-cards td[data-label=""]::before,
+  table.responsive-cards td:not([data-label])::before {
+    content: none;
+  }
+}
+
 /* ── Notification Bell & Panel ── */
 .notif-bell-btn {
   position: relative;

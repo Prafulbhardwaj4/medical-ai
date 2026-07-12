@@ -20,5 +20,6 @@ class MedicineOrder(Base):
     included = Column(Boolean, default=True, nullable=False)
     status = Column(String, nullable=False, default="advised")  # advised -> paid -> dispensed
     paid_at = Column(DateTime, nullable=True)
+    queued_at = Column(DateTime, nullable=True)  # set whenever this order enters a day's active queue (payment or requeue)
     dispensed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

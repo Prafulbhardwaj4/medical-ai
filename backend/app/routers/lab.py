@@ -13,6 +13,7 @@ from app.models.patient import Patient
 from app.models.test_catalog import TestCatalogItem
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
+from app.utils.order_lifecycle import is_order_expired
 from app.routers.attendance import require_present
 from app.services.pdf_service import generate_test_report_pdf
 from fastapi.responses import FileResponse
@@ -49,9 +50,9 @@ def get_lab_queue(
     orders = db.query(TestOrder).filter(
         TestOrder.hospital_id == current_doctor.hospital_id,
         TestOrder.status.in_(["paid", "sample_collected", "processing", "completed"]),
-        TestOrder.created_at >= today_start,
-        TestOrder.created_at <= today_end
-    ).order_by(TestOrder.paid_at).all()
+        TestOrder.queued_at >= today_start,
+        TestOrder.queued_at <= today_end
+    ).order_by(TestOrder.queued_at).all()
 
     result = []
     for o in orders:
@@ -73,6 +74,93 @@ def get_lab_queue(
             "waiting_minutes": waiting_minutes
         })
     return result
+
+
+@router.get("/pending-tasks")
+def search_pending_lab_tasks(
+    q: str = "",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Patient-ID/name search for paid-but-not-completed tests that fell out
+    of today's active queue — free, repeatable, one-click requeue, as long
+    as still inside the 7-day/next-consultation window."""
+    require_lab(current_doctor)
+    if not q or len(q.strip()) < 2:
+        return []
+
+    like = f"%{q.strip()}%"
+    patients = db.query(Patient).filter(
+        Patient.hospital_id == current_doctor.hospital_id,
+        (Patient.name.ilike(like)) | (Patient.patient_uid.ilike(like))
+    ).limit(15).all()
+
+    today = date.today()
+    result = []
+    for p in patients:
+        orders = db.query(TestOrder).filter(
+            TestOrder.patient_id == p.id,
+            TestOrder.hospital_id == current_doctor.hospital_id,
+            TestOrder.status == "paid"
+        ).all()
+
+        pending = []
+        for o in orders:
+            if o.queued_at and o.queued_at.date() == today:
+                continue  # already active in today's queue
+            if is_order_expired(db, p.id, o.consultation_id, o.created_at):
+                continue
+            consultation = db.query(Consultation).filter(Consultation.id == o.consultation_id).first()
+            ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first() if consultation else None
+            pending.append({
+                "order_id": o.id,
+                "test_name": o.test_name,
+                "price": o.price,
+                "doctor_name": f"{ordering_doctor.title} {ordering_doctor.name}" if ordering_doctor else "—",
+                "paid_at": o.paid_at.isoformat() if o.paid_at else None
+            })
+
+        if pending:
+            result.append({
+                "patient_id": p.id,
+                "patient_name": p.name,
+                "patient_uid": p.patient_uid,
+                "pending": pending
+            })
+    return result
+
+
+@router.post("/orders/{order_id}/requeue")
+def requeue_test_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_lab(current_doctor)
+
+    order = db.query(TestOrder).filter(
+        TestOrder.id == order_id,
+        TestOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Test order not found")
+    if order.status != "paid":
+        raise HTTPException(status_code=400, detail="Only paid, uncollected tests can be requeued")
+    if is_order_expired(db, order.patient_id, order.consultation_id, order.created_at):
+        raise HTTPException(status_code=400, detail="This order's window has closed — a fresh order is needed")
+
+    order.queued_at = datetime.utcnow()
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="test_order_requeued",
+        target_type="test_order",
+        target_id=order.id,
+        target_label=order.test_name,
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"id": order.id, "queued_at": order.queued_at.isoformat()}
 
 
 @router.patch("/orders/{order_id}/status")

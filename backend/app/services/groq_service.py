@@ -57,6 +57,11 @@ Other rules:
 - Do not add any fields not listed above
 - Do not include any explanation or markdown — only the raw JSON object
 - If a field is not mentioned, use empty string or empty array
+
+Rules for "repeat" shorthand:
+- If the doctor uses shorthand like "repeat the medicines", "same as last time", "get CBC done again", or similar — resolve it using ONLY the most recent previous visit shown in the patient history above (the first one listed), never any earlier visit.
+- Expand the shorthand into the full, explicit medicine/test entries in the normal "medicines"/"tests" output arrays above, exactly as if the doctor had listed them out loud. Do not output a placeholder string like "same as before" — always the real, structured entries.
+- If no patient history is provided and the doctor uses repeat-shorthand, leave the corresponding array empty rather than guessing.
 """
 
 async def structure_transcript(transcript: str, patient_history: str = "") -> dict:

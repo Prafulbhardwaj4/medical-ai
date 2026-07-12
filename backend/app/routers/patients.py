@@ -18,6 +18,8 @@ import os
 from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
+from app.utils.order_lifecycle import is_order_expired
+from app.models.medicine_order import MedicineOrder
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -604,6 +606,169 @@ def get_hospital_tests(
         for t in items
     ]
 
+
+@router.get("/reception/pending-payments")
+def reception_pending_payments(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Ambient box on the receptionist main screen — today's check-ins only,
+    with per-patient Consultation / Tests / Pharmacy buckets. A bucket is
+    omitted entirely if it doesn't apply to that patient."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    today = date.today()
+    day_start = datetime.combine(today, datetime.min.time())
+    day_end = datetime.combine(today, datetime.max.time())
+
+    checkins = db.query(Checkin).filter(
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == today
+    ).order_by(Checkin.created_at.asc()).all()
+
+    result = []
+    for c in checkins:
+        patient = db.query(Patient).filter(Patient.id == c.patient_id).first()
+        if not patient:
+            continue
+
+        consultations = db.query(Consultation).filter(
+            Consultation.patient_id == c.patient_id,
+            Consultation.created_at >= day_start,
+            Consultation.created_at <= day_end
+        ).all()
+        consultation_ids = [cc.id for cc in consultations]
+
+        buckets = {}
+
+        if c.consultation_fee is not None:
+            buckets["consultation"] = {"status": "paid" if c.is_paid else "unpaid"}
+
+        if consultation_ids:
+            test_orders = db.query(TestOrder).filter(
+                TestOrder.consultation_id.in_(consultation_ids),
+                TestOrder.included == True
+            ).all()
+            if test_orders:
+                pending = [t for t in test_orders if t.status == "payment_pending"]
+                buckets["tests"] = {
+                    "status": "unpaid" if pending else "paid",
+                    "pending_count": len(pending),
+                    "pending_total": sum(t.price for t in pending)
+                }
+
+            medicine_orders = db.query(MedicineOrder).filter(
+                MedicineOrder.consultation_id.in_(consultation_ids),
+                MedicineOrder.included == True
+            ).all()
+            if medicine_orders:
+                statuses = set(m.status for m in medicine_orders)
+                if "advised" in statuses:
+                    pharm_status = "pending"
+                elif "paid" in statuses:
+                    pharm_status = "paid_not_dispensed"
+                else:
+                    pharm_status = "dispensed"
+                buckets["pharmacy"] = {"status": pharm_status}
+
+        if not buckets:
+            continue
+
+        result.append({
+            "checkin_id": c.id,
+            "patient_id": patient.id,
+            "patient_name": patient.name,
+            "buckets": buckets
+        })
+
+    return result
+
+
+@router.get("/{patient_id}/pending-tasks")
+def get_patient_pending_tasks(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Search-based modal (not the same-day ambient box) — for a patient who
+    never paid on consultation day. Shows lab tests still payable (any day,
+    within window) and pharmacy status read-only (pharmacy always collects
+    its own money)."""
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    test_orders = db.query(TestOrder).filter(
+        TestOrder.patient_id == patient_id,
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.status == "payment_pending",
+        TestOrder.included == True
+    ).all()
+    lab_pending = [
+        t for t in test_orders
+        if not is_order_expired(db, patient_id, t.consultation_id, t.created_at)
+    ]
+
+    medicine_orders = db.query(MedicineOrder).filter(
+        MedicineOrder.patient_id == patient_id,
+        MedicineOrder.hospital_id == current_doctor.hospital_id
+    ).order_by(MedicineOrder.created_at.desc()).limit(15).all()
+
+    return {
+        "lab": [
+            {"id": t.id, "test_name": t.test_name, "price": t.price, "created_at": t.created_at.isoformat()}
+            for t in lab_pending
+        ],
+        "pharmacy": [
+            {"medicine_name": m.medicine_name, "status": m.status}
+            for m in medicine_orders
+        ]
+    }
+
+
+@router.post("/{patient_id}/collect-test-payment-anyday")
+def collect_test_payment_anyday(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Used from the search-based pending-tasks modal — collects payment for
+    included, non-expired payment_pending tests regardless of what day they
+    were ordered on."""
+    orders = db.query(TestOrder).filter(
+        TestOrder.patient_id == patient_id,
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.status == "payment_pending",
+        TestOrder.included == True
+    ).all()
+
+    payable = [o for o in orders if not is_order_expired(db, patient_id, o.consultation_id, o.created_at)]
+    if not payable:
+        raise HTTPException(status_code=400, detail="No payable tests pending — window may have closed")
+
+    total = 0
+    now = datetime.utcnow()
+    for o in payable:
+        o.status = "paid"
+        o.paid_at = now
+        o.queued_at = now
+        total += o.price
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="test_fees_collected_anyday",
+        target_type="patient",
+        target_id=patient_id,
+        target_label=f"Rs.{total} for {len(payable)} tests (late collection)",
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"charged": total, "count": len(payable)}
+
 @router.get("/{patient_id}/pending-test-fees")
 def get_pending_test_fees(
     patient_id: int,
@@ -676,9 +841,11 @@ def collect_test_payment(
         raise HTTPException(status_code=400, detail="No included tests pending payment")
 
     total = 0
+    now = datetime.utcnow()
     for o in orders:
         o.status = "paid"
-        o.paid_at = datetime.utcnow()
+        o.paid_at = now
+        o.queued_at = now
         total += o.price
 
     db.commit()
@@ -712,6 +879,7 @@ def mark_test_order_paid(
 
     order.status = "paid"
     order.paid_at = datetime.utcnow()
+    order.queued_at = order.paid_at
     db.commit()
 
     log_action(

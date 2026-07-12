@@ -60,7 +60,11 @@
       <div class="card">
         <div class="card-header">
           <h2>Lab Queue</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-control" id="lab-pending-search" placeholder="Find patient (pending tasks)…" style="width:220px" oninput="searchLabPendingTasks(this.value)" />
+          </div>
         </div>
+        <div id="lab-pending-results" style="margin-bottom:10px"></div>
         <div id="lab-queue-list">
           <p style="color:var(--slate)">Loading…</p>
         </div>
@@ -94,6 +98,53 @@
 
     let labCurrentStatus = 'not_marked';
     let currentOrderId = null;
+
+    let labPendingSearchTimer;
+    function searchLabPendingTasks(val) {
+      clearTimeout(labPendingSearchTimer);
+      labPendingSearchTimer = setTimeout(() => runLabPendingSearch(val), 350);
+    }
+
+    async function runLabPendingSearch(q) {
+      const el = document.getElementById('lab-pending-results');
+      if (!q || q.trim().length < 2) { el.innerHTML = ''; return; }
+      try {
+        const results = await api("GET", `/lab/pending-tasks?q=${encodeURIComponent(q)}`);
+        renderLabPendingResults(results);
+      } catch (e) { }
+    }
+
+    function renderLabPendingResults(results) {
+      const el = document.getElementById('lab-pending-results');
+      if (!results.length) {
+        el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No pending tasks found for this search.</p>';
+        return;
+      }
+      el.innerHTML = results.map(r => `
+        <div style="border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
+          <strong>${sanitize(r.patient_name)}</strong> <span class="badge badge-navy">${sanitize(r.patient_uid)}</span>
+          ${r.pending.map(p => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;flex-wrap:wrap;gap:8px">
+              <div style="font-size:13px">
+                ${sanitize(p.test_name)} — Rs.${p.price}
+                <div style="color:var(--slate);font-size:12px">Ordered by ${sanitize(p.doctor_name)} · paid ${p.paid_at ? new Date(p.paid_at + 'Z').toLocaleDateString('en-IN') : '—'}</div>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="requeueTestOrder(${p.order_id})">Requeue to Today</button>
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
+    }
+
+    async function requeueTestOrder(orderId) {
+      try {
+        await api("POST", `/lab/orders/${orderId}/requeue`, {});
+        toast('Requeued to today\'s list.', 'success');
+        document.getElementById('lab-pending-search').value = '';
+        document.getElementById('lab-pending-results').innerHTML = '';
+        loadQueue();
+      } catch (e) { toast(e.message, 'error'); }
+    }
 
     async function loadLabAttendance() {
       try {
