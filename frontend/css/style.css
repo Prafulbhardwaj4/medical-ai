@@ -995,6 +995,10 @@ tbody tr:hover { background: var(--smoke); }
 .mobile-back-link:hover { text-decoration: underline; }
 
 /* ── Responsive ── */
+@media (min-width: 901px) {
+  #sidebar-doctor-name { display: none; }
+  .sidebar-signout-btn { display: none; }
+}
 @media (max-width: 900px) {
   .room-add-grid { grid-template-columns: 1fr !important; }
   .auth-page { grid-template-columns: 1fr; }
@@ -1177,6 +1181,10 @@ tbody tr:hover { background: var(--smoke); }
 }
 @media (min-width: 901px) {
   .topbar-profile-btn { display: none; }
+}
+@media (max-width: 600px) {
+  .billing-filter-grid { grid-template-columns: 1fr !important; }
+  .visit-detail-grid { grid-template-columns: 1fr !important; }
 }
 
 .topbar-profile-btn .profile-dot {
