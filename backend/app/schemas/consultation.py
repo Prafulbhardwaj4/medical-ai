@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict
 
 class MedicineItem(BaseModel):
     name: str
@@ -10,20 +10,13 @@ class MedicineItem(BaseModel):
     duration: str
     schedule: Literal["otc", "controlled"] = "controlled"
 
-class Vitals(BaseModel):
-    bp: str = ""
-    temperature: str = ""
-    pulse: str = ""
-    weight: str = ""
-    spo2: str = ""
-
 class StructureRequest(BaseModel):
     transcript: Optional[str] = None
 
 class ConsultationStructured(BaseModel):
     chief_complaint: Optional[str] = ""
     diagnosis: Optional[str] = ""
-    vitals: Optional[Vitals] = Vitals()
+    vitals: Optional[Dict[str, str]] = {}
     medicines: Optional[List[MedicineItem]] = []
     tests: Optional[List[str]] = []
     advice: Optional[str] = ""

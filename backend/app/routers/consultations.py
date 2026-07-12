@@ -530,8 +530,9 @@ def mark_dispensed(
         mo.status = "dispensed"
         mo.dispensed_at = now_ist()
 
-        if mo.catalog_medicine_id and mo.quantity:
-            result = deduct_stock_fefo(db, mo.catalog_medicine_id, mo.quantity)
+        dispense_qty = mo.billed_quantity if mo.billed_quantity is not None else mo.quantity
+        if mo.catalog_medicine_id and dispense_qty:
+            result = deduct_stock_fefo(db, mo.catalog_medicine_id, dispense_qty)
             db.commit()
             sync_stock_notifications(db, mo.hospital_id)
             log_action(
@@ -539,7 +540,7 @@ def mark_dispensed(
                 action="medicine_dispensed",
                 target_type="hospital_medicine",
                 target_id=mo.catalog_medicine_id,
-                target_label=f"{result['medicine_name']} -{mo.quantity}" + (f" (shortfall {result['shortfall']})" if result["shortfall"] > 0 else ""),
+                target_label=f"{result['medicine_name']} -{dispense_qty}" + (f" (shortfall {result['shortfall']})" if result["shortfall"] > 0 else ""),
                 hospital_id=mo.hospital_id
             )
     db.commit()
@@ -835,7 +836,7 @@ def update_consultation(
     consultation.advice = payload.advice
     consultation.followup = payload.followup
     consultation.has_pending_tests = len(payload.tests) > 0
-    consultation.vitals = json.dumps(payload.vitals.dict() if payload.vitals else {})
+    consultation.vitals = json.dumps(payload.vitals or {})
 
     db.commit()
     db.refresh(consultation)

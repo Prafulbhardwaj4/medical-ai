@@ -6,6 +6,7 @@ import json
 
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 from app.database import get_db
 from app.models.doctor import Doctor
 from app.models.patient import Patient
@@ -109,14 +110,23 @@ def get_pharmacy_prescription(
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "confirmed_at": consultation.created_at.isoformat(),
         "medicines": medicines,
-        "medicine_orders": [serialize_medicine_order(m) for m in medicine_orders],
+        "medicine_orders": [serialize_medicine_order(m, db) for m in medicine_orders],
         "is_dispensed": consultation.is_dispensed,
         "dispensed_at": consultation.dispensed_at.isoformat() if consultation.dispensed_at else None,
         "verify_hash": consultation.verify_hash
     }
 
 
-def serialize_medicine_order(m: MedicineOrder):
+def serialize_medicine_order(m: MedicineOrder, db: Session = None):
+    stock_quantity = None
+    low_stock_threshold = None
+    if db is not None and m.catalog_medicine_id:
+        catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == m.catalog_medicine_id).first()
+        if catalog_item:
+            stock_quantity = catalog_item.stock_quantity
+            low_stock_threshold = catalog_item.low_stock_threshold
+
+    billed = m.billed_quantity if m.billed_quantity is not None else m.quantity
     return {
         "id": m.id,
         "medicine_name": m.medicine_name,
@@ -127,9 +137,13 @@ def serialize_medicine_order(m: MedicineOrder):
         "catalog_medicine_id": m.catalog_medicine_id,
         "unit_price": m.unit_price,
         "quantity": m.quantity,
-        "line_total": (m.unit_price * m.quantity) if (m.unit_price is not None and m.quantity is not None) else None,
+        "billed_quantity": m.billed_quantity,
+        "line_total": (m.unit_price * billed) if (m.unit_price is not None and billed is not None) else None,
         "included": m.included,
-        "status": m.status
+        "status": m.status,
+        "substitute_for_id": m.substitute_for_id,
+        "stock_quantity": stock_quantity,
+        "low_stock_threshold": low_stock_threshold
     }
 
 
@@ -188,7 +202,7 @@ def set_medicine_order_quantity(
 
     order.quantity = payload.quantity
     db.commit()
-    return serialize_medicine_order(order)
+    return serialize_medicine_order(order, db)
 
 
 @router.patch("/medicine-orders/{order_id}/link-catalog")
@@ -221,7 +235,7 @@ def link_medicine_order_catalog(
     order.catalog_medicine_id = catalog_item.id
     order.unit_price = catalog_item.price
     db.commit()
-    return serialize_medicine_order(order)
+    return serialize_medicine_order(order, db)
 
 
 @router.get("/medicines/search")
@@ -281,12 +295,28 @@ def collect_medicine_payment(
         )
 
     total = 0
+    charged_count = 0
+    skipped = []
     now = datetime.utcnow()
     for o in orders:
+        available = None
+        if o.catalog_medicine_id:
+            catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == o.catalog_medicine_id).first()
+            if catalog_item and catalog_item.stock_quantity is not None:
+                available = catalog_item.stock_quantity
+
+        billable_qty = min(o.quantity, available) if available is not None else o.quantity
+
+        if billable_qty <= 0:
+            skipped.append(o.medicine_name)
+            continue
+
+        o.billed_quantity = billable_qty
         o.status = "paid"
         o.paid_at = now
         o.queued_at = now
-        total += o.unit_price * o.quantity
+        total += o.unit_price * billable_qty
+        charged_count += 1
 
     db.commit()
 
@@ -295,11 +325,10 @@ def collect_medicine_payment(
         action="medicine_fees_collected",
         target_type="consultation",
         target_id=consultation.id,
-        target_label=f"Rs.{total} for {len(orders)} medicines",
+        target_label=f"Rs.{total} for {charged_count} medicines" + (f" ({len(skipped)} skipped — out of stock)" if skipped else ""),
         hospital_id=current_doctor.hospital_id
     )
-    return {"charged": total, "count": len(orders)}
-
+    return {"charged": total, "count": charged_count, "skipped": skipped}
 
 @router.get("/pending-tasks")
 def search_pending_pharmacy_tasks(
@@ -354,6 +383,110 @@ def search_pending_pharmacy_tasks(
                 "pending": pending
             })
     return result
+
+
+class AddMedicineIn(BaseModel):
+    catalog_medicine_id: int
+    quantity: int = 1
+    substitute_for_id: Optional[int] = None
+
+
+@router.post("/prescription/{token_number}/add-medicine")
+def add_medicine_order(
+    token_number: str,
+    payload: AddMedicineIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
+
+    consultation = db.query(Consultation).filter(
+        Consultation.token_number == token_number,
+        Consultation.is_voided == False
+    ).first()
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    catalog_item = db.query(HospitalMedicine).filter(
+        HospitalMedicine.id == payload.catalog_medicine_id,
+        HospitalMedicine.hospital_id == current_doctor.hospital_id,
+        HospitalMedicine.is_active == True
+    ).first()
+    if not catalog_item:
+        raise HTTPException(status_code=404, detail="Catalog medicine not found")
+
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+
+    if payload.substitute_for_id:
+        original = db.query(MedicineOrder).filter(
+            MedicineOrder.id == payload.substitute_for_id,
+            MedicineOrder.consultation_id == consultation.id
+        ).first()
+        if not original:
+            raise HTTPException(status_code=404, detail="Original medicine order not found")
+
+    new_order = MedicineOrder(
+        consultation_id=consultation.id,
+        patient_id=consultation.patient_id,
+        hospital_id=current_doctor.hospital_id,
+        catalog_medicine_id=catalog_item.id,
+        medicine_name=catalog_item.generic_name,
+        brand_name=catalog_item.brand_names,
+        unit_price=catalog_item.price,
+        quantity=payload.quantity,
+        included=True,
+        status="advised",
+        substitute_for_id=payload.substitute_for_id
+    )
+    db.add(new_order)
+    db.commit()
+    db.refresh(new_order)
+
+    log_action(
+        db, current_doctor,
+        action="medicine_order_added",
+        target_type="consultation",
+        target_id=consultation.id,
+        target_label=f"Added {new_order.medicine_name}" + (" (substitute)" if payload.substitute_for_id else ""),
+        hospital_id=current_doctor.hospital_id
+    )
+
+    return serialize_medicine_order(new_order, db)
+
+
+@router.patch("/medicine-orders/{order_id}/mark-unavailable")
+def mark_medicine_order_unavailable(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
+
+    order = db.query(MedicineOrder).filter(
+        MedicineOrder.id == order_id,
+        MedicineOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Medicine order not found")
+    if order.status != "advised":
+        raise HTTPException(status_code=400, detail="Cannot change after payment")
+
+    order.status = "unavailable"
+    order.included = False
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="medicine_order_unavailable",
+        target_type="medicine_order",
+        target_id=order.id,
+        target_label=f"{order.medicine_name} — advised outside",
+        hospital_id=current_doctor.hospital_id
+    )
+    return serialize_medicine_order(order, db)
 
 
 @router.post("/medicine-orders/{order_id}/requeue")

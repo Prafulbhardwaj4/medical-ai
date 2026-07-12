@@ -25,7 +25,6 @@ def vitals_queue(
     _require_nurse(current_doctor)
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.nurse_id == current_doctor.id,
         Checkin.vitals_status == "pending",
         Checkin.visit_date == date.today()
     ).order_by(Checkin.created_at.asc()).all()
@@ -129,7 +128,6 @@ def post_consult_queue(
     _require_nurse(current_doctor)
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.nurse_id == current_doctor.id,
         Checkin.post_consult_status == "pending",
         Checkin.visit_date == date.today()
     ).order_by(Checkin.created_at.asc()).all()

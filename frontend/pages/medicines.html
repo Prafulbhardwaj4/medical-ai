@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Medicine Catalog — MedScribe</title>
-  <link rel="stylesheet" href="../css/style.css?v=3" />
+  <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
     /* Scoped to this page only — medicine catalog card layout */
     .item-card {
@@ -95,7 +95,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div class="topbar-brand">Med<span>Scribe</span></div>
+        <a class="topbar-brand" href="analytics.html">Med<span>Scribe</span></a>
       </div>
       <div class="topbar-doctor">
                 <span><strong id="topbar-doctor-name"></strong></span>
@@ -109,7 +109,42 @@
                 </button>
                 <button class="btn-logout" onclick="logout()">Sign out</button>
             </div>
+            <button class="topbar-profile-btn" onclick="toggleProfileMenu()" aria-label="Profile">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="8" r="4" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+                </svg>
+                <span class="profile-dot" id="profile-dot"></span>
+            </button>
         </header>
+
+        <div class="sidebar-backdrop" id="profile-menu-backdrop" onclick="closeProfileMenu()" style="display:none"></div>
+        <div class="profile-menu" id="profile-menu">
+            <div class="profile-menu-header">
+                <strong id="profile-menu-name"></strong>
+                <span id="profile-menu-clinic"></span>
+            </div>
+            <button class="profile-menu-item" onclick="closeProfileMenu(); toggleNotifPanel()">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                Notifications
+                <span class="profile-menu-badge" id="profile-menu-notif-badge" style="display:none">0</span>
+            </button>
+            <button class="profile-menu-item" onclick="closeProfileMenu(); toast('Settings — Coming Soon','info')">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <circle cx="12" cy="12" r="3" />
+                </svg>
+                Settings
+            </button>
+            <button class="profile-menu-item danger" onclick="logout()">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Sign out
+            </button>
+        </div>
 
         <div class="notif-backdrop" id="notif-backdrop" onclick="closeNotifPanel()"></div>
         <div class="notif-panel" id="notif-panel">
@@ -218,6 +253,87 @@
       </a>
     </nav>
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+    <nav class="bottom-nav">
+      <a class="bottom-nav-item" href="analytics.html">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Home
+      </a>
+      <a class="bottom-nav-item" href="doctors.html">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+        </svg>
+        Staff
+      </a>
+      <a class="bottom-nav-item active" href="medicines.html">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+        Medicines
+      </a>
+      <button class="bottom-nav-item" onclick="openMobileMenu()">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        Menu
+      </button>
+    </nav>
+
+    <div class="mobile-menu-sheet" id="mobile-menu-sheet">
+      <div class="mobile-menu-header">
+        <h2>More</h2>
+        <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
+      </div>
+      <div class="mobile-menu-body">
+        <a class="mobile-menu-item" href="analytics.html?section=patients">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>
+          Patients
+        </a>
+        <a class="mobile-menu-item" href="analytics.html?section=consultations">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Consultations
+        </a>
+        <a class="mobile-menu-item" href="analytics.html?section=tests">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v4a1 1 0 001 1h4M9 3h6l4 4v13a1 1 0 01-1 1H9a1 1 0 01-1-1V4a1 1 0 011-1z"/></svg>
+          Tests & Diagnoses
+        </a>
+        <a class="mobile-menu-item" href="analytics.html?section=demographics">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+          Demographics
+        </a>
+        <a class="mobile-menu-item" id="mobile-nav-billing" href="analytics.html?section=billing" style="display:none">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3v-6m-3 6v-9m12 3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Billing
+        </a>
+        <a class="mobile-menu-item" href="tests-catalog.html">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Test Catalog
+        </a>
+        <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();toast('Complaints & Suggestions — Coming Soon','info');return false;">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          Complaints
+        </a>
+        <a class="mobile-menu-item" href="attendance.html">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          Attendance
+        </a>
+        <a class="mobile-menu-item" href="rooms.html">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+          Rooms
+        </a>
+        <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();toast('Reports — Coming Soon','info');return false;">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6M4 5h16v14H4V5z"/></svg>
+          Reports
+        </a>
+        <a class="mobile-menu-item" href="audit.html">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+          Audit Log
+        </a>
+      </div>
+    </div>
+
     <main class="main-content">
       <div class="card">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -229,7 +345,7 @@
         </div>
         <input type="file" id="upload-input" accept=".pdf,.xlsx,.xls" style="display:none" onchange="handleFileSelected(event)" />
 
-        <div style="display:grid;grid-template-columns:1fr 180px 160px;gap:10px;margin:16px 0 20px">
+        <div class="med-filter-row" style="display:grid;grid-template-columns:1fr 180px 160px;gap:10px;margin:16px 0 20px">
           <input class="form-control" id="med-search" placeholder="Search by generic or brand name…" oninput="loadMedicines()" />
           <select class="form-control" id="med-category-filter" onchange="loadMedicines()">
             <option value="">All Categories</option>
@@ -441,7 +557,7 @@
   </div>
 
   <div id="toast"></div>
-  <script src="../js/api.js?v=3"></script>
+  <script src="../js/api.js?v=4"></script>
   <script>
     const doc = getDoctor();
     if (!doc || !["admin", "sub_admin"].includes(doc.role)) window.location.href = "dashboard.html";
@@ -458,11 +574,17 @@
       try {
         const data = await api("GET", "/notifications/unread-count");
         const badge = document.getElementById('notif-badge');
+        const dot = document.getElementById('profile-dot');
+        const pmBadge = document.getElementById('profile-menu-notif-badge');
         if (data.unread_count > 0) {
           badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
           badge.style.display = 'flex';
+          if (dot) dot.style.display = 'block';
+          if (pmBadge) { pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count; pmBadge.style.display = 'inline-block'; }
         } else {
           badge.style.display = 'none';
+          if (dot) dot.style.display = 'none';
+          if (pmBadge) pmBadge.style.display = 'none';
         }
       } catch (e) { }
     }
@@ -526,7 +648,11 @@
       } catch (e) { }
     }
 
-    if (doc?.billing_enabled) document.getElementById('medicines-billing-link').style.display = '';
+    if (doc?.billing_enabled) {
+      document.getElementById('medicines-billing-link').style.display = '';
+      const mobileBilling = document.getElementById('mobile-nav-billing');
+      if (mobileBilling) mobileBilling.style.display = '';
+    }
 
     const SCHEDULE_BADGE = { otc: 'badge-green', h: 'badge-amber', h1: 'badge-warn', x: 'badge-red' };
 

@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Consultation</title>
-  <link rel="stylesheet" href="../css/style.css?v=2" />
+  <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
     .section-block {
       margin-bottom: 20px;
@@ -253,28 +253,7 @@
 
         <div class="section-block">
           <div class="section-title">Vitals <span style="font-weight:400;color:var(--slate)">(if recorded)</span></div>
-          <div class="form-row-3">
-            <div class="form-group">
-              <label class="form-label">Blood Pressure</label>
-              <input class="form-control" id="v-bp" placeholder="e.g. 120/80 mmHg" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Temperature</label>
-              <input class="form-control" id="v-temp" placeholder="e.g. 99°F" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Pulse</label>
-              <input class="form-control" id="v-pulse" placeholder="e.g. 78 bpm" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Weight</label>
-              <input class="form-control" id="v-weight" placeholder="e.g. 65 kg" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">SpO2</label>
-              <input class="form-control" id="v-spo2" placeholder="e.g. 98%" />
-            </div>
-          </div>
+          <div class="form-row-3" id="vitals-review-fields"></div>
         </div>
 
         <div class="section-block">
@@ -399,7 +378,7 @@
 
   <div id="toast"></div>
 
-  <script src="../js/api.js?v=2"></script>
+  <script src="../js/api.js?v=4"></script>
   <script>
     if (!requireAuth()) throw new Error();
     fillTopbar();
@@ -420,6 +399,41 @@
     let isRecording = false;
     let tests = [];
     let currentStream = null;
+
+    // ── Vitals (dynamic, no fixed field list) ──────────────
+    const VITALS_KEY_TO_LABEL = { bp: "Blood Pressure", temperature: "Temperature", pulse: "Pulse", weight: "Weight", spo2: "SpO2" };
+    const VITALS_LABEL_TO_KEY = { "Blood Pressure": "bp", "Pulse": "pulse", "Temperature": "temperature", "Weight": "weight", "SpO2": "spo2" };
+    let currentVitals = {};
+
+    function setVital(key, value, overwrite) {
+      if (!value) return;
+      if (currentVitals[key] && !overwrite) return;
+      currentVitals[key] = value;
+    }
+
+    function renderVitalsReview() {
+      const wrap = document.getElementById('vitals-review-fields');
+      const entries = Object.entries(currentVitals).filter(([, v]) => v);
+      if (!entries.length) {
+        wrap.innerHTML = '<p style="color:var(--slate-light);font-size:0.85rem;grid-column:1/-1">No vitals recorded.</p>';
+        return;
+      }
+      wrap.innerHTML = entries.map(([key, value]) => `
+        <div class="form-group">
+          <label class="form-label">${VITALS_KEY_TO_LABEL[key] || key}</label>
+          <input class="form-control" data-vital-key="${key.replace(/"/g, '&quot;')}" value="${(value || '').replace(/"/g, '&quot;')}" />
+        </div>
+      `).join('');
+    }
+
+    function collectVitalsPayload() {
+      const payload = {};
+      document.querySelectorAll('#vitals-review-fields [data-vital-key]').forEach(inp => {
+        const val = inp.value.trim();
+        if (val) payload[inp.getAttribute('data-vital-key')] = val;
+      });
+      return payload;
+    }
 
     async function loadPatient() {
       try {
@@ -591,12 +605,8 @@
         document.getElementById("f-followup").value = s.followup || "";
         document.getElementById("f-nurse-instructions").value = s.nurse_instructions || "";
 
-        const v = s.vitals || {};
-        document.getElementById("v-bp").value = v.bp || document.getElementById("v-bp").value;
-        document.getElementById("v-temp").value = v.temperature || document.getElementById("v-temp").value;
-        document.getElementById("v-pulse").value = v.pulse || document.getElementById("v-pulse").value;
-        document.getElementById("v-weight").value = v.weight || document.getElementById("v-weight").value;
-        document.getElementById("v-spo2").value = v.spo2 || document.getElementById("v-spo2").value;
+        currentVitals = {};
+        Object.entries(s.vitals || {}).forEach(([k, val]) => setVital(k, val, true));
 
         renderMedRows(s.medicines || []);
         tests = s.tests || [];
@@ -715,13 +725,7 @@
       const editedData = {
         chief_complaint: document.getElementById("f-complaint").value.trim(),
         diagnosis: document.getElementById("f-diagnosis").value.trim(),
-        vitals: {
-          bp: document.getElementById("v-bp").value.trim(),
-          temperature: document.getElementById("v-temp").value.trim(),
-          pulse: document.getElementById("v-pulse").value.trim(),
-          weight: document.getElementById("v-weight").value.trim(),
-          spo2: document.getElementById("v-spo2").value.trim()
-        },
+        vitals: collectVitalsPayload(),
         medicines: getMedicines(),
         tests: tests,
         advice: document.getElementById("f-advice").value.trim(),
@@ -809,12 +813,8 @@
         renderMedRows(d.medicines || []);
         tests = d.tests || [];
         renderTests();
-        const v = d.vitals || {};
-        document.getElementById("v-bp").value = v.bp || "";
-        document.getElementById("v-temp").value = v.temperature || "";
-        document.getElementById("v-pulse").value = v.pulse || "";
-        document.getElementById("v-weight").value = v.weight || "";
-        document.getElementById("v-spo2").value = v.spo2 || "";
+        currentVitals = { ...(d.vitals || {}) };
+        renderVitalsReview();
       }
 
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -866,29 +866,18 @@
     async function loadNurseVitals() {
       try {
         const c = await api("GET", `/patients/${patientId}/checkin-today`);
-        if (c.vitals_status !== 'done' || !c.vitals_data) return;
+        if (c.vitals_status === 'done' && c.vitals_data) {
+          Object.entries(c.vitals_data).forEach(([label, value]) => {
+            const key = VITALS_LABEL_TO_KEY[label] || label;
+            setVital(key, value, false);
+          });
 
-        const map = { "Blood Pressure": "v-bp", "Pulse": "v-pulse", "Temperature": "v-temp", "Weight": "v-weight", "SpO2": "v-spo2" };
-        const extras = [];
-        Object.entries(c.vitals_data).forEach(([label, value]) => {
-          if (map[label] && document.getElementById(map[label])) {
-            document.getElementById(map[label]).value = value;
-          } else {
-            extras.push(`${label}: ${value}`);
-          }
-        });
-
-        const summaryParts = Object.entries(c.vitals_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);
-        document.getElementById('nurse-vitals-summary').innerHTML = summaryParts.join(' &nbsp;·&nbsp; ');
-        document.getElementById('nurse-vitals-wrap').style.display = 'block';
-
-        if (extras.length) {
-          const note = document.createElement('div');
-          note.style.cssText = 'font-size:13px;color:var(--slate);margin-top:8px';
-          note.textContent = `Also recorded by nurse: ${extras.join(' · ')}`;
-          document.querySelector('.vitals-grid')?.after(note) || document.getElementById('v-bp').closest('.section-block')?.appendChild(note);
+          const summaryParts = Object.entries(c.vitals_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);
+          document.getElementById('nurse-vitals-summary').innerHTML = summaryParts.join(' &nbsp;·&nbsp; ');
+          document.getElementById('nurse-vitals-wrap').style.display = 'block';
         }
       } catch (e) { }
+      renderVitalsReview();
     }
 
     let hospitalTests = [];

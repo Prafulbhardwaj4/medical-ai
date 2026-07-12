@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Patient</title>
-  <link rel="stylesheet" href="../css/style.css?v=2" />
+  <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
     .patient-header {
       background: var(--white);
@@ -346,7 +346,7 @@
 
   <div id="toast"></div>
 
-  <script src="../js/api.js?v=2"></script>
+  <script src="../js/api.js?v=4"></script>
   <script>
     if (!requireAuth()) throw new Error();
     fillTopbar();
@@ -410,10 +410,10 @@
           const tests = v.tests ? safeJSON(v.tests, []) : [];
           const waClass = v.whatsapp_status === "sent" ? "badge-green" : v.whatsapp_status === "failed" ? "badge-red" : "badge-grey";
           const vitals = v.vitals ? safeJSON(v.vitals, {}) : {};
-          const vitalItems = [
-            ["BP", vitals.bp], ["Temp", vitals.temperature],
-            ["Pulse", vitals.pulse], ["Weight", vitals.weight], ["SpO2", vitals.spo2]
-          ].filter(([k, val]) => val);
+          const VITALS_DISPLAY_NAMES = { bp: "BP", temperature: "Temp", pulse: "Pulse", weight: "Weight", spo2: "SpO2" };
+          const vitalItems = Object.entries(vitals)
+            .filter(([, val]) => val)
+            .map(([k, val]) => [VITALS_DISPLAY_NAMES[k] || k, val]);
 
           return `
         <div class="visit-card">

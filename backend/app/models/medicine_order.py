@@ -18,8 +18,10 @@ class MedicineOrder(Base):
     unit_price = Column(Float, nullable=True)
     quantity = Column(Integer, nullable=True)
     included = Column(Boolean, default=True, nullable=False)
-    status = Column(String, nullable=False, default="advised")  # advised -> paid -> dispensed
+    status = Column(String, nullable=False, default="advised")  # advised -> paid -> dispensed (or unavailable = advised outside, never billed)
     paid_at = Column(DateTime, nullable=True)
     queued_at = Column(DateTime, nullable=True)  # set whenever this order enters a day's active queue (payment or requeue)
     dispensed_at = Column(DateTime, nullable=True)
+    billed_quantity = Column(Integer, nullable=True)  # actually charged/dispensed qty, capped by stock at payment time
+    substitute_for_id = Column(Integer, ForeignKey("medicine_orders.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

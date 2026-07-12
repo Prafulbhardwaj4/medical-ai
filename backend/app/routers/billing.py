@@ -65,12 +65,13 @@ def gather_invoice_items(db: Session, checkin: Checkin):
         MedicineOrder.consultation_id.in_(consultation_ids) if consultation_ids else False
     ).all()
     for m in medicine_orders:
+        billed = m.billed_quantity if m.billed_quantity is not None else m.quantity
         items.append({
             "type": "medicine",
             "name": f"{m.medicine_name}{' (' + m.brand_name + ')' if m.brand_name else ''}",
-            "qty": m.quantity or 1,
+            "qty": billed or 1,
             "unit_price": m.unit_price or 0,
-            "line_total": (m.unit_price or 0) * (m.quantity or 1)
+            "line_total": (m.unit_price or 0) * (billed or 1)
         })
 
     return items

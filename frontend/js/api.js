@@ -89,12 +89,68 @@ function fillTopbar() {
   if (cl) cl.textContent = doc.clinic_name;
   const sb = document.getElementById("sidebar-doctor-name");
   if (sb) sb.textContent = `${doc.title} ${doc.name}`;
+  const pmName = document.getElementById("profile-menu-name");
+  if (pmName) pmName.textContent = `${doc.title} ${doc.name}`;
+  const pmClinic = document.getElementById("profile-menu-clinic");
+  if (pmClinic) pmClinic.textContent = doc.clinic_name || "";
+}
+
+// Mobile profile dropdown (header)
+function toggleProfileMenu() {
+  const menu = document.getElementById("profile-menu");
+  const backdrop = document.getElementById("profile-menu-backdrop");
+  if (!menu) return;
+  const opening = !menu.classList.contains("open");
+  menu.classList.toggle("open", opening);
+  if (backdrop) backdrop.style.display = opening ? "block" : "none";
+}
+
+function closeProfileMenu() {
+  document.getElementById("profile-menu")?.classList.remove("open");
+  const backdrop = document.getElementById("profile-menu-backdrop");
+  if (backdrop) backdrop.style.display = "none";
+}
+
+// Mobile full-screen "More" menu
+function openMobileMenu() {
+  document.getElementById("mobile-menu-sheet")?.classList.add("open");
+}
+
+function closeMobileMenu() {
+  document.getElementById("mobile-menu-sheet")?.classList.remove("open");
 }
 // Mobile sidebar drawer
 function toggleSidebar() {
   document.querySelector(".sidebar")?.classList.toggle("open");
   document.getElementById("sidebar-backdrop")?.classList.toggle("open");
 }
+
+// Auto-lock body scroll whenever any overlay (modal, notif panel, sidebar
+// drawer, mobile menu sheet, profile dropdown) is visibly open — prevents
+// the page underneath from scrolling while an overlay sits on top of it.
+function isAnyOverlayOpen() {
+  if (document.querySelector(".modal-overlay.open")) return true;
+  if (document.querySelector(".notif-panel.open")) return true;
+  if (document.querySelector(".sidebar.open")) return true;
+  if (document.querySelector(".mobile-menu-sheet.open")) return true;
+  if (document.querySelector(".profile-menu.open")) return true;
+  const legacyModal = document.getElementById("modal-overlay");
+  if (legacyModal && getComputedStyle(legacyModal).display !== "none") return true;
+  return false;
+}
+
+function syncBodyScrollLock() {
+  document.body.style.overflow = isAnyOverlayOpen() ? "hidden" : "";
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const watched = document.querySelectorAll(
+    ".modal-overlay, #modal-overlay, .notif-panel, .sidebar, .mobile-menu-sheet, .profile-menu"
+  );
+  if (!watched.length) return;
+  const observer = new MutationObserver(syncBodyScrollLock);
+  watched.forEach(el => observer.observe(el, { attributes: true, attributeFilter: ["class", "style"] }));
+});
 function closeSidebar() {
   document.querySelector(".sidebar")?.classList.remove("open");
   document.getElementById("sidebar-backdrop")?.classList.remove("open");

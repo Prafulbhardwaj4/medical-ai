@@ -149,22 +149,32 @@ def generate_prescription_pdf(
         elements.append(Paragraph("Medicines", section_style))
         med_cell_style = ParagraphStyle("medcell", fontSize=9, fontName="Helvetica", leading=11)
 
-        med_data = [["Medicine", "Brand Name", "Dosage", "Frequency", "Duration", "Type"]]
+        has_brand = any((m.get("brand_name") or "").strip() for m in medicines)
+
+        if has_brand:
+            med_data = [["Medicine", "Brand Name", "Dosage", "Frequency", "Duration", "Type"]]
+        else:
+            med_data = [["Medicine", "Dosage", "Frequency", "Duration", "Type"]]
+
         has_controlled = False
         for m in medicines:
             schedule = m.get("schedule", "controlled")
             if schedule == "controlled":
                 has_controlled = True
             type_label = "Rx" if schedule == "controlled" else "OTC"
-            med_data.append([
-                Paragraph(cap_sentence(m.get("name", "")), med_cell_style),
-                Paragraph(cap_sentence(m.get("brand_name", "—")), med_cell_style),
+            row = [Paragraph(cap_sentence(m.get("name", "")), med_cell_style)]
+            if has_brand:
+                brand = (m.get("brand_name") or "").strip()
+                row.append(Paragraph(cap_sentence(brand) if brand else "-", med_cell_style))
+            row.extend([
                 Paragraph(m.get("dosage", ""), med_cell_style),
                 Paragraph(cap_sentence(m.get("frequency", "")), med_cell_style),
                 Paragraph(m.get("duration", "-"), med_cell_style),
                 type_label
             ])
+            med_data.append(row)
 
+        type_col = 5 if has_brand else 4
         med_table_style = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a237e")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -176,16 +186,17 @@ def generate_prescription_pdf(
             ("TOPPADDING", (0, 0), (-1, -1), 4),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("FONTNAME", (5, 1), (5, -1), "Helvetica-Bold"),
-            ("ALIGN", (5, 0), (5, -1), "CENTER"),
+            ("FONTNAME", (type_col, 1), (type_col, -1), "Helvetica-Bold"),
+            ("ALIGN", (type_col, 0), (type_col, -1), "CENTER"),
         ]
 
         for idx, m in enumerate(medicines, start=1):
             schedule = m.get("schedule", "controlled")
             color = colors.HexColor("#dc2626") if schedule == "controlled" else colors.HexColor("#16a34a")
-            med_table_style.append(("TEXTCOLOR", (5, idx), (5, idx), color))
+            med_table_style.append(("TEXTCOLOR", (type_col, idx), (type_col, idx), color))
 
-        med_table = Table(med_data, colWidths=[38*mm, 26*mm, 20*mm, 52*mm, 22*mm, 12*mm])   
+        col_widths = [38*mm, 26*mm, 20*mm, 52*mm, 22*mm, 12*mm] if has_brand else [38*mm, 20*mm, 78*mm, 22*mm, 12*mm]
+        med_table = Table(med_data, colWidths=col_widths)
         med_table.setStyle(TableStyle(med_table_style))
         elements.append(med_table)
         elements.append(Spacer(1, 2*mm))
