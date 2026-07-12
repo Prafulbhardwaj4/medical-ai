@@ -113,7 +113,8 @@
                 <span id="topbar-clinic" style="color:var(--slate)"></span>
                 <button class="notif-bell-btn" id="notif-bell-btn" onclick="toggleNotifPanel()" style="display:none">
                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                     </svg>
                     <span class="notif-badge" id="notif-badge">0</span>
                 </button>
@@ -136,6 +137,10 @@
         </div>
 
         <nav class="sidebar">
+            <div class="sidebar-section-label" style="display:flex;justify-content:space-between;align-items:center">
+                <span id="sidebar-doctor-name"></span>
+                <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
+            </div>
             <div class="sidebar-section-label">Hospital Admin</div>
             <a class="nav-item active" id="nav-overview" href="#" onclick="showSection('overview');return false;">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -181,12 +186,14 @@
             </a>
             <a class="nav-item" id="nav-settings" href="#" onclick="showSection('settings');return false;">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 Settings
             </a>
-            <a class="nav-item" id="nav-billing" href="#" onclick="showSection('billing');return false;" style="display:none">
+            <a class="nav-item" id="nav-billing" href="#" onclick="showSection('billing');return false;"
+                style="display:none">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round"
                         d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -201,13 +208,15 @@
             </a>
             <a class="nav-item" href="medicines.html">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
                 Medicine Catalog
             </a>
             <a class="nav-item" href="tests-catalog.html">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
                 </svg>
                 Test Catalog
             </a>
@@ -249,6 +258,37 @@
         </nav>
 
         <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+        <nav class="bottom-nav">
+            <a class="bottom-nav-item active" href="#" onclick="showSection('overview');return false;">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                Home
+            </a>
+            <a class="bottom-nav-item" href="doctors.html">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                </svg>
+                Staff
+            </a>
+            <a class="bottom-nav-item" href="medicines.html">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+                Medicines
+            </a>
+            <button class="bottom-nav-item" onclick="toggleSidebar()">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="8" r="4" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+                </svg>
+                Profile
+            </button>
+        </nav>
 
         <main class="main-content">
 
@@ -342,8 +382,11 @@
                                 placeholder="Name, UID or token..." />
                         </div>
                         <div>
-                            <label style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">Doctor</label>
-                            <select id="filter-doctor" class="form-control"><option value="">All Doctors</option></select>
+                            <label
+                                style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">Doctor</label>
+                            <select id="filter-doctor" class="form-control">
+                                <option value="">All Doctors</option>
+                            </select>
                         </div>
                         <button class="btn btn-primary" onclick="loadConsultations(1)">Search</button>
                     </div>
@@ -446,9 +489,11 @@
                     <div class="card-header">
                         <h2>Default Consultation Fee</h2>
                     </div>
-                    <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Used as a fallback when a doctor doesn't have their own fee set.</p>
+                    <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Used as a fallback when a doctor
+                        doesn't have their own fee set.</p>
                     <div style="display:flex;gap:10px;max-width:320px">
-                        <input type="number" min="0" step="1" class="form-control" id="default-fee-input" placeholder="Rs." />
+                        <input type="number" min="0" step="1" class="form-control" id="default-fee-input"
+                            placeholder="Rs." />
                         <button class="btn btn-primary" onclick="saveDefaultFee()">Save</button>
                     </div>
                 </div>
@@ -457,11 +502,15 @@
                         <h2>Billing History</h2>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 160px 160px;gap:10px;margin-bottom:16px">
-                        <input class="form-control" id="billing-search" placeholder="Search by patient name or token…" oninput="loadBillingHistory()" />
-                        <input class="form-control" id="billing-from-date" type="date" onchange="loadBillingHistory()" />
+                        <input class="form-control" id="billing-search" placeholder="Search by patient name or token…"
+                            oninput="loadBillingHistory()" />
+                        <input class="form-control" id="billing-from-date" type="date"
+                            onchange="loadBillingHistory()" />
                         <input class="form-control" id="billing-to-date" type="date" onchange="loadBillingHistory()" />
                     </div>
-                    <div id="billing-history-list"><p style="color:var(--slate)">Loading…</p></div>
+                    <div id="billing-history-list">
+                        <p style="color:var(--slate)">Loading…</p>
+                    </div>
                 </div>
             </div>
 
@@ -473,23 +522,33 @@
                     <div class="card-header">
                         <h2>Hospital Details</h2>
                     </div>
-                    <p style="color:var(--slate);font-size:13px;margin-bottom:14px">Name, city, and state are set by your super admin and can't be changed here. Address and GSTIN are yours to manage — used on printed invoices.</p>
+                    <p style="color:var(--slate);font-size:13px;margin-bottom:14px">Name, city, and state are set by
+                        your super admin and can't be changed here. Address and GSTIN are yours to manage — used on
+                        printed invoices.</p>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:600px;margin-bottom:14px">
                         <div>
-                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Hospital Name</label>
-                            <input class="form-control" id="hd-name" disabled style="background:var(--smoke-mid);color:var(--slate)" />
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Hospital
+                                Name</label>
+                            <input class="form-control" id="hd-name" disabled
+                                style="background:var(--smoke-mid);color:var(--slate)" />
                         </div>
                         <div>
-                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Hospital Code</label>
-                            <input class="form-control" id="hd-code" disabled style="background:var(--smoke-mid);color:var(--slate)" />
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Hospital
+                                Code</label>
+                            <input class="form-control" id="hd-code" disabled
+                                style="background:var(--smoke-mid);color:var(--slate)" />
                         </div>
                         <div>
-                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">City</label>
-                            <input class="form-control" id="hd-city" disabled style="background:var(--smoke-mid);color:var(--slate)" />
+                            <label
+                                style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">City</label>
+                            <input class="form-control" id="hd-city" disabled
+                                style="background:var(--smoke-mid);color:var(--slate)" />
                         </div>
                         <div>
-                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">State</label>
-                            <input class="form-control" id="hd-state" disabled style="background:var(--smoke-mid);color:var(--slate)" />
+                            <label
+                                style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">State</label>
+                            <input class="form-control" id="hd-state" disabled
+                                style="background:var(--smoke-mid);color:var(--slate)" />
                         </div>
                     </div>
                     <div style="max-width:600px;margin-bottom:12px">
@@ -497,7 +556,8 @@
                         <input class="form-control" id="hd-address" placeholder="Street, area, pincode…" />
                     </div>
                     <div style="max-width:280px;margin-bottom:14px">
-                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GSTIN <span style="color:var(--slate-light);font-weight:400">(optional)</span></label>
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GSTIN <span
+                                style="color:var(--slate-light);font-weight:400">(optional)</span></label>
                         <input class="form-control" id="hd-gstin" placeholder="e.g. 07AAAAA0000A1Z5" />
                     </div>
                     <button class="btn btn-primary" onclick="saveHospitalDetails()">Save</button>
@@ -515,54 +575,54 @@
         if (!requireAuth()) throw new Error();
         fillTopbar();
 
-    if (["admin", "sub_admin", "pharmacy"].includes(getDoctor()?.role)) {
-      document.getElementById('notif-bell-btn').style.display = '';
-      loadNotifUnreadCount();
-      setInterval(loadNotifUnreadCount, 30000);
-    }
-
-    async function loadNotifUnreadCount() {
-      try {
-        const data = await api("GET", "/notifications/unread-count");
-        const badge = document.getElementById('notif-badge');
-        if (data.unread_count > 0) {
-          badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
-          badge.style.display = 'flex';
-        } else {
-          badge.style.display = 'none';
+        if (["admin", "sub_admin", "pharmacy"].includes(getDoctor()?.role)) {
+            document.getElementById('notif-bell-btn').style.display = '';
+            loadNotifUnreadCount();
+            setInterval(loadNotifUnreadCount, 30000);
         }
-      } catch (e) { }
-    }
 
-    async function toggleNotifPanel() {
-      const panel = document.getElementById('notif-panel');
-      const backdrop = document.getElementById('notif-backdrop');
-      if (panel.classList.contains('open')) {
-        closeNotifPanel();
-      } else {
-        panel.classList.add('open');
-        backdrop.classList.add('open');
-        await loadNotifList();
-      }
-    }
-
-    function closeNotifPanel() {
-      document.getElementById('notif-panel').classList.remove('open');
-      document.getElementById('notif-backdrop').classList.remove('open');
-    }
-
-    const NOTIF_ICON = { critical: 'critical', warning: 'warning', info: 'info' };
-
-    async function loadNotifList() {
-      const body = document.getElementById('notif-panel-body');
-      try {
-        const data = await api("GET", "/notifications");
-        loadNotifUnreadCount();
-        if (!data.notifications.length) {
-          body.innerHTML = '<p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">You\'re all caught up.</p>';
-          return;
+        async function loadNotifUnreadCount() {
+            try {
+                const data = await api("GET", "/notifications/unread-count");
+                const badge = document.getElementById('notif-badge');
+                if (data.unread_count > 0) {
+                    badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                    badge.style.display = 'flex';
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch (e) { }
         }
-        body.innerHTML = data.notifications.map(n => `
+
+        async function toggleNotifPanel() {
+            const panel = document.getElementById('notif-panel');
+            const backdrop = document.getElementById('notif-backdrop');
+            if (panel.classList.contains('open')) {
+                closeNotifPanel();
+            } else {
+                panel.classList.add('open');
+                backdrop.classList.add('open');
+                await loadNotifList();
+            }
+        }
+
+        function closeNotifPanel() {
+            document.getElementById('notif-panel').classList.remove('open');
+            document.getElementById('notif-backdrop').classList.remove('open');
+        }
+
+        const NOTIF_ICON = { critical: 'critical', warning: 'warning', info: 'info' };
+
+        async function loadNotifList() {
+            const body = document.getElementById('notif-panel-body');
+            try {
+                const data = await api("GET", "/notifications");
+                loadNotifUnreadCount();
+                if (!data.notifications.length) {
+                    body.innerHTML = '<p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">You\'re all caught up.</p>';
+                    return;
+                }
+                body.innerHTML = data.notifications.map(n => `
           <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
             <div class="notif-item-title">
               <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
@@ -571,27 +631,27 @@
             <div class="notif-item-message">${sanitize(n.message)}</div>
           </div>
         `).join('');
-      } catch (e) {
-        body.innerHTML = '<p style="color:var(--danger);padding:20px;text-align:center;font-size:13px">Could not load notifications.</p>';
-      }
-    }
-
-    async function onNotifClick(id, linkType, linkId) {
-      try {
-        await api("PATCH", `/notifications/${id}/read`, {});
-        loadNotifUnreadCount();
-        if (linkType === 'medicine') {
-          window.location.href = 'medicines.html';
+            } catch (e) {
+                body.innerHTML = '<p style="color:var(--danger);padding:20px;text-align:center;font-size:13px">Could not load notifications.</p>';
+            }
         }
-      } catch (e) { }
-    }
 
-    async function markAllNotifsRead() {
-      try {
-        await api("POST", "/notifications/mark-all-read", {});
-        loadNotifList();
-      } catch (e) { }
-    }
+        async function onNotifClick(id, linkType, linkId) {
+            try {
+                await api("PATCH", `/notifications/${id}/read`, {});
+                loadNotifUnreadCount();
+                if (linkType === 'medicine') {
+                    window.location.href = 'medicines.html';
+                }
+            } catch (e) { }
+        }
+
+        async function markAllNotifsRead() {
+            try {
+                await api("POST", "/notifications/mark-all-read", {});
+                loadNotifList();
+            } catch (e) { }
+        }
 
         const doctor = getDoctor();
         if (doctor && doctor.clinic_name) {
@@ -642,31 +702,31 @@
         }
 
         async function loadBillingHistory() {
-      try {
-        const params = new URLSearchParams();
-        const search = document.getElementById('billing-search').value.trim();
-        const fromDate = document.getElementById('billing-from-date').value;
-        const toDate = document.getElementById('billing-to-date').value;
-        if (search) params.append('search', search);
-        if (fromDate) params.append('from_date', fromDate);
-        if (toDate) params.append('to_date', toDate);
+            try {
+                const params = new URLSearchParams();
+                const search = document.getElementById('billing-search').value.trim();
+                const fromDate = document.getElementById('billing-from-date').value;
+                const toDate = document.getElementById('billing-to-date').value;
+                if (search) params.append('search', search);
+                if (fromDate) params.append('from_date', fromDate);
+                if (toDate) params.append('to_date', toDate);
 
-        const invoices = await api("GET", `/billing/invoices?${params.toString()}`);
-        renderBillingHistory(invoices);
-      } catch (e) { toast(e.message, 'error'); }
-    }
+                const invoices = await api("GET", `/billing/invoices?${params.toString()}`);
+                renderBillingHistory(invoices);
+            } catch (e) { toast(e.message, 'error'); }
+        }
 
-    function renderBillingHistory(invoices) {
-      const el = document.getElementById('billing-history-list');
-      if (!invoices.length) {
-        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No invoices found.</p>';
-        return;
-      }
-      el.innerHTML = invoices.map(inv => {
-        const dt = new Date(inv.generated_at.endsWith("Z") ? inv.generated_at : inv.generated_at + "Z");
-        const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-        const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-        return `
+        function renderBillingHistory(invoices) {
+            const el = document.getElementById('billing-history-list');
+            if (!invoices.length) {
+                el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No invoices found.</p>';
+                return;
+            }
+            el.innerHTML = invoices.map(inv => {
+                const dt = new Date(inv.generated_at.endsWith("Z") ? inv.generated_at : inv.generated_at + "Z");
+                const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div style="flex:1;min-width:200px">
               <strong>${sanitize(inv.patient_name)}</strong>
@@ -678,45 +738,45 @@
             <button class="btn btn-outline btn-sm" onclick="downloadInvoicePdf(${inv.id})">View PDF</button>
           </div>
         `;
-      }).join('');
-    }
+            }).join('');
+        }
 
-    async function downloadInvoicePdf(invoiceId) {
-      try {
-        const response = await fetch(`${BASE}/billing/invoices/${invoiceId}/pdf`, {
-          headers: { "Authorization": `Bearer ${getToken()}` }
-        });
-        const blob = await response.blob();
-        window.open(URL.createObjectURL(blob), "_blank");
-      } catch (e) { toast('Could not load invoice', 'error'); }
-    }
+        async function downloadInvoicePdf(invoiceId) {
+            try {
+                const response = await fetch(`${BASE}/billing/invoices/${invoiceId}/pdf`, {
+                    headers: { "Authorization": `Bearer ${getToken()}` }
+                });
+                const blob = await response.blob();
+                window.open(URL.createObjectURL(blob), "_blank");
+            } catch (e) { toast('Could not load invoice', 'error'); }
+        }
 
-    async function loadHospitalDetails() {
-        try {
-            const h = await api("GET", "/admin/hospital/details");
-            document.getElementById('hd-name').value = h.name || '';
-            document.getElementById('hd-code').value = h.hospital_code || '';
-            document.getElementById('hd-city').value = h.city || '';
-            document.getElementById('hd-state').value = h.state || '';
-            document.getElementById('hd-address').value = h.address || '';
-            document.getElementById('hd-gstin').value = h.gstin || '';
-            if (h.default_consultation_fee != null) {
-                document.getElementById('default-fee-input').value = h.default_consultation_fee;
-            }
-        } catch (e) { }
-    }
+        async function loadHospitalDetails() {
+            try {
+                const h = await api("GET", "/admin/hospital/details");
+                document.getElementById('hd-name').value = h.name || '';
+                document.getElementById('hd-code').value = h.hospital_code || '';
+                document.getElementById('hd-city').value = h.city || '';
+                document.getElementById('hd-state').value = h.state || '';
+                document.getElementById('hd-address').value = h.address || '';
+                document.getElementById('hd-gstin').value = h.gstin || '';
+                if (h.default_consultation_fee != null) {
+                    document.getElementById('default-fee-input').value = h.default_consultation_fee;
+                }
+            } catch (e) { }
+        }
 
-    async function saveHospitalDetails() {
-        try {
-            await api("PATCH", "/admin/hospital/details", {
-                address: document.getElementById('hd-address').value.trim(),
-                gstin: document.getElementById('hd-gstin').value.trim()
-            });
-            toast('Hospital details saved.', 'success');
-        } catch (e) { toast(e.message, 'error'); }
-    }
+        async function saveHospitalDetails() {
+            try {
+                await api("PATCH", "/admin/hospital/details", {
+                    address: document.getElementById('hd-address').value.trim(),
+                    gstin: document.getElementById('hd-gstin').value.trim()
+                });
+                toast('Hospital details saved.', 'success');
+            } catch (e) { toast(e.message, 'error'); }
+        }
 
-    async function saveDefaultFee() {
+        async function saveDefaultFee() {
             const val = parseFloat(document.getElementById('default-fee-input').value);
             if (isNaN(val) || val < 0) { toast('Enter a valid fee amount.', 'error'); return; }
             try {
@@ -746,7 +806,7 @@
         }
 
         function makeTable(headers, rows) {
-            return `<table class="data-table">
+            return `<table class="data-table responsive-cards">
         <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
@@ -756,10 +816,10 @@
             if (!items || !items.length) return emptyMsg('No data yet.');
             const rows = items.map((item, i) => `
         <tr>
-          <td style="color:var(--slate);font-size:13px;width:40px">${i + 1}</td>
-          <td style="font-weight:500">${sanitize(item.name)}</td>
-          <td style="text-align:center;font-weight:600;color:var(--teal)">${item.count}</td>
-          ${diagKey ? `<td style="color:var(--slate);font-size:13px">${sanitize(item[diagKey] || '—')}</td>` : ''}
+          <td data-label="#" style="color:var(--slate);font-size:13px;width:40px">${i + 1}</td>
+          <td data-label="${col1}" style="font-weight:500">${sanitize(item.name)}</td>
+          <td data-label="${col2}" style="text-align:center;font-weight:600;color:var(--teal)">${item.count}</td>
+          ${diagKey ? `<td data-label="Common Diagnosis" style="color:var(--slate);font-size:13px">${sanitize(item[diagKey] || '—')}</td>` : ''}
         </tr>`).join('');
             const headers = [
                 '<th style="width:40px">#</th>',
@@ -767,7 +827,7 @@
                 `<th style="text-align:center">${col2}</th>`,
                 ...(diagKey ? ['<th>Common Diagnosis</th>'] : [])
             ].join('');
-            return `<table class="data-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+            return `<table class="data-table responsive-cards"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
         }
 
         function statItem(label, value) {
@@ -791,16 +851,16 @@
                 return;
             }
             const rows = patients.map(p => `<tr>
-        <td style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(p.patient_uid)}</td>
-        <td style="font-weight:600">${sanitize(p.name)}</td>
-        <td style="text-align:center">${p.age}</td>
-        <td>${sanitize(p.gender)}</td>
-        <td style="text-align:center">${sanitize(p.blood_group)}</td>
-        <td style="color:var(--slate)">${sanitize(p.phone)}</td>
-        <td style="color:var(--slate);white-space:nowrap">${sanitize(p.doctor)}</td>
-        <td style="text-align:center;font-weight:600;color:var(--teal)">${p.total_visits}</td>
-        <td style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(p.last_visit)}</td>
-        <td style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(p.registered)}</td>
+        <td data-label="UID" style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(p.patient_uid)}</td>
+        <td data-label="Name" style="font-weight:600">${sanitize(p.name)}</td>
+        <td data-label="Age" style="text-align:center">${p.age}</td>
+        <td data-label="Gender">${sanitize(p.gender)}</td>
+        <td data-label="Blood Group" style="text-align:center">${sanitize(p.blood_group)}</td>
+        <td data-label="Phone" style="color:var(--slate)">${sanitize(p.phone)}</td>
+        <td data-label="Doctor" style="color:var(--slate);white-space:nowrap">${sanitize(p.doctor)}</td>
+        <td data-label="Visits" style="text-align:center;font-weight:600;color:var(--teal)">${p.total_visits}</td>
+        <td data-label="Last Visit" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(p.last_visit)}</td>
+        <td data-label="Registered" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(p.registered)}</td>
       </tr>`).join('');
             container.innerHTML = makeTable(
                 ['UID', 'Name',

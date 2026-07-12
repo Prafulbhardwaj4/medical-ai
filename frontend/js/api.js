@@ -87,6 +87,8 @@ function fillTopbar() {
   if (el) el.textContent = `${doc.title} ${doc.name}`;
   const cl = document.getElementById("topbar-clinic");
   if (cl) cl.textContent = doc.clinic_name;
+  const sb = document.getElementById("sidebar-doctor-name");
+  if (sb) sb.textContent = `${doc.title} ${doc.name}`;
 }
 // Mobile sidebar drawer
 function toggleSidebar() {

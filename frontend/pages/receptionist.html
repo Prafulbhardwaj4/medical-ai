@@ -33,6 +33,10 @@
     </header>
 
     <nav class="sidebar">
+      <div class="sidebar-section-label" style="display:flex;justify-content:space-between;align-items:center">
+        <span id="sidebar-doctor-name"></span>
+        <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
+      </div>
       <div class="sidebar-section-label">Navigation</div>
       <div class="nav-item active">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -192,7 +196,7 @@
           <button class="btn btn-outline btn-sm" id="pf-female" onclick="setPatientFilter('female')">Female</button>
         </div>
         <div class="table-wrap">
-          <table id="all-patients-table">
+          <table id="all-patients-table" class="responsive-cards">
             <thead>
                 <tr>
                   <th>Patient</th>
@@ -860,12 +864,12 @@
       }
       tbody.innerHTML = data.map(p => `
         <tr style="cursor:pointer" onclick='selectExistingPatient(${JSON.stringify(p)})'>
-          <td><strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber">Today</span>' : ''}</td>
-          <td><span class="badge badge-navy">${p.patient_uid}</span></td>
-          <td style="color:var(--slate)">${p.phone}</td>
-          <td>${p.age}y / ${capitalize(p.gender)}</td>
-          <td>${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
-          <td>
+          <td data-label="Patient"><strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber">Today</span>' : ''}</td>
+          <td data-label="ID"><span class="badge badge-navy">${p.patient_uid}</span></td>
+          <td data-label="Phone" style="color:var(--slate)">${p.phone}</td>
+          <td data-label="Age / Gender">${p.age}y / ${capitalize(p.gender)}</td>
+          <td data-label="Last Visit">${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
+          <td data-label="" style="text-align:left">
             <button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openEditPatient(${JSON.stringify(p)})'>✏️ Edit</button>
             <button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openDocumentsModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>📄 Docs</button>
             <button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openPendingTasksModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>⏳ Pending</button>
