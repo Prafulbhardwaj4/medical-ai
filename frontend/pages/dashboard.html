@@ -7,9 +7,18 @@
   <title>MedScribe — Dashboard</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
-    @media (max-width: 900px) {
-      .mobile-section { display: none; }
-      .mobile-section.active { display: block; }
+    .mobile-section { display: none; }
+    .mobile-section.active { display: block; }
+    @media (min-width: 901px) {
+      .mobile-section { display: block !important; margin-bottom: 20px; }
+    }
+
+    .dash-att-status { text-align: center; padding: 24px 0 20px; }
+    .dash-att-status .badge { font-size: 15px; padding: 8px 18px; }
+    .dash-att-actions { display: flex; flex-direction: column; gap: 10px; }
+    @media (min-width: 901px) {
+      .dash-att-status { display: none; }
+      .dash-att-actions { flex-direction: row; flex-wrap: wrap; }
     }
   </style>
 </head>
@@ -47,6 +56,13 @@
         <strong id="profile-menu-name"></strong>
         <span id="profile-menu-clinic"></span>
       </div>
+      <button class="profile-menu-item" onclick="closeProfileMenu();toast('Settings — Coming Soon','info')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        Settings
+      </button>
       <button class="profile-menu-item danger" onclick="logout()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
         Sign out
@@ -93,13 +109,19 @@
         </svg>
         Home
       </button>
+      <button class="bottom-nav-item" id="bn-stats" onclick="showMobileSection('stats')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6m0 13H5a2 2 0 01-2-2V9a2 2 0 012-2h4m0 12h6m-6 0V4a2 2 0 012-2h0a2 2 0 012 2v15m0 0h4a2 2 0 002-2v-6a2 2 0 00-2-2h-4" />
+        </svg>
+        Stats
+      </button>
       <button class="bottom-nav-item" id="bn-patients" onclick="showMobileSection('patients')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/>
         </svg>
         Patients
       </button>
-      <button class="bottom-nav-item" id="bn-attendance" onclick="showMobileSection('patients'); setTimeout(() => document.getElementById('attendance-card')?.scrollIntoView({behavior:'smooth', block:'center'}), 100)">
+      <button class="bottom-nav-item" id="bn-attendance" onclick="showMobileSection('attendance')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
@@ -109,9 +131,8 @@
 
     <main class="main-content">
 
-      <div class="mobile-section active" id="section-home">
-
-        <!-- Stats -->
+      <!-- Stats tab -->
+      <div class="mobile-section" id="section-stats">
         <div class="stats-row" id="stats-row">
           <div class="stat-card">
             <div class="stat-label">Total Patients</div>
@@ -129,9 +150,11 @@
             <div class="stat-sub">via WhatsApp Cloud API</div>
           </div>
         </div>
+      </div>
 
-        <!-- Today's Queue -->
-        <div class="card" id="queue-card" style="margin-bottom:24px">
+      <!-- Home tab: Today's Queue only -->
+      <div class="mobile-section active" id="section-home">
+        <div class="card" id="queue-card">
           <div class="card-header">
             <h2>Today's Queue</h2>
             <span id="queue-count" style="color:var(--slate);font-size:0.9rem"></span>
@@ -154,13 +177,11 @@
             </table>
           </div>
         </div>
-
       </div>
 
+      <!-- Patients tab: list only -->
       <div class="mobile-section" id="section-patients">
-
-        <!-- Patient list -->
-        <div class="card" style="margin-bottom:24px">
+        <div class="card">
           <div class="card-header">
             <h2>Patients</h2>
             <div style="display:flex;gap:12px;align-items:center">
@@ -202,22 +223,25 @@
             </table>
           </div>
         </div>
+      </div>
 
-        <!-- Attendance -->
-        <div class="card" id="attendance-card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-          <div>
-            <strong>Today's Status:</strong>
-            <span class="badge badge-grey" id="attendance-badge" style="margin-left:8px">Not marked</span>
-            <span id="room-display" style="margin-left:10px;font-size:13px;color:var(--slate)"></span>
+      <!-- Attendance tab: status only, matching lab.html -->
+      <div class="mobile-section" id="section-attendance">
+        <div class="card" id="attendance-card">
+          <div class="card-header" style="margin-bottom:0">
+            <h2>Today's Status</h2>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" id="attendance-btns">
-            <select class="form-control" id="room-select" style="width:170px;font-size:13px;display:none" onchange="markAttendance(currentAttendanceStatus)"></select>
-            <button class="btn btn-primary btn-sm" id="btn-mark-present" onclick="markAttendance('present')">Mark Present</button>
-            <button class="btn btn-outline btn-sm" id="btn-mark-break" onclick="markAttendance('on_break')" style="display:none">On Break</button>
-            <button class="btn btn-outline btn-sm" id="btn-mark-offduty" onclick="markAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+          <div class="dash-att-status">
+            <span class="badge badge-grey" id="attendance-badge">Not marked</span>
+            <div id="room-display" style="margin-top:8px;font-size:13px;color:var(--slate)"></div>
+          </div>
+          <div class="dash-att-actions" id="attendance-btns">
+            <select class="form-control" id="room-select" style="display:none" onchange="markAttendance(currentAttendanceStatus)"></select>
+            <button class="btn btn-primary" id="btn-mark-present" onclick="markAttendance('present')">Mark Present</button>
+            <button class="btn btn-outline" id="btn-mark-break" onclick="markAttendance('on_break')" style="display:none">On Break</button>
+            <button class="btn btn-outline" id="btn-mark-offduty" onclick="markAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
           </div>
         </div>
-
       </div>
 
     </main>
@@ -303,13 +327,12 @@
 
   <script src="../js/api.js?v=4"></script>
   <script>
-    
-    function showMobileSection(name) {
-      document.getElementById('section-home').classList.toggle('active', name === 'home');
-      document.getElementById('section-patients').classList.toggle('active', name === 'patients');
-      document.getElementById('bn-home').classList.toggle('active', name === 'home');
-      document.getElementById('bn-patients').classList.toggle('active', name === 'patients');
-      document.getElementById('bn-attendance').classList.remove('active');
+
+    function showMobileSection(id) {
+      ['home', 'stats', 'patients', 'attendance'].forEach(s => {
+        document.getElementById('section-' + s).classList.toggle('active', s === id);
+        document.getElementById('bn-' + s).classList.toggle('active', s === id);
+      });
     }
 
     const doc = getDoctor();
