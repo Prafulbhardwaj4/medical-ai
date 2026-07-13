@@ -995,11 +995,29 @@ tbody tr:hover { background: var(--smoke); }
 }
 .mobile-back-link:hover { text-decoration: underline; }
 
-/* ── Responsive ── */
 @media (min-width: 901px) {
   #sidebar-doctor-name { display: none; }
   .sidebar-signout-btn { display: none; }
 }
+
+/* Shared mobile tab-section switching, used on lab/nurse/receptionist etc. */
+.mobile-section { display: none; }
+.mobile-section.active { display: block; }
+@media (min-width: 901px) {
+  .mobile-section { display: block !important; margin-bottom: 20px; }
+}
+
+/* Shared "Today's Status" attendance block — same on every staff page */
+.staff-att-status { text-align: center; padding: 24px 0 20px; }
+.staff-att-status .badge { font-size: 15px; padding: 8px 18px; }
+.staff-att-actions { display: flex; flex-direction: column; gap: 10px; }
+.staff-att-actions select { width: 100% !important; }
+@media (min-width: 901px) {
+  .staff-att-status { display: none; }
+  .staff-att-actions { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .staff-att-actions select { width: 170px !important; }
+}
+
 @media (max-width: 900px) {
   .room-add-grid { grid-template-columns: 1fr !important; }
   .auth-page { grid-template-columns: 1fr; }
@@ -1047,8 +1065,28 @@ tbody tr:hover { background: var(--smoke); }
 @media (max-width: 600px) {
   .stats-row { grid-template-columns: 1fr; }
   .steps { padding: 12px 16px; }
-  .med-row { grid-template-columns: 1fr; }
-  .med-row .btn-remove-med { width: 100%; }
+  .med-row {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "name brand" "dosage freq" "dur schedule" "remove remove";
+  }
+  .med-row .med-name { grid-area: name; }
+  .med-row .med-brand { grid-area: brand; }
+  .med-row .med-dosage { grid-area: dosage; }
+  .med-row .med-freq { grid-area: freq; }
+  .med-row .med-dur { grid-area: dur; }
+  .med-row .med-schedule { grid-area: schedule; }
+  .med-row .btn-remove-med { grid-area: remove; width: 100%; }
+
+  #panel-1 > div[style*="justify-content:flex-end"],
+  #panel-2 > div[style*="justify-content:space-between"],
+  .success-panel > div[style*="justify-content:center"] {
+    flex-direction: column;
+  }
+  #panel-1 > div[style*="justify-content:flex-end"] button,
+  #panel-2 > div[style*="justify-content:space-between"] button,
+  .success-panel > div[style*="justify-content:center"] button {
+    width: 100%;
+  }
 
   .topbar { padding: 0 14px; }
   .topbar-brand { font-size: 0.95rem; }
@@ -1163,6 +1201,11 @@ tbody tr:hover { background: var(--smoke); }
   table.responsive-cards td[data-label=""]::before,
   table.responsive-cards td:not([data-label])::before {
     content: none;
+  }
+  table.responsive-cards td[data-label=""],
+  table.responsive-cards td:not([data-label]) {
+    padding-left: 0;
+    text-align: left;
   }
 }
 

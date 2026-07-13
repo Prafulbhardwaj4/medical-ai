@@ -6,21 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Dashboard</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
-  <style>
-    .mobile-section { display: none; }
-    .mobile-section.active { display: block; }
-    @media (min-width: 901px) {
-      .mobile-section { display: block !important; margin-bottom: 20px; }
-    }
-
-    .dash-att-status { text-align: center; padding: 24px 0 20px; }
-    .dash-att-status .badge { font-size: 15px; padding: 8px 18px; }
-    .dash-att-actions { display: flex; flex-direction: column; gap: 10px; }
-    @media (min-width: 901px) {
-      .dash-att-status { display: none; }
-      .dash-att-actions { flex-direction: row; flex-wrap: wrap; }
-    }
-  </style>
 </head>
 
 <body>
@@ -231,11 +216,11 @@
           <div class="card-header" style="margin-bottom:0">
             <h2>Today's Status</h2>
           </div>
-          <div class="dash-att-status">
+          <div class="staff-att-status">
             <span class="badge badge-grey" id="attendance-badge">Not marked</span>
             <div id="room-display" style="margin-top:8px;font-size:13px;color:var(--slate)"></div>
           </div>
-          <div class="dash-att-actions" id="attendance-btns">
+          <div class="staff-att-actions" id="attendance-btns">
             <select class="form-control" id="room-select" style="display:none" onchange="markAttendance(currentAttendanceStatus)"></select>
             <button class="btn btn-primary" id="btn-mark-present" onclick="markAttendance('present')">Mark Present</button>
             <button class="btn btn-outline" id="btn-mark-break" onclick="markAttendance('on_break')" style="display:none">On Break</button>
