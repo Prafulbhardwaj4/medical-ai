@@ -6,6 +6,17 @@
     <title>Attendance — MedScribe</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="../css/style.css?v=4" />
+    <style>
+        @media (max-width: 700px) {
+            .staff-filter-tabs {
+                display: none;
+            }
+
+            .staff-filter-select {
+                display: block !important;
+            }
+        }
+    </style>
 </head>
 
 <body>
@@ -336,7 +347,7 @@
         </div>
 
         <main class="main-content">
-            <div style="display:flex;gap:8px;margin-bottom:16px" id="staff-filters">
+            <div class="chip-scroll staff-filter-tabs" id="staff-filters" style="margin-bottom:16px">
                 <button class="btn btn-sm" onclick="setStaffFilter('all')" id="sf-all"
                     style="background:var(--teal);color:white;border-color:var(--teal)">All</button>
                 <button class="btn btn-outline btn-sm" onclick="setStaffFilter('doctor')"
@@ -346,7 +357,20 @@
                 <button class="btn btn-outline btn-sm" onclick="setStaffFilter('receptionist')"
                     id="sf-receptionist">Receptionists</button>
                 <button class="btn btn-outline btn-sm" onclick="setStaffFilter('nurse')" id="sf-nurse">Nurses</button>
+                <button class="btn btn-outline btn-sm" onclick="setStaffFilter('lab')" id="sf-lab">Lab Staff</button>
+                <button class="btn btn-outline btn-sm" onclick="setStaffFilter('pharmacy')"
+                    id="sf-pharmacy">Pharmacists</button>
             </div>
+            <select class="form-control staff-filter-select" id="sf-mobile-select" onchange="setStaffFilter(this.value)"
+                style="display:none;margin-bottom:16px">
+                <option value="all">All Staff</option>
+                <option value="doctor">Doctors</option>
+                <option value="sub_admin">Sub Admins</option>
+                <option value="receptionist">Receptionists</option>
+                <option value="nurse">Nurses</option>
+                <option value="lab">Lab Staff</option>
+                <option value="pharmacy">Pharmacists</option>
+            </select>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
                 <h2 style="margin:0">Today's Attendance</h2>
                 <button class="btn btn-outline btn-sm" onclick="toast('Attendance History — Coming Soon', 'info')">View
@@ -452,17 +476,20 @@
         let allStaff = [];
         function setStaffFilter(f) {
             staffFilter = f;
-            ['all', 'doctor', 'sub_admin', 'receptionist', 'nurse'].forEach(x => {
+            ['all', 'doctor', 'sub_admin', 'receptionist', 'nurse', 'lab', 'pharmacy'].forEach(x => {
                 const btn = document.getElementById(`sf-${x}`);
+                if (!btn) return;
                 btn.className = x === f ? 'btn btn-sm' : 'btn btn-outline btn-sm';
                 if (x === f) btn.style.cssText = 'background:var(--teal);color:white;border-color:var(--teal)';
                 else btn.style.cssText = '';
             });
+            const mobileSelect = document.getElementById('sf-mobile-select');
+            if (mobileSelect) mobileSelect.value = f;
             renderStaffList();
         }
         function renderStaffList() {
             const list = staffFilter === 'all' ? allStaff : allStaff.filter(d => d.role === staffFilter);
-            const roleLabels = { doctor: 'Doctor', sub_admin: 'Sub Admin', nurse: 'Nurse', receptionist: 'Receptionist' };
+            const roleLabels = { doctor: 'Doctor', sub_admin: 'Sub Admin', nurse: 'Nurse', receptionist: 'Receptionist', lab: 'Lab Staff', pharmacy: 'Pharmacist' };
             document.getElementById('attendance-list').innerHTML = list.length ? list.map(d => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
             <div>
