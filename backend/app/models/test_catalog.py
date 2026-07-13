@@ -18,3 +18,4 @@ class TestCatalogItem(Base):
     reference_range_female = Column(String, nullable=True)
     unit = Column(String, nullable=True)
     turnaround_hours = Column(Integer, nullable=True)
+    aliases = Column(Text, nullable=True)

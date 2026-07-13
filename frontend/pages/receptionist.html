@@ -641,6 +641,7 @@
     };
 
     async function openDocumentsModal(patientId, patientName) {
+      window._docModalPatientId = patientId;
       document.getElementById('doc-patient-name').textContent = patientName;
       document.getElementById('documents-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
       document.getElementById('modal-documents').classList.add('open');
@@ -666,16 +667,40 @@
         const dt = new Date(d.date && d.date.endsWith("Z") ? d.date : d.date + "Z");
         const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        const billAction = (d.type === 'token_slip' && !d.has_invoice)
+          ? `<button class="btn btn-primary btn-sm" onclick="generateBillForCheckin(${d.checkin_id}, this)">🧾 Generate Bill</button>`
+          : '';
         return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div>
               <strong>${DOC_TYPE_LABEL[d.type] || d.label}</strong>
               <div style="font-size:12px;color:var(--slate)">${dateStr} · ${timeStr}</div>
             </div>
-            <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', ${d.ref_id})">View / Print</button>
+            <div style="display:flex;gap:8px">
+              ${billAction}
+              <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', ${d.ref_id})">View / Print</button>
+            </div>
           </div>
         `;
       }).join('');
+    }
+
+    async function generateBillForCheckin(checkinId, btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = 'Generating…';
+      try {
+        const invoice = await api("POST", `/billing/checkins/${checkinId}/finalize-invoice`, {});
+        toast(`Bill generated — Rs.${invoice.grand_total}`, 'success');
+        const currentPatientId = window._docModalPatientId;
+        if (currentPatientId) {
+          const docs = await api("GET", `/patients/${currentPatientId}/documents`);
+          renderDocuments(docs);
+        }
+      } catch (e) {
+        toast(e.message, 'error');
+        btnEl.disabled = false;
+        btnEl.textContent = '🧾 Generate Bill';
+      }
     }
 
     async function viewDocument(type, refId) {

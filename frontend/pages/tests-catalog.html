@@ -370,6 +370,10 @@
         doctor orders)</label>
       <input class="form-control" id="t-name" placeholder="e.g. Complete Blood Count, or Blood Sugar (Fasting)"
         style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Aliases / abbreviations
+        doctors might say out loud (comma-separated)</label>
+      <input class="form-control" id="t-aliases" placeholder="e.g. CBC, Complete Blood Count, Hemogram"
+        style="margin-bottom:14px" />
       <div style="display:flex;gap:12px;margin-bottom:14px">
         <input class="form-control" id="t-category" placeholder="Category" style="flex:1" />
         <input class="form-control" id="t-price" type="number" min="0" step="0.01" placeholder="Price (Rs.)"
@@ -613,6 +617,7 @@
       document.getElementById('test-modal-title').textContent = 'Add Test';
       document.getElementById('t-id').value = '';
       document.getElementById('t-name').value = '';
+      document.getElementById('t-aliases').value = '';
       document.getElementById('t-category').value = '';
       document.getElementById('t-price').value = '';
       document.getElementById('t-turnaround').value = '';
@@ -632,6 +637,7 @@
       document.getElementById('test-modal-title').textContent = 'Edit Test';
       document.getElementById('t-id').value = t.id;
       document.getElementById('t-name').value = t.test_name || '';
+      document.getElementById('t-aliases').value = t.aliases || '';
       document.getElementById('t-category').value = t.category || '';
       document.getElementById('t-price').value = t.price != null ? t.price : '';
       document.getElementById('t-turnaround').value = t.turnaround_hours != null ? t.turnaround_hours : '';
@@ -672,6 +678,7 @@
 
       const payload = {
         test_name,
+        aliases: document.getElementById('t-aliases').value.trim(),
         category: document.getElementById('t-category').value.trim(),
         price: parseFloat(priceVal),
         turnaround_hours: document.getElementById('t-turnaround').value ? parseInt(document.getElementById('t-turnaround').value) : null,

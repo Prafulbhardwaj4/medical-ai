@@ -40,6 +40,7 @@ class TestIn(BaseModel):
     turnaround_hours: Optional[int] = None
     is_panel: Optional[bool] = False
     parameters: Optional[list[ParameterIn]] = None
+    aliases: Optional[str] = ""
 
 
 class TestBulkConfirm(BaseModel):
@@ -79,6 +80,7 @@ def serialize(t: TestCatalogItem, db: Session = None):
         "turnaround_hours": t.turnaround_hours,
         "is_active": t.is_active,
         "is_panel": t.is_panel,
+        "aliases": t.aliases or "",
         "parameters": parameters
     }
 
@@ -132,6 +134,7 @@ def create_test(
         reference_range_female="" if is_panel else (payload.reference_range_female or "").strip(),
         unit="" if is_panel else (payload.unit or "").strip(),
         turnaround_hours=payload.turnaround_hours,
+        aliases=(payload.aliases or "").strip(),
         is_active=True
     )
     db.add(test)
@@ -198,6 +201,7 @@ def update_test(
     test.reference_range_female = "" if is_panel else (payload.reference_range_female or "").strip()
     test.unit = "" if is_panel else (payload.unit or "").strip()
     test.turnaround_hours = payload.turnaround_hours
+    test.aliases = (payload.aliases or "").strip()
 
     # Replace-all: simplest and safest way to sync a small, admin-managed parameter
     # list without diffing rows. Existing parameter rows for this test are wiped

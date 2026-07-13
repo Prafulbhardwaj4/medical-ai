@@ -162,6 +162,10 @@
             style="margin-bottom:10px" oninput="searchPharmPendingTasks(this.value)" />
           <div id="pharm-pending-results" style="margin-bottom:10px"></div>
 
+          <input class="form-control" id="pharm-doc-search" placeholder="Find patient (documents / generate bill)…"
+            style="margin-bottom:10px" oninput="searchPharmDocPatients(this.value)" />
+          <div id="pharm-doc-results" style="margin-bottom:10px"></div>
+
           <div id="pharmacy-queue-list">
             <p style="color:var(--slate)">Loading…</p>
           </div>
@@ -227,6 +231,17 @@
         <button class="modal-close" onclick="closeBatchesModal()">×</button>
       </div>
       <div id="batches-list" style="max-height:50vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- Documents / Bills Modal -->
+  <div class="modal-overlay" id="modal-documents">
+    <div class="modal" style="max-width:600px">
+      <div class="modal-header">
+        <h2>Documents — <span id="doc-patient-name"></span></h2>
+        <button class="modal-close" onclick="closeDocumentsModal()">×</button>
+      </div>
+      <div id="documents-list" style="max-height:60vh;overflow-y:auto"></div>
     </div>
   </div>
 
@@ -704,6 +719,110 @@
         dispenseBtn.disabled = false;
         dispenseBtn.textContent = 'Mark Dispensed';
       }
+    }
+
+    let pharmDocSearchTimer = null;
+    async function searchPharmDocPatients(q) {
+      clearTimeout(pharmDocSearchTimer);
+      const box = document.getElementById('pharm-doc-results');
+      if (!q || q.trim().length < 2) { box.innerHTML = ''; return; }
+      pharmDocSearchTimer = setTimeout(async () => {
+        try {
+          const patients = await api("GET", `/patients/?search=${encodeURIComponent(q.trim())}&limit=8`);
+          if (!patients.length) { box.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No matches.</p>'; return; }
+          box.innerHTML = patients.map(p => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+              <span style="font-size:14px">${sanitize(p.name)} <span style="color:var(--slate);font-size:12px">· ${sanitize(p.patient_uid)}</span></span>
+              <button class="btn btn-outline btn-sm" onclick="openDocumentsModal(${p.id}, '${p.name.replace(/'/g, "\\'")}')">📄 Docs</button>
+            </div>
+          `).join('');
+        } catch (e) { box.innerHTML = `<p style="color:var(--danger);font-size:13px">${e.message}</p>`; }
+      }, 300);
+    }
+
+    const DOC_TYPE_LABEL = {
+      token_slip: "🎫 Token Slip",
+      prescription: "📋 Prescription",
+      test_report: "🧪 Test Report",
+      invoice: "🧾 Invoice"
+    };
+
+    async function openDocumentsModal(patientId, patientName) {
+      window._docModalPatientId = patientId;
+      document.getElementById('doc-patient-name').textContent = patientName;
+      document.getElementById('documents-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+      document.getElementById('modal-documents').classList.add('open');
+      try {
+        const docs = await api("GET", `/patients/${patientId}/documents`);
+        renderDocuments(docs);
+      } catch (e) {
+        document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+      }
+    }
+
+    function closeDocumentsModal() {
+      document.getElementById('modal-documents').classList.remove('open');
+    }
+
+    function renderDocuments(docs) {
+      const el = document.getElementById('documents-list');
+      if (!docs.length) {
+        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No documents yet for this patient.</p>';
+        return;
+      }
+      el.innerHTML = docs.map(d => {
+        const dt = new Date(d.date && d.date.endsWith("Z") ? d.date : d.date + "Z");
+        const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        const billAction = (d.type === 'token_slip' && !d.has_invoice)
+          ? `<button class="btn btn-primary btn-sm" onclick="generateBillForCheckin(${d.checkin_id}, this)">🧾 Generate Bill</button>`
+          : '';
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+            <div>
+              <strong>${DOC_TYPE_LABEL[d.type] || d.label}</strong>
+              <div style="font-size:12px;color:var(--slate)">${dateStr} · ${timeStr}</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              ${billAction}
+              <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', ${d.ref_id})">View / Print</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function generateBillForCheckin(checkinId, btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = 'Generating…';
+      try {
+        const invoice = await api("POST", `/billing/checkins/${checkinId}/finalize-invoice`, {});
+        toast(`Bill generated — Rs.${invoice.grand_total}`, 'success');
+        const currentPatientId = window._docModalPatientId;
+        if (currentPatientId) {
+          const docs = await api("GET", `/patients/${currentPatientId}/documents`);
+          renderDocuments(docs);
+        }
+      } catch (e) {
+        toast(e.message, 'error');
+        btnEl.disabled = false;
+        btnEl.textContent = '🧾 Generate Bill';
+      }
+    }
+
+    async function viewDocument(type, refId) {
+      try {
+        let url = null;
+        if (type === 'prescription') url = `${BASE}/patients/prescriptions/${refId}/download`;
+        else if (type === 'test_report') url = `${BASE}/lab/orders/${refId}/report`;
+        else if (type === 'invoice') url = `${BASE}/billing/invoices/${refId}/pdf`;
+        else if (type === 'token_slip') { toast('Reopen this token from reception to reprint the slip.', 'info'); return; }
+
+        const response = await fetch(url, { headers: { "Authorization": `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error("Could not load document");
+        const blob = await response.blob();
+        window.open(URL.createObjectURL(blob), "_blank");
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     async function generateBillFromPharmacy() {

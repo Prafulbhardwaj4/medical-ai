@@ -3,23 +3,34 @@ from sqlalchemy.orm import Session
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.medicine_batch import MedicineBatch
 
+# Countable/discrete dosage forms — quantity is meaningfully "times_per_day x duration_days"
+# units of the medicine itself. Mirrors DIVISIBLE_FORMS in frontend/pages/medicines.html —
+# keep these two lists in sync if that one changes.
+COUNTABLE_FORMS = {"Tablet", "Capsule", "Sachet", "Suppository", "Patch"}
+
 
 def calculate_prescribed_quantity(matched_medicine, times_per_day, duration_days):
     """
     Auto-prefill for MedicineOrder.quantity, always editable by pharmacy afterward.
 
-    - If times_per_day and duration_days are both known: raw = times_per_day * duration_days,
-      rounded UP to the nearest full pack_size for per_pack (strip-billed) medicines — matches
-      how deduct_stock_fefo already rounds at dispense time, so the prefill agrees with what
-      actually gets deducted.
-    - If either is missing/null (SOS, ambiguous, not mentioned): prefill one full pack/strip
-      for a matched per_pack medicine, or 1 unit for a matched per_unit medicine — never guess
-      a specific dose count with no basis. Pharmacy must review either way.
-    - If the medicine isn't matched to the catalog at all, pack size is unknown — leave
-      quantity blank like before; pharmacy has to link it to the catalog first regardless.
+    - Countable forms (tablet/capsule/sachet/suppository/patch): raw = times_per_day *
+      duration_days when both are known, rounded UP to the nearest full pack_size for
+      per_pack (strip-billed) medicines — matches how deduct_stock_fefo rounds at dispense
+      time. If frequency/duration is missing (SOS, ambiguous), falls back to one pack/strip
+      or 1 unit — never guesses a specific dose count with no basis.
+    - Non-countable forms (syrup, suspension, injection, drops, ointment, cream, gel,
+      lotion, inhaler, spray, powder, or anything typed in via "Other"): quantity is not a
+      simple multiple of dose count (a "3x/day for 3 days" syrup isn't 9 bottles). Always
+      defaults to 1; pharmacy manually increases it if more than one bottle/vial/tube is
+      actually needed.
+    - If the medicine isn't matched to the catalog at all, dosage form is unknown — leave
+      quantity blank; pharmacy has to link it to the catalog first regardless.
     """
     if not matched_medicine:
         return None
+
+    if matched_medicine.dosage_forms not in COUNTABLE_FORMS:
+        return 1
 
     pack_size = matched_medicine.pack_size or 1
     is_per_pack = matched_medicine.billing_mode == "per_pack"

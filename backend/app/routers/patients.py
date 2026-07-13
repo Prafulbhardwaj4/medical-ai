@@ -673,7 +673,7 @@ def get_hospital_tests(
         TestCatalogItem.is_active == True
     ).order_by(TestCatalogItem.name).all()
     return [
-        {"id": t.id, "test_name": t.name, "price": t.fee}
+        {"id": t.id, "test_name": t.name, "price": t.fee, "aliases": t.aliases or ""}
         for t in items
     ]
 
@@ -1029,7 +1029,9 @@ def get_patient_documents(
             "label": f"Token Slip — {c.token_number}",
             "ref_id": c.id,
             "extra": c.token_number,
-            "date": c.created_at.isoformat() if c.created_at else None
+            "date": c.created_at.isoformat() if c.created_at else None,
+            "checkin_id": c.id,
+            "has_invoice": bool(c.invoice_id)
         })
         if c.invoice_id:
             documents.append({

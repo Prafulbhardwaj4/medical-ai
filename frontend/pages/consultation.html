@@ -618,6 +618,7 @@
         renderMedRows(s.medicines || []);
         tests = s.tests || [];
         renderTests();
+        autoMatchTests();
 
         await loadNurseVitals();
 
@@ -695,6 +696,45 @@
       tests.push(val);
       document.getElementById("test-input").value = "";
       renderTests();
+      autoMatchTests();
+    }
+
+    // Matches a dictated/typed test term (e.g. "CBC") against the hospital's real test
+    // catalog, checking both the catalog name and its comma-separated aliases. Mirrors the
+    // backend's medicine match_catalog() logic (exact / alias / substring), just run
+    // client-side here since the match feeds the visible, editable billable-chip list rather
+    // than being written straight to the database.
+    function matchTestToCatalog(term) {
+      const t = (term || "").trim().toLowerCase();
+      if (!t) return null;
+      for (const item of hospitalTests) {
+        const catName = (item.test_name || "").trim().toLowerCase();
+        const catAliases = (item.aliases || "").split(",").map(a => a.trim().toLowerCase()).filter(Boolean);
+        if (t === catName || catAliases.includes(t) || (catName && t.includes(catName))) {
+          return item;
+        }
+      }
+      return null;
+    }
+
+    // Auto-fills the billable "Recommended Tests" chip list from whatever the doctor already
+    // dictated/typed in the free-text tests box, so ordering a test doesn't require saying it
+    // and then separately re-searching/re-clicking it in a second widget. Only adds tests not
+    // already in the chip list; never removes a chip the doctor already took out. Safe to call
+    // more than once — matches already present are skipped, matches that failed just remain
+    // as free text (flagged in renderTests below) so nothing is silently mismatched.
+    function autoMatchTests() {
+      if (!hospitalTests.length) return;
+      let changed = false;
+      tests.forEach(t => {
+        const match = matchTestToCatalog(t);
+        if (match && !selectedTests.some(s => s.id === match.id)) {
+          selectedTests.push(match);
+          changed = true;
+        }
+      });
+      if (changed) renderTestChips();
+      renderTests();
     }
 
     function renderTests() {
@@ -704,13 +744,15 @@
       tests.forEach((t, i) => {
         const tag = document.createElement("div");
         tag.className = "test-tag";
-        tag.innerHTML = `${t} <button onclick="removeTest(${i})">×</button>`;
+        const matched = matchTestToCatalog(t);
+        const flag = matched ? "" : ` <span title="No catalog match — won't be billed automatically. Add it via the billable tests search below if needed." style="color:var(--danger, #c0392b)">⚠</span>`;
+        tag.innerHTML = `${t}${flag} <button onclick="removeFreeTextTest(${i})">×</button>`;
         wrap.appendChild(tag);
       });
       wrap.appendChild(input);
     }
 
-    function removeTest(i) {
+    function removeFreeTextTest(i) {
       tests.splice(i, 1);
       renderTests();
     }
@@ -871,6 +913,7 @@
         if (!items.length) return;
         hospitalTests = items;
         document.getElementById('test-catalog-block').style.display = '';
+        autoMatchTests();
       } catch (e) { }
     }
 
