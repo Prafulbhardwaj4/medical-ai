@@ -8,10 +8,19 @@
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
     /* Mobile tab sections: only one visible at a time on phones, all stacked normally on desktop */
-    .mobile-section { display: none; }
-    .mobile-section.active { display: block; }
+    .mobile-section {
+      display: none;
+    }
+
+    .mobile-section.active {
+      display: block;
+    }
+
     @media (min-width: 901px) {
-      .mobile-section { display: block !important; margin-bottom: 20px; }
+      .mobile-section {
+        display: block !important;
+        margin-bottom: 20px;
+      }
     }
 
     /* Attendance tab */
@@ -19,11 +28,27 @@
       text-align: center;
       padding: 24px 0 20px;
     }
-    .lab-att-status .badge { font-size: 15px; padding: 8px 18px; }
-    .lab-att-actions { display: flex; flex-direction: column; gap: 10px; }
+
+    .lab-att-status .badge {
+      font-size: 15px;
+      padding: 8px 18px;
+    }
+
+    .lab-att-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
     @media (min-width: 901px) {
-      .lab-att-status { display: none; }
-      .lab-att-actions { flex-direction: row; flex-wrap: wrap; }
+      .lab-att-status {
+        display: none;
+      }
+
+      .lab-att-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
     }
 
     /* Queue cards */
@@ -33,17 +58,67 @@
       padding: 14px;
       margin-bottom: 10px;
     }
-    .lq-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
-    .lq-name { font-size: 15px; }
-    .lq-sub { font-size: 13px; color: var(--slate); margin-bottom: 2px; }
-    .lq-wait { font-size: 12px; color: var(--slate-light); margin-bottom: 10px; }
-    .lq-actions button { width: 100%; }
+
+    .lq-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .lq-name {
+      font-size: 15px;
+    }
+
+    .lq-sub {
+      font-size: 13px;
+      color: var(--slate);
+      margin-bottom: 2px;
+    }
+
+    .lq-wait {
+      font-size: 12px;
+      color: var(--slate-light);
+      margin-bottom: 10px;
+    }
+
+    .lq-actions button {
+      width: 100%;
+    }
+
     @media (min-width: 901px) {
-      .lq-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border: none; border-bottom: 1px solid var(--border); border-radius: 0; padding: 12px 0; }
-      .lq-top { flex: 1; min-width: 200px; display: block; }
-      .lq-wait { min-width: 100px; margin-bottom: 0; }
-      .lq-actions { display: flex; gap: 8px; }
-      .lq-actions button { width: auto; }
+      .lq-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        border: none;
+        border-bottom: 1px solid var(--border);
+        border-radius: 0;
+        padding: 12px 0;
+      }
+
+      .lq-top {
+        flex: 1;
+        min-width: 200px;
+        display: block;
+      }
+
+      .lq-wait {
+        min-width: 100px;
+        margin-bottom: 0;
+      }
+
+      .lq-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .lq-actions button {
+        width: auto;
+      }
     }
 
     /* Pending cards */
@@ -53,12 +128,33 @@
       padding: 12px 14px;
       margin-bottom: 8px;
     }
-    .lp-item { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-top: 1px solid var(--border); }
-    .lp-item:first-of-type { border-top: none; }
-    .lp-item button { width: 100%; }
+
+    .lp-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .lp-item:first-of-type {
+      border-top: none;
+    }
+
+    .lp-item button {
+      width: 100%;
+    }
+
     @media (min-width: 901px) {
-      .lp-item { flex-direction: row; justify-content: space-between; align-items: center; }
-      .lp-item button { width: auto; }
+      .lp-item {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .lp-item button {
+        width: auto;
+      }
     }
   </style>
 </head>
@@ -80,7 +176,36 @@
         <span id="topbar-clinic" style="color:var(--slate)"></span>
         <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
       </div>
+      <button class="topbar-profile-btn" onclick="toggleProfileMenu()" aria-label="Profile">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="8" r="4" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+        </svg>
+      </button>
     </header>
+
+    <div class="sidebar-backdrop" id="profile-menu-backdrop" onclick="closeProfileMenu()" style="display:none"></div>
+    <div class="profile-menu" id="profile-menu">
+      <div class="profile-menu-header">
+        <strong id="profile-menu-name"></strong>
+        <span id="profile-menu-clinic"></span>
+      </div>
+      <button class="profile-menu-item" onclick="closeProfileMenu();toast('Settings — Coming Soon','info')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        Settings
+      </button>
+      <button class="profile-menu-item danger" onclick="logout()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+        Sign out
+      </button>
+    </div>
 
     <nav class="sidebar">
       <div class="sidebar-section-label">Navigation</div>
@@ -98,7 +223,8 @@
     <nav class="bottom-nav">
       <button class="bottom-nav-item active" id="tab-btn-queue" onclick="showLabSection('queue')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
         </svg>
         Queue
       </button>
@@ -110,30 +236,13 @@
       </button>
       <button class="bottom-nav-item" id="tab-btn-attendance" onclick="showLabSection('attendance')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
         Attendance
       </button>
-      <button class="bottom-nav-item" onclick="openMobileMenu()">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-        Menu
-      </button>
-    </nav>
 
-    <div class="mobile-menu-sheet" id="mobile-menu-sheet">
-      <div class="mobile-menu-header">
-        <h2>More</h2>
-        <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
-      </div>
-      <div class="mobile-menu-body">
-        <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();logout();return false;" style="color:var(--danger)">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-          Sign out
-        </a>
-      </div>
-    </div>
+    </nav>
 
     <main class="main-content">
 
@@ -147,9 +256,12 @@
             <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
           </div>
           <div class="lab-att-actions">
-            <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark Present</button>
-            <button class="btn btn-outline" id="lab-btn-break" onclick="markLabAttendance('on_break')" style="display:none">On Break</button>
-            <button class="btn btn-outline" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+            <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
+              Present</button>
+            <button class="btn btn-outline" id="lab-btn-break" onclick="markLabAttendance('on_break')"
+              style="display:none">On Break</button>
+            <button class="btn btn-outline" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')"
+              style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
           </div>
         </div>
       </div>
@@ -173,9 +285,11 @@
             <h2>Pending Tasks</h2>
           </div>
           <p style="font-size:13px;color:var(--slate);margin-bottom:10px">
-            Search a patient who paid for a test but wasn't queued the same day — you can add them back to today's queue any time within their payment window.
+            Search a patient who paid for a test but wasn't queued the same day — you can add them back to today's queue
+            any time within their payment window.
           </p>
-          <input class="form-control" id="lab-pending-search" placeholder="Search patient name, UID or token…" oninput="searchLabPendingTasks(this.value)" style="margin-bottom:12px" />
+          <input class="form-control" id="lab-pending-search" placeholder="Search patient name, UID or token…"
+            oninput="searchLabPendingTasks(this.value)" style="margin-bottom:12px" />
           <div id="lab-pending-results"></div>
         </div>
       </div>
