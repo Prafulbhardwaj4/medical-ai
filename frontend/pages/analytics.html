@@ -92,6 +92,12 @@
                 grid-template-columns: 1fr !important;
             }
         }
+
+        @media (max-width: 700px) {
+            table.responsive-cards td.table-center {
+                text-align: right !important;
+            }
+        }
     </style>
 </head>
 
@@ -963,12 +969,12 @@
             const rows = patients.map(p => `<tr>
         <td data-label="UID" style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(p.patient_uid)}</td>
         <td data-label="Name" style="font-weight:600">${sanitize(p.name)}</td>
-        <td data-label="Age" style="text-align:center">${p.age}</td>
+        <td data-label="Age" class="table-center">${p.age}</td>
         <td data-label="Gender">${sanitize(p.gender)}</td>
-        <td data-label="Blood Group" style="text-align:center">${sanitize(p.blood_group)}</td>
+        <td data-label="Blood Group" class="table-center">${sanitize(p.blood_group)}</td>
         <td data-label="Phone" style="color:var(--slate)">${sanitize(p.phone)}</td>
         <td data-label="Doctor" style="color:var(--slate);white-space:nowrap">${sanitize(p.doctor)}</td>
-        <td data-label="Visits" style="text-align:center;font-weight:600;color:var(--teal)">${p.total_visits}</td>
+        <td data-label="Visits" class="table-center" style="font-weight:600;color:var(--teal)">${p.total_visits}</td>
         <td data-label="Last Visit" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(p.last_visit)}</td>
         <td data-label="Registered" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(p.registered)}</td>
       </tr>`).join('');
@@ -1020,10 +1026,10 @@
                     document.getElementById("today-activity").innerHTML = emptyMsg('No consultations today yet.');
                 } else {
                     const rows = todayConsults.map(c => `<tr>
-            <td style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}${c.is_voided ? ' <span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626">Voided</span>' : ''}</td>
-            <td><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
-            <td style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
-            <td>${sanitize(c.diagnosis)}</td>
+            <td data-label="Token" style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}${c.is_voided ? ' <span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626">Voided</span>' : ''}</td>
+            <td data-label="Patient"><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
+            <td data-label="Doctor" style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
+            <td data-label="Diagnosis">${sanitize(c.diagnosis)}</td>
           </tr>`).join('');
                     document.getElementById("today-activity").innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis'], rows);
                 }
@@ -1061,20 +1067,20 @@
                 const demo = d.demographics;
 
                 const ageRows = demo.age_patterns.map(a => `<tr>
-          <td style="font-weight:500">${a.age_group}</td>
-          <td style="text-align:center">${a.total_patients}</td>
-          <td>${sanitize(a.top_diagnosis)}</td>
-          <td style="text-align:center;color:var(--teal);font-weight:600">${a.cases || '—'}</td>
+          <td data-label="Age Group" style="font-weight:500">${a.age_group}</td>
+          <td data-label="Patients" class="table-center">${a.total_patients}</td>
+          <td data-label="Most Common Issue">${sanitize(a.top_diagnosis)}</td>
+          <td data-label="Cases" class="table-center" style="color:var(--teal);font-weight:600">${a.cases || '—'}</td>
         </tr>`).join('');
                 document.getElementById("age-patterns").innerHTML = ageRows
                     ? makeTable(['Age Group', 'Patients', 'Most Common Issue', 'Cases'], ageRows)
                     : emptyMsg('No data yet.');
 
                 const genderRows = demo.gender_patterns.map(g => `<tr>
-          <td style="font-weight:500">${sanitize(g.gender)}</td>
-          <td style="text-align:center">${g.total_patients}</td>
-          <td>${sanitize(g.top_diagnosis)}</td>
-          <td style="text-align:center;color:var(--teal);font-weight:600">${g.cases}</td>
+          <td data-label="Gender" style="font-weight:500">${sanitize(g.gender)}</td>
+          <td data-label="Patients" class="table-center">${g.total_patients}</td>
+          <td data-label="Most Common Issue">${sanitize(g.top_diagnosis)}</td>
+          <td data-label="Cases" class="table-center" style="color:var(--teal);font-weight:600">${g.cases}</td>
         </tr>`).join('');
                 document.getElementById("gender-patterns").innerHTML = genderRows
                     ? makeTable(['Gender', 'Patients', 'Most Common Issue', 'Cases'], genderRows)
@@ -1084,8 +1090,8 @@
                     document.getElementById("blood-table").innerHTML = emptyMsg('No blood group data yet.');
                 } else {
                     const bloodRows = Object.entries(demo.blood_groups).map(([k, v]) => `<tr>
-            <td>${k}</td>
-            <td style="text-align:center;font-weight:600">${v}</td>
+            <td data-label="Blood Group">${k}</td>
+            <td data-label="Patients" class="table-center" style="font-weight:600">${v}</td>
           </tr>`).join('');
                     document.getElementById("blood-table").innerHTML = makeTable(
                         ['Blood Group', '<span style="display:block;text-align:center">Patients</span>'],
@@ -1124,11 +1130,11 @@
                     return;
                 }
                 const rows = consults.map(c => `<tr>
-          <td style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}${c.is_voided ? ' <span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626">Voided</span>' : ''}</td>
-          <td><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
-          <td style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
-          <td>${sanitize(c.diagnosis)}</td>
-          <td style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(c.date)}</td>
+          <td data-label="Token" style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}${c.is_voided ? ' <span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626">Voided</span>' : ''}</td>
+          <td data-label="Patient"><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
+          <td data-label="Doctor" style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
+          <td data-label="Diagnosis">${sanitize(c.diagnosis)}</td>
+          <td data-label="Date" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(c.date)}</td>
         </tr>`).join('');
                 table.innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis', 'Date'], rows);
                 pagination.innerHTML = `

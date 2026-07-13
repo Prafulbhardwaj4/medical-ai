@@ -6,6 +6,61 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lab — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
+  <style>
+    /* Mobile tab sections: only one visible at a time on phones, all stacked normally on desktop */
+    .mobile-section { display: none; }
+    .mobile-section.active { display: block; }
+    @media (min-width: 901px) {
+      .mobile-section { display: block !important; margin-bottom: 20px; }
+    }
+
+    /* Attendance tab */
+    .lab-att-status {
+      text-align: center;
+      padding: 24px 0 20px;
+    }
+    .lab-att-status .badge { font-size: 15px; padding: 8px 18px; }
+    .lab-att-actions { display: flex; flex-direction: column; gap: 10px; }
+    @media (min-width: 901px) {
+      .lab-att-status { display: none; }
+      .lab-att-actions { flex-direction: row; flex-wrap: wrap; }
+    }
+
+    /* Queue cards */
+    .lq-card {
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+    .lq-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
+    .lq-name { font-size: 15px; }
+    .lq-sub { font-size: 13px; color: var(--slate); margin-bottom: 2px; }
+    .lq-wait { font-size: 12px; color: var(--slate-light); margin-bottom: 10px; }
+    .lq-actions button { width: 100%; }
+    @media (min-width: 901px) {
+      .lq-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border: none; border-bottom: 1px solid var(--border); border-radius: 0; padding: 12px 0; }
+      .lq-top { flex: 1; min-width: 200px; display: block; }
+      .lq-wait { min-width: 100px; margin-bottom: 0; }
+      .lq-actions { display: flex; gap: 8px; }
+      .lq-actions button { width: auto; }
+    }
+
+    /* Pending cards */
+    .lp-card {
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-bottom: 8px;
+    }
+    .lp-item { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-top: 1px solid var(--border); }
+    .lp-item:first-of-type { border-top: none; }
+    .lp-item button { width: 100%; }
+    @media (min-width: 901px) {
+      .lp-item { flex-direction: row; justify-content: space-between; align-items: center; }
+      .lp-item button { width: auto; }
+    }
+  </style>
 </head>
 
 <body>
@@ -40,35 +95,91 @@
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
+    <nav class="bottom-nav">
+      <button class="bottom-nav-item active" id="tab-btn-queue" onclick="showLabSection('queue')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
+        </svg>
+        Queue
+      </button>
+      <button class="bottom-nav-item" id="tab-btn-pending" onclick="showLabSection('pending')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+        </svg>
+        Pending
+      </button>
+      <button class="bottom-nav-item" id="tab-btn-attendance" onclick="showLabSection('attendance')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        Attendance
+      </button>
+      <button class="bottom-nav-item" onclick="openMobileMenu()">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        Menu
+      </button>
+    </nav>
+
+    <div class="mobile-menu-sheet" id="mobile-menu-sheet">
+      <div class="mobile-menu-header">
+        <h2>More</h2>
+        <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
+      </div>
+      <div class="mobile-menu-body">
+        <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();logout();return false;" style="color:var(--danger)">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+          Sign out
+        </a>
+      </div>
+    </div>
+
     <main class="main-content">
-      <div class="card"
-        style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <div>
-          <strong>Today's Status:</strong>
-          <span class="badge badge-grey" id="lab-attendance-badge" style="margin-left:8px">Not marked</span>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <button class="btn btn-primary btn-sm" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
-            Present</button>
-          <button class="btn btn-outline btn-sm" id="lab-btn-break" onclick="markLabAttendance('on_break')"
-            style="display:none">On Break</button>
-          <button class="btn btn-outline btn-sm" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')"
-            style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+
+      <!-- Attendance tab -->
+      <div class="mobile-section" id="section-attendance">
+        <div class="card">
+          <div class="card-header" style="margin-bottom:0">
+            <h2>Today's Status</h2>
+          </div>
+          <div class="lab-att-status">
+            <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
+          </div>
+          <div class="lab-att-actions">
+            <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark Present</button>
+            <button class="btn btn-outline" id="lab-btn-break" onclick="markLabAttendance('on_break')" style="display:none">On Break</button>
+            <button class="btn btn-outline" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+          </div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <h2>Lab Queue</h2>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-control" id="lab-pending-search" placeholder="Find patient (pending tasks)…" style="width:220px" oninput="searchLabPendingTasks(this.value)" />
+      <!-- Queue tab -->
+      <div class="mobile-section active" id="section-queue">
+        <div class="card">
+          <div class="card-header">
+            <h2>Lab Queue</h2>
+          </div>
+          <div id="lab-queue-list">
+            <p style="color:var(--slate)">Loading…</p>
           </div>
         </div>
-        <div id="lab-pending-results" style="margin-bottom:10px"></div>
-        <div id="lab-queue-list">
-          <p style="color:var(--slate)">Loading…</p>
+      </div>
+
+      <!-- Pending tab -->
+      <div class="mobile-section" id="section-pending">
+        <div class="card">
+          <div class="card-header">
+            <h2>Pending Tasks</h2>
+          </div>
+          <p style="font-size:13px;color:var(--slate);margin-bottom:10px">
+            Search a patient who paid for a test but wasn't queued the same day — you can add them back to today's queue any time within their payment window.
+          </p>
+          <input class="form-control" id="lab-pending-search" placeholder="Search patient name, UID or token…" oninput="searchLabPendingTasks(this.value)" style="margin-bottom:12px" />
+          <div id="lab-pending-results"></div>
         </div>
       </div>
+
     </main>
   </div>
 
@@ -99,6 +210,13 @@
     let labCurrentStatus = 'not_marked';
     let currentOrderId = null;
 
+    function showLabSection(id) {
+      ['queue', 'pending', 'attendance'].forEach(s => {
+        document.getElementById('section-' + s).classList.toggle('active', s === id);
+        document.getElementById('tab-btn-' + s).classList.toggle('active', s === id);
+      });
+    }
+
     let labPendingSearchTimer;
     function searchLabPendingTasks(val) {
       clearTimeout(labPendingSearchTimer);
@@ -121,10 +239,10 @@
         return;
       }
       el.innerHTML = results.map(r => `
-        <div style="border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
+        <div class="lp-card">
           <strong>${sanitize(r.patient_name)}</strong> <span class="badge badge-navy">${sanitize(r.patient_uid)}</span>
           ${r.pending.map(p => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;flex-wrap:wrap;gap:8px">
+            <div class="lp-item">
               <div style="font-size:13px">
                 ${sanitize(p.test_name)} — Rs.${p.price}
                 <div style="color:var(--slate);font-size:12px">Ordered by ${sanitize(p.doctor_name)} · paid ${p.paid_at ? new Date(p.paid_at + 'Z').toLocaleDateString('en-IN') : '—'}</div>
@@ -218,14 +336,16 @@
         return;
       }
       el.innerHTML = items.map(o => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <strong>${sanitize(o.patient_name)}</strong>
-            <div style="font-size:12px;color:var(--slate)">Token ${sanitize(o.token_number)} · ${sanitize(o.test_name)}</div>
+        <div class="lq-card">
+          <div class="lq-top">
+            <div>
+              <strong class="lq-name">${sanitize(o.patient_name)}</strong>
+              <div class="lq-sub">Token ${sanitize(o.token_number)} · ${sanitize(o.test_name)}</div>
+            </div>
+            <span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}">${STATUS_LABEL[o.status] || o.status}</span>
           </div>
-          <div style="font-size:12px;color:var(--slate);min-width:100px">${o.waiting_minutes != null ? o.waiting_minutes + ' min waiting' : '—'}</div>
-          <div><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}">${STATUS_LABEL[o.status] || o.status}</span></div>
-          <div style="display:flex;gap:8px">
+          <div class="lq-wait">${o.waiting_minutes != null ? o.waiting_minutes + ' min waiting' : '—'}</div>
+          <div class="lq-actions">
             ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="advanceStatus(${o.id}, 'sample_collected')">Collect Sample</button>` : ''}
             ${o.status === 'sample_collected' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} advanceStatus(${o.id}, 'processing')">Mark Processing</button>` : ''}
             ${o.status === 'processing' ? `<button class="btn btn-primary btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} openResultModal(${o.id}, '${sanitize(o.test_name)}')">Enter Results</button>` : ''}
