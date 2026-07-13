@@ -97,6 +97,12 @@
             table.responsive-cards td.table-center {
                 text-align: right !important;
             }
+            table.responsive-cards td.table-rank {
+                padding-left: 0 !important;
+                text-align: left !important;
+                font-weight: 700;
+                color: var(--teal) !important;
+            }
         }
     </style>
 </head>
@@ -932,7 +938,7 @@
             if (!items || !items.length) return emptyMsg('No data yet.');
             const rows = items.map((item, i) => `
         <tr>
-          <td data-label="#" class="table-center" style="color:var(--slate);font-size:13px;width:40px">${i + 1}</td>
+          <td class="table-rank" style="color:var(--slate);font-size:13px;width:40px">${i + 1}</td>
           <td data-label="${col1}" style="font-weight:500">${sanitize(item.name)}</td>
           <td data-label="${col2}" class="table-center" style="font-weight:600;color:var(--teal)">${item.count}</td>
           ${diagKey ? `<td data-label="Common Diagnosis" style="color:var(--slate);font-size:13px">${sanitize(item[diagKey] || '—')}</td>` : ''}

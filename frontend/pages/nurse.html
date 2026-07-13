@@ -6,14 +6,6 @@
   <title>Nurse Station — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
-    /* Mobile tab sections: only one visible at a time on phones, all stacked normally on desktop */
-    .mobile-section { display: none; }
-    .mobile-section.active { display: block; }
-    @media (min-width: 901px) {
-      .mobile-section { display: block !important; margin-bottom: 20px; }
-    }
-
-    /* Row cards used in vitals / tasks / history lists */
     .ns-row {
       border: 1.5px solid var(--border);
       border-radius: var(--radius);
@@ -30,17 +22,6 @@
         padding: 14px 0; margin-bottom: 0;
       }
       .ns-row button { width: auto; margin-top: 0; }
-    }
-
-    /* Attendance tab */
-    .nurse-att-status { text-align: center; padding: 20px 0 16px; }
-    .nurse-att-status .badge { font-size: 15px; padding: 8px 18px; }
-    .nurse-att-actions { display: flex; flex-direction: column; gap: 10px; }
-    .nurse-att-actions select { width: 100% !important; }
-    @media (min-width: 901px) {
-      .nurse-att-status { display: none; }
-      .nurse-att-actions { flex-direction: row; flex-wrap: wrap; }
-      .nurse-att-actions select { width: 170px !important; }
     }
   </style>
 </head>
@@ -103,17 +84,11 @@
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <nav class="bottom-nav">
-      <button class="bottom-nav-item active" id="tab-btn-vitals" onclick="showNurseSection('vitals')">
+      <button class="bottom-nav-item active" id="tab-btn-queue" onclick="showNurseSection('queue')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3 8 4-16 3 8h4" />
         </svg>
-        Vitals
-      </button>
-      <button class="bottom-nav-item" id="tab-btn-tasks" onclick="showNurseSection('tasks')">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
-        Tasks
+        Queue
       </button>
       <button class="bottom-nav-item" id="tab-btn-history" onclick="showNurseSection('history')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -133,35 +108,30 @@
 
       <!-- Attendance tab -->
       <div class="mobile-section" id="section-attendance">
-        <div class="card" style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-          <div>
-            <strong>Today's Status:</strong>
-            <span class="badge badge-grey" id="nurse-attendance-badge" style="margin-left:8px">Not marked</span>
-            <span id="nurse-room-display" style="margin-left:10px;font-size:13px;color:var(--slate)"></span>
+        <div class="card">
+          <div class="card-header" style="margin-bottom:0">
+            <h2>Today's Status</h2>
           </div>
-          <div class="nurse-att-status">
-            <span class="badge badge-grey" style="display:none"></span>
+          <div class="staff-att-status">
+            <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
+            <div id="nurse-room-display" style="margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
-          <div class="nurse-att-actions" id="nurse-attendance-btns">
+          <div class="staff-att-actions" id="nurse-attendance-btns">
             <select class="form-control" id="nurse-room-select" style="display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
-            <button class="btn btn-primary btn-sm" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
-            <button class="btn btn-outline btn-sm" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
-            <button class="btn btn-outline btn-sm" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+            <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
+            <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
+            <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
           </div>
         </div>
       </div>
 
-      <!-- Vitals tab -->
-      <div class="mobile-section active" id="section-vitals">
+      <!-- Queue tab: Vitals + Post-Consult together -->
+      <div class="mobile-section active" id="section-queue">
         <div class="card">
           <div class="card-header"><h2>Vitals Queue</h2></div>
           <div id="vitals-list"><p style="color:var(--slate)">Loading…</p></div>
         </div>
-      </div>
-
-      <!-- Tasks tab -->
-      <div class="mobile-section" id="section-tasks">
-        <div class="card">
+        <div class="card" style="margin-top:20px">
           <div class="card-header"><h2>Post-Consultation Tasks</h2></div>
           <div id="postconsult-list"><p style="color:var(--slate)">Loading…</p></div>
         </div>
@@ -219,7 +189,7 @@
     if (getDoctor()?.role !== 'nurse') redirectByRole(getDoctor()?.role);
 
     function showNurseSection(id) {
-      ['vitals', 'tasks', 'history', 'attendance'].forEach(s => {
+      ['queue', 'history', 'attendance'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         document.getElementById('tab-btn-' + s).classList.toggle('active', s === id);
       });
