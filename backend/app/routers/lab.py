@@ -86,14 +86,17 @@ def search_pending_lab_tasks(
     of today's active queue — free, repeatable, one-click requeue, as long
     as still inside the 7-day/next-consultation window."""
     require_lab(current_doctor)
-    if not q or len(q.strip()) < 2:
-        return []
-
-    like = f"%{q.strip()}%"
-    patients = db.query(Patient).filter(
-        Patient.hospital_id == current_doctor.hospital_id,
-        (Patient.name.ilike(like)) | (Patient.patient_uid.ilike(like))
-    ).limit(15).all()
+    query = db.query(Patient).filter(Patient.hospital_id == current_doctor.hospital_id)
+    if q and len(q.strip()) >= 2:
+        like = f"%{q.strip()}%"
+        query = query.filter((Patient.name.ilike(like)) | (Patient.patient_uid.ilike(like)))
+        patients = query.limit(15).all()
+    else:
+        # No search yet — list everyone with a pending task, most recent first
+        patients = query.join(TestOrder, TestOrder.patient_id == Patient.id).filter(
+            TestOrder.hospital_id == current_doctor.hospital_id,
+            TestOrder.status == "paid"
+        ).distinct().order_by(Patient.id.desc()).limit(30).all()
 
     today = date.today()
     result = []

@@ -6,6 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Manage Staff — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
+  <style>
+    @media (max-width: 700px) {
+      .staff-filter-tabs { display: none; }
+      .staff-filter-select { display: block !important; }
+    }
+  </style>
 </head>
 
 <body>
@@ -313,7 +319,7 @@
         <h2 style="margin:0">Manage Staff</h2>
         <button class="btn btn-primary" onclick="openAddModal()">+ Add Staff</button>
       </div>
-      <div class="chip-scroll" style="margin-bottom:20px">
+      <div class="chip-scroll staff-filter-tabs" style="margin-bottom:20px">
         <button class="btn btn-sm" id="df-all" onclick="setDoctorFilter('all')" style="background:var(--teal);color:white;border-color:var(--teal)">All</button>
         <button class="btn btn-outline btn-sm" id="df-doctor" onclick="setDoctorFilter('doctor')">Doctors</button>
         <button class="btn btn-outline btn-sm" id="df-sub_admin" onclick="setDoctorFilter('sub_admin')">Sub Admins</button>
@@ -322,6 +328,15 @@
         <button class="btn btn-outline btn-sm" id="df-lab" onclick="setDoctorFilter('lab')">Lab Staff</button>
         <button class="btn btn-outline btn-sm" id="df-pharmacy" onclick="setDoctorFilter('pharmacy')">Pharmacists</button>
       </div>
+      <select class="form-control staff-filter-select" id="df-mobile-select" onchange="setDoctorFilter(this.value)" style="display:none;margin-bottom:20px">
+        <option value="all">All Staff</option>
+        <option value="doctor">Doctors</option>
+        <option value="sub_admin">Sub Admins</option>
+        <option value="receptionist">Receptionists</option>
+        <option value="nurse">Nurses</option>
+        <option value="lab">Lab Staff</option>
+        <option value="pharmacy">Pharmacists</option>
+      </select>
       <div class="card" id="doctors-list">
         <p>Loading...</p>
       </div>
@@ -541,7 +556,7 @@
 
     function setDoctorFilter(filter) {
       doctorFilter = filter;
-      ['all', 'doctor', 'sub_admin', 'receptionist', 'nurse'].forEach(f => {
+      ['all', 'doctor', 'sub_admin', 'receptionist', 'nurse', 'lab', 'pharmacy'].forEach(f => {
         const btn = document.getElementById(`df-${f}`);
         if (!btn) return;
         btn.style.background = '';
@@ -557,6 +572,8 @@
         active.style.borderColor = 'var(--teal)';
         active.classList.remove('btn-outline');
       }
+      const mobileSelect = document.getElementById('df-mobile-select');
+      if (mobileSelect) mobileSelect.value = filter;
       renderDoctors();
     }
 

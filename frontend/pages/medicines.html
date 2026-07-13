@@ -1110,9 +1110,9 @@
       if (!items.length) { panel.style.display = 'none'; return; }
       panel.style.display = 'block';
       list.innerHTML = items.map(i => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px">
-          <span>${sanitize(i.medicine_name)}${i.batch_number ? ' · Lot ' + sanitize(i.batch_number) : ''} — ${i.quantity} units</span>
-          <span style="font-weight:600;color:${i.is_expired ? '#991b1b' : '#b45309'}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:2px 12px;padding:6px 0;font-size:13px">
+          <span style="min-width:0;flex:1 1 200px">${sanitize(i.medicine_name)}${i.batch_number ? ' · Lot ' + sanitize(i.batch_number) : ''} — ${i.quantity} units</span>
+          <span style="font-weight:600;white-space:nowrap;flex-shrink:0;color:${i.is_expired ? '#991b1b' : '#b45309'}">
             ${i.is_expired ? 'Expired' : `${i.days_left} day${i.days_left === 1 ? '' : 's'} left`}
           </span>
         </div>

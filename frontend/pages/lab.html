@@ -329,6 +329,7 @@
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         document.getElementById('tab-btn-' + s).classList.toggle('active', s === id);
       });
+      if (id === 'pending') runLabPendingSearch(document.getElementById('lab-pending-search').value);
     }
 
     let labPendingSearchTimer;
@@ -336,10 +337,9 @@
       clearTimeout(labPendingSearchTimer);
       labPendingSearchTimer = setTimeout(() => runLabPendingSearch(val), 350);
     }
+    document.addEventListener('DOMContentLoaded', () => runLabPendingSearch(''));
 
     async function runLabPendingSearch(q) {
-      const el = document.getElementById('lab-pending-results');
-      if (!q || q.trim().length < 2) { el.innerHTML = ''; return; }
       try {
         const results = await api("GET", `/lab/pending-tasks?q=${encodeURIComponent(q)}`);
         renderLabPendingResults(results);

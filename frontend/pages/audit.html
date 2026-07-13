@@ -29,13 +29,15 @@
       word-break: break-word;
       overflow-wrap: anywhere;
     }
-    .audit-table { table-layout: fixed; }
-    .audit-table th:nth-child(1), .audit-table td:nth-child(1) { width: 15%; }
-    .audit-table th:nth-child(2), .audit-table td:nth-child(2) { width: 15%; }
-    .audit-table th:nth-child(3), .audit-table td:nth-child(3) { width: 10%; }
-    .audit-table th:nth-child(4), .audit-table td:nth-child(4) { width: 15%; }
-    .audit-table th:nth-child(5), .audit-table td:nth-child(5) { width: 20%; }
-    .audit-table th:nth-child(6), .audit-table td:nth-child(6) { width: 25%; }
+    @media (min-width: 701px) {
+      .audit-table { table-layout: fixed; }
+      .audit-table th:nth-child(1), .audit-table td:nth-child(1) { width: 15%; }
+      .audit-table th:nth-child(2), .audit-table td:nth-child(2) { width: 15%; }
+      .audit-table th:nth-child(3), .audit-table td:nth-child(3) { width: 10%; }
+      .audit-table th:nth-child(4), .audit-table td:nth-child(4) { width: 15%; }
+      .audit-table th:nth-child(5), .audit-table td:nth-child(5) { width: 20%; }
+      .audit-table th:nth-child(6), .audit-table td:nth-child(6) { width: 25%; }
+    }
 
     .audit-table tr:last-child td {
       border-bottom: none;
@@ -460,7 +462,7 @@
         <!-- Log Table -->
         <div class="card">
           <div class="table-wrap">
-            <table class="audit-table">
+            <table class="audit-table responsive-cards">
               <thead>
                 <tr>
                   <th>When</th>
@@ -577,15 +579,15 @@
 
         tbody.innerHTML = allLogs.map(l => `
           <tr>
-            <td style="white-space:nowrap;color:var(--slate);font-size:13px">${formatDateTime(l.created_at)}</td>
-            <td style="font-weight:500">${sanitize(l.actor_name)}</td>
-            <td style="font-size:13px;color:var(--slate)">${ROLE_LABELS[l.actor_role] || l.actor_role}</td>
-            <td><span class="action-badge ${ACTION_BADGE[l.action] || 'badge-grey'}">${ACTION_LABELS[l.action] || l.action}</span></td>
-            <td style="font-size:13px">
+            <td data-label="When" style="white-space:nowrap;color:var(--slate);font-size:13px">${formatDateTime(l.created_at)}</td>
+            <td data-label="Actor" style="font-weight:500">${sanitize(l.actor_name)}</td>
+            <td data-label="Role" style="font-size:13px;color:var(--slate)">${ROLE_LABELS[l.actor_role] || l.actor_role}</td>
+            <td data-label="Event"><span class="action-badge ${ACTION_BADGE[l.action] || 'badge-grey'}">${ACTION_LABELS[l.action] || l.action}</span></td>
+            <td data-label="Target" style="font-size:13px">
               <span style="color:var(--slate)">${l.target_type}</span>
               ${l.target_label ? `<br><span style="font-weight:500">${sanitize(l.target_label)}</span>` : ""}
             </td>
-            <td style="font-size:13px;color:var(--slate)">${l.details ? sanitize(l.details) : "—"}</td>
+            <td data-label="Details" style="font-size:13px;color:var(--slate)">${l.details ? sanitize(l.details) : "—"}</td>
           </tr>
         `).join("");
 

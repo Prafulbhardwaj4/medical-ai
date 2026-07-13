@@ -932,9 +932,9 @@
             if (!items || !items.length) return emptyMsg('No data yet.');
             const rows = items.map((item, i) => `
         <tr>
-          <td data-label="#" style="color:var(--slate);font-size:13px;width:40px">${i + 1}</td>
+          <td data-label="#" class="table-center" style="color:var(--slate);font-size:13px;width:40px">${i + 1}</td>
           <td data-label="${col1}" style="font-weight:500">${sanitize(item.name)}</td>
-          <td data-label="${col2}" style="text-align:center;font-weight:600;color:var(--teal)">${item.count}</td>
+          <td data-label="${col2}" class="table-center" style="font-weight:600;color:var(--teal)">${item.count}</td>
           ${diagKey ? `<td data-label="Common Diagnosis" style="color:var(--slate);font-size:13px">${sanitize(item[diagKey] || '—')}</td>` : ''}
         </tr>`).join('');
             const headers = [
