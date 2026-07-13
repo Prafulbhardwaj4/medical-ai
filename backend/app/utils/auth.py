@@ -72,3 +72,20 @@ IST = pytz.timezone("Asia/Kolkata")
 
 def now_ist():
     return datetime.now(IST)
+
+def ist_today():
+    return now_ist().date()
+
+def ist_day_bounds_utc(day=None):
+    """(start, end) naive-UTC datetimes covering the given IST calendar day (default: today).
+    Use to query naive-UTC datetime columns (created_at, queued_at, paid_at, etc.) for 'today' in IST."""
+    day = day or ist_today()
+    start_ist = IST.localize(datetime.combine(day, datetime.min.time()))
+    end_ist = IST.localize(datetime.combine(day, datetime.max.time()))
+    return start_ist.astimezone(pytz.utc).replace(tzinfo=None), end_ist.astimezone(pytz.utc).replace(tzinfo=None)
+
+def utc_naive_to_ist_date(dt):
+    """Convert a naive-UTC datetime (as stored in our DB) to its calendar date in IST."""
+    if dt is None:
+        return None
+    return pytz.utc.localize(dt).astimezone(IST).date()

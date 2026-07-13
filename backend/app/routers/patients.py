@@ -16,8 +16,9 @@ from app.models.test_order import TestOrder
 from app.models.checkin import Checkin
 import os
 from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate
-from app.utils.auth import get_current_doctor
+from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds_utc
 from app.utils.audit import log_action
+from app.models.attendance import AttendanceRecord
 from app.utils.order_lifecycle import is_order_expired
 from app.models.medicine_order import MedicineOrder
 
@@ -43,10 +44,20 @@ def generate_url_token(db: Session) -> str:
             return token
 
 def pick_random_nurse(db: Session, hospital_id: int):
+    present_nurse_ids = [
+        r[0] for r in db.query(AttendanceRecord.doctor_id).filter(
+            AttendanceRecord.hospital_id == hospital_id,
+            AttendanceRecord.date == ist_today(),
+            AttendanceRecord.status.in_(["present", "on_break"])
+        ).all()
+    ]
+    if not present_nurse_ids:
+        return None
     nurses = db.query(Doctor).filter(
         Doctor.hospital_id == hospital_id,
         Doctor.role == UserRole.nurse,
-        Doctor.is_active == True
+        Doctor.is_active == True,
+        Doctor.id.in_(present_nurse_ids)
     ).all()
     return random.choice(nurses) if nurses else None
 
@@ -162,7 +173,7 @@ def list_patients(
         else:
             last_visit, last_token = None, None
 
-        checked_in_today = bool(last_checkin and last_checkin.visit_date == date.today())
+        checked_in_today = bool(last_checkin and last_checkin.visit_date == ist_today())
 
         result.append(PatientSummary(
             id=p.id,
@@ -193,7 +204,7 @@ def hospital_doctors(
     present_ids = set(
         r[0] for r in db.query(AttendanceRecord.doctor_id).filter(
             AttendanceRecord.hospital_id == current_doctor.hospital_id,
-            AttendanceRecord.date == date.today(),
+            AttendanceRecord.date == ist_today(),
             AttendanceRecord.status == "present"
         ).all()
     )
@@ -271,7 +282,7 @@ def checkin_today(
 
     checkin = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
-        Checkin.visit_date == date.today()
+        Checkin.visit_date == ist_today()
     ).order_by(desc(Checkin.created_at)).first()
 
     if not checkin:
@@ -324,7 +335,7 @@ def send_to_nurse(
 
     checkin = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
-        Checkin.visit_date == date.today()
+        Checkin.visit_date == ist_today()
     ).order_by(desc(Checkin.created_at)).first()
     if not checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today.")
@@ -364,7 +375,7 @@ def send_to_nurse_postconsult(
 
     checkin = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
-        Checkin.visit_date == date.today()
+        Checkin.visit_date == ist_today()
     ).order_by(desc(Checkin.created_at)).first()
     if not checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today.")
@@ -436,7 +447,7 @@ def update_patient(
     return patient
 
 def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> str:
-    today = date.today()
+    today = ist_today()
     prefix = hospital_code.replace("-", "")[:4].upper()
     date_part = today.strftime("%d%m%y")
     while True:
@@ -493,7 +504,7 @@ def checkin_patient(
         issue_category=payload.issue_category,
         doctor_id=doctor.id,
         created_by=current_doctor.id,
-        visit_date=date.today(),
+        visit_date=ist_today(),
         nurse_id=nurse.id if nurse else None,
         vitals_status="pending" if nurse else "none",
         consultation_fee=consultation_fee,
@@ -518,7 +529,7 @@ def checkin_patient(
         patient_name=patient.name,
         doctor_name=f"{doctor.title} {doctor.name}",
         issue_category=payload.issue_category,
-        visit_date=date.today(),
+        visit_date=ist_today(),
         nurse_name=f"{nurse.title} {nurse.name}" if nurse else None,
         consultation_fee=consultation_fee,
         test_fee=payload.test_fee,
@@ -554,6 +565,66 @@ def mark_checkin_paid(
     )
     return {"is_paid": True, "paid_at": checkin.paid_at.isoformat()}
 
+
+@router.patch("/checkin/{checkin_id}/mark-unpaid")
+def mark_checkin_unpaid(
+    checkin_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    checkin = db.query(Checkin).filter(
+        Checkin.id == checkin_id,
+        Checkin.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not checkin:
+        raise HTTPException(status_code=404, detail="Check-in not found")
+
+    checkin.is_paid = False
+    checkin.paid_at = None
+    db.commit()
+
+    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
+    log_action(
+        db, current_doctor,
+        action="payment_reverted",
+        target_type="patient",
+        target_id=checkin.patient_id,
+        target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),
+        details=f"Token {checkin.token_number} — consultation fee marked unpaid"
+    )
+    return {"is_paid": False}
+
+
+@router.post("/{patient_id}/revert-test-payment")
+def revert_test_payment(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    orders = db.query(TestOrder).filter(
+        TestOrder.patient_id == patient_id,
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.status == "paid"
+    ).all()
+
+    if not orders:
+        raise HTTPException(status_code=400, detail="No paid tests to revert — they may already be in progress at the lab")
+
+    for o in orders:
+        o.status = "payment_pending"
+        o.paid_at = None
+        o.queued_at = None
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="test_payment_reverted",
+        target_type="patient",
+        target_id=patient_id,
+        target_label=f"{len(orders)} test(s) reverted to unpaid"
+    )
+    return {"reverted": len(orders)}
+
 @router.get("/queue/today")
 def todays_queue(
     db: Session = Depends(get_db),
@@ -562,7 +633,7 @@ def todays_queue(
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.doctor_id == current_doctor.id,
-        Checkin.visit_date == date.today()
+        Checkin.visit_date == ist_today()
     ).order_by(Checkin.created_at.asc()).all()
 
     patient_ids = [c.patient_id for c in checkins]
@@ -618,9 +689,8 @@ def reception_pending_payments(
     if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    today = date.today()
-    day_start = datetime.combine(today, datetime.min.time())
-    day_end = datetime.combine(today, datetime.max.time())
+    today = ist_today()
+    day_start, day_end = ist_day_bounds_utc(today)
 
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
@@ -782,8 +852,7 @@ def get_pending_test_fees(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    today_end = datetime.combine(date.today(), datetime.max.time())
+    today_start, today_end = ist_day_bounds_utc()
 
     orders = db.query(TestOrder).filter(
         TestOrder.patient_id == patient_id,
@@ -825,8 +894,7 @@ def collect_test_payment(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    today_end = datetime.combine(date.today(), datetime.max.time())
+    today_start, today_end = ist_day_bounds_utc()
 
     orders = db.query(TestOrder).filter(
         TestOrder.patient_id == patient_id,

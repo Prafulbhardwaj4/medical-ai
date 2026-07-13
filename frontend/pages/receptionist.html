@@ -104,15 +104,17 @@
 
     <main class="main-content">
       <div class="mobile-section" id="section-attendance">
-      <div class="card" style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <div>
-          <strong>Today's Status:</strong>
-          <span class="badge badge-grey" id="rec-attendance-badge" style="margin-left:8px">Not marked</span>
+      <div class="card">
+        <div class="card-header" style="margin-bottom:0">
+          <h2>Today's Status</h2>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <button class="btn btn-primary btn-sm" id="rec-btn-present" onclick="markRecAttendance('present')">Mark Present</button>
-          <button class="btn btn-outline btn-sm" id="rec-btn-break" onclick="markRecAttendance('on_break')" style="display:none">On Break</button>
-          <button class="btn btn-outline btn-sm" id="rec-btn-offduty" onclick="markRecAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+        <div class="staff-att-status">
+          <span class="badge badge-grey" id="rec-attendance-badge">Not marked</span>
+        </div>
+        <div class="staff-att-actions">
+          <button class="btn btn-primary" id="rec-btn-present" onclick="markRecAttendance('present')">Mark Present</button>
+          <button class="btn btn-outline" id="rec-btn-break" onclick="markRecAttendance('on_break')" style="display:none">On Break</button>
+          <button class="btn btn-outline" id="rec-btn-offduty" onclick="markRecAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
         </div>
       </div>
       </div>
@@ -317,7 +319,20 @@
   </div>
 
   <!-- Document History Modal -->
-  <div class="modal-overlay" id="modal-documents">
+  <div class="modal-overlay" id="modal-payment-toggle">
+        <div class="modal" style="max-width:420px">
+          <div class="modal-header">
+            <h2 id="pt-toggle-patient-name">Payments</h2>
+            <button class="modal-close" onclick="closePaymentToggleModal()">×</button>
+          </div>
+          <div id="payment-toggle-body"></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:16px">
+            <button class="btn btn-outline" onclick="closePaymentToggleModal()">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="modal-documents">
     <div class="modal" style="max-width:600px">
       <div class="modal-header">
         <h2>Documents — <span id="doc-patient-name"></span></h2>
@@ -691,51 +706,107 @@
       dispensed: "Dispensed"
     };
 
+    let pendingPaymentRows = [];
+    let paymentToggleRow = null;
+
     function renderPendingPayments(rows) {
+      pendingPaymentRows = rows;
       const card = document.getElementById('pending-payments-card');
       const list = document.getElementById('pending-payments-list');
       if (!rows.length) { card.style.display = 'none'; return; }
       card.style.display = '';
-      list.innerHTML = rows.map(r => {
-        const buckets = [];
-        if (r.buckets.consultation) {
-          const b = r.buckets.consultation;
-          buckets.push(b.status === 'paid'
-            ? `<span class="badge badge-green">Consultation: Paid</span>`
-            : `<button class="btn btn-outline btn-sm" onclick="quickMarkPaidFromBox(${r.checkin_id}, this)">Consultation: Unpaid</button>`);
-        }
-        if (r.buckets.tests) {
-          const b = r.buckets.tests;
-          buckets.push(b.status === 'paid'
-            ? `<span class="badge badge-green">Tests: Paid</span>`
-            : `<button class="btn btn-outline btn-sm" onclick="quickCollectTestsFromBox(${r.patient_id}, this)">Tests: Rs.${b.pending_total} pending</button>`);
-        }
-        if (r.buckets.pharmacy) {
-          buckets.push(`<span class="badge badge-grey">Pharmacy: ${PHARM_STATUS_LABEL[r.buckets.pharmacy.status] || r.buckets.pharmacy.status}</span>`);
-        }
+      list.innerHTML = rows.map((r, idx) => {
+        const parts = [];
+        if (r.buckets.consultation) parts.push(r.buckets.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
+        if (r.buckets.tests) parts.push(r.buckets.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${r.buckets.tests.pending_total} pending`);
+        if (r.buckets.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[r.buckets.pharmacy.status] || r.buckets.pharmacy.status}`);
         return `
           <div id="pp-row-${r.checkin_id}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
-            <strong style="min-width:140px">${r.patient_name}</strong>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">${buckets.join('')}</div>
+            <div>
+              <strong>${r.patient_name}</strong>
+              <div style="font-size:12px;color:var(--slate)">${parts.join(' · ')}</div>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="openPaymentToggleModal(${idx})">Manage Payments</button>
           </div>
         `;
       }).join('');
     }
 
-    async function quickMarkPaidFromBox(checkinId, btn) {
-      try {
-        await api("PATCH", `/patients/checkin/${checkinId}/mark-paid`, {});
-        toast('Marked as paid.', 'success');
-        loadPendingPayments();
-      } catch (e) { toast(e.message, 'error'); }
+    function openPaymentToggleModal(idx) {
+      paymentToggleRow = pendingPaymentRows[idx];
+      document.getElementById('pt-toggle-patient-name').textContent = paymentToggleRow.patient_name;
+      renderPaymentToggleBody();
+      document.getElementById('modal-payment-toggle').classList.add('open');
+    }
+    function closePaymentToggleModal() {
+      document.getElementById('modal-payment-toggle').classList.remove('open');
+      paymentToggleRow = null;
     }
 
-    async function quickCollectTestsFromBox(patientId, btn) {
+    function renderPaymentToggleBody() {
+      const row = paymentToggleRow;
+      const body = document.getElementById('payment-toggle-body');
+      let html = '';
+
+      if (row.buckets.consultation) {
+        const paid = row.buckets.consultation.status === 'paid';
+        html += `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+            <span>Consultation Fee</span>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <span style="font-size:13px;color:var(--slate)">${paid ? 'Paid' : 'Unpaid'}</span>
+              <input type="checkbox" ${paid ? 'checked' : ''} onchange="togglePaymentSwitch('consultation', this.checked)" />
+            </label>
+          </div>`;
+      }
+      if (row.buckets.tests) {
+        const paid = row.buckets.tests.status === 'paid';
+        html += `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+            <span>Tests${paid ? '' : ` (Rs.${row.buckets.tests.pending_total} pending)`}</span>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <span style="font-size:13px;color:var(--slate)">${paid ? 'Paid' : 'Unpaid'}</span>
+              <input type="checkbox" ${paid ? 'checked' : ''} onchange="togglePaymentSwitch('tests', this.checked)" />
+            </label>
+          </div>`;
+      }
+      if (row.buckets.pharmacy) {
+        html += `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+            <span>Pharmacy</span>
+            <span class="badge badge-grey">${PHARM_STATUS_LABEL[row.buckets.pharmacy.status] || row.buckets.pharmacy.status}</span>
+          </div>`;
+      }
+      body.innerHTML = html || '<p style="color:var(--slate-light)">Nothing to show.</p>';
+    }
+
+    async function togglePaymentSwitch(kind, turningOn) {
+      const row = paymentToggleRow;
       try {
-        const result = await api("POST", `/patients/${patientId}/collect-test-payment`, {});
-        toast(`Rs.${result.charged} collected.`, 'success');
+        if (kind === 'consultation') {
+          if (turningOn) {
+            await api("PATCH", `/patients/checkin/${row.checkin_id}/mark-paid`, {});
+          } else {
+            if (!confirm('Mark the consultation fee as unpaid?')) { renderPaymentToggleBody(); return; }
+            await api("PATCH", `/patients/checkin/${row.checkin_id}/mark-unpaid`, {});
+          }
+          row.buckets.consultation.status = turningOn ? 'paid' : 'unpaid';
+        } else if (kind === 'tests') {
+          if (turningOn) {
+            const result = await api("POST", `/patients/${row.patient_id}/collect-test-payment`, {});
+            toast(`Rs.${result.charged} collected.`, 'success');
+          } else {
+            if (!confirm('Mark tests as unpaid? Only tests not yet started at the lab can be reverted.')) { renderPaymentToggleBody(); return; }
+            await api("POST", `/patients/${row.patient_id}/revert-test-payment`, {});
+          }
+          row.buckets.tests.status = turningOn ? 'paid' : 'unpaid';
+        }
+        renderPaymentToggleBody();
         loadPendingPayments();
-      } catch (e) { toast(e.message, 'error'); }
+      } catch (e) {
+        toast(e.message, 'error');
+        renderPaymentToggleBody();
+      }
     }
 
     async function openPendingTasksModal(patientId, patientName) {

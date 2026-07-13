@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.attendance import AttendanceRecord
 from app.models.doctor import Doctor, UserRole
-from app.utils.auth import get_current_doctor
+from app.utils.auth import get_current_doctor, ist_today
 from app.utils.notify import sync_idle_staff_notification
 
 router = APIRouter(prefix="/doctors", tags=["attendance"])
@@ -21,7 +21,7 @@ class AttendanceMark(BaseModel):
 def get_today_attendance(db: Session, doctor_id: int):
     return db.query(AttendanceRecord).filter(
         AttendanceRecord.doctor_id == doctor_id,
-        AttendanceRecord.date == date.today()
+        AttendanceRecord.date == ist_today()
     ).first()
 
 def require_present(db: Session, doctor: Doctor):
@@ -67,7 +67,7 @@ def mark_attendance(
             record = AttendanceRecord(
                 doctor_id=current_doctor.id,
                 hospital_id=current_doctor.hospital_id,
-                date=date.today(),
+                date=ist_today(),
                 status="present",
                 room_id=payload.room_id,
                 marked_by=current_doctor.id,
@@ -107,14 +107,14 @@ def attendance_today(
     records = {
         r.doctor_id: r.status for r in db.query(AttendanceRecord).filter(
             AttendanceRecord.hospital_id == current_doctor.hospital_id,
-            AttendanceRecord.date == date.today()
+            AttendanceRecord.date == ist_today()
         ).all()
     }
 
     from app.models.room import Room
     today_records = db.query(AttendanceRecord).filter(
         AttendanceRecord.hospital_id == current_doctor.hospital_id,
-        AttendanceRecord.date == date.today()
+        AttendanceRecord.date == ist_today()
     ).all()
     room_ids_by_doctor = {r.doctor_id: r.room_id for r in today_records}
     room_names = {r.id: r.name for r in db.query(Room).filter(Room.hospital_id == current_doctor.hospital_id).all()}

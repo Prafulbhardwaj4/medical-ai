@@ -8,7 +8,7 @@ from app.models.checkin import Checkin
 from app.models.patient import Patient
 from app.models.doctor import Doctor
 from app.schemas.patient import VitalsSubmit, NurseTaskComplete
-from app.utils.auth import get_current_doctor
+from app.utils.auth import get_current_doctor, ist_today
 from app.utils.audit import log_action
 
 router = APIRouter(prefix="/nurses", tags=["nurses"])
@@ -26,7 +26,7 @@ def vitals_queue(
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.vitals_status == "pending",
-        Checkin.visit_date == date.today()
+        Checkin.visit_date == ist_today()
     ).order_by(Checkin.created_at.asc()).all()
 
     patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
@@ -100,7 +100,7 @@ def nurse_history(
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.vitals_recorded_by == current_doctor.id,
-        Checkin.visit_date == date.today()
+        Checkin.visit_date == ist_today()
     ).order_by(Checkin.vitals_recorded_at.desc()).all()
 
     patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
@@ -129,7 +129,7 @@ def post_consult_queue(
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.post_consult_status == "pending",
-        Checkin.visit_date == date.today()
+        Checkin.visit_date == ist_today()
     ).order_by(Checkin.created_at.asc()).all()
 
     patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}

@@ -133,20 +133,19 @@
 
       <!-- Attendance tab -->
       <div class="mobile-section" id="section-attendance">
-        <div class="card" style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-          <div>
-            <strong>Today's Status:</strong>
-            <span class="badge badge-grey" id="nurse-attendance-badge" style="margin-left:8px">Not marked</span>
-            <span id="nurse-room-display" style="margin-left:10px;font-size:13px;color:var(--slate)"></span>
+        <div class="card">
+          <div class="card-header" style="margin-bottom:0">
+            <h2>Today's Status</h2>
           </div>
-          <div class="nurse-att-status">
-            <span class="badge badge-grey" style="display:none"></span>
+          <div class="staff-att-status">
+            <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
+            <div id="nurse-room-display" style="margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
-          <div class="nurse-att-actions" id="nurse-attendance-btns">
+          <div class="staff-att-actions" id="nurse-attendance-btns">
             <select class="form-control" id="nurse-room-select" style="display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
-            <button class="btn btn-primary btn-sm" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
-            <button class="btn btn-outline btn-sm" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
-            <button class="btn btn-outline btn-sm" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+            <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
+            <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
+            <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
           </div>
         </div>
       </div>
@@ -229,11 +228,58 @@
     let activeCheckinId = null;
     let activePostConsultId = null;
 
-    function fieldRow(label, value, locked) {
+    const VITALS_RULES = {
+      "Blood Pressure": { type: "bp", unit: "mmHg" },
+      "Pulse": { type: "number", min: 30, max: 220, unit: "bpm" },
+      "Temperature": { type: "number", min: 90, max: 110, unit: "°F" },
+      "SpO2": { type: "number", min: 50, max: 100, unit: "%" },
+      "Respiratory Rate": { type: "number", min: 8, max: 60, unit: "/min" },
+      "Weight": { type: "number", min: 1, max: 300, unit: "kg" },
+      "Height": { type: "number", min: 30, max: 250, unit: "cm" },
+      "Blood Sugar (GRBS)": { type: "number", min: 20, max: 600, unit: "mg/dL" }
+    };
+
+    function validateVitalInput(input) {
+      const row = input.closest('[data-row]');
+      const warnEl = row.querySelector('[data-warn]');
+      const ruleStr = input.getAttribute('data-rule');
+      if (!ruleStr || !warnEl) return;
+      const rule = JSON.parse(ruleStr.replace(/&#39;/g, "'"));
+      const val = input.value.trim();
+      if (!val) { warnEl.style.display = 'none'; input.style.borderColor = ''; return; }
+
+      let msg = '';
+      if (rule.type === 'bp') {
+        if (!/^\d{2,3}\/\d{2,3}$/.test(val)) {
+          msg = 'Enter as systolic/diastolic, numbers only — e.g. 120/80';
+        } else {
+          const [sys, dia] = val.split('/').map(Number);
+          if (sys < 60 || sys > 260 || dia < 30 || dia > 160) msg = 'Outside the usual range — please double-check';
+        }
+      } else if (rule.type === 'number') {
+        if (!/^\d+(\.\d+)?$/.test(val)) {
+          msg = 'Numbers only';
+        } else {
+          const n = parseFloat(val);
+          if (n < rule.min || n > rule.max) msg = `Outside the usual ${rule.min}–${rule.max} ${rule.unit} range — please double-check`;
+        }
+      }
+      warnEl.textContent = msg;
+      warnEl.style.display = msg ? 'block' : 'none';
+      input.style.borderColor = msg ? 'var(--danger)' : '';
+    }
+
+    function fieldRow(label, value, locked, rule) {
+      const ruleAttr = rule ? ` data-rule='${JSON.stringify(rule).replace(/'/g, "&#39;")}'` : '';
+      const unitHtml = rule && rule.unit ? `<span style="font-size:12px;color:var(--slate);white-space:nowrap;align-self:center">${rule.unit}</span>` : '';
       return `
-        <div style="display:flex;gap:8px;margin-bottom:8px" data-row>
-          <input class="form-control" placeholder="Field" value="${(label || '').replace(/"/g, '&quot;')}" style="flex:1${locked ? ';background:var(--smoke,#f5f5f5);color:var(--navy);font-weight:600' : ''}" data-label ${locked ? 'readonly' : ''} />
-          <input class="form-control" placeholder="Value" value="${(value || '').replace(/"/g, '&quot;')}" style="flex:1" data-value />
+        <div style="margin-bottom:8px" data-row>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-control" placeholder="Field" value="${(label || '').replace(/"/g, '&quot;')}" style="flex:1${locked ? ';background:var(--smoke,#f5f5f5);color:var(--navy);font-weight:600' : ''}" data-label ${locked ? 'readonly' : ''} />
+            <input class="form-control" placeholder="Value" value="${(value || '').replace(/"/g, '&quot;')}" style="flex:1" data-value${ruleAttr} oninput="validateVitalInput(this)" />
+            ${unitHtml}
+          </div>
+          <div style="font-size:12px;color:var(--danger);margin-top:2px;display:none" data-warn></div>
         </div>`;
     }
 
@@ -309,7 +355,7 @@
       const usedLabels = new Set();
       const rows = STANDARD_VITALS.map(label => {
         usedLabels.add(label);
-        return fieldRow(label, data[label] || '', true);
+        return fieldRow(label, data[label] || '', true, VITALS_RULES[label]);
       });
       Object.keys(data).forEach(label => {
         if (!usedLabels.has(label)) rows.push(fieldRow(label, data[label]));

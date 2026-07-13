@@ -11,7 +11,7 @@ from app.models.test_order import TestOrder
 from app.models.consultation import Consultation
 from app.models.patient import Patient
 from app.models.test_catalog import TestCatalogItem
-from app.utils.auth import get_current_doctor
+from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds_utc, utc_naive_to_ist_date
 from app.utils.audit import log_action
 from app.utils.order_lifecycle import is_order_expired
 from app.routers.attendance import require_present
@@ -44,8 +44,7 @@ def get_lab_queue(
 ):
     require_lab(current_doctor)
 
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    today_end = datetime.combine(date.today(), datetime.max.time())
+    today_start, today_end = ist_day_bounds_utc()
 
     orders = db.query(TestOrder).filter(
         TestOrder.hospital_id == current_doctor.hospital_id,
@@ -98,7 +97,7 @@ def search_pending_lab_tasks(
             TestOrder.status == "paid"
         ).distinct().order_by(Patient.id.desc()).limit(30).all()
 
-    today = date.today()
+    today = ist_today()
     result = []
     for p in patients:
         orders = db.query(TestOrder).filter(
@@ -109,7 +108,7 @@ def search_pending_lab_tasks(
 
         pending = []
         for o in orders:
-            if o.queued_at and o.queued_at.date() == today:
+            if o.queued_at and utc_naive_to_ist_date(o.queued_at) == today:
                 continue  # already active in today's queue
             if is_order_expired(db, p.id, o.consultation_id, o.created_at):
                 continue

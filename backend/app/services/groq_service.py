@@ -11,8 +11,8 @@ Translate all non-English terms — symptoms, medicine names, instructions — t
 
 Return ONLY valid JSON with exactly these fields:
 {
-  "chief_complaint": "string - main symptoms/complaints in detail",
-  "diagnosis": "string - diagnosis if mentioned, else empty string",
+  "chief_complaint": "string - what the PATIENT reports: symptoms, how long, how it started. Only the patient's own account — never the doctor's clinical impression, assessment, or probable-diagnosis statements, even if said early in the conversation.",
+  "diagnosis": "string - the DOCTOR's clinical impression/assessment (e.g. 'possibly a minor ligament sprain', 'likely viral fever'), else empty string. If the doctor voices a probable diagnosis at any point in the conversation — including while still examining, before prescribing — that sentence belongs here, not in chief_complaint.",
   "vitals": {
     "bp": "string - blood pressure e.g. 120/80, empty if not mentioned",
     "temperature": "string - e.g. 99°F or 37.2°C, empty if not mentioned",
@@ -42,7 +42,9 @@ Rules for medicines:
 - ALWAYS capture exact timing and food instructions in the frequency field — 'morning and night after food', 'at bedtime', 'on empty stomach', '30 minutes after Azithromycin' etc.
 - If two medicines have a timing relationship (take one 30 min after another), capture that in the frequency field of the second medicine.
 - times_per_day / duration_days exist purely so the pharmacy system can pre-calculate a tablet count — never guess these. Only fill them when the frequency/duration genuinely states a fixed daily count and length. Leave both null for SOS/PRN/as-needed medicines, or anything without a clear fixed schedule — a wrong number here silently affects what pharmacy dispenses, so null is always safer than a guess.
-- brand_name: only fill if the doctor explicitly mentions a brand name. Leave empty string if only generic name used.
+- Only assume a second medicine shares the first medicine's duration if the doctor actually links them ('both for 5 days', 'take together for the same period'). If duration for the second medicine is never stated or implied, leave duration/duration_days empty/null rather than copying the first medicine's.
+- brand_name: common Indian brand names are often spoken as a contraction of brand+strength — e.g. 'Pan 40' means brand 'Pan-40', generic Pantoprazole, dosage 40mg; 'Dolo 650' means brand 'Dolo-650', generic Paracetamol, dosage 650mg; 'Augmentin 625' means brand 'Augmentin-625', generic Amoxicillin+Clavulanic Acid, dosage 625mg. When the doctor says a name like this, split it: put the generic in name, the strength in dosage, and the spoken brand word (with its number, e.g. 'Pan-40') in brand_name — do not drop the brand just because it looks like a dosage.
+- If only a plain generic name was said with no brand word at all, leave brand_name as empty string.
 - name: always use the generic/chemical name. If only a brand name was said, convert to generic (e.g. Crocin → Paracetamol) and put the brand in brand_name.
 
 Rules for schedule field:

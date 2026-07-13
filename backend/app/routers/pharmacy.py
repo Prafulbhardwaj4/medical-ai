@@ -13,7 +13,7 @@ from app.models.patient import Patient
 from app.models.consultation import Consultation
 from app.models.medicine_order import MedicineOrder
 from app.models.hospital_medicine import HospitalMedicine
-from app.utils.auth import get_current_doctor
+from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds_utc
 from app.utils.audit import log_action
 from app.utils.order_lifecycle import is_order_expired
 from app.routers.attendance import require_present
@@ -33,8 +33,7 @@ def get_pharmacy_queue(
 ):
     require_pharmacy(current_doctor)
 
-    today_start = datetime.combine(date.today(), datetime.min.time())
-    today_end = datetime.combine(date.today(), datetime.max.time())
+    today_start, today_end = ist_day_bounds_utc()
 
     requeued_consultation_ids = [
         row[0] for row in db.query(MedicineOrder.consultation_id).filter(
@@ -349,7 +348,7 @@ def search_pending_pharmacy_tasks(
         (Patient.name.ilike(like)) | (Patient.patient_uid.ilike(like))
     ).limit(15).all()
 
-    today = date.today()
+    today = ist_today()
     result = []
     for p in patients:
         orders = db.query(MedicineOrder).filter(
