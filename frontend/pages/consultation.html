@@ -645,6 +645,13 @@
       const wrap = document.getElementById("med-rows");
       const div = document.createElement("div");
       div.className = "med-row";
+      // Carries the AI-derived dose count through to getMedicines() below — these aren't
+      // shown as editable inputs (frequency/duration text are the editable source of truth),
+      // but without preserving them here, quantity auto-calc silently loses its only inputs
+      // the moment this consultation round-trips through a save, which was happening on
+      // every single confirm regardless of dosage form.
+      div.dataset.timesPerDay = (m.times_per_day ?? '') === null ? '' : (m.times_per_day ?? '');
+      div.dataset.durationDays = (m.duration_days ?? '') === null ? '' : (m.duration_days ?? '');
       const schedule = m.schedule || "controlled";
       div.innerHTML = `
         <div class="form-group med-name" style="margin:0">
@@ -686,7 +693,9 @@
         dosage: row.querySelector(".med-dosage input").value.trim(),
         frequency: row.querySelector(".med-freq input").value.trim(),
         duration: row.querySelector(".med-dur input").value.trim(),
-        schedule: row.querySelector(".med-schedule select").value
+        schedule: row.querySelector(".med-schedule select").value,
+        times_per_day: row.dataset.timesPerDay ? Number(row.dataset.timesPerDay) : null,
+        duration_days: row.dataset.durationDays ? Number(row.dataset.durationDays) : null
       })).filter(m => m.name);
     }
 

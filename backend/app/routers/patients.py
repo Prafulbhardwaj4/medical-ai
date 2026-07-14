@@ -400,6 +400,24 @@ def send_to_nurse_postconsult(
 
     return {"nurse_name": f"{nurse.title} {nurse.name}"}
 
+# Must stay registered before /{patient_id} below — that route is a 1-segment int path param
+# and, being registered first, was silently swallowing every request to this literal path
+# ("hospital-tests" failing int conversion, hence the 422s). Any other new literal 1-segment
+# GET route added to this router needs to go above /{patient_id} too, for the same reason.
+@router.get("/hospital-tests")
+def get_hospital_tests(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    items = db.query(TestCatalogItem).filter(
+        TestCatalogItem.hospital_id == current_doctor.hospital_id,
+        TestCatalogItem.is_active == True
+    ).order_by(TestCatalogItem.name).all()
+    return [
+        {"id": t.id, "test_name": t.name, "price": t.fee, "aliases": t.aliases or ""}
+        for t in items
+    ]
+
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(
     patient_id: int,
@@ -662,20 +680,6 @@ def todays_queue(
             "status": "done" if c.token_number in confirmed_tokens else "waiting"
         })
     return result
-
-@router.get("/hospital-tests")
-def get_hospital_tests(
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    items = db.query(TestCatalogItem).filter(
-        TestCatalogItem.hospital_id == current_doctor.hospital_id,
-        TestCatalogItem.is_active == True
-    ).order_by(TestCatalogItem.name).all()
-    return [
-        {"id": t.id, "test_name": t.name, "price": t.fee, "aliases": t.aliases or ""}
-        for t in items
-    ]
 
 
 @router.get("/reception/pending-payments")
