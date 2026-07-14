@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
-from typing import List
+from typing import List, Optional
 from datetime import date, datetime
 import json
 import random
@@ -217,6 +217,49 @@ def hospital_doctors(
             on_duty_today=d.id in present_ids,
             room_number=d.room_number
         ))
+    return result
+
+@router.get("/doctors-in-room/{room_id}")
+def doctors_in_room(
+    room_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    from app.models.room import Room
+    room = db.query(Room).filter(
+        Room.id == room_id,
+        Room.hospital_id == current_doctor.hospital_id,
+        Room.is_active == True
+    ).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    records = db.query(AttendanceRecord).filter(
+        AttendanceRecord.hospital_id == current_doctor.hospital_id,
+        AttendanceRecord.date == ist_today(),
+        AttendanceRecord.room_id == room_id,
+        AttendanceRecord.status.in_(["present", "on_break"])
+    ).all()
+    status_by_doctor = {r.doctor_id: r.status for r in records}
+    if not status_by_doctor:
+        return []
+
+    doctors = db.query(Doctor).filter(
+        Doctor.id.in_(status_by_doctor.keys()),
+        Doctor.hospital_id == current_doctor.hospital_id,
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
+        Doctor.is_active == True
+    ).all()
+
+    result = [{
+        "id": d.id,
+        "title": d.title,
+        "name": d.name,
+        "specialization": d.specialization,
+        "consultation_fee": d.consultation_fee,
+        "status": status_by_doctor.get(d.id, "present")
+    } for d in doctors]
+    random.shuffle(result)
     return result
 
 @router.get("/hospital-nurses")

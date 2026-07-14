@@ -59,6 +59,7 @@ function _hideGlobalLoading() {
 }
 
 let _activeRequests = 0;
+let _visibleRequests = 0;
 
 async function api(method, path, body = null, isFormData = false) {
   const headers = { Authorization: `Bearer ${getToken()}` };
@@ -72,7 +73,10 @@ async function api(method, path, body = null, isFormData = false) {
   if (triggerBtn && !alreadyDisabled) triggerBtn.disabled = true;
 
   _activeRequests++;
-  _showGlobalLoading();
+  if (triggerBtn) {
+    _visibleRequests++;
+    _showGlobalLoading();
+  }
 
   try {
     const res = await fetch(BASE + path, opts);
@@ -94,7 +98,10 @@ async function api(method, path, body = null, isFormData = false) {
     return data;
   } finally {
     _activeRequests = Math.max(0, _activeRequests - 1);
-    if (_activeRequests === 0) _hideGlobalLoading();
+    if (triggerBtn) {
+      _visibleRequests = Math.max(0, _visibleRequests - 1);
+      if (_visibleRequests === 0) _hideGlobalLoading();
+    }
     if (triggerBtn && !alreadyDisabled) triggerBtn.disabled = false;
   }
 }

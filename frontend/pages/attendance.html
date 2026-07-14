@@ -28,6 +28,14 @@
                 display: block !important;
             }
         }
+
+        .staff-filter-tabs .btn {
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+
+        #attendance-list {
+            transition: opacity 0.18s ease;
+        }
     </style>
 </head>
 
@@ -60,6 +68,7 @@
                     <circle cx="12" cy="8" r="4" />
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
                 </svg>
+                <span class="profile-dot" id="profile-dot"></span>
             </button>
         </header>
 
@@ -367,6 +376,11 @@
         </div>
 
         <main class="main-content">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h2 style="margin:0">Current Attendance</h2>
+                <button class="btn btn-outline btn-sm" onclick="toast('Attendance History — Coming Soon', 'info')">View
+                    History</button>
+            </div>
             <div class="chip-scroll staff-filter-tabs" id="staff-filters" style="margin-bottom:16px">
                 <button class="btn btn-sm" onclick="setStaffFilter('all')" id="sf-all"
                     style="background:var(--teal);color:white;border-color:var(--teal)">All</button>
@@ -391,15 +405,7 @@
                 <option value="lab">Lab Staff</option>
                 <option value="pharmacy">Pharmacists</option>
             </select>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <h2 style="margin:0">Today's Attendance</h2>
-                <button class="btn btn-outline btn-sm" onclick="toast('Attendance History — Coming Soon', 'info')">View
-                    History</button>
-            </div>
             <div class="card">
-                <div class="card-header">
-                    <h2>Current Attendance</h2>
-                </div>
                 <div id="attendance-list">
                     <p style="color:var(--slate)">Loading…</p>
                 </div>
@@ -424,11 +430,17 @@
             try {
                 const data = await api("GET", "/notifications/unread-count");
                 const badge = document.getElementById('notif-badge');
-                if (data.unread_count > 0) {
+                const dot = document.getElementById('profile-dot');
+                const pmBadge = document.getElementById('profile-menu-notif-badge');
+                const hasUnread = data.unread_count > 0;
+                if (badge) {
                     badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
-                    badge.style.display = 'flex';
-                } else {
-                    badge.style.display = 'none';
+                    badge.style.display = hasUnread ? 'flex' : 'none';
+                }
+                if (dot) dot.style.display = hasUnread ? 'block' : 'none';
+                if (pmBadge) {
+                    pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                    pmBadge.style.display = hasUnread ? 'inline-flex' : 'none';
                 }
             } catch (e) { }
         }
@@ -505,7 +517,12 @@
             });
             const mobileSelect = document.getElementById('sf-mobile-select');
             if (mobileSelect) mobileSelect.value = f;
-            renderStaffList();
+            const list = document.getElementById('attendance-list');
+            list.style.opacity = '0';
+            setTimeout(() => {
+                renderStaffList();
+                list.style.opacity = '1';
+            }, 150);
         }
         function renderStaffList() {
             const list = staffFilter === 'all' ? allStaff : allStaff.filter(d => d.role === staffFilter);

@@ -316,6 +316,7 @@ def serialize_room(r):
         "name": r.name or "",
         "room_type": r.room_type or "General",
         "type_confirmed": r.type_confirmed,
+        "sequence_number": r.sequence_number,
         "display": f"{r.name or ''}{' (' + r.room_number + ')' if r.room_number else ''}".strip()
     }
 
@@ -343,6 +344,7 @@ def create_room(
     room_number: str = "",
     name: str = "",
     room_type: str = "General",
+    sequence_number: Optional[int] = None,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -353,13 +355,25 @@ def create_room(
         raise HTTPException(status_code=400, detail="At least a room number or name is required")
 
     from app.models.room import Room
+    if sequence_number is not None:
+        if sequence_number < 1:
+            raise HTTPException(status_code=400, detail="Sequence number must be positive")
+        clash = db.query(Room).filter(
+            Room.hospital_id == current_doctor.hospital_id,
+            Room.is_active == True,
+            Room.sequence_number == sequence_number
+        ).first()
+        if clash:
+            raise HTTPException(status_code=400, detail=f"Sequence number {sequence_number} is already used by another room")
+
     room = Room(
         hospital_id=current_doctor.hospital_id,
         room_number=room_number.strip() or None,
         name=name.strip() or None,
         room_type=room_type.strip() or "General",
         type_confirmed=True,
-        is_active=True
+        is_active=True,
+        sequence_number=sequence_number
     )
     db.add(room)
     db.commit()
@@ -370,6 +384,8 @@ def create_room(
 def update_room_type(
     room_id: int,
     room_type: str = "",
+    sequence_number: Optional[int] = None,
+    clear_sequence_number: bool = False,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -386,6 +402,21 @@ def update_room_type(
     ).first()
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
+
+    if sequence_number is not None:
+        if sequence_number < 1:
+            raise HTTPException(status_code=400, detail="Sequence number must be positive")
+        clash = db.query(Room).filter(
+            Room.hospital_id == current_doctor.hospital_id,
+            Room.is_active == True,
+            Room.sequence_number == sequence_number,
+            Room.id != room_id
+        ).first()
+        if clash:
+            raise HTTPException(status_code=400, detail=f"Sequence number {sequence_number} is already used by another room")
+        room.sequence_number = sequence_number
+    elif clear_sequence_number:
+        room.sequence_number = None
 
     room.room_type = room_type.strip()
     room.type_confirmed = True

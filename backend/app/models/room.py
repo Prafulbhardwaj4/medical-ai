@@ -11,3 +11,4 @@ class Room(Base):
     room_type = Column(String, nullable=True, default="General")
     type_confirmed = Column(Boolean, default=True, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    sequence_number = Column(Integer, nullable=True)

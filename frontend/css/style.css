@@ -1263,9 +1263,12 @@ tbody tr:hover { background: var(--smoke); }
 }
 @media (min-width: 901px) {
   .topbar-profile-btn { display: flex; }
-  .topbar-doctor > span:first-child,
+  .topbar-doctor {
+    margin-left: auto;
+  }
   .topbar-doctor .topbar-divider,
   #topbar-clinic,
+  .topbar-doctor .notif-bell-btn,
   .topbar-doctor button[onclick="logout()"] {
     display: none !important;
   }

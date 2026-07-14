@@ -6,6 +6,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Dashboard</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
+  <style>
+    /* Desktop-only tab layout (Home / Patients), scoped to this page only */
+    @media (min-width: 901px) {
+      .desktop-tab { display: none; }
+      .desktop-tab.active { display: block; }
+      #attendance-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      #attendance-card .card-header {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+        flex: 0 0 auto;
+      }
+      #attendance-card .staff-att-actions {
+        flex: 0 0 auto;
+      }
+    }
+  </style>
 </head>
 
 <body>
@@ -60,12 +83,18 @@
         <button class="btn btn-outline btn-sm sidebar-signout-btn" onclick="logout()">Sign out</button>
       </div>
       <div class="sidebar-section-label">Navigation</div>
-      <a class="nav-item active" href="dashboard.html">
+      <a class="nav-item active" href="#" id="nav-home" onclick="event.preventDefault(); switchDesktopTab('home')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
-        Dashboard
+        Home
+      </a>
+      <a class="nav-item" href="#" id="nav-patients-tab" onclick="event.preventDefault(); switchDesktopTab('patients')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/>
+        </svg>
+        Patients
       </a>
       <div class="nav-divider"></div>
       <div class="sidebar-section-label">Quick Actions</div>
@@ -116,6 +145,7 @@
 
     <main class="main-content">
 
+      <div class="desktop-tab active" id="desktop-tab-home">
       <!-- Attendance tab: status only, matching lab.html -->
       <div class="mobile-section" id="section-attendance">
         <div class="card" id="attendance-card">
@@ -182,8 +212,10 @@
           </div>
         </div>
       </div>
+      </div>
 
       <!-- Patients tab: list only -->
+      <div class="desktop-tab" id="desktop-tab-patients">
       <div class="mobile-section" id="section-patients">
         <div class="card">
           <div class="card-header">
@@ -227,6 +259,7 @@
             </table>
           </div>
         </div>
+      </div>
       </div>
 
     </main>
@@ -318,6 +351,15 @@
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         document.getElementById('bn-' + s).classList.toggle('active', s === id);
       });
+    }
+
+    function switchDesktopTab(tab) {
+      closeSidebar();
+      document.getElementById('desktop-tab-home').classList.toggle('active', tab === 'home');
+      document.getElementById('desktop-tab-patients').classList.toggle('active', tab === 'patients');
+      document.getElementById('nav-home').classList.toggle('active', tab === 'home');
+      document.getElementById('nav-patients-tab').classList.toggle('active', tab === 'patients');
+      showMobileSection(tab === 'patients' ? 'patients' : 'home');
     }
 
     const doc = getDoctor();

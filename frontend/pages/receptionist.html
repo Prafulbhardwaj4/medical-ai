@@ -33,20 +33,12 @@
       .rec-att-card .staff-att-actions { flex-direction: row; flex-wrap: wrap; width: auto; }
     }
 
-    /* #7 — desktop-only tab switcher for Home / Patients List */
-    .rec-desktop-tabs { display: none; }
+    /* #7 — Home / Patients List are switched from the sidebar nav on desktop now */
     @media (min-width: 901px) {
-      .rec-desktop-tabs {
-        display: flex; gap: 28px; margin: 20px 0 4px; border-bottom: 1.5px solid var(--border);
-      }
-      .rec-desktop-tab {
-        background: none; border: none; cursor: pointer; padding: 10px 2px 12px;
-        font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 600;
-        color: var(--slate); border-bottom: 2px solid transparent;
-        transition: color 0.15s ease, border-color 0.15s ease;
-      }
-      .rec-desktop-tab:hover { color: var(--navy); }
-      .rec-desktop-tab.active { color: var(--teal); border-bottom-color: var(--teal); }
+      .rec-att-card { padding: 14px 24px; }
+      .rec-att-left h2 { font-size: 1rem; }
+      .rec-att-left .badge { font-size: 12.5px; padding: 5px 13px; }
+      .rec-att-card .staff-att-actions .btn { padding: 6px 14px; font-size: 0.82rem; }
     }
 
     /* Select Patient modal (Docs / Pending chooser) */
@@ -139,12 +131,18 @@
         <span id="sidebar-doctor-name"></span>
       </div>
       <div class="sidebar-section-label">Navigation</div>
-      <div class="nav-item active">
+      <div class="nav-item active" id="sidebar-nav-home" onclick="showRecDesktopTab('home')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
-        Dashboard
+        Home
+      </div>
+      <div class="nav-item" id="sidebar-nav-patients" onclick="showRecDesktopTab('patients')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
+        </svg>
+        Patients List
       </div>
     </nav>
 
@@ -194,11 +192,6 @@
       </div>
       </div>
 
-      <div class="rec-desktop-tabs">
-        <button class="rec-desktop-tab active" id="dtab-btn-home" onclick="showRecDesktopTab('home')">Home</button>
-        <button class="rec-desktop-tab" id="dtab-btn-patients" onclick="showRecDesktopTab('patients')">Patients List</button>
-      </div>
-
       <div class="mobile-section active" id="section-home">
       <div class="card">
 
@@ -214,29 +207,34 @@
           <button class="btn btn-outline" style="width:100%" onclick="openNewPatient()">+ Add as New Patient</button>
         </div>
 
-        <!-- STEP 2: Category -->
-        <div id="step-category" style="display:none">
+        <!-- STEP 2: Room -->
+        <div id="step-room" style="display:none">
           <div class="card-header">
-            <h2>Reason for Visit</h2>
+            <h2>Select Room</h2>
             <button class="btn btn-outline btn-sm" onclick="goToStep('search')">← Back</button>
           </div>
           <p style="color:var(--slate);margin-bottom:16px">Checking in: <strong id="cat-patient-name"></strong></p>
-          <div style="display:flex;flex-wrap:wrap;gap:10px">
-            <button class="btn btn-outline category-chip" onclick="selectCategory('General OPD')">General OPD</button>
-            <button class="btn btn-outline category-chip" onclick="selectCategory('Emergency')">Emergency</button>
-            <button class="btn btn-outline category-chip" onclick="selectCategory('Fracture / Orthopedic')">Fracture / Orthopedic</button>
-            <button class="btn btn-outline category-chip" onclick="selectCategory('BP / Vitals Check')">BP / Vitals Check</button>
-            <button class="btn btn-outline category-chip" onclick="selectCategory('Follow-up')">Follow-up</button>
-            <button class="btn btn-outline category-chip" onclick="selectCategory('Other')">Other</button>
+          <div class="form-group">
+            <label class="form-label">Room</label>
+            <select class="form-control" id="room-select" onchange="onRoomPicked()">
+              <option value="">— Select a room —</option>
+            </select>
           </div>
+          <div class="form-group">
+            <label class="form-label">Or jump to Seq #</label>
+            <input class="form-control" id="room-seq-jump" type="number" min="1" placeholder="Type the room's seq # and press Enter"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();jumpToRoomBySeq(this.value);}" />
+          </div>
+          <button class="btn btn-primary" id="btn-room-continue" style="width:100%" onclick="confirmRoomAndLoadDoctors()" disabled>Continue</button>
         </div>
 
         <!-- STEP 3: Doctor -->
         <div id="step-doctor" style="display:none">
           <div class="card-header">
             <h2>Assign Doctor</h2>
-            <button class="btn btn-outline btn-sm" onclick="goToStep('category')">← Back</button>
+            <button class="btn btn-outline btn-sm" onclick="goToStep('room')">← Back</button>
           </div>
+          <p style="color:var(--slate);margin-bottom:16px">Room: <strong id="doc-step-room-name"></strong></p>
           <div class="form-group">
             <label class="form-label">Doctor</label>
             <select class="form-control" id="doc-select" onchange="updateFeeForSelectedDoctor()"></select>
@@ -265,7 +263,7 @@
             <div style="text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:20px">
               <p><strong>Patient:</strong> <span id="slip-name"></span></p>
               <p><strong>Doctor:</strong> <span id="slip-doctor"></span></p>
-              <p><strong>Reason:</strong> <span id="slip-category"></span></p>
+              <p><strong>Room:</strong> <span id="slip-room"></span></p>
               <p><strong>Date:</strong> <span id="slip-date"></span></p>
               <p id="slip-nurse-row" style="display:none"><strong>Vitals Room:</strong> <span id="slip-nurse"></span></p>
             </div>
@@ -495,19 +493,20 @@
       Object.values(groups).flat().forEach(elId => document.getElementById(elId).classList.remove('d-active'));
       groups[id].forEach(elId => document.getElementById(elId).classList.add('d-active'));
       ['home', 'patients'].forEach(t => {
-        document.getElementById('dtab-btn-' + t).classList.toggle('active', t === id);
+        document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id);
       });
     }
 
     if (window.innerWidth >= 901) showRecDesktopTab('home');
 
     function goToStep(step) {
-      ['search', 'category', 'doctor', 'token'].forEach(s => {
+      ['search', 'room', 'doctor', 'token'].forEach(s => {
         document.getElementById(`step-${s}`).style.display = (s === step) ? '' : 'none';
       });
       if (step === 'search') {
         selectedPatient = null;
         selectedCategory = null;
+        selectedRoom = null;
         document.getElementById('s-name').value = '';
         document.getElementById('search-results').innerHTML = '';
         document.getElementById('s-name').focus();
@@ -557,7 +556,7 @@
       } catch (e) {}
 
       document.getElementById('cat-patient-name').textContent = `${p.name} (${p.patient_uid})`;
-      goToStepCategory();
+      goToStepRoom();
       api("GET", `/patients/${p.id}/preferred-doctor`).then(r => {
         preferredDoctorId = r.doctor_id;
       }).catch(() => {});
@@ -568,13 +567,13 @@
       document.getElementById('slip-token').textContent = t.token_number;
       document.getElementById('slip-name').textContent = t.patient_name;
       document.getElementById('slip-doctor').textContent = t.doctor_name;
-      document.getElementById('slip-category').textContent = t.issue_category;
+      document.getElementById('slip-room').textContent = t.issue_category;
       document.getElementById('slip-date').textContent = formatDate(t.visit_date);
       document.getElementById('slip-nurse-row').style.display = t.nurse_name ? '' : 'none';
       if (t.nurse_name) document.getElementById('slip-nurse').textContent = t.nurse_name;
       currentCheckinId = t.checkin_id;
       renderBillingRow(getDoctor()?.billing_enabled, t.total_fee, t.is_paid);
-      ['search', 'category', 'doctor'].forEach(s => document.getElementById(`step-${s}`).style.display = 'none');
+      ['search', 'room', 'doctor'].forEach(s => document.getElementById(`step-${s}`).style.display = 'none');
       document.getElementById('step-token').style.display = '';
       toast('Already checked in today — showing existing token.', 'info');
     }
@@ -584,38 +583,79 @@
       return badge && (badge.textContent === 'Present' || badge.textContent === 'On Break');
     }
 
-    function goToStepCategory() {
+    let allRoomsForCheckin = [];
+    let selectedRoom = null;
+
+    function goToStepRoom() {
       if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       document.getElementById('step-search').style.display = 'none';
       document.getElementById('step-token').style.display = 'none';
       document.getElementById('step-doctor').style.display = 'none';
-      document.getElementById('step-category').style.display = '';
+      document.getElementById('step-room').style.display = '';
+      document.getElementById('room-select').value = '';
+      document.getElementById('room-seq-jump').value = '';
+      document.getElementById('btn-room-continue').disabled = true;
+      loadRoomsForCheckin();
     }
 
-    function selectCategory(cat) {
-      selectedCategory = cat;
-      loadDoctorsAndGoNext();
+    async function loadRoomsForCheckin() {
+      try {
+        const rooms = await api("GET", "/admin/rooms");
+        allRoomsForCheckin = rooms;
+        const sorted = [...rooms].sort((a, b) => {
+          if (a.sequence_number != null && b.sequence_number != null) return a.sequence_number - b.sequence_number;
+          if (a.sequence_number != null) return -1;
+          if (b.sequence_number != null) return 1;
+          return (a.display || a.name || '').localeCompare(b.display || b.name || '');
+        });
+        const sel = document.getElementById('room-select');
+        sel.innerHTML = '<option value="">— Select a room —</option>' + sorted.map(r =>
+          `<option value="${r.id}">${r.display || r.name || ('Room ' + r.room_number)} · ${r.room_type}${r.sequence_number != null ? ` (#${r.sequence_number})` : ''}</option>`
+        ).join('');
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function onRoomPicked() {
+      const val = document.getElementById('room-select').value;
+      document.getElementById('btn-room-continue').disabled = !val;
+    }
+
+    function jumpToRoomBySeq(val) {
+      const seq = parseInt(val);
+      if (!seq) return;
+      const room = allRoomsForCheckin.find(r => r.sequence_number === seq);
+      if (!room) { toast(`No room with seq #${seq}.`, 'error'); return; }
+      document.getElementById('room-select').value = room.id;
+      onRoomPicked();
     }
 
     let hospitalDoctors = [];
 
+    async function confirmRoomAndLoadDoctors() {
+      const roomId = document.getElementById('room-select').value;
+      if (!roomId) return;
+      selectedRoom = allRoomsForCheckin.find(r => r.id === parseInt(roomId));
+      selectedCategory = selectedRoom.display || selectedRoom.name || `Room ${selectedRoom.room_number}`;
+      await loadDoctorsAndGoNext();
+    }
+
     async function loadDoctorsAndGoNext() {
       try {
-        const allDoctors = await api("GET", "/patients/hospital-doctors");
-        const doctors = allDoctors.filter(d => d.on_duty_today);
-        hospitalDoctors = doctors;
+        const doctors = await api("GET", `/patients/doctors-in-room/${selectedRoom.id}`);
         if (!doctors.length) {
-          toast('No doctors are marked Present today.', 'error');
+          toast('No doctors are present (or on break) in this room right now — pick another room.', 'error');
           return;
         }
+        // Bump the patient's most-visited doctor to the top, if they're currently in this room.
+        const preferred = doctors.find(d => d.id === preferredDoctorId);
+        const ordered = preferred ? [preferred, ...doctors.filter(d => d.id !== preferredDoctorId)] : doctors;
+        hospitalDoctors = ordered;
         const sel = document.getElementById('doc-select');
-        let defaultId = preferredDoctorId;
-        if (!defaultId && doctors.length) {
-          defaultId = doctors[Math.floor(Math.random() * doctors.length)].id;
-        }
-        sel.innerHTML = doctors.map(d =>
-          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}${d.room_number ? ` (Room ${d.room_number})` : ''}</option>`
+        const defaultId = ordered[0].id;
+        sel.innerHTML = ordered.map(d =>
+          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}${d.status === 'on_break' ? ' (On Break)' : ''}</option>`
         ).join('');
+        document.getElementById('doc-step-room-name').textContent = selectedRoom.display || selectedRoom.name || `Room ${selectedRoom.room_number}`;
         document.getElementById('fee-group').style.display = getDoctor()?.billing_enabled ? '' : 'none';
         updateFeeForSelectedDoctor();
         // Hide nurse checkbox if no nurses available
@@ -625,7 +665,7 @@
         } catch(e) {
           document.getElementById('send-to-nurse').parentElement.style.display = 'none';
         }
-        document.getElementById('step-category').style.display = 'none';
+        document.getElementById('step-room').style.display = 'none';
         document.getElementById('step-doctor').style.display = '';
       } catch (e) { toast(e.message, "error"); }
     }
@@ -658,7 +698,7 @@
         document.getElementById('slip-token').textContent = result.token_number;
         document.getElementById('slip-name').textContent = result.patient_name;
         document.getElementById('slip-doctor').textContent = result.doctor_name;
-        document.getElementById('slip-category').textContent = result.issue_category;
+        document.getElementById('slip-room').textContent = result.issue_category;
         document.getElementById('slip-date').textContent = formatDate(result.visit_date);
         document.getElementById('send-to-nurse').checked = false;
         if (result.nurse_name) {
@@ -1163,8 +1203,9 @@
           toast("Patient added", "success");
           closeAddPatient();
           selectedPatient = patient;
+          preferredDoctorId = null;
           document.getElementById('cat-patient-name').textContent = `${patient.name} (${patient.patient_uid})`;
-          goToStepCategory();
+          goToStepRoom();
           loadAllPatients();
         }
       } catch (e) {

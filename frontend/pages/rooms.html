@@ -19,13 +19,32 @@
       display: flex;
       gap: 8px;
       align-items: center;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
     }
     .room-row-actions select,
     .room-row-actions input {
       flex: 1 1 120px;
       min-width: 100px;
       max-width: 160px;
+    }
+    .room-row-actions .btn { flex-shrink: 0; }
+    .room-filter-wrap { margin: 8px 0 16px; }
+    .room-filter-label { font-size: 12px; color: var(--slate); margin-bottom: 6px; display: block; }
+    .room-filter-mobile { display: none; }
+    .room-filter-desktop { display: flex; gap: 8px; flex-wrap: wrap; }
+    .room-filter-chip {
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      color: var(--slate);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .room-filter-chip.active {
+      background: var(--teal);
+      border-color: var(--teal);
+      color: var(--white);
     }
     @media (max-width: 900px) {
       .room-row {
@@ -36,13 +55,19 @@
         padding: 14px;
         margin-bottom: 10px;
       }
-      .room-row-actions { width: 100%; }
+      .room-row-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        width: 100%;
+      }
       .room-row-actions select,
       .room-row-actions input {
         max-width: none;
-        flex: 1 1 45%;
+        width: 100%;
       }
-      .room-row-actions .btn { flex: 1 1 45%; }
+      .room-row-actions .btn { width: 100%; }
+      .room-filter-mobile { display: block; }
+      .room-filter-desktop { display: none; }
     }
   </style>
 </head>
@@ -74,6 +99,7 @@
           <circle cx="12" cy="8" r="4" />
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
+        <span class="profile-dot" id="profile-dot"></span>
       </button>
     </header>
 
@@ -305,7 +331,7 @@
     <main class="main-content">
       <div class="card">
         <div class="card-header"><h2>Rooms</h2></div>
-        <div class="room-add-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;max-width:720px">
+        <div class="room-add-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr 0.7fr auto;gap:10px;max-width:860px">
           <input class="form-control" id="room-name" placeholder="Name (e.g. OPD, Emergency)" />
           <input class="form-control" id="room-number" placeholder="Number (e.g. 101, optional)" />
           <select class="form-control" id="room-type-select" onchange="onRoomTypeChange()">
@@ -315,10 +341,32 @@
             <option value="Emergency">Emergency</option>
             <option value="Other">Other</option>
           </select>
+          <input class="form-control" id="room-sequence" type="number" min="1" placeholder="Seq #" title="Optional shortcut number receptionist can type to jump to this room" />
           <button class="btn btn-primary" onclick="addRoom()">Add</button>
         </div>
         <input class="form-control" id="room-type-other" placeholder="Enter custom room type" style="display:none;max-width:720px;margin-top:10px" />
-        <p style="color:var(--slate);font-size:13px;margin:12px 0 20px">Name/Number are both optional — fill whichever applies. Room Type controls which room shows up in the doctor's or nurse's room picker: only Doctor-type rooms appear for doctors, only Nurse-type for nurses. General/Emergency/Other don't appear in either staff picker.</p>
+        <p style="color:var(--slate);font-size:13px;margin:12px 0 20px">Name/Number are both optional — fill whichever applies. Room Type controls which room shows up in the doctor's or nurse's room picker: only Doctor-type rooms appear for doctors, only Nurse-type for nurses. General/Emergency/Other don't appear in either staff picker. Seq # is an optional shortcut number the receptionist can type at check-in to jump straight to this room — must be unique across active rooms.</p>
+        <div class="room-filter-wrap">
+          <span class="room-filter-label">Filter by type</span>
+          <div class="room-filter-mobile">
+            <select class="form-control" id="room-filter-select" onchange="setRoomFilter(this.value)">
+              <option value="All">All</option>
+              <option value="Doctor">Doctor</option>
+              <option value="Nurse">Nurse</option>
+              <option value="General">General</option>
+              <option value="Emergency">Emergency</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="room-filter-desktop" id="room-filter-desktop">
+            <button class="room-filter-chip active" data-type="All" onclick="setRoomFilter('All')">All</button>
+            <button class="room-filter-chip" data-type="Doctor" onclick="setRoomFilter('Doctor')">Doctor</button>
+            <button class="room-filter-chip" data-type="Nurse" onclick="setRoomFilter('Nurse')">Nurse</button>
+            <button class="room-filter-chip" data-type="General" onclick="setRoomFilter('General')">General</button>
+            <button class="room-filter-chip" data-type="Emergency" onclick="setRoomFilter('Emergency')">Emergency</button>
+            <button class="room-filter-chip" data-type="Other" onclick="setRoomFilter('Other')">Other</button>
+          </div>
+        </div>
         <div id="rooms-list"><p style="color:var(--slate)">Loading…</p></div>
       </div>
     </main>
@@ -341,11 +389,17 @@
       try {
         const data = await api("GET", "/notifications/unread-count");
         const badge = document.getElementById('notif-badge');
-        if (data.unread_count > 0) {
+        const dot = document.getElementById('profile-dot');
+        const pmBadge = document.getElementById('profile-menu-notif-badge');
+        const hasUnread = data.unread_count > 0;
+        if (badge) {
           badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
-          badge.style.display = 'flex';
-        } else {
-          badge.style.display = 'none';
+          badge.style.display = hasUnread ? 'flex' : 'none';
+        }
+        if (dot) dot.style.display = hasUnread ? 'block' : 'none';
+        if (pmBadge) {
+          pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+          pmBadge.style.display = hasUnread ? 'inline-flex' : 'none';
         }
       } catch (e) { }
     }
@@ -421,33 +475,52 @@
       return `<span class="badge badge-grey" style="margin-left:8px">${sanitize(type)}</span>`;
     }
 
+    let _allRooms = [];
+    let _roomFilter = 'All';
+
+    function setRoomFilter(type) {
+      _roomFilter = type;
+      document.getElementById('room-filter-select').value = type;
+      document.querySelectorAll('.room-filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === type));
+      renderRoomsList();
+    }
+
     async function loadRooms() {
       try {
-        const rooms = await api("GET", "/admin/rooms");
-        document.getElementById('rooms-list').innerHTML = rooms.length ? rooms.map(r => `
-          <div class="room-row">
-            <div>
-              <strong>${r.display || r.name}</strong>
-              ${r.room_number || r.name ? `<span style="font-size:12px;color:var(--slate);margin-left:8px">${r.room_number ? 'No. ' + r.room_number : ''}${r.room_number && r.name ? ' · ' : ''}${r.name || ''}</span>` : ''}
-              ${roomTypeBadge(r.room_type, r.type_confirmed)}
-            </div>
-            <div class="room-row-actions">
-              <select class="form-control" id="room-type-edit-${r.id}" onchange="onEditTypeChange(${r.id})">
-                ${ROOM_TYPE_PRESETS.map(t => `<option value="${t}" ${r.room_type === t ? 'selected' : ''}>${t}</option>`).join('')}
-                <option value="Other" ${!ROOM_TYPE_PRESETS.includes(r.room_type) ? 'selected' : ''}>Other</option>
-              </select>
-              <input class="form-control" style="display:${ROOM_TYPE_PRESETS.includes(r.room_type) ? 'none' : ''}" id="room-type-edit-other-${r.id}" placeholder="Custom type" value="${!ROOM_TYPE_PRESETS.includes(r.room_type) ? sanitize(r.room_type) : ''}" />
-              <button class="btn btn-outline btn-sm" onclick="saveRoomType(${r.id})">Save</button>
-              <button class="btn btn-outline btn-sm" onclick="deleteRoom(${r.id})">Delete</button>
-            </div>
-          </div>
-        `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No rooms added yet.</p>';
+        _allRooms = await api("GET", "/admin/rooms");
+        renderRoomsList();
       } catch (e) { toast(e.message, "error"); }
+    }
+
+    function renderRoomsList() {
+      const rooms = _roomFilter === 'All' ? _allRooms
+        : _roomFilter === 'Other' ? _allRooms.filter(r => !ROOM_TYPE_PRESETS.includes(r.room_type))
+        : _allRooms.filter(r => r.room_type === _roomFilter);
+      document.getElementById('rooms-list').innerHTML = rooms.length ? rooms.map(r => `
+        <div class="room-row">
+          <div>
+            <strong>${r.display || r.name}</strong>
+            ${r.room_number || r.name ? `<span style="font-size:12px;color:var(--slate);margin-left:8px">${r.room_number ? 'No. ' + r.room_number : ''}${r.room_number && r.name ? ' · ' : ''}${r.name || ''}</span>` : ''}
+            ${roomTypeBadge(r.room_type, r.type_confirmed)}
+            ${r.sequence_number != null ? `<span class="badge badge-navy" style="margin-left:8px">Seq ${r.sequence_number}</span>` : ''}
+          </div>
+          <div class="room-row-actions">
+            <select class="form-control" id="room-type-edit-${r.id}" onchange="onEditTypeChange(${r.id})">
+              ${ROOM_TYPE_PRESETS.map(t => `<option value="${t}" ${r.room_type === t ? 'selected' : ''}>${t}</option>`).join('')}
+              <option value="Other" ${!ROOM_TYPE_PRESETS.includes(r.room_type) ? 'selected' : ''}>Other</option>
+            </select>
+            <input class="form-control" style="visibility:${ROOM_TYPE_PRESETS.includes(r.room_type) ? 'hidden' : 'visible'}" id="room-type-edit-other-${r.id}" placeholder="Custom type" value="${!ROOM_TYPE_PRESETS.includes(r.room_type) ? sanitize(r.room_type) : ''}" />
+            <input class="form-control" style="max-width:90px" id="room-seq-edit-${r.id}" type="number" min="1" placeholder="Seq #" value="${r.sequence_number != null ? r.sequence_number : ''}" />
+            <button class="btn btn-outline btn-sm" onclick="saveRoomType(${r.id})">Save</button>
+            <button class="btn btn-outline btn-sm" onclick="deleteRoom(${r.id})">Delete</button>
+          </div>
+        </div>
+      `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No rooms match this filter.</p>';
     }
 
     function onEditTypeChange(roomId) {
       const val = document.getElementById(`room-type-edit-${roomId}`).value;
-      document.getElementById(`room-type-edit-other-${roomId}`).style.display = val === 'Other' ? '' : 'none';
+      document.getElementById(`room-type-edit-other-${roomId}`).style.visibility = val === 'Other' ? 'visible' : 'hidden';
     }
 
     async function saveRoomType(roomId) {
@@ -455,11 +528,14 @@
       const other = document.getElementById(`room-type-edit-other-${roomId}`).value.trim();
       const finalType = select === 'Other' ? other : select;
       if (!finalType) { toast('Enter a custom room type.', 'error'); return; }
+      const seqRaw = document.getElementById(`room-seq-edit-${roomId}`).value.trim();
       try {
         const params = new URLSearchParams();
         params.append('room_type', finalType);
+        if (seqRaw) params.append('sequence_number', seqRaw);
+        else params.append('clear_sequence_number', 'true');
         await api("PATCH", `/admin/rooms/${roomId}?${params.toString()}`);
-        toast('Room type updated.', 'success');
+        toast('Room updated.', 'success');
         loadRooms();
       } catch (e) { toast(e.message, 'error'); }
     }
@@ -470,6 +546,7 @@
       const typeSelect = document.getElementById('room-type-select').value;
       const typeOther = document.getElementById('room-type-other').value.trim();
       const roomType = typeSelect === 'Other' ? typeOther : typeSelect;
+      const seqRaw = document.getElementById('room-sequence').value.trim();
       if (!name && !number) { toast('Enter at least a name or number.', 'error'); return; }
       if (typeSelect === 'Other' && !typeOther) { toast('Enter a custom room type.', 'error'); return; }
       try {
@@ -477,12 +554,14 @@
         if (name) params.append('name', name);
         if (number) params.append('room_number', number);
         params.append('room_type', roomType);
+        if (seqRaw) params.append('sequence_number', seqRaw);
         await api("POST", `/admin/rooms?${params.toString()}`);
         document.getElementById('room-name').value = '';
         document.getElementById('room-number').value = '';
         document.getElementById('room-type-select').value = 'General';
         document.getElementById('room-type-other').value = '';
         document.getElementById('room-type-other').style.display = 'none';
+        document.getElementById('room-sequence').value = '';
         toast('Room added.', 'success');
         loadRooms();
       } catch (e) { toast(e.message, 'error'); }
