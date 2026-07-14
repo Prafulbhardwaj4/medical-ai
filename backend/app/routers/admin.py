@@ -7,7 +7,7 @@ from app.models.hospital import Hospital
 from app.models.doctor import Doctor, UserRole
 from app.config import settings
 import secrets
-from app.utils.auth import hash_password, get_current_doctor
+from app.utils.auth import hash_password, get_current_doctor, now_ist_naive, ist_today
 from app.utils.audit import log_action
 import re
 from app.models.consultation import Consultation
@@ -218,7 +218,7 @@ def billing_today(
     from app.models.checkin import Checkin
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.visit_date == datetime.utcnow().date()
+        Checkin.visit_date == ist_today()
     ).all()
 
     paid = [c for c in checkins if c.is_paid]
@@ -427,7 +427,7 @@ def list_doctors(
         Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.receptionist, UserRole.nurse, UserRole.lab, UserRole.pharmacy])
     ).all()
 
-    now = datetime.utcnow()
+    now = now_ist_naive()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = now - timedelta(days=7)
 

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.blacklisted_token import BlacklistedToken
-import pytz
+from app.utils.timezone import now_ist, now_ist_naive, ist_today, ist_day_bounds, ist_date
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
@@ -31,7 +31,7 @@ def decode_access_token(token: str) -> dict:
         return None
 
 def blacklist_token(token: str, db: Session):
-    entry = BlacklistedToken(token=token, blacklisted_at=datetime.utcnow())
+    entry = BlacklistedToken(token=token, blacklisted_at=now_ist_naive())
     db.add(entry)
     db.commit()
 
@@ -67,25 +67,3 @@ def get_current_doctor(
         if not hospital or not hospital.is_active:
             raise credentials_exception
     return doctor
-
-IST = pytz.timezone("Asia/Kolkata")
-
-def now_ist():
-    return datetime.now(IST)
-
-def ist_today():
-    return now_ist().date()
-
-def ist_day_bounds_utc(day=None):
-    """(start, end) naive-UTC datetimes covering the given IST calendar day (default: today).
-    Use to query naive-UTC datetime columns (created_at, queued_at, paid_at, etc.) for 'today' in IST."""
-    day = day or ist_today()
-    start_ist = IST.localize(datetime.combine(day, datetime.min.time()))
-    end_ist = IST.localize(datetime.combine(day, datetime.max.time()))
-    return start_ist.astimezone(pytz.utc).replace(tzinfo=None), end_ist.astimezone(pytz.utc).replace(tzinfo=None)
-
-def utc_naive_to_ist_date(dt):
-    """Convert a naive-UTC datetime (as stored in our DB) to its calendar date in IST."""
-    if dt is None:
-        return None
-    return pytz.utc.localize(dt).astimezone(IST).date()

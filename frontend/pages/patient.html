@@ -565,8 +565,8 @@
     function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
     function formatDate(iso) {
-      const utc = iso.endsWith("Z") ? iso : iso + "Z";
-      return new Date(utc).toLocaleString("en-IN", {
+      const ist = /[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30";
+      return new Date(ist).toLocaleString("en-IN", {
         timeZone: "Asia/Kolkata",
         day: "2-digit",
         month: "short",

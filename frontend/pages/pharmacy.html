@@ -431,8 +431,8 @@
     }
 
     function timeSince(iso) {
-      const utc = iso.endsWith("Z") ? iso : iso + "Z";
-      const mins = Math.floor((Date.now() - new Date(utc).getTime()) / 60000);
+      const ist = /[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30";
+      const mins = Math.floor((Date.now() - new Date(ist).getTime()) / 60000);
       if (mins < 1) return "just now";
       if (mins < 60) return `${mins} min ago`;
       const hrs = Math.floor(mins / 60);
@@ -507,7 +507,7 @@
             <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;flex-wrap:wrap;gap:8px">
               <div style="font-size:13px">
                 ${sanitize(p.medicine_name)} × ${p.quantity ?? '—'}
-                <div style="color:var(--slate);font-size:12px">Prescribed by ${sanitize(p.doctor_name)} · token ${sanitize(p.token_number || '—')} · paid ${p.paid_at ? new Date(p.paid_at + 'Z').toLocaleDateString('en-IN') : '—'}</div>
+                <div style="color:var(--slate);font-size:12px">Prescribed by ${sanitize(p.doctor_name)} · token ${sanitize(p.token_number || '—')} · paid ${p.paid_at ? new Date(p.paid_at + '+05:30').toLocaleDateString('en-IN') : '—'}</div>
               </div>
               <button class="btn btn-primary btn-sm" onclick="requeueMedicineOrder(${p.order_id})">Requeue to Today</button>
             </div>
@@ -779,7 +779,7 @@
         return;
       }
       el.innerHTML = docs.map(d => {
-        const dt = new Date(d.date && d.date.endsWith("Z") ? d.date : d.date + "Z");
+        const dt = new Date(d.date && /[+-]\d\d:\d\d$|Z$/.test(d.date) ? d.date : d.date + "+05:30");
         const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         const billAction = (d.type === 'token_slip' && !d.has_invoice)

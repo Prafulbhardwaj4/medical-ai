@@ -7,7 +7,7 @@ from app.models.consultation import Consultation
 from app.models.patient import Patient
 from app.models.doctor import Doctor, UserRole
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem, StructureRequest
-from app.utils.auth import get_current_doctor, now_ist, decode_access_token, is_token_blacklisted
+from app.utils.auth import get_current_doctor, now_ist_naive, ist_day_bounds, decode_access_token, is_token_blacklisted
 from app.utils.audit import log_action
 from app.services.whisper import transcribe_audio
 from app.services.groq_service import structure_transcript, match_tests_to_catalog
@@ -29,7 +29,6 @@ from sqlalchemy import exists, func
 import json
 import asyncio
 from datetime import datetime, date
-import pytz
 from fastapi.responses import FileResponse
 import os
 from slowapi import Limiter
@@ -41,9 +40,7 @@ router = APIRouter(prefix="/consultations", tags=["consultations"])
 
 @router.get("/today")
 def today_consultations(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    ist = pytz.timezone("Asia/Kolkata")
-    now_ist = datetime.now(ist)
-    start_of_day = now_ist.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_day, _ = ist_day_bounds()
     count = db.query(Consultation).filter(
         Consultation.doctor_id == current_doctor.id,
         Consultation.created_at >= start_of_day,
@@ -520,7 +517,7 @@ def mark_dispensed(
         raise HTTPException(status_code=400, detail="Already marked as dispensed")
 
     consultation.is_dispensed = True
-    consultation.dispensed_at = now_ist()
+    consultation.dispensed_at = now_ist_naive()
 
     paid_medicine_orders = db.query(MedicineOrder).filter(
         MedicineOrder.consultation_id == consultation.id,
@@ -528,7 +525,7 @@ def mark_dispensed(
     ).all()
     for mo in paid_medicine_orders:
         mo.status = "dispensed"
-        mo.dispensed_at = now_ist()
+        mo.dispensed_at = now_ist_naive()
 
         dispense_qty = mo.billed_quantity if mo.billed_quantity is not None else mo.quantity
         if mo.catalog_medicine_id and dispense_qty:
@@ -766,20 +763,37 @@ def confirm_prescription(
             HospitalMedicine.is_active == True
         ).all()
 
-        def match_catalog(name, brand):
+        def match_catalog(name, brand, dosage):
             search_terms = [t for t in [(name or "").strip().lower(), (brand or "").strip().lower()] if t]
+            candidates = []
             for cm in catalog_medicines:
                 cm_generic = (cm.generic_name or "").strip().lower()
                 cm_brands = [b.strip().lower() for b in (cm.brand_names or "").split(",") if b.strip()]
                 for term in search_terms:
                     if term and (term == cm_generic or term in cm_brands or cm_generic in term):
+                        candidates.append(cm)
+                        break
+            if not candidates:
+                return None
+            if len(candidates) == 1:
+                return candidates[0]
+            # Multiple catalog entries share this generic/brand name (e.g. Paracetamol
+            # 500mg Tablet vs Paracetamol 125mg Syrup) — name/brand alone isn't unique
+            # enough, so disambiguate by strength against the prescribed dosage.
+            dosage_norm = (dosage or "").strip().lower().replace(" ", "")
+            if dosage_norm:
+                for cm in candidates:
+                    cm_strength = (cm.strength or "").strip().lower().replace(" ", "")
+                    if cm_strength and cm_strength == dosage_norm:
                         return cm
-            return None
+            # No strength match found — fall back to first candidate, same as before.
+            return candidates[0]
 
         for med in prescribed_medicines:
             name = med.get("name", "")
             brand = med.get("brand_name", "")
-            matched = match_catalog(name, brand)
+            dosage = med.get("dosage", "")
+            matched = match_catalog(name, brand, dosage)
 
             quantity = calculate_prescribed_quantity(
                 matched, med.get("times_per_day"), med.get("duration_days")
@@ -955,7 +969,7 @@ def admin_dashboard(
     doctor_ids = [d.id for d in hospital_doctors]
     doctor_map = {d.id: d for d in hospital_doctors}
 
-    now = datetime.utcnow()
+    now = now_ist_naive()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = now - timedelta(days=7)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)

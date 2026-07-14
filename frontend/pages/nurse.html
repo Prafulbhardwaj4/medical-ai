@@ -199,7 +199,17 @@
       <!-- History tab -->
       <div class="mobile-section" id="section-history">
         <div class="card">
-          <div class="card-header"><h2>Recently Recorded</h2></div>
+          <div class="card-header">
+            <h2>Recently Recorded</h2>
+            <div class="search-wrap" style="max-width:240px">
+              <svg class="search-icon" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8" />
+                <path stroke-linecap="round" d="M21 21l-4.35-4.35" />
+              </svg>
+              <input class="form-control" id="nurse-history-search" placeholder="Search name, ID, token…"
+                oninput="filterNurseHistory(this.value)" />
+            </div>
+          </div>
           <div id="history-list"><p style="color:var(--slate)">Loading…</p></div>
         </div>
       </div>
@@ -343,21 +353,39 @@
       return data;
     }
 
+    let nurseHistoryData = [];
+    let nurseHistorySearch = '';
+
     async function loadHistory() {
       try {
-        const history = await api("GET", "/nurses/history");
-        document.getElementById('history-list').innerHTML = history.length ? history.map(h => `
+        nurseHistoryData = await api("GET", "/nurses/history");
+        renderNurseHistoryList();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function filterNurseHistory(val) {
+      nurseHistorySearch = (val || '').trim().toLowerCase();
+      renderNurseHistoryList();
+    }
+
+    function renderNurseHistoryList() {
+      const q = nurseHistorySearch;
+      const history = !q ? nurseHistoryData : nurseHistoryData.filter(h =>
+        (h.patient_name || '').toLowerCase().includes(q) ||
+        (h.patient_uid || '').toLowerCase().includes(q) ||
+        String(h.token_number || '').toLowerCase().includes(q)
+      );
+      document.getElementById('history-list').innerHTML = history.length ? history.map(h => `
           <div class="ns-row">
             <div>
               <strong>${h.patient_name}</strong>
               <span class="badge badge-navy" style="margin-left:8px">${h.patient_uid}</span>
-              <div class="ns-row-sub">Token ${h.token_number} · ${new Date(h.recorded_at).toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit'})}</div>
+              <div class="ns-row-sub">Token ${h.token_number} · ${new Date(/[+-]\d\d:\d\d$|Z$/.test(h.recorded_at) ? h.recorded_at : h.recorded_at + '+05:30').toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit'})}</div>
               <div class="ns-row-sub">${Object.entries(h.vitals_data).map(([k,v]) => `${k}: ${v}`).join(' · ')}</div>
             </div>
             <button class="btn btn-outline btn-sm" onclick='openVitalsModal(${h.checkin_id}, ${JSON.stringify(h.patient_name)}, ${JSON.stringify(h.vitals_data)})'>Edit</button>
           </div>
-        `).join('') : '<p style="color:var(--slate-light);padding:12px 0">Nothing recorded yet today.</p>';
-      } catch (e) { toast(e.message, "error"); }
+        `).join('') : `<p style="color:var(--slate-light);padding:12px 0">${q ? 'No matching records.' : 'Nothing recorded yet today.'}</p>`;
     }
 
     async function loadQueues() {

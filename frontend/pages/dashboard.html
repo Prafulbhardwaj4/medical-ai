@@ -585,12 +585,16 @@
     function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
     function formatDate(iso) {
-      return new Date(iso).toLocaleString("en-IN", {
+      const ist = /[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30";
+      return new Date(ist).toLocaleString("en-IN", {
         timeZone: "Asia/Kolkata",
         day: "2-digit",
         month: "short",
         year: "numeric"
       });
+    }
+    function toIST(iso) {
+      return /[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30";
     }
 
     document.getElementById("modal-add").addEventListener("click", function (e) {
@@ -613,7 +617,7 @@
             <td data-label="Token"><strong>${q.token_number}</strong></td>
             <td data-label="Patient">${q.patient_name}</td>
             <td data-label="Reason">${q.issue_category}</td>
-            <td data-label="Checked In" style="color:var(--slate)">${new Date(q.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
+            <td data-label="Checked In" style="color:var(--slate)">${new Date(toIST(q.created_at)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
             <td data-label="Status"><span class="badge ${q.status === 'waiting' ? 'badge-amber' : 'badge-teal'}">${q.status === 'waiting' ? 'Waiting' : 'Consulted'}</span></td>
             <td data-label="" style="text-align:left"><button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button></td>
           </tr>

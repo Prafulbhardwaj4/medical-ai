@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Text, Float, Boolean
-from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class Checkin(Base):
     __tablename__ = "checkins"
@@ -13,7 +13,7 @@ class Checkin(Base):
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     created_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     visit_date = Column(Date, nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime, default=now_ist_naive)
 
     nurse_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     vitals_status = Column(String, default="none", nullable=False)

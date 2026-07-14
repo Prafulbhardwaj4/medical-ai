@@ -359,7 +359,7 @@
             <div class="lp-item">
               <div style="font-size:13px">
                 ${sanitize(p.test_name)} — Rs.${p.price}
-                <div style="color:var(--slate);font-size:12px">Ordered by ${sanitize(p.doctor_name)} · paid ${p.paid_at ? new Date(p.paid_at + 'Z').toLocaleDateString('en-IN') : '—'}</div>
+                <div style="color:var(--slate);font-size:12px">Ordered by ${sanitize(p.doctor_name)} · paid ${p.paid_at ? new Date(p.paid_at + '+05:30').toLocaleDateString('en-IN') : '—'}</div>
               </div>
               <button class="btn btn-primary btn-sm" onclick="requeueTestOrder(${p.order_id})">Requeue to Today</button>
             </div>

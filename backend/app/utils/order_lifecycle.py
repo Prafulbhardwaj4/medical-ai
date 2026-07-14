@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.models.consultation import Consultation
+from app.utils.timezone import now_ist_naive
 
 WINDOW_DAYS = 7
 
@@ -10,7 +11,7 @@ def is_order_expired(db: Session, patient_id: int, consultation_id: int, order_c
     patient's next consultation after the order was created — whichever
     happens first. Once expired, the order dies for good; no repayment,
     no requeue, no carryover."""
-    if datetime.utcnow() - order_created_at > timedelta(days=WINDOW_DAYS):
+    if now_ist_naive() - order_created_at > timedelta(days=WINDOW_DAYS):
         return True
 
     newer_consultation = db.query(Consultation).filter(

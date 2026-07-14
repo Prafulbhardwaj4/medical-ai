@@ -837,7 +837,7 @@
                 return;
             }
             el.innerHTML = invoices.map(inv => {
-                const dt = new Date(inv.generated_at.endsWith("Z") ? inv.generated_at : inv.generated_at + "Z");
+                const dt = new Date(/[+-]\d\d:\d\d$|Z$/.test(inv.generated_at) ? inv.generated_at : inv.generated_at + "+05:30");
                 const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
                 const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
                 return `
@@ -905,7 +905,8 @@
 
         function timeAgo(iso) {
             if (!iso) return 'Never';
-            const diff = Date.now() - new Date(iso).getTime();
+            const ist = /[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30";
+            const diff = Date.now() - new Date(ist).getTime();
             const mins = Math.floor(diff / 60000);
             const hours = Math.floor(mins / 60);
             const days = Math.floor(hours / 24);
@@ -1014,10 +1015,14 @@
           ${statItem('Void Rate', ov.void_rate + '%')}
         `;
 
-                const today = new Date();
+                const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const istParts = new Intl.DateTimeFormat('en-US', {
+                    timeZone: 'Asia/Kolkata', day: '2-digit', month: 'numeric', year: 'numeric'
+                }).formatToParts(new Date());
+                const partVal = t => istParts.find(p => p.type === t).value;
+                const todayIST = `${partVal('day')} ${MONTHS[parseInt(partVal('month'), 10) - 1]} ${partVal('year')}`;
                 const todayConsults = d.recent_consultations.filter(c => {
-                    const d2 = new Date(c.date);
-                    return c.date.includes(today.getDate() + ' ' + today.toLocaleString('en', { month: 'short' }) + ' ' + today.getFullYear());
+                    return c.date.startsWith(todayIST);
                 });
 
                 if (!todayConsults.length) {

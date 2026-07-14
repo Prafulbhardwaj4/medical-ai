@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from app.models.notification import Notification
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.medicine_batch import MedicineBatch
+from app.utils.timezone import now_ist_naive
 
 
 def _upsert(db: Session, hospital_id: int, source_key: str, type_: str, severity: str, title: str, message: str, link_type: str, link_id: int):
@@ -59,7 +60,7 @@ def sync_idle_staff_notification(db: Session, doctor):
         # No known arrival time today — don't guess, skip the check entirely
         return
 
-    hours_since_arrival = (datetime.utcnow() - attendance.shift_started_at).total_seconds() / 3600
+    hours_since_arrival = (now_ist_naive() - attendance.shift_started_at).total_seconds() / 3600
     if hours_since_arrival < MIN_SHIFT_HOURS_BEFORE_IDLE_CHECK:
         return
 

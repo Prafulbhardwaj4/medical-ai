@@ -771,7 +771,7 @@
         return;
       }
       el.innerHTML = docs.map(d => {
-        const dt = new Date(d.date && d.date.endsWith("Z") ? d.date : d.date + "Z");
+        const dt = new Date(d.date && /[+-]\d\d:\d\d$|Z$/.test(d.date) ? d.date : d.date + "+05:30");
         const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         const billAction = (d.type === 'token_slip' && !d.has_invoice)
@@ -1155,7 +1155,7 @@
     }
 
     function formatDate(iso) {
-      const d = new Date(iso);
+      const d = new Date(/[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30");
       return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
     }
     function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
