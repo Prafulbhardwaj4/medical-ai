@@ -368,6 +368,11 @@
       renderNurseHistoryList();
     }
 
+    function fmtRecordedAt(iso) {
+      return new Date(/[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + '+05:30')
+        .toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+    }
+
     function renderNurseHistoryList() {
       const q = nurseHistorySearch;
       const history = !q ? nurseHistoryData : nurseHistoryData.filter(h =>
@@ -380,10 +385,13 @@
             <div>
               <strong>${h.patient_name}</strong>
               <span class="badge badge-navy" style="margin-left:8px">${h.patient_uid}</span>
-              <div class="ns-row-sub">Token ${h.token_number} · ${new Date(/[+-]\d\d:\d\d$|Z$/.test(h.recorded_at) ? h.recorded_at : h.recorded_at + '+05:30').toLocaleTimeString('en-IN', {timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit'})}</div>
-              <div class="ns-row-sub">${Object.entries(h.vitals_data).map(([k,v]) => `${k}: ${v}`).join(' · ')}</div>
+              <span class="badge ${h.type === 'vitals' ? 'badge-teal' : 'badge-navy'}" style="margin-left:6px">${h.type === 'vitals' ? 'Vitals' : 'Post-Consult'}</span>
+              <div class="ns-row-sub">Token ${h.token_number} · ${fmtRecordedAt(h.recorded_at)}</div>
+              <div class="ns-row-sub">${Object.entries(h.data).map(([k,v]) => `${k}: ${v}`).join(' · ')}</div>
             </div>
-            <button class="btn btn-outline btn-sm" onclick='openVitalsModal(${h.checkin_id}, ${JSON.stringify(h.patient_name)}, ${JSON.stringify(h.vitals_data)})'>Edit</button>
+            ${h.type === 'vitals'
+              ? `<button class="btn btn-outline btn-sm" onclick='openVitalsModal(${h.checkin_id}, ${JSON.stringify(h.patient_name)}, ${JSON.stringify(h.data)})'>Edit</button>`
+              : `<button class="btn btn-outline btn-sm" onclick='openPostConsultModal(${h.checkin_id}, "", ${JSON.stringify(h.data)})'>Edit</button>`}
           </div>
         `).join('') : `<p style="color:var(--slate-light);padding:12px 0">${q ? 'No matching records.' : 'Nothing recorded yet today.'}</p>`;
     }
@@ -459,10 +467,14 @@
       }
     }
 
-    function openPostConsultModal(checkinId, note) {
+    function openPostConsultModal(checkinId, note, existingData) {
       activePostConsultId = checkinId;
       document.getElementById('postconsult-note').textContent = note || '—';
-      document.getElementById('postconsult-fields').innerHTML = fieldRow('Notes', '');
+      const data = existingData || {};
+      const rows = Object.keys(data).length
+        ? Object.entries(data).map(([label, value]) => fieldRow(label, value))
+        : [fieldRow('Notes', '')];
+      document.getElementById('postconsult-fields').innerHTML = rows.join('');
       document.getElementById('modal-postconsult').classList.add('open');
     }
     function closePostConsultModal() {

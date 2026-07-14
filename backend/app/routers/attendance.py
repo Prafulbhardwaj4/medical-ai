@@ -9,6 +9,7 @@ from app.models.attendance import AttendanceRecord
 from app.models.doctor import Doctor, UserRole
 from app.utils.auth import get_current_doctor, ist_today
 from app.utils.notify import sync_idle_staff_notification
+from app.utils.timezone import now_ist_naive
 
 router = APIRouter(prefix="/doctors", tags=["attendance"])
 
@@ -58,7 +59,7 @@ def mark_attendance(
         if record:
             record.status = "present"
             record.marked_by = current_doctor.id
-            record.created_at = datetime.utcnow()
+            record.created_at = now_ist_naive()
             # shift_started_at deliberately NOT touched here — it stays pinned to
             # whenever they first arrived today, even if they toggle present/break/off_duty again
             if payload.room_id is not None:
@@ -71,7 +72,7 @@ def mark_attendance(
                 status="present",
                 room_id=payload.room_id,
                 marked_by=current_doctor.id,
-                shift_started_at=datetime.utcnow()
+                shift_started_at=now_ist_naive()
             )
             db.add(record)
     else:
@@ -79,7 +80,7 @@ def mark_attendance(
             raise HTTPException(status_code=400, detail="Mark yourself present first.")
         record.status = status
         record.marked_by = current_doctor.id
-        record.created_at = datetime.utcnow()
+        record.created_at = now_ist_naive()
         if payload.room_id is not None:
             record.room_id = payload.room_id
 

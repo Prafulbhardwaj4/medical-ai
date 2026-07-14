@@ -9,6 +9,7 @@ from app.models.patient import Patient
 from app.models.doctor import Doctor
 from app.schemas.patient import VitalsSubmit, NurseTaskComplete
 from app.utils.auth import get_current_doctor, ist_today
+from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
 
 router = APIRouter(prefix="/nurses", tags=["nurses"])
@@ -77,7 +78,7 @@ def submit_vitals(
     checkin.vitals_data = json.dumps(data)
     checkin.vitals_status = "done"
     checkin.vitals_recorded_by = current_doctor.id
-    checkin.vitals_recorded_at = datetime.utcnow()
+    checkin.vitals_recorded_at = now_ist_naive()
     db.commit()
 
     patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
@@ -97,11 +98,16 @@ def nurse_history(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     _require_nurse(current_doctor)
+    from sqlalchemy import or_, and_
+
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.vitals_recorded_by == current_doctor.id,
-        Checkin.visit_date == ist_today()
-    ).order_by(Checkin.vitals_recorded_at.desc()).all()
+        Checkin.visit_date == ist_today(),
+        or_(
+            and_(Checkin.vitals_recorded_by == current_doctor.id, Checkin.vitals_status == "done"),
+            and_(Checkin.post_consult_recorded_by == current_doctor.id, Checkin.post_consult_status == "done")
+        )
+    ).all()
 
     patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
 
@@ -110,14 +116,28 @@ def nurse_history(
         p = patients.get(c.patient_id)
         if not p:
             continue
-        result.append({
-            "checkin_id": c.id,
-            "patient_name": p.name,
-            "patient_uid": p.patient_uid,
-            "token_number": c.token_number,
-            "vitals_data": json.loads(c.vitals_data) if c.vitals_data else {},
-            "recorded_at": c.vitals_recorded_at.isoformat() if c.vitals_recorded_at else None
-        })
+        if c.vitals_recorded_by == current_doctor.id and c.vitals_status == "done":
+            result.append({
+                "checkin_id": c.id,
+                "type": "vitals",
+                "patient_name": p.name,
+                "patient_uid": p.patient_uid,
+                "token_number": c.token_number,
+                "data": json.loads(c.vitals_data) if c.vitals_data else {},
+                "recorded_at": c.vitals_recorded_at.isoformat() if c.vitals_recorded_at else None
+            })
+        if c.post_consult_recorded_by == current_doctor.id and c.post_consult_status == "done":
+            result.append({
+                "checkin_id": c.id,
+                "type": "post_consult",
+                "patient_name": p.name,
+                "patient_uid": p.patient_uid,
+                "token_number": c.token_number,
+                "data": json.loads(c.post_consult_data) if c.post_consult_data else {},
+                "recorded_at": c.post_consult_recorded_at.isoformat() if c.post_consult_recorded_at else None
+            })
+
+    result.sort(key=lambda r: r["recorded_at"] or "", reverse=True)
     return result
 
 @router.get("/post-consult-queue")
@@ -172,11 +192,13 @@ def complete_post_consult(
         raise HTTPException(status_code=404, detail="Check-in not found")
 
     data = {k.strip(): v.strip() for k, v in payload.data.items() if k.strip() and v.strip()}
+    if not data:
+        raise HTTPException(status_code=400, detail="Notes are required to confirm this task was completed")
 
     checkin.post_consult_data = json.dumps(data)
     checkin.post_consult_status = "done"
     checkin.post_consult_recorded_by = current_doctor.id
-    checkin.post_consult_recorded_at = datetime.utcnow()
+    checkin.post_consult_recorded_at = now_ist_naive()
     db.commit()
 
     patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
