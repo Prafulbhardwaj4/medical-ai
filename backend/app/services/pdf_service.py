@@ -219,12 +219,10 @@ def generate_prescription_pdf(
 
     if ordered_tests:
         elements.append(Paragraph("Tests / Investigations", section_style))
-        test_data = [["#", "Test Name", "Fee"]]
+        test_data = [["#", "Test Name"]]
         for i, t in enumerate(ordered_tests, 1):
-            price = t.get("price")
-            price_str = f"Rs.{price:.2f}" if isinstance(price, (int, float)) else "Rs.0.00"
-            test_data.append([str(i), cap_sentence(t.get("test_name", "")), price_str])
-        test_table = Table(test_data, colWidths=[15*mm, 115*mm, 40*mm])
+            test_data.append([str(i), cap_sentence(t.get("test_name", ""))])
+        test_table = Table(test_data, colWidths=[15*mm, 155*mm])
         test_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a237e")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -236,7 +234,6 @@ def generate_prescription_pdf(
             ("TOPPADDING", (0, 0), (-1, -1), 4),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("ALIGN", (2, 0), (2, -1), "RIGHT"),
         ]))
         elements.append(test_table)
         elements.append(Spacer(1, 4*mm))
