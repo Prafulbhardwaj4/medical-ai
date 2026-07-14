@@ -10,9 +10,10 @@
     .mobile-section.active { display: block; }
     @media (min-width: 901px) {
       .mobile-section { display: block !important; }
-      /* On desktop, Home/Patients act as real tabs; Attendance stays always visible above them. */
-      #section-home.mobile-section:not(.active) { display: none !important; }
-      #section-patients.mobile-section:not(.active) { display: none !important; }
+      /* On desktop, Home (+ its Pending Payments) / Patients act as real tabs; Attendance stays always visible above them. */
+      #section-home.mobile-section:not(.d-active) { display: none !important; }
+      #section-pending.mobile-section:not(.d-active) { display: none !important; }
+      #section-patients.mobile-section:not(.d-active) { display: none !important; }
     }
     @media print {
       body * { visibility: hidden; }
@@ -156,6 +157,12 @@
         </svg>
         Home
       </button>
+      <button class="bottom-nav-item" id="tab-btn-pending" onclick="showRecSection('pending')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Pending
+      </button>
       <button class="bottom-nav-item" id="tab-btn-patients" onclick="showRecSection('patients')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
@@ -188,8 +195,8 @@
       </div>
 
       <div class="rec-desktop-tabs">
-        <button class="rec-desktop-tab active" id="dtab-btn-home" onclick="showRecSection('home')">Home</button>
-        <button class="rec-desktop-tab" id="dtab-btn-patients" onclick="showRecSection('patients')">Patients List</button>
+        <button class="rec-desktop-tab active" id="dtab-btn-home" onclick="showRecDesktopTab('home')">Home</button>
+        <button class="rec-desktop-tab" id="dtab-btn-patients" onclick="showRecDesktopTab('patients')">Patients List</button>
       </div>
 
       <div class="mobile-section active" id="section-home">
@@ -286,7 +293,10 @@
 
       </div>
 
-      <div class="card" id="pending-payments-card" style="margin-top:20px;display:none">
+      </div>
+      <div class="mobile-section" id="section-pending">
+
+      <div class="card" id="pending-payments-card">
         <div class="card-header">
           <h2>Pending Payments (Today)</h2>
           <div class="search-wrap" style="max-width:260px">
@@ -472,14 +482,24 @@
     let selectedCategory = null;
 
     function showRecSection(id) {
-      ['home', 'attendance', 'patients'].forEach(s => {
+      ['home', 'pending', 'attendance', 'patients'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         const mobileBtn = document.getElementById('tab-btn-' + s);
         if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
-        const desktopBtn = document.getElementById('dtab-btn-' + s);
-        if (desktopBtn) desktopBtn.classList.toggle('active', s === id);
+      });
+      if (id === 'pending') loadPendingPayments();
+    }
+
+    function showRecDesktopTab(id) {
+      const groups = { home: ['section-home', 'section-pending'], patients: ['section-patients'] };
+      Object.values(groups).flat().forEach(elId => document.getElementById(elId).classList.remove('d-active'));
+      groups[id].forEach(elId => document.getElementById(elId).classList.add('d-active'));
+      ['home', 'patients'].forEach(t => {
+        document.getElementById('dtab-btn-' + t).classList.toggle('active', t === id);
       });
     }
+
+    if (window.innerWidth >= 901) showRecDesktopTab('home');
 
     function goToStep(step) {
       ['search', 'category', 'doctor', 'token'].forEach(s => {
@@ -854,10 +874,11 @@
 
     function renderPendingPaymentsList() {
       const rows = pendingPaymentRows;
-      const card = document.getElementById('pending-payments-card');
       const list = document.getElementById('pending-payments-list');
-      if (!rows.length) { card.style.display = 'none'; return; }
-      card.style.display = '';
+      if (!rows.length) {
+        list.innerHTML = `<p style="color:var(--slate-light);padding:12px 0">No pending payments right now.</p>`;
+        return;
+      }
 
       const q = pendingPaymentsSearch;
       const filtered = !q ? rows : rows.filter(r =>

@@ -608,13 +608,13 @@
       container.innerHTML = data.map(d => `
         <div class="staff-row" style="padding:16px 0;border-bottom:1px solid var(--border)">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
-            <div>
-              <div style="font-weight:600;font-size:15px">
-                ${sanitize(d.name)}
-                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:6px;${ROLE_BADGE_STYLE[d.role] || 'background:#f1f5f9;color:#64748b'}">
+            <div style="min-width:0;flex:1">
+              <div class="staff-name-row" style="font-weight:600;font-size:15px;display:flex;align-items:center;gap:6px">
+                <span>${sanitize(d.name)}</span>
+                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;${ROLE_BADGE_STYLE[d.role] || 'background:#f1f5f9;color:#64748b'}">
                   ${ROLE_LABEL[d.role] || 'Doctor'}
                 </span>
-                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;margin-left:4px;${d.is_active ? 'background:#dcfce7;color:#16a34a' : 'background:#fee2e2;color:#dc2626'}">
+                <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;${d.is_active ? 'background:#dcfce7;color:#16a34a' : 'background:#fee2e2;color:#dc2626'}">
                   ${d.is_active ? 'Active' : 'Inactive'}
                 </span>
               </div>
@@ -622,7 +622,7 @@
               <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(d.email)} · ${sanitize(d.phone)}</div>
               ${d.registration_number ? `<div style="color:var(--slate-light);font-size:12px;margin-top:2px">Reg: ${sanitize(d.registration_number)}</div>` : ''}
               ${d.role === 'doctor' || d.role === 'sub_admin' ? `
-              <div style="display:flex;gap:16px;margin-top:8px">
+              <div class="staff-stats-row" style="display:flex;gap:16px;margin-top:8px">
                 <div style="font-size:12px;color:var(--slate)">Today's Consultations: <strong style="color:var(--navy)">${d.consultations_today}</strong></div>
                 <div style="font-size:12px;color:var(--slate)">This Week: <strong style="color:var(--navy)">${d.consultations_week}</strong></div>
                 <div style="font-size:12px;color:var(--slate)">All Time: <strong style="color:var(--navy)">${d.consultations_total}</strong></div>

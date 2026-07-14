@@ -116,6 +116,25 @@
 
     <main class="main-content">
 
+      <!-- Attendance tab: status only, matching lab.html -->
+      <div class="mobile-section" id="section-attendance">
+        <div class="card" id="attendance-card">
+          <div class="card-header" style="margin-bottom:0">
+            <h2>Today's Status</h2>
+          </div>
+          <div class="staff-att-status">
+            <span class="badge badge-grey" id="attendance-badge">Not marked</span>
+            <div id="room-display" style="margin-top:8px;font-size:13px;color:var(--slate)"></div>
+          </div>
+          <div class="staff-att-actions" id="attendance-btns">
+            <select class="form-control" id="room-select" style="display:none" onchange="markAttendance(currentAttendanceStatus)"></select>
+            <button class="btn btn-primary" id="btn-mark-present" onclick="markAttendance('present')">Mark Present</button>
+            <button class="btn btn-outline" id="btn-mark-break" onclick="markAttendance('on_break')" style="display:none">On Break</button>
+            <button class="btn btn-outline" id="btn-mark-offduty" onclick="markAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Stats tab -->
       <div class="mobile-section" id="section-stats">
         <div class="stats-row" id="stats-row">
@@ -206,25 +225,6 @@
                 </tr>
               </tbody>
             </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- Attendance tab: status only, matching lab.html -->
-      <div class="mobile-section" id="section-attendance">
-        <div class="card" id="attendance-card">
-          <div class="card-header" style="margin-bottom:0">
-            <h2>Today's Status</h2>
-          </div>
-          <div class="staff-att-status">
-            <span class="badge badge-grey" id="attendance-badge">Not marked</span>
-            <div id="room-display" style="margin-top:8px;font-size:13px;color:var(--slate)"></div>
-          </div>
-          <div class="staff-att-actions" id="attendance-btns">
-            <select class="form-control" id="room-select" style="display:none" onchange="markAttendance(currentAttendanceStatus)"></select>
-            <button class="btn btn-primary" id="btn-mark-present" onclick="markAttendance('present')">Mark Present</button>
-            <button class="btn btn-outline" id="btn-mark-break" onclick="markAttendance('on_break')" style="display:none">On Break</button>
-            <button class="btn btn-outline" id="btn-mark-offduty" onclick="markAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
           </div>
         </div>
       </div>

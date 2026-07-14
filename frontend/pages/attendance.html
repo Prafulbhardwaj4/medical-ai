@@ -7,6 +7,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="../css/style.css?v=4" />
     <style>
+        @media (max-width: 900px) {
+            .att-staff-row {
+                flex-direction: column;
+                align-items: flex-start !important;
+                gap: 8px;
+                padding: 14px !important;
+                border: 1px solid var(--border);
+                border-radius: var(--radius-lg);
+                margin-bottom: 10px;
+            }
+        }
+
         @media (max-width: 700px) {
             .staff-filter-tabs {
                 display: none;
@@ -499,8 +511,8 @@
             const list = staffFilter === 'all' ? allStaff : allStaff.filter(d => d.role === staffFilter);
             const roleLabels = { doctor: 'Doctor', sub_admin: 'Sub Admin', nurse: 'Nurse', receptionist: 'Receptionist', lab: 'Lab Staff', pharmacy: 'Pharmacist' };
             document.getElementById('attendance-list').innerHTML = list.length ? list.map(d => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
-            <div>
+          <div class="att-staff-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+            <div style="min-width:0">
               <strong>${d.name}</strong>
               <span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:#f1f5f9;color:#64748b;margin-left:6px">${roleLabels[d.role] || d.role}</span>
               <div style="color:var(--slate);font-size:13px;margin-top:2px">${d.specialization}${d.room_number && d.room_number !== '—' ? ` · Room ${d.room_number}` : ''}</div>

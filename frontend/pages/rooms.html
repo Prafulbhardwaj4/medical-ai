@@ -5,6 +5,46 @@
   <title>Rooms — MedScribe</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="../css/style.css?v=4" />
+  <style>
+    .room-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .room-row-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .room-row-actions select,
+    .room-row-actions input {
+      flex: 1 1 120px;
+      min-width: 100px;
+      max-width: 160px;
+    }
+    @media (max-width: 900px) {
+      .room-row {
+        flex-direction: column;
+        align-items: stretch;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 14px;
+        margin-bottom: 10px;
+      }
+      .room-row-actions { width: 100%; }
+      .room-row-actions select,
+      .room-row-actions input {
+        max-width: none;
+        flex: 1 1 45%;
+      }
+      .room-row-actions .btn { flex: 1 1 45%; }
+    }
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -385,18 +425,18 @@
       try {
         const rooms = await api("GET", "/admin/rooms");
         document.getElementById('rooms-list').innerHTML = rooms.length ? rooms.map(r => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+          <div class="room-row">
             <div>
               <strong>${r.display || r.name}</strong>
               ${r.room_number || r.name ? `<span style="font-size:12px;color:var(--slate);margin-left:8px">${r.room_number ? 'No. ' + r.room_number : ''}${r.room_number && r.name ? ' · ' : ''}${r.name || ''}</span>` : ''}
               ${roomTypeBadge(r.room_type, r.type_confirmed)}
             </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <select class="form-control" style="width:150px" id="room-type-edit-${r.id}" onchange="onEditTypeChange(${r.id})">
+            <div class="room-row-actions">
+              <select class="form-control" id="room-type-edit-${r.id}" onchange="onEditTypeChange(${r.id})">
                 ${ROOM_TYPE_PRESETS.map(t => `<option value="${t}" ${r.room_type === t ? 'selected' : ''}>${t}</option>`).join('')}
                 <option value="Other" ${!ROOM_TYPE_PRESETS.includes(r.room_type) ? 'selected' : ''}>Other</option>
               </select>
-              <input class="form-control" style="width:130px;display:${ROOM_TYPE_PRESETS.includes(r.room_type) ? 'none' : ''}" id="room-type-edit-other-${r.id}" placeholder="Custom type" value="${!ROOM_TYPE_PRESETS.includes(r.room_type) ? sanitize(r.room_type) : ''}" />
+              <input class="form-control" style="display:${ROOM_TYPE_PRESETS.includes(r.room_type) ? 'none' : ''}" id="room-type-edit-other-${r.id}" placeholder="Custom type" value="${!ROOM_TYPE_PRESETS.includes(r.room_type) ? sanitize(r.room_type) : ''}" />
               <button class="btn btn-outline btn-sm" onclick="saveRoomType(${r.id})">Save</button>
               <button class="btn btn-outline btn-sm" onclick="deleteRoom(${r.id})">Delete</button>
             </div>

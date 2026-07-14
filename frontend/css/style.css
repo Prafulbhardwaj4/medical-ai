@@ -1263,6 +1263,12 @@ tbody tr:hover { background: var(--smoke); }
 }
 @media (min-width: 901px) {
   .topbar-profile-btn { display: flex; }
+  .topbar-doctor > span:first-child,
+  .topbar-doctor .topbar-divider,
+  #topbar-clinic,
+  .topbar-doctor button[onclick="logout()"] {
+    display: none !important;
+  }
 }
 @media (max-width: 600px) {
   .billing-filter-grid { grid-template-columns: 1fr !important; }
@@ -1419,7 +1425,7 @@ tbody tr:hover { background: var(--smoke); }
 .chip-scroll > * { flex: 0 0 auto; }
 
 /* ── Staff row → real mobile card (not just a squeezed desktop row) ── */
-@media (max-width: 600px) {
+@media (max-width: 900px) {
   .staff-row {
     display: flex;
     flex-direction: column;
@@ -1429,6 +1435,13 @@ tbody tr:hover { background: var(--smoke); }
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-xs);
+  }
+  .staff-name-row {
+    flex-wrap: wrap;
+  }
+  .staff-stats-row {
+    flex-wrap: wrap !important;
+    gap: 10px 16px !important;
   }
   .staff-row-actions {
     display: flex;

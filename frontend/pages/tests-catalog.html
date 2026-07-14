@@ -6,6 +6,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Test Catalog — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
+  <style>
+    .test-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .test-row-meta {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .test-row-actions {
+      display: flex;
+      gap: 8px;
+    }
+    @media (max-width: 900px) {
+      .test-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        margin-bottom: 10px;
+      }
+      .test-row-meta {
+        gap: 10px 18px;
+        font-size: 13px;
+      }
+      .test-row-actions { width: 100%; }
+      .test-row-actions .btn { flex: 1; }
+    }
+  </style>
 </head>
 
 <body>
@@ -603,17 +640,21 @@
         return;
       }
       el.innerHTML = items.map(t => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
-          <div style="flex:1;min-width:220px">
-            <strong>${sanitize(t.test_name)}</strong>
-            ${t.is_panel ? `<span class="badge badge-navy" style="margin-left:8px">Panel · ${t.parameters.length} params</span>` : ''}
-            ${(!t.is_panel && (t.reference_range_male || t.reference_range_female)) ? `<div style="font-size:12px;color:var(--slate)">M: ${sanitize(t.reference_range_male || '—')} · F: ${sanitize(t.reference_range_female || '—')}${t.unit ? ' ' + sanitize(t.unit) : ''}</div>` : ''}
-            ${t.is_panel ? `<div style="font-size:12px;color:var(--slate)">${t.parameters.map(p => sanitize(p.name)).join(', ')}</div>` : ''}
+        <div class="test-row">
+          <div class="test-row-main">
+            <div style="flex:1;min-width:220px">
+              <strong>${sanitize(t.test_name)}</strong>
+              ${t.is_panel ? `<span class="badge badge-navy" style="margin-left:8px">Panel · ${t.parameters.length} params</span>` : ''}
+              ${(!t.is_panel && (t.reference_range_male || t.reference_range_female)) ? `<div style="font-size:12px;color:var(--slate)">M: ${sanitize(t.reference_range_male || '—')} · F: ${sanitize(t.reference_range_female || '—')}${t.unit ? ' ' + sanitize(t.unit) : ''}</div>` : ''}
+              ${t.is_panel ? `<div style="font-size:12px;color:var(--slate)">${t.parameters.map(p => sanitize(p.name)).join(', ')}</div>` : ''}
+            </div>
           </div>
-          <div style="font-size:12px;color:var(--slate);min-width:100px">${sanitize(t.category || '—')}</div>
-          <div style="min-width:80px;font-size:13px">Rs.${t.price}</div>
-          <div style="min-width:90px;font-size:13px">${t.turnaround_hours != null ? t.turnaround_hours + ' hrs' : '—'}</div>
-          <div style="display:flex;gap:8px">
+          <div class="test-row-meta">
+            <div style="font-size:12px;color:var(--slate)">${sanitize(t.category || '—')}</div>
+            <div style="font-size:13px">Rs.${t.price}</div>
+            <div style="font-size:13px">${t.turnaround_hours != null ? t.turnaround_hours + ' hrs' : '—'}</div>
+          </div>
+          <div class="test-row-actions">
             <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(t)})'>Edit</button>
             <button class="btn btn-outline btn-sm" onclick="deactivateTest(${t.id})">Deactivate</button>
           </div>
