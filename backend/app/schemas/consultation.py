@@ -9,6 +9,8 @@ class MedicineItem(BaseModel):
     frequency: str
     duration: str
     schedule: Literal["otc", "controlled"] = "controlled"
+    times_per_day: Optional[float] = None
+    duration_days: Optional[int] = None
 
 class StructureRequest(BaseModel):
     transcript: Optional[str] = None
