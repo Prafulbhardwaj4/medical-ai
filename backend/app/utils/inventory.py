@@ -3,10 +3,13 @@ from sqlalchemy.orm import Session
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.medicine_batch import MedicineBatch
 
-# Countable/discrete dosage forms — quantity is meaningfully "times_per_day x duration_days"
-# units of the medicine itself. Mirrors DIVISIBLE_FORMS in frontend/pages/medicines.html —
-# keep these two lists in sync if that one changes.
-COUNTABLE_FORMS = {"Tablet", "Capsule", "Sachet", "Suppository", "Patch"}
+# Non-countable dosage forms — "3x/day for 3 days" doesn't mean 9 units for these, since a
+# single bottle/tube/vial covers many doses. Everything NOT in this set (including blank/
+# unset dosage_forms, which most existing catalog entries have since the field isn't
+# required) is treated as countable and gets the old times_per_day x duration_days
+# multiply — that was already correct for tablets/capsules and is the safer default for
+# anything unlabeled, since most medicines in practice are discrete-unit forms.
+NON_COUNTABLE_FORMS = {"Syrup", "Suspension", "Injection", "Drops", "Ointment", "Cream", "Gel", "Lotion", "Inhaler", "Spray", "Powder"}
 
 
 def calculate_prescribed_quantity(matched_medicine, times_per_day, duration_days):
@@ -29,7 +32,7 @@ def calculate_prescribed_quantity(matched_medicine, times_per_day, duration_days
     if not matched_medicine:
         return None
 
-    if matched_medicine.dosage_forms not in COUNTABLE_FORMS:
+    if matched_medicine.dosage_forms in NON_COUNTABLE_FORMS:
         return 1
 
     pack_size = matched_medicine.pack_size or 1

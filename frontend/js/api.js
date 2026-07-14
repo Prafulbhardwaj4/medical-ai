@@ -39,6 +39,27 @@ function requireAuth() {
   }
 }
 
+function _showGlobalLoading() {
+  let bar = document.getElementById("global-loading-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "global-loading-bar";
+    document.body.appendChild(bar);
+  }
+  bar.classList.remove("done");
+  void bar.offsetWidth;
+  bar.classList.add("active");
+}
+
+function _hideGlobalLoading() {
+  const bar = document.getElementById("global-loading-bar");
+  if (!bar) return;
+  bar.classList.add("done");
+  setTimeout(() => bar.classList.remove("active", "done"), 250);
+}
+
+let _activeRequests = 0;
+
 async function api(method, path, body = null, isFormData = false) {
   const headers = { Authorization: `Bearer ${getToken()}` };
   if (!isFormData) headers["Content-Type"] = "application/json";
@@ -46,23 +67,36 @@ async function api(method, path, body = null, isFormData = false) {
   const opts = { method, headers };
   if (body) opts.body = isFormData ? body : JSON.stringify(body);
 
-  const res = await fetch(BASE + path, opts);
+  const triggerBtn = document.activeElement && document.activeElement.tagName === "BUTTON" ? document.activeElement : null;
+  const alreadyDisabled = triggerBtn ? triggerBtn.disabled : true;
+  if (triggerBtn && !alreadyDisabled) triggerBtn.disabled = true;
 
-  if (res.status === 401) {
-    clearSession();
-    window.location.href = "/pages/login.html";
-    return;
+  _activeRequests++;
+  _showGlobalLoading();
+
+  try {
+    const res = await fetch(BASE + path, opts);
+
+    if (res.status === 401) {
+      clearSession();
+      window.location.href = "/pages/login.html";
+      return;
+    }
+
+    if (res.status === 403 || res.status === 404) {
+      toast("Access denied or resource not found.", "error");
+      setTimeout(() => redirectByRole(getDoctor()?.role), 1500);
+      return;
+    }
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Request failed");
+    return data;
+  } finally {
+    _activeRequests = Math.max(0, _activeRequests - 1);
+    if (_activeRequests === 0) _hideGlobalLoading();
+    if (triggerBtn && !alreadyDisabled) triggerBtn.disabled = false;
   }
-
-  if (res.status === 403 || res.status === 404) {
-    toast("Access denied or resource not found.", "error");
-    setTimeout(() => redirectByRole(getDoctor()?.role), 1500);
-    return;
-  }
-
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || "Request failed");
-  return data;
 }
 
 // Toast notification

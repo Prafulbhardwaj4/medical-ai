@@ -749,6 +749,8 @@ def reception_pending_payments(
             "checkin_id": c.id,
             "patient_id": patient.id,
             "patient_name": patient.name,
+            "patient_uid": patient.patient_uid,
+            "patient_phone": patient.phone,
             "buckets": buckets
         })
 

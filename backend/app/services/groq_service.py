@@ -178,6 +178,76 @@ async def extract_medicines(raw_text: str) -> list:
     return result
 
 
+TEST_MATCH_PROMPT_TEMPLATE = """You are matching diagnostic tests a doctor said out loud to a specific hospital's own test catalog.
+
+This hospital's test catalog (the ONLY valid options to match against — every hospital's catalog is different, do not use outside knowledge of test names not listed here):
+{catalog_list}
+
+Doctor said these test names/abbreviations during a consultation:
+{raw_terms}
+
+For each term, return the single best-matching entry from the catalog list above, using your medical knowledge of test names, abbreviations, and synonyms (e.g. "CBC" usually means "Complete Blood Count", "LFT" means "Liver Function Test", "KFT"/"RFT" mean "Kidney/Renal Function Test"). Only match if genuinely confident it's the same test as something in the list — if nothing in the catalog is a good match, return null for that term rather than guessing, since a wrong match here silently affects patient billing.
+
+Return ONLY a valid JSON array, one object per term said, in this exact shape:
+[{{"raw_term": "the term exactly as the doctor said it", "matched_test_name": "the exact catalog name copied from the list above, or null if no confident match"}}]
+
+Do not include any explanation or markdown — only the raw JSON array.
+"""
+
+
+async def match_tests_to_catalog(raw_terms: list, catalog_names: list) -> list:
+    """
+    Matches doctor-dictated test terms (e.g. "CBC", "KFT") against one specific hospital's
+    own test catalog, fetched fresh per-request — never a hardcoded/shared list, since every
+    hospital's catalog naming is different.
+
+    Only called when the main structuring call actually returned tests (see consultations.py)
+    — kept off the hot path for the majority of visits where no tests are ordered at all.
+
+    Fails open: any error here returns an empty list rather than raising, since test-matching
+    is a convenience layer and should never block the rest of the consultation flow. An
+    unmatched term just stays as free text with an "unmatched" flag in the UI, not silently
+    dropped, so the doctor still sees it and can add it manually if needed.
+    """
+    if not raw_terms or not catalog_names:
+        return []
+
+    prompt = TEST_MATCH_PROMPT_TEMPLATE.format(
+        catalog_list="\n".join(f"- {n}" for n in catalog_names),
+        raw_terms="\n".join(f"- {t}" for t in raw_terms)
+    )
+
+    headers = {
+        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1,
+        "max_tokens": 500
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(GROQ_API_URL, headers=headers, json=payload)
+
+        if response.status_code != 200:
+            return []
+
+        content = response.json()["choices"][0]["message"]["content"].strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+
+        result = json.loads(content)
+        return result if isinstance(result, list) else []
+    except Exception:
+        return []
+
+
 TEST_EXTRACTION_PROMPT = """You are extracting a hospital's diagnostic test/lab catalog from raw text taken from a PDF or Excel file.
 The text may be messy, tabular, or inconsistently formatted.
 

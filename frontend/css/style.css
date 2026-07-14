@@ -192,6 +192,35 @@ p  { color: var(--slate); font-size: 0.9rem; }
 .page-header p { margin-top: 4px; }
 
 /* ── Cards ── */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+#global-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0%;
+  background: var(--teal);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: width 0.25s ease, opacity 0.2s ease;
+}
+
+#global-loading-bar.active {
+  opacity: 1;
+  width: 75%;
+  transition: width 3.5s cubic-bezier(0.1, 0.8, 0.4, 1), opacity 0.2s ease;
+}
+
+#global-loading-bar.active.done {
+  width: 100%;
+  transition: width 0.2s ease, opacity 0.2s ease;
+}
+
 .card {
   background: var(--white);
   border-radius: var(--radius-lg);
@@ -199,6 +228,11 @@ p  { color: var(--slate); font-size: 0.9rem; }
   box-shadow: var(--shadow-sm);
   padding: 24px;
   transition: box-shadow 0.2s;
+  animation: fadeSlideIn 0.25s ease;
+}
+
+.mobile-section.active {
+  animation: fadeSlideIn 0.2s ease;
 }
 
 .card:hover {
@@ -229,11 +263,15 @@ p  { color: var(--slate); font-size: 0.9rem; }
   font-weight: 500;
   cursor: pointer;
   border: none;
-  transition: all 0.15s ease;
+  transition: all 0.15s ease, transform 0.1s ease;
   text-decoration: none;
   white-space: nowrap;
   letter-spacing: -0.01em;
 }
+
+.btn:active:not(:disabled) { transform: scale(0.96); }
+
+.btn:disabled { cursor: default; }
 
 .btn-primary {
   background: var(--teal);
@@ -1224,7 +1262,7 @@ tbody tr:hover { background: var(--smoke); }
   flex-shrink: 0;
 }
 @media (min-width: 901px) {
-  .topbar-profile-btn { display: none; }
+  .topbar-profile-btn { display: flex; }
 }
 @media (max-width: 600px) {
   .billing-filter-grid { grid-template-columns: 1fr !important; }
@@ -1244,7 +1282,7 @@ tbody tr:hover { background: var(--smoke); }
 }
 
 .profile-menu {
-  display: none;
+  display: block;
   position: fixed;
   top: 62px;
   right: 12px;
@@ -1255,9 +1293,18 @@ tbody tr:hover { background: var(--smoke); }
   box-shadow: var(--shadow-lg);
   z-index: 260;
   overflow: hidden;
+  opacity: 0;
+  transform: translateY(-8px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  transform-origin: top right;
 }
 
-.profile-menu.open { display: block; }
+.profile-menu.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: all;
+}
 
 .profile-menu-header { padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .profile-menu-header strong { display: block; font-size: 0.9rem; }

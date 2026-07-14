@@ -10,7 +10,7 @@ from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, C
 from app.utils.auth import get_current_doctor, now_ist, decode_access_token, is_token_blacklisted
 from app.utils.audit import log_action
 from app.services.whisper import transcribe_audio
-from app.services.groq_service import structure_transcript
+from app.services.groq_service import structure_transcript, match_tests_to_catalog
 from app.services.pdf_service import generate_prescription_pdf
 from app.services.sms_service import send_sms
 from app.services.sarvam_stream import stream_transcribe
@@ -616,9 +616,30 @@ async def structure(
     db.commit()
     db.refresh(consultation)
 
+    # Only match tests against this hospital's own catalog when tests were actually
+    # dictated — keeps the extra Groq call off the hot path for the majority of visits
+    # with no tests ordered. Catalog is fetched fresh per-hospital every time, never
+    # hardcoded/shared, so this scales to any hospital's own test list with no admin setup.
+    matched_tests = []
+    raw_tests = structured.get("tests", [])
+    if raw_tests:
+        catalog_items = db.query(TestCatalogItem).filter(
+            TestCatalogItem.hospital_id == current_doctor.hospital_id,
+            TestCatalogItem.is_active == True
+        ).all()
+        if catalog_items:
+            catalog_by_name = {c.name: c for c in catalog_items}
+            raw_matches = await match_tests_to_catalog(raw_tests, list(catalog_by_name.keys()))
+            for m in raw_matches:
+                matched_name = m.get("matched_test_name")
+                if matched_name and matched_name in catalog_by_name:
+                    c = catalog_by_name[matched_name]
+                    matched_tests.append({"raw_term": m.get("raw_term", ""), "test_id": c.id, "test_name": c.name})
+
     return {
         "consultation_id": consultation.id,
-        "structured": structured
+        "structured": structured,
+        "matched_tests": matched_tests
     }
 
 

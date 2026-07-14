@@ -10,6 +10,9 @@
     .mobile-section.active { display: block; }
     @media (min-width: 901px) {
       .mobile-section { display: block !important; }
+      /* On desktop, Home/Patients act as real tabs; Attendance stays always visible above them. */
+      #section-home.mobile-section:not(.active) { display: none !important; }
+      #section-patients.mobile-section:not(.active) { display: none !important; }
     }
     @media print {
       body * { visibility: hidden; }
@@ -17,6 +20,71 @@
       #print-area { position: absolute; top: 0; left: 0; width: 100%; }
       .no-print { display: none !important; }
     }
+
+    /* #5 — Today's Status attendance card (receptionist-only layout) */
+    .rec-att-row { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .rec-att-left { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+    .rec-att-left .badge { font-size: 15px; padding: 8px 18px; }
+    .rec-att-card .staff-att-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+    @media (min-width: 901px) {
+      .rec-att-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 20px; }
+      .rec-att-left { flex-direction: row; text-align: left; gap: 14px; }
+      .rec-att-card .staff-att-actions { flex-direction: row; flex-wrap: wrap; width: auto; }
+    }
+
+    /* #7 — desktop-only tab switcher for Home / Patients List */
+    .rec-desktop-tabs { display: none; }
+    @media (min-width: 901px) {
+      .rec-desktop-tabs {
+        display: flex; gap: 28px; margin: 20px 0 4px; border-bottom: 1.5px solid var(--border);
+      }
+      .rec-desktop-tab {
+        background: none; border: none; cursor: pointer; padding: 10px 2px 12px;
+        font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 600;
+        color: var(--slate); border-bottom: 2px solid transparent;
+        transition: color 0.15s ease, border-color 0.15s ease;
+      }
+      .rec-desktop-tab:hover { color: var(--navy); }
+      .rec-desktop-tab.active { color: var(--teal); border-bottom-color: var(--teal); }
+    }
+
+    /* Select Patient modal (Docs / Pending chooser) */
+    .sel-patient-option {
+      width: 100%; display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 14px; font-weight: 600;
+    }
+    .sel-patient-option-sub { font-weight: 400; font-size: 12.5px; color: var(--slate); }
+
+    /* #6 — Manage Payments modal */
+    .pay-toggle-subtitle { margin: 2px 0 0; font-size: 12.5px; color: var(--slate); font-weight: 400; }
+    .pay-toggle-list { display: flex; flex-direction: column; }
+    .pay-toggle-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 0; border-bottom: 1px solid var(--border); gap: 12px;
+    }
+    .pay-toggle-row:last-child { border-bottom: none; }
+    .pay-toggle-info { display: flex; align-items: center; gap: 12px; }
+    .pay-toggle-icon {
+      width: 36px; height: 36px; border-radius: 10px; background: var(--smoke-mid);
+      display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0;
+    }
+    .pay-toggle-label { font-weight: 600; color: var(--navy); font-size: 0.92rem; }
+    .pay-toggle-sub { font-size: 12.5px; margin-top: 2px; }
+    .pay-toggle-sub.is-paid { color: #065f46; }
+    .pay-toggle-sub.is-unpaid { color: #b45309; }
+    .pay-toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
+    .pay-toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .pay-toggle-slider {
+      position: absolute; cursor: pointer; inset: 0; background: var(--border-mid);
+      border-radius: 24px; transition: background 0.2s ease;
+    }
+    .pay-toggle-slider::before {
+      content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px;
+      background: white; border-radius: 50%; transition: transform 0.2s ease;
+      box-shadow: var(--shadow-xs);
+    }
+    .pay-toggle-switch input:checked + .pay-toggle-slider { background: var(--teal); }
+    .pay-toggle-switch input:checked + .pay-toggle-slider::before { transform: translateX(18px); }
   </style>
 </head>
 <body>
@@ -104,27 +172,27 @@
 
     <main class="main-content">
       <div class="mobile-section" id="section-attendance">
-      <div class="card">
-        <div class="card-header" style="margin-bottom:0">
-          <h2>Today's Status</h2>
-        </div>
-        <div class="staff-att-status">
-          <span class="badge badge-grey" id="rec-attendance-badge">Not marked</span>
-        </div>
-        <div class="staff-att-actions">
-          <button class="btn btn-primary" id="rec-btn-present" onclick="markRecAttendance('present')">Mark Present</button>
-          <button class="btn btn-outline" id="rec-btn-break" onclick="markRecAttendance('on_break')" style="display:none">On Break</button>
-          <button class="btn btn-outline" id="rec-btn-offduty" onclick="markRecAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+      <div class="card rec-att-card">
+        <div class="rec-att-row">
+          <div class="rec-att-left">
+            <h2 style="margin:0">Today's Status</h2>
+            <span class="badge badge-grey" id="rec-attendance-badge">Not marked</span>
+          </div>
+          <div class="staff-att-actions">
+            <button class="btn btn-primary" id="rec-btn-present" onclick="markRecAttendance('present')">Mark Present</button>
+            <button class="btn btn-outline" id="rec-btn-break" onclick="markRecAttendance('on_break')" style="display:none">On Break</button>
+            <button class="btn btn-outline" id="rec-btn-offduty" onclick="markRecAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+          </div>
         </div>
       </div>
       </div>
+
+      <div class="rec-desktop-tabs">
+        <button class="rec-desktop-tab active" id="dtab-btn-home" onclick="showRecSection('home')">Home</button>
+        <button class="rec-desktop-tab" id="dtab-btn-patients" onclick="showRecSection('patients')">Patients List</button>
+      </div>
+
       <div class="mobile-section active" id="section-home">
-      <div class="card" id="pending-payments-card" style="margin-bottom:20px;display:none">
-        <div class="card-header">
-          <h2>Pending Payments (Today)</h2>
-        </div>
-        <div id="pending-payments-list"></div>
-      </div>
       <div class="card">
 
         <!-- STEP 1: Search / Select / New -->
@@ -216,6 +284,21 @@
           </div>
         </div>
 
+      </div>
+
+      <div class="card" id="pending-payments-card" style="margin-top:20px;display:none">
+        <div class="card-header">
+          <h2>Pending Payments (Today)</h2>
+          <div class="search-wrap" style="max-width:260px">
+            <svg class="search-icon" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8" />
+              <path stroke-linecap="round" d="M21 21l-4.35-4.35" />
+            </svg>
+            <input class="form-control" id="pp-search-input" placeholder="Search name, ID, phone…"
+              oninput="filterPendingPayments(this.value)" />
+          </div>
+        </div>
+        <div id="pending-payments-list"></div>
       </div>
 
       </div>
@@ -318,15 +401,18 @@
     </div>
   </div>
 
-  <!-- Document History Modal -->
+  <!-- Manage Payments Modal -->
   <div class="modal-overlay" id="modal-payment-toggle">
-        <div class="modal" style="max-width:420px">
+        <div class="modal pay-toggle-modal" style="max-width:420px">
           <div class="modal-header">
-            <h2 id="pt-toggle-patient-name">Payments</h2>
+            <div>
+              <h2 id="pt-toggle-patient-name">Payments</h2>
+              <p class="pay-toggle-subtitle">Manage today's visit</p>
+            </div>
             <button class="modal-close" onclick="closePaymentToggleModal()">×</button>
           </div>
-          <div id="payment-toggle-body"></div>
-          <div style="display:flex;justify-content:flex-end;margin-top:16px">
+          <div id="payment-toggle-body" class="pay-toggle-list"></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:18px">
             <button class="btn btn-outline" onclick="closePaymentToggleModal()">Close</button>
           </div>
         </div>
@@ -353,6 +439,24 @@
     </div>
   </div>
 
+  <!-- Select Patient Modal (Docs / Pending chooser) -->
+  <div class="modal-overlay" id="modal-select-patient">
+    <div class="modal" style="max-width:360px">
+      <div class="modal-header">
+        <h2 id="sel-patient-name">Patient</h2>
+        <button class="modal-close" onclick="closeSelectPatientModal()">×</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-outline sel-patient-option" onclick="selectPatientOpenDocs()">
+          <span>📄 Docs</span><span class="sel-patient-option-sub">Bills &amp; reports</span>
+        </button>
+        <button class="btn btn-outline sel-patient-option" onclick="selectPatientOpenPending()">
+          <span>⏳ Pending</span><span class="sel-patient-option-sub">Pending payments</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
 
   <script src="../js/api.js?v=4"></script>
@@ -370,7 +474,10 @@
     function showRecSection(id) {
       ['home', 'attendance', 'patients'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
-        document.getElementById('tab-btn-' + s).classList.toggle('active', s === id);
+        const mobileBtn = document.getElementById('tab-btn-' + s);
+        if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
+        const desktopBtn = document.getElementById('dtab-btn-' + s);
+        if (desktopBtn) desktopBtn.classList.toggle('active', s === id);
       });
     }
 
@@ -733,14 +840,39 @@
 
     let pendingPaymentRows = [];
     let paymentToggleRow = null;
+    let pendingPaymentsSearch = '';
 
     function renderPendingPayments(rows) {
       pendingPaymentRows = rows;
+      renderPendingPaymentsList();
+    }
+
+    function filterPendingPayments(val) {
+      pendingPaymentsSearch = (val || '').trim().toLowerCase();
+      renderPendingPaymentsList();
+    }
+
+    function renderPendingPaymentsList() {
+      const rows = pendingPaymentRows;
       const card = document.getElementById('pending-payments-card');
       const list = document.getElementById('pending-payments-list');
       if (!rows.length) { card.style.display = 'none'; return; }
       card.style.display = '';
-      list.innerHTML = rows.map((r, idx) => {
+
+      const q = pendingPaymentsSearch;
+      const filtered = !q ? rows : rows.filter(r =>
+        (r.patient_name || '').toLowerCase().includes(q) ||
+        (r.patient_uid || '').toLowerCase().includes(q) ||
+        (r.patient_phone || '').toLowerCase().includes(q)
+      );
+
+      if (!filtered.length) {
+        list.innerHTML = `<p style="color:var(--slate-light);padding:12px 0">No matching patients.</p>`;
+        return;
+      }
+
+      list.innerHTML = filtered.map(r => {
+        const idx = pendingPaymentRows.indexOf(r);
         const parts = [];
         if (r.buckets.consultation) parts.push(r.buckets.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
         if (r.buckets.tests) parts.push(r.buckets.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${r.buckets.tests.pending_total} pending`);
@@ -748,7 +880,7 @@
         return `
           <div id="pp-row-${r.checkin_id}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div>
-              <strong>${r.patient_name}</strong>
+              <strong>${r.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${r.patient_uid || ''}</span>
               <div style="font-size:12px;color:var(--slate)">${parts.join(' · ')}</div>
             </div>
             <button class="btn btn-outline btn-sm" onclick="openPaymentToggleModal(${idx})">Manage Payments</button>
@@ -776,29 +908,46 @@
       if (row.buckets.consultation) {
         const paid = row.buckets.consultation.status === 'paid';
         html += `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-            <span>Consultation Fee</span>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <span style="font-size:13px;color:var(--slate)">${paid ? 'Paid' : 'Unpaid'}</span>
+          <div class="pay-toggle-row">
+            <div class="pay-toggle-info">
+              <span class="pay-toggle-icon">🩺</span>
+              <div>
+                <div class="pay-toggle-label">Consultation Fee</div>
+                <div class="pay-toggle-sub ${paid ? 'is-paid' : 'is-unpaid'}">${paid ? 'Paid' : 'Unpaid'}</div>
+              </div>
+            </div>
+            <label class="pay-toggle-switch">
               <input type="checkbox" ${paid ? 'checked' : ''} onchange="togglePaymentSwitch('consultation', this.checked)" />
+              <span class="pay-toggle-slider"></span>
             </label>
           </div>`;
       }
       if (row.buckets.tests) {
         const paid = row.buckets.tests.status === 'paid';
         html += `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-            <span>Tests${paid ? '' : ` (Rs.${row.buckets.tests.pending_total} pending)`}</span>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <span style="font-size:13px;color:var(--slate)">${paid ? 'Paid' : 'Unpaid'}</span>
+          <div class="pay-toggle-row">
+            <div class="pay-toggle-info">
+              <span class="pay-toggle-icon">🧪</span>
+              <div>
+                <div class="pay-toggle-label">Tests</div>
+                <div class="pay-toggle-sub ${paid ? 'is-paid' : 'is-unpaid'}">${paid ? 'Paid' : `Rs.${row.buckets.tests.pending_total} pending`}</div>
+              </div>
+            </div>
+            <label class="pay-toggle-switch">
               <input type="checkbox" ${paid ? 'checked' : ''} onchange="togglePaymentSwitch('tests', this.checked)" />
+              <span class="pay-toggle-slider"></span>
             </label>
           </div>`;
       }
       if (row.buckets.pharmacy) {
         html += `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
-            <span>Pharmacy</span>
+          <div class="pay-toggle-row">
+            <div class="pay-toggle-info">
+              <span class="pay-toggle-icon">💊</span>
+              <div>
+                <div class="pay-toggle-label">Pharmacy</div>
+              </div>
+            </div>
             <span class="badge badge-grey">${PHARM_STATUS_LABEL[row.buckets.pharmacy.status] || row.buckets.pharmacy.status}</span>
           </div>`;
       }
@@ -888,6 +1037,28 @@
 
     function closePendingTasksModal() {
       document.getElementById('modal-pending-tasks').classList.remove('open');
+    }
+
+    let selectPatientCtx = null;
+
+    function openSelectPatientModal(patientId, patientName) {
+      selectPatientCtx = { patientId, patientName };
+      document.getElementById('sel-patient-name').textContent = patientName;
+      document.getElementById('modal-select-patient').classList.add('open');
+    }
+    function closeSelectPatientModal() {
+      document.getElementById('modal-select-patient').classList.remove('open');
+      selectPatientCtx = null;
+    }
+    function selectPatientOpenDocs() {
+      const ctx = selectPatientCtx;
+      closeSelectPatientModal();
+      if (ctx) openDocumentsModal(ctx.patientId, ctx.patientName);
+    }
+    function selectPatientOpenPending() {
+      const ctx = selectPatientCtx;
+      closeSelectPatientModal();
+      if (ctx) openPendingTasksModal(ctx.patientId, ctx.patientName);
     }
 
     async function markPaid() {
@@ -1009,16 +1180,15 @@
         return;
       }
       tbody.innerHTML = data.map(p => `
-        <tr style="cursor:pointer" onclick='selectExistingPatient(${JSON.stringify(p)})'>
+        <tr>
           <td data-label="Patient"><strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber">Today</span>' : ''}</td>
           <td data-label="ID"><span class="badge badge-navy">${p.patient_uid}</span></td>
           <td data-label="Phone" style="color:var(--slate)">${p.phone}</td>
           <td data-label="Age / Gender">${p.age}y / ${capitalize(p.gender)}</td>
           <td data-label="Last Visit">${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
           <td data-label="" style="text-align:left">
-            <button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openEditPatient(${JSON.stringify(p)})'>✏️ Edit</button>
-            <button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openDocumentsModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>📄 Docs</button>
-            <button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openPendingTasksModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>⏳ Pending</button>
+            <button class="btn btn-outline btn-sm" onclick='openEditPatient(${JSON.stringify(p)})'>✏️ Edit</button>
+            <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>Select</button>
           </td>
         </tr>
       `).join('');
