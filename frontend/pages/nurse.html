@@ -14,28 +14,15 @@
       #section-vitals, #section-tasks, #section-history, #section-attendance { display: none !important; }
       #section-vitals.d-active, #section-tasks.d-active, #section-history.d-active, #section-attendance.d-active { display: block !important; }
     }
-    .desktop-tabs { display: none; }
+    /* Today's Status row — title left, controls right on desktop; stacked on mobile */
+    .att-top-row h2 { margin: 0; }
     @media (min-width: 901px) {
-      .desktop-tabs {
+      .att-top-row {
         display: flex;
-        gap: 6px;
-        border-bottom: 1.5px solid var(--border);
-        margin-bottom: 20px;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
       }
-      .desktop-tab {
-        padding: 10px 18px;
-        font-size: 0.92rem;
-        font-weight: 600;
-        color: var(--slate);
-        background: none;
-        border: none;
-        border-bottom: 2.5px solid transparent;
-        cursor: pointer;
-        margin-bottom: -1.5px;
-        transition: color 0.15s ease, border-color 0.15s ease;
-      }
-      .desktop-tab:hover { color: var(--navy); }
-      .desktop-tab.active { color: var(--teal); border-bottom-color: var(--teal); }
     }
 
     /* Row cards used in vitals / tasks / history lists */
@@ -117,11 +104,17 @@
 
     <nav class="sidebar">
       <div class="sidebar-section-label">Navigation</div>
-      <div class="nav-item active">
+      <div class="nav-item active" id="sidebar-nav-home" onclick="showNurseDesktopTab('home')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
-        Nurse Station
+        Home
+      </div>
+      <div class="nav-item" id="sidebar-nav-history" onclick="showNurseDesktopTab('history')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        History
       </div>
     </nav>
 
@@ -155,27 +148,23 @@
     </nav>
 
     <main class="main-content">
-      <div class="desktop-tabs">
-        <button class="desktop-tab active" id="dtab-btn-home" onclick="showNurseDesktopTab('home')">Home</button>
-        <button class="desktop-tab" id="dtab-btn-history" onclick="showNurseDesktopTab('history')">History</button>
-        <button class="desktop-tab" id="dtab-btn-attendance" onclick="showNurseDesktopTab('attendance')">Attendance</button>
-      </div>
-
-      <!-- Attendance tab -->
+      <!-- Attendance — sits at the top of Home -->
       <div class="mobile-section" id="section-attendance">
         <div class="card">
-          <div class="card-header" style="margin-bottom:0">
-            <h2>Today's Status</h2>
-          </div>
-          <div class="staff-att-status">
-            <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
-            <div id="nurse-room-display" style="margin-top:6px;font-size:13px;color:var(--slate)"></div>
-          </div>
-          <div class="staff-att-actions" id="nurse-attendance-btns">
-            <select class="form-control" id="nurse-room-select" style="display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
-            <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
-            <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
-            <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+          <div class="att-top-row">
+            <div class="card-header" style="margin-bottom:0">
+              <h2>Today's Status</h2>
+            </div>
+            <div class="staff-att-status">
+              <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
+              <div id="nurse-room-display" style="margin-top:6px;font-size:13px;color:var(--slate)"></div>
+            </div>
+            <div class="staff-att-actions" id="nurse-attendance-btns">
+              <select class="form-control" id="nurse-room-select" style="display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
+              <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
+              <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
+              <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+            </div>
           </div>
         </div>
       </div>
@@ -234,16 +223,17 @@
   </div>
 
   <div class="modal-overlay" id="modal-postconsult">
-    <div class="modal" style="max-width:520px">
+    <div class="modal" style="max-width:480px">
       <div class="modal-header">
-        <h2>Complete Task</h2>
+        <h2>Mark Task as Done</h2>
         <button class="modal-close" onclick="closePostConsultModal()">×</button>
       </div>
       <p style="color:var(--slate);font-size:13px;margin-bottom:4px">Doctor's note:</p>
       <p style="font-weight:600;margin-bottom:16px" id="postconsult-note"></p>
-      <div id="postconsult-fields"></div>
-      <button class="btn btn-outline btn-sm" style="margin:10px 0 20px" onclick="addPostConsultField()">+ Add Field</button>
-      <div style="display:flex;gap:10px;justify-content:flex-end">
+      <label style="font-size:13px;color:var(--slate);margin-bottom:6px;display:block">Notes (optional)</label>
+      <textarea class="form-control" id="postconsult-notes-input" rows="3" placeholder="Add any notes about this task…"></textarea>
+      <p style="color:var(--slate);font-size:13px;margin:16px 0 0">Confirm this task has been completed for this patient?</p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
         <button class="btn btn-outline" onclick="closePostConsultModal()">Cancel</button>
         <button class="btn btn-primary" id="btn-save-postconsult" onclick="savePostConsult()">Mark Done</button>
       </div>
@@ -258,13 +248,13 @@
     if (getDoctor()?.role !== 'nurse') redirectByRole(getDoctor()?.role);
 
     function showNurseDesktopTab(id) {
-      const groups = { home: ['vitals', 'tasks'], history: ['history'], attendance: ['attendance'] };
-      ['vitals', 'tasks', 'history', 'attendance'].forEach(s => {
+      const groups = { home: ['attendance', 'vitals', 'tasks'], history: ['history'] };
+      ['attendance', 'vitals', 'tasks', 'history'].forEach(s => {
         document.getElementById('section-' + s).classList.remove('d-active');
       });
       groups[id].forEach(s => document.getElementById('section-' + s).classList.add('d-active'));
-      ['home', 'history', 'attendance'].forEach(t => {
-        document.getElementById('dtab-btn-' + t).classList.toggle('active', t === id);
+      ['home', 'history'].forEach(t => {
+        document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id);
       });
     }
 
@@ -338,9 +328,6 @@
 
     function addVitalsField() {
       document.getElementById('vitals-fields').insertAdjacentHTML('beforeend', fieldRow('', ''));
-    }
-    function addPostConsultField() {
-      document.getElementById('postconsult-fields').insertAdjacentHTML('beforeend', fieldRow('', ''));
     }
 
     function collectFields(containerId) {
@@ -471,10 +458,7 @@
       activePostConsultId = checkinId;
       document.getElementById('postconsult-note').textContent = note || '—';
       const data = existingData || {};
-      const rows = Object.keys(data).length
-        ? Object.entries(data).map(([label, value]) => fieldRow(label, value))
-        : [fieldRow('Notes', '')];
-      document.getElementById('postconsult-fields').innerHTML = rows.join('');
+      document.getElementById('postconsult-notes-input').value = Object.values(data).join('\n');
       document.getElementById('modal-postconsult').classList.add('open');
     }
     function closePostConsultModal() {
@@ -483,7 +467,8 @@
     }
 
     async function savePostConsult() {
-      const data = collectFields('postconsult-fields');
+      const notesVal = document.getElementById('postconsult-notes-input').value.trim();
+      const data = { Notes: notesVal || 'Completed' };
       const btn = document.getElementById('btn-save-postconsult');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';

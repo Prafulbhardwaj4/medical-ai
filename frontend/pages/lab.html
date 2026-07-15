@@ -7,9 +7,9 @@
   <title>Lab — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
-    /* Mobile tab sections: only one visible at a time on phones.
-       Scoped override (by id) so desktop now tabs too, instead of the
-       shared style.css default of stacking every .mobile-section on desktop. */
+    /* Tab sections (Home / Pending / Attendance) - only the active one shows,
+       on both mobile and desktop. Navigation lives in the sidebar on desktop
+       and the bottom nav on mobile. */
     .mobile-section {
       display: none;
     }
@@ -20,103 +20,52 @@
 
     @media (min-width: 901px) {
       .mobile-section {
-        display: block !important;
-        margin-bottom: 20px;
-      }
-
-      #section-queue.mobile-section,
-      #section-pending.mobile-section {
         display: none !important;
       }
 
-      #section-queue.mobile-section.active,
-      #section-pending.mobile-section.active {
+      .mobile-section.active {
         display: block !important;
       }
     }
 
-    /* Desktop tabs (Home / Pending) */
-    .lab-desktop-tabs {
-      display: none;
-      gap: 8px;
-      margin-bottom: 16px;
+    /* Attendance tab - same pattern as nurse.html, but the status badge
+       stays visible on desktop too (was hidden there before) */
+    .lab-att-status {
+      text-align: center;
+      padding: 20px 0 16px;
     }
 
-    @media (min-width: 901px) {
-      .lab-desktop-tabs {
-        display: flex;
-      }
-    }
-
-    .lab-tab-chip {
-      padding: 6px 16px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--white);
-      color: var(--slate);
+    .lab-att-status .label {
+      display: block;
       font-size: 13px;
-      cursor: pointer;
+      color: var(--slate);
+      margin-bottom: 8px;
     }
 
-    .lab-tab-chip.active {
-      background: var(--teal);
-      border-color: var(--teal);
-      color: var(--white);
-    }
-
-    /* Persistent attendance bar — always visible, not a tab */
-    .lab-att-bar {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      align-items: stretch;
-      padding: 16px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      margin-bottom: 20px;
-      background: var(--white);
-    }
-
-    .lab-att-bar-top {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    .lab-att-status .badge {
+      font-size: 15px;
+      padding: 8px 18px;
     }
 
     .lab-att-actions {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
     }
 
-    .lab-att-actions button {
-      width: 100%;
-    }
-
-    #lab-room-select {
-      width: 100%;
+    .lab-att-actions select {
+      width: 100% !important;
     }
 
     @media (min-width: 901px) {
-      .lab-att-bar {
-        flex-direction: row;
-        align-items: center;
-        gap: 16px;
-        padding: 12px 16px;
-      }
-
-      #lab-room-select {
-        width: 190px;
-      }
-
       .lab-att-actions {
         flex-direction: row;
-        gap: 8px;
-        margin-left: auto;
+        flex-wrap: wrap;
+        justify-content: center;
       }
 
-      .lab-att-actions button {
-        width: auto;
+      .lab-att-actions select {
+        width: 170px !important;
       }
     }
 
@@ -138,7 +87,6 @@
       justify-content: space-between;
       align-items: flex-start;
       gap: 8px;
-      margin-bottom: 4px;
     }
 
     .lq-name {
@@ -149,11 +97,6 @@
       font-size: 13px;
       color: var(--slate);
       margin-bottom: 2px;
-    }
-
-    .lq-wait {
-      font-size: 12px;
-      color: var(--slate-light);
     }
 
     @media (min-width: 901px) {
@@ -172,11 +115,6 @@
         flex: 1;
         min-width: 200px;
         display: block;
-        margin-bottom: 0;
-      }
-
-      .lq-wait {
-        min-width: 100px;
       }
     }
 
@@ -209,12 +147,69 @@
       }
     }
 
-    /* Pending cards (search results) */
+    /* Pending tab: one card per patient, all their pending tests listed, one Requeue button */
     .lp-card {
       border: 1.5px solid var(--border);
       border-radius: var(--radius);
-      padding: 12px 14px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .lp-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
       margin-bottom: 8px;
+    }
+
+    .lp-test-list {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 8px;
+    }
+
+    .lp-test-list li {
+      font-size: 13px;
+      padding: 4px 0;
+      border-top: 1px dashed var(--border);
+    }
+
+    .lp-test-list li:first-child {
+      border-top: none;
+    }
+
+    .lp-card-meta {
+      font-size: 12px;
+      color: var(--slate);
+      margin-bottom: 10px;
+    }
+
+    .lp-card button {
+      width: 100%;
+    }
+
+    @media (min-width: 901px) {
+      .lp-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .lp-card-top {
+        margin-bottom: 4px;
+      }
+
+      .lp-card-body {
+        flex: 1;
+        min-width: 240px;
+      }
+
+      .lp-card button {
+        width: auto;
+      }
     }
   </style>
 </head>
@@ -270,12 +265,25 @@
 
     <nav class="sidebar">
       <div class="sidebar-section-label">Navigation</div>
-      <div class="nav-item active">
+      <div class="nav-item active" id="sidebar-tab-queue" onclick="showLabSection('queue')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
         </svg>
         Home
+      </div>
+      <div class="nav-item" id="sidebar-tab-pending" onclick="showLabSection('pending')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+        </svg>
+        Pending
+      </div>
+      <div class="nav-item" id="sidebar-tab-attendance" onclick="showLabSection('attendance')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        Attendance
       </div>
     </nav>
 
@@ -295,30 +303,16 @@
         </svg>
         Pending
       </button>
+      <button class="bottom-nav-item" id="tab-btn-attendance" onclick="showLabSection('attendance')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        Attendance
+      </button>
     </nav>
 
     <main class="main-content">
-
-      <!-- Persistent attendance bar - always visible, not a tab -->
-      <div class="lab-att-bar">
-        <div class="lab-att-bar-top">
-          <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
-          <select class="form-control" id="lab-room-select" style="display:none" onchange="markLabAttendance(labCurrentStatus)"></select>
-        </div>
-        <div class="lab-att-actions">
-          <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
-            Present</button>
-          <button class="btn btn-outline" id="lab-btn-break" onclick="markLabAttendance('on_break')"
-            style="display:none">On Break</button>
-          <button class="btn btn-outline" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')"
-            style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
-        </div>
-      </div>
-
-      <div class="lab-desktop-tabs">
-        <button class="lab-tab-chip active" id="desktop-tab-btn-queue" onclick="showLabSection('queue')">Home</button>
-        <button class="lab-tab-chip" id="desktop-tab-btn-pending" onclick="showLabSection('pending')">Pending</button>
-      </div>
 
       <!-- Home tab -->
       <div class="mobile-section active" id="section-queue">
@@ -341,6 +335,29 @@
           <input class="form-control" id="lab-pending-search" placeholder="Search patient to requeue a paid test…"
             oninput="searchLabPendingTasks(this.value)" style="margin-bottom:12px" />
           <div id="lab-pending-results"></div>
+        </div>
+      </div>
+
+      <!-- Attendance tab -->
+      <div class="mobile-section" id="section-attendance">
+        <div class="card">
+          <div class="card-header">
+            <h2>Today's Status</h2>
+          </div>
+          <div class="lab-att-status">
+            <span class="label">Status</span>
+            <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
+          </div>
+          <div class="lab-att-actions">
+            <select class="form-control" id="lab-room-select" style="display:none"
+              onchange="markLabAttendance(labCurrentStatus)"></select>
+            <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
+              Present</button>
+            <button class="btn btn-outline" id="lab-btn-break" onclick="markLabAttendance('on_break')"
+              style="display:none">On Break</button>
+            <button class="btn btn-outline" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')"
+              style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+          </div>
         </div>
       </div>
 
@@ -391,10 +408,10 @@
     let currentResultParams = [];
 
     function showLabSection(id) {
-      ['queue', 'pending'].forEach(s => {
+      ['queue', 'pending', 'attendance'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         document.getElementById('tab-btn-' + s).classList.toggle('active', s === id);
-        document.getElementById('desktop-tab-btn-' + s).classList.toggle('active', s === id);
+        document.getElementById('sidebar-tab-' + s).classList.toggle('active', s === id);
       });
       if (id === 'pending') runLabPendingSearch(document.getElementById('lab-pending-search').value);
     }
@@ -419,28 +436,35 @@
         el.innerHTML = `<p style="color:var(--slate-light);padding:8px 0">${hasQuery ? 'No matches for this search.' : 'No pending tasks right now.'}</p>`;
         return;
       }
-      el.innerHTML = results.map(r => `
+      el.innerHTML = results.map(r => {
+        const orderIds = r.pending.map(p => p.order_id).join(',');
+        const totalPrice = r.pending.reduce((sum, p) => sum + (p.price || 0), 0);
+        return `
         <div class="lp-card">
-          <strong>${sanitize(r.patient_name)}</strong> <span class="badge badge-navy">${sanitize(r.patient_uid)}</span>
-          ${r.pending.map(p => `
-            <div class="lp-item">
-              <div style="font-size:13px">
-                ${sanitize(p.test_name)} — Rs.${p.price}
-                <div style="color:var(--slate);font-size:12px">Ordered by ${sanitize(p.doctor_name)} · paid ${p.paid_at ? new Date(p.paid_at + '+05:30').toLocaleDateString('en-IN') : '—'}</div>
-              </div>
-              <button class="btn btn-primary btn-sm" onclick="requeueTestOrder(${p.order_id})">Requeue to Today</button>
+          <div class="lp-card-body">
+            <div class="lp-card-top">
+              <strong>${sanitize(r.patient_name)}</strong>
+              <span class="badge badge-navy">${sanitize(r.patient_uid)}</span>
             </div>
-          `).join('')}
+            <ul class="lp-test-list">
+              ${r.pending.map(p => `<li>${sanitize(p.test_name)} — Rs.${p.price} <span style="color:var(--slate-light)">(Dr. ${sanitize(p.doctor_name)})</span></li>`).join('')}
+            </ul>
+            <div class="lp-card-meta">${r.pending.length} test${r.pending.length > 1 ? 's' : ''} · Rs.${totalPrice} total</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="requeueAllForPatient('${orderIds}')">Requeue</button>
         </div>
-      `).join('');
+      `;
+      }).join('');
     }
 
-    async function requeueTestOrder(orderId) {
+    async function requeueAllForPatient(orderIdsCsv) {
+      const orderIds = orderIdsCsv.split(',').map(Number);
       try {
-        await api("POST", `/lab/orders/${orderId}/requeue`, {});
-        toast('Requeued to today\'s list.', 'success');
-        document.getElementById('lab-pending-search').value = '';
-        document.getElementById('lab-pending-results').innerHTML = '';
+        for (const id of orderIds) {
+          await api("POST", `/lab/orders/${id}/requeue`, {});
+        }
+        toast(orderIds.length > 1 ? `Requeued ${orderIds.length} tests.` : 'Requeued.', 'success');
+        runLabPendingSearch(document.getElementById('lab-pending-search').value);
         loadQueue();
       } catch (e) { toast(e.message, 'error'); }
     }
@@ -515,7 +539,7 @@
     }
 
     const STATUS_LABEL = {
-      paid: "Payment Received",
+      paid: "Awaiting Sample",
       sample_collected: "Sample Collected",
       processing: "Processing",
       completed: "Completed"
@@ -555,7 +579,6 @@
       const groups = groupQueueByPatient(items);
       el.innerHTML = groups.map(g => {
         const pendingCount = g.tests.filter(t => t.status !== 'completed').length;
-        const earliestWait = g.tests.reduce((max, t) => (t.waiting_minutes != null && t.waiting_minutes > max) ? t.waiting_minutes : max, -1);
         const summaryBadge = pendingCount === 0
           ? '<span class="badge badge-green">All completed</span>'
           : `<span class="badge badge-amber">${pendingCount} pending</span>`;
@@ -563,10 +586,9 @@
         <div class="lq-card" onclick="openPatientTestsModal('${g.key}')">
           <div class="lq-top">
             <strong class="lq-name">${sanitize(g.patient_name)}</strong>
-            <div class="lq-sub">Token ${sanitize(g.token_number)} · ${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>
+            <div class="lq-sub">Token #${sanitize(g.token_number)} · ${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>
           </div>
           ${summaryBadge}
-          <div class="lq-wait">${earliestWait >= 0 ? earliestWait + ' min waiting' : '—'}</div>
         </div>
       `;
       }).join('');
@@ -580,7 +602,7 @@
       currentPatientKey = key;
       document.getElementById('patient-tests-modal-title').textContent = group.patient_name;
       document.getElementById('patient-tests-modal-sub').textContent =
-        `Token ${group.token_number}${group.patient_uid ? ' · ' + group.patient_uid : ''}`;
+        `Token #${group.token_number}${group.patient_uid ? ' · UID ' + group.patient_uid : ''}`;
       renderPatientTestsList(group);
       document.getElementById('modal-patient-tests').classList.add('open');
     }
@@ -603,8 +625,7 @@
         <div class="lp-item">
           <div style="font-size:13px">
             <strong>${sanitize(o.test_name)}</strong>
-            <div style="margin-top:4px"><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}">${STATUS_LABEL[o.status] || o.status}</span></div>
-            <div style="color:var(--slate);font-size:12px;margin-top:4px">${o.waiting_minutes != null ? o.waiting_minutes + ' min waiting' : ''}</div>
+            <div style="margin-top:4px"><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}" id="lp-status-${o.id}">${STATUS_LABEL[o.status] || o.status}</span></div>
           </div>
           <div>
             ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="advanceStatus(${o.id}, 'sample_collected')">Collect Sample</button>` : ''}
@@ -633,8 +654,12 @@
     async function advanceStatus(orderId, status) {
       try {
         await api("PATCH", `/lab/orders/${orderId}/status`, { status });
-        toast('Status updated.', 'success');
-        await loadQueue();
+        const order = labQueueData.find(o => o.id === orderId);
+        if (order) order.status = status;
+        renderQueue(labQueueData);
+        refreshOpenPatientModal();
+        const labels = { sample_collected: 'Sample collected.', processing: 'Marked as processing.' };
+        toast(labels[status] || 'Status updated.', 'success');
       } catch (e) { toast(e.message, 'error'); }
     }
 
@@ -723,9 +748,12 @@
       try {
         await api("POST", `/lab/orders/${currentOrderId}/result`, { results });
         await api("PATCH", `/lab/orders/${currentOrderId}/status`, { status: "completed" });
-        toast('Results saved. Marked complete.', 'success');
+        const order = labQueueData.find(o => o.id === currentOrderId);
+        if (order) order.status = 'completed';
+        renderQueue(labQueueData);
+        toast('Results saved — report ready to download.', 'success');
         closeResultModal();
-        loadQueue();
+        refreshOpenPatientModal();
       } catch (e) { errEl.textContent = e.message; }
     }
 
