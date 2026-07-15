@@ -363,6 +363,39 @@ def checkin_today(
         "is_paid": checkin.is_paid
     }
 
+@router.get("/checkins/{checkin_id}/slip")
+def get_checkin_slip(
+    checkin_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    checkin = db.query(Checkin).filter(
+        Checkin.id == checkin_id,
+        Checkin.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not checkin:
+        raise HTTPException(status_code=404, detail="Visit not found")
+
+    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
+    doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first()
+
+    if checkin.vitals_status == "done" and checkin.vitals_recorded_by:
+        attending_nurse = db.query(Doctor).filter(Doctor.id == checkin.vitals_recorded_by).first()
+    else:
+        attending_nurse = db.query(Doctor).filter(Doctor.id == checkin.nurse_id).first() if checkin.nurse_id else None
+
+    return {
+        "token_number": checkin.token_number,
+        "patient_name": patient.name if patient else "—",
+        "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
+        "issue_category": checkin.issue_category,
+        "visit_date": checkin.visit_date.isoformat(),
+        "nurse_name": f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
+        "checkin_id": checkin.id,
+        "total_fee": (checkin.consultation_fee or 0) + (checkin.test_fee or 0),
+        "is_paid": checkin.is_paid
+    }
+
 @router.post("/{patient_id}/send-to-nurse")
 def send_to_nurse(
     patient_id: int,
@@ -1132,7 +1165,7 @@ def download_prescription_staff(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
-    if not consultation or not consultation.pdf_path:
+    if not consultation:
         raise HTTPException(status_code=404, detail="Prescription not found")
 
     patient = db.query(Patient).filter(
@@ -1142,8 +1175,16 @@ def download_prescription_staff(
     if not patient:
         raise HTTPException(status_code=404, detail="Prescription not found")
 
-    if not os.path.exists(consultation.pdf_path):
-        raise HTTPException(status_code=404, detail="Prescription file not found")
+    doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first()
+
+    from app.services.pdf_service import generate_prescription_pdf
+    pdf_path = generate_prescription_pdf(
+        doctor, patient, consultation,
+        consultation.token_number or f"consult-{consultation.id}",
+        consultation.verify_hash or ""
+    )
+    consultation.pdf_path = pdf_path
+    db.commit()
 
     from fastapi.responses import FileResponse
-    return FileResponse(consultation.pdf_path, media_type="application/pdf", filename=os.path.basename(consultation.pdf_path))
+    return FileResponse(pdf_path, media_type="application/pdf", filename=os.path.basename(pdf_path))

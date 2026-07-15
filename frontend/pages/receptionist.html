@@ -17,8 +17,8 @@
     }
     @media print {
       body * { visibility: hidden; }
-      #print-area, #print-area * { visibility: visible; }
-      #print-area { position: absolute; top: 0; left: 0; width: 100%; }
+      .print-area, .print-area * { visibility: visible; }
+      .print-area { position: absolute; top: 0; left: 0; width: 100%; }
       .no-print { display: none !important; }
     }
 
@@ -254,7 +254,7 @@
 
         <!-- STEP 4: Token slip -->
         <div id="step-token" style="display:none;text-align:center">
-          <div id="print-area">
+          <div id="print-area" class="print-area">
             <p style="font-weight:700;color:var(--navy);margin-bottom:2px" id="slip-hospital"></p>
             <div style="padding:20px 0">
               <p style="color:var(--slate);margin-bottom:6px">Token Number</p>
@@ -433,6 +433,33 @@
         <button class="modal-close" onclick="closeDocumentsModal()">×</button>
       </div>
       <div id="documents-list" style="max-height:60vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- Past Token Slip Modal (view/print-only, any day) -->
+  <div class="modal-overlay" id="modal-past-slip">
+    <div class="modal" style="max-width:360px">
+      <div class="modal-header no-print">
+        <h2>Token Slip</h2>
+        <button class="modal-close" onclick="closePastSlipModal()">×</button>
+      </div>
+      <div class="print-area" style="text-align:center">
+        <p style="font-weight:700;color:var(--navy);margin-bottom:2px" id="pslip-hospital"></p>
+        <div style="padding:20px 0">
+          <p style="color:var(--slate);margin-bottom:6px">Token Number</p>
+          <div style="font-size:2.4rem;font-weight:700;color:var(--navy);letter-spacing:1px" id="pslip-token"></div>
+        </div>
+        <div style="text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:20px">
+          <p><strong>Patient:</strong> <span id="pslip-name"></span></p>
+          <p><strong>Doctor:</strong> <span id="pslip-doctor"></span></p>
+          <p><strong>Room:</strong> <span id="pslip-room"></span></p>
+          <p><strong>Date:</strong> <span id="pslip-date"></span></p>
+          <p id="pslip-nurse-row" style="display:none"><strong>Vitals Room:</strong> <span id="pslip-nurse"></span></p>
+        </div>
+      </div>
+      <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px">
+        <button class="btn btn-outline" style="width:100%" onclick="window.print()">Print Slip</button>
+      </div>
     </div>
   </div>
 
@@ -876,7 +903,7 @@
         if (type === 'prescription') url = `${BASE}/patients/prescriptions/${refId}/download`;
         else if (type === 'test_report') url = `${BASE}/lab/orders/${refId}/report`;
         else if (type === 'invoice') url = `${BASE}/billing/invoices/${refId}/pdf`;
-        else if (type === 'token_slip') { toast('Reopen this token from the patient list to reprint the slip.', 'info'); return; }
+        else if (type === 'token_slip') { openPastSlipModal(refId); return; }
 
         const response = await fetch(url, { headers: { "Authorization": `Bearer ${getToken()}` } });
         if (!response.ok) throw new Error("Could not load document");
@@ -885,9 +912,28 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
-    async function loadPendingPayments() {
+    async function openPastSlipModal(checkinId) {
       try {
-        const rows = await api("GET", "/patients/reception/pending-payments");
+        const t = await api("GET", `/patients/checkins/${checkinId}/slip`);
+        document.getElementById('pslip-hospital').textContent = getDoctor()?.clinic_name || '';
+        document.getElementById('pslip-token').textContent = t.token_number;
+        document.getElementById('pslip-name').textContent = t.patient_name;
+        document.getElementById('pslip-doctor').textContent = t.doctor_name;
+        document.getElementById('pslip-room').textContent = t.issue_category;
+        document.getElementById('pslip-date').textContent = formatDate(t.visit_date);
+        document.getElementById('pslip-nurse-row').style.display = t.nurse_name ? '' : 'none';
+        if (t.nurse_name) document.getElementById('pslip-nurse').textContent = t.nurse_name;
+        document.getElementById('modal-past-slip').classList.add('open');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function closePastSlipModal() {
+      document.getElementById('modal-past-slip').classList.remove('open');
+    }
+
+    async function loadPendingPayments(silent = false) {
+      try {
+        const rows = await api("GET", "/patients/reception/pending-payments", null, false, silent);
         renderPendingPayments(rows);
       } catch (e) { }
     }
@@ -1318,7 +1364,7 @@
 
     loadAllPatients();
     loadPendingPayments();
-    setInterval(loadPendingPayments, 15000);
+    setInterval(() => loadPendingPayments(true), 15000);
   </script>
 </body>
 </html>

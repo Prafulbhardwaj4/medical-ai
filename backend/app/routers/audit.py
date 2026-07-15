@@ -10,6 +10,18 @@ from datetime import datetime
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
+LOGGED_ACTIONS = [
+    "account_created", "account_activated", "account_deactivated", "account_updated",
+    "role_changed",
+    "patient_created", "patient_updated", "patient_checked_in",
+    "vitals_recorded", "post_consult_task_completed",
+    "prescription_confirmed", "consultation_voided",
+    "payment_collected", "payment_reverted",
+    "test_fee_paid", "test_fees_collected", "test_fees_collected_anyday",
+    "medicine_created", "medicine_updated", "medicine_deactivated",
+    "medicine_stock_added", "medicine_fees_collected"
+]
+
 @router.get("/logs")
 def get_audit_logs(
     page: int = 1,
@@ -27,7 +39,7 @@ def get_audit_logs(
 
     query = db.query(AuditLog).filter(
         AuditLog.hospital_id == current_doctor.hospital_id,
-        AuditLog.actor_role != "super_admin"
+        AuditLog.action.in_(LOGGED_ACTIONS)
     )
 
     if action:
@@ -85,8 +97,7 @@ def get_audit_summary(
 
     query = db.query(AuditLog).filter(
         AuditLog.hospital_id == current_doctor.hospital_id,
-        AuditLog.actor_role != "super_admin",
-        AuditLog.action.notin_(["hospital_created", "hospital_activated", "hospital_deactivated"])
+        AuditLog.action.in_(LOGGED_ACTIONS)
     )
 
     total = query.count()

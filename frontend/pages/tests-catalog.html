@@ -25,22 +25,63 @@
       display: flex;
       gap: 8px;
     }
+    @media (min-width: 901px) {
+      .test-row-main { flex: 0 0 55%; max-width: 55%; min-width: 0; overflow-wrap: anywhere; }
+      .test-row-meta { flex: 0 0 200px; max-width: 200px; }
+      .test-row-actions { flex: 0 0 170px; max-width: 170px; justify-content: flex-end; }
+    }
     @media (max-width: 900px) {
       .test-row {
         flex-direction: column;
         align-items: stretch;
-        gap: 10px;
-        padding: 14px;
+        gap: 12px;
+        padding: 16px;
         border: 1px solid var(--border);
         border-radius: var(--radius-lg);
         margin-bottom: 10px;
       }
       .test-row-meta {
-        gap: 10px 18px;
-        font-size: 13px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-size: 12px;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        padding: 10px 0;
+      }
+      .test-row-meta > div {
+        background: var(--bg-light, #f1f5f9);
+        border-radius: 6px;
+        padding: 4px 10px;
       }
       .test-row-actions { width: 100%; }
       .test-row-actions .btn { flex: 1; }
+      .test-search-filter-grid { grid-template-columns: 1fr !important; }
+
+      #modal-test .form-row-3 {
+        flex-direction: column;
+        gap: 10px !important;
+      }
+      #modal-test .param-grid-header { display: none; }
+      #modal-test .param-row {
+        grid-template-columns: 1fr 30px !important;
+        grid-template-areas:
+          "name remove"
+          "rest rest";
+        row-gap: 8px !important;
+      }
+      #modal-test .param-row .param-name { grid-area: name; }
+      #modal-test .param-row .param-remove-btn { grid-area: remove; }
+      #modal-test .param-row > input:not(.param-name) {
+        grid-area: auto;
+      }
+      #modal-test .param-row {
+        display: flex !important;
+        flex-wrap: wrap;
+      }
+      #modal-test .param-row .param-name { flex: 1 1 100%; }
+      #modal-test .param-row .param-remove-btn { order: 2; flex: 0 0 auto; margin-left: auto; }
+      #modal-test .param-row > input:not(.param-name) { flex: 1 1 28%; order: 1; }
     }
   </style>
 </head>
@@ -74,6 +115,7 @@
           <circle cx="12" cy="8" r="4" />
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
+        <span class="profile-dot" id="profile-dot"></span>
       </button>
     </header>
 
@@ -389,7 +431,7 @@
         <input type="file" id="upload-input" accept=".pdf,.xlsx,.xls" style="display:none"
           onchange="handleFileSelected(event)" />
 
-        <div style="display:grid;grid-template-columns:1fr 200px;gap:10px;margin:16px 0 20px">
+        <div class="test-search-filter-grid" style="display:grid;grid-template-columns:1fr 200px;gap:10px;margin:16px 0 20px">
           <input class="form-control" id="test-search" placeholder="Search by test name…" oninput="loadTests()" />
           <select class="form-control" id="test-category-filter" onchange="loadTests()">
             <option value="">All Categories</option>
@@ -419,7 +461,7 @@
         doctors might say out loud (comma-separated)</label>
       <input class="form-control" id="t-aliases" placeholder="e.g. CBC, Complete Blood Count, Hemogram"
         style="margin-bottom:14px" />
-      <div style="display:flex;gap:12px;margin-bottom:14px">
+      <div class="form-row-3" style="display:flex;gap:12px;margin-bottom:14px">
         <input class="form-control" id="t-category" placeholder="Category" style="flex:1" />
         <input class="form-control" id="t-price" type="number" min="0" step="0.01" placeholder="Price (Rs.)"
           style="flex:1" />
@@ -433,7 +475,7 @@
       </label>
 
       <div id="t-simple-fields">
-        <div style="display:flex;gap:12px;margin-bottom:14px">
+        <div class="form-row-3" style="display:flex;gap:12px;margin-bottom:14px">
           <input class="form-control" id="t-range-male" placeholder="Reference Range (Male)" style="flex:1" />
           <input class="form-control" id="t-range-female" placeholder="Reference Range (Female)" style="flex:1" />
           <input class="form-control" id="t-unit" placeholder="Unit (e.g. mg/dL)" style="flex:1" />
@@ -450,7 +492,7 @@
             Count…)</label>
           <button class="btn btn-outline btn-sm" onclick="addParameterRow()">+ Add Parameter</button>
         </div>
-        <div
+        <div class="param-grid-header"
           style="display:grid;grid-template-columns:1.4fr 0.7fr 0.9fr 0.9fr 30px;gap:6px;font-size:12px;color:var(--slate);padding:0 0 6px;font-weight:600">
           <div>Parameter Name</div>
           <div>Unit</div>
@@ -506,12 +548,26 @@
     async function loadNotifUnreadCount() {
       try {
         const data = await api("GET", "/notifications/unread-count");
+        const hasUnread = data.unread_count > 0;
         const badge = document.getElementById('notif-badge');
-        if (data.unread_count > 0) {
+        if (hasUnread) {
           badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
           badge.style.display = 'flex';
         } else {
           badge.style.display = 'none';
+        }
+
+        const profileDot = document.getElementById('profile-dot');
+        if (profileDot) profileDot.style.display = hasUnread ? 'block' : 'none';
+
+        const menuBadge = document.getElementById('profile-menu-notif-badge');
+        if (menuBadge) {
+          if (hasUnread) {
+            menuBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+            menuBadge.style.display = '';
+          } else {
+            menuBadge.style.display = 'none';
+          }
         }
       } catch (e) { }
     }
@@ -600,12 +656,12 @@
     function renderParameterRows() {
       const el = document.getElementById('t-parameters-list');
       el.innerHTML = currentParameters.map((p, i) => `
-        <div style="display:grid;grid-template-columns:1.4fr 0.7fr 0.9fr 0.9fr 30px;gap:6px;margin-bottom:6px">
-          <input class="form-control" placeholder="e.g. Hemoglobin (Hb)" value="${sanitize(p.name)}" oninput="currentParameters[${i}].name=this.value" />
+        <div class="param-row" style="display:grid;grid-template-columns:1.4fr 0.7fr 0.9fr 0.9fr 30px;gap:6px;margin-bottom:6px">
+          <input class="form-control param-name" placeholder="e.g. Hemoglobin (Hb)" value="${sanitize(p.name)}" oninput="currentParameters[${i}].name=this.value" />
           <input class="form-control" placeholder="g/dL" value="${sanitize(p.unit)}" oninput="currentParameters[${i}].unit=this.value" />
           <input class="form-control" placeholder="13.0-17.0" value="${sanitize(p.reference_range_male)}" oninput="currentParameters[${i}].reference_range_male=this.value" />
           <input class="form-control" placeholder="12.0-15.5" value="${sanitize(p.reference_range_female)}" oninput="currentParameters[${i}].reference_range_female=this.value" />
-          <button class="btn btn-outline btn-sm" onclick="removeParameterRow(${i})" title="Remove">×</button>
+          <button class="btn btn-outline btn-sm param-remove-btn" onclick="removeParameterRow(${i})" title="Remove">×</button>
         </div>
       `).join('');
     }

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 import json, os
 
 from app.database import get_db
@@ -16,6 +16,7 @@ from app.models.invoice import Invoice
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 from app.services.pdf_service import generate_invoice_pdf
+from app.utils.timezone import ist_today, ist_day_bounds_utc, ist_date
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -179,10 +180,19 @@ def download_invoice_pdf(
         Invoice.id == invoice_id,
         Invoice.hospital_id == current_doctor.hospital_id
     ).first()
-    if not invoice or not invoice.pdf_path or not os.path.exists(invoice.pdf_path):
-        raise HTTPException(status_code=404, detail="Invoice PDF not found")
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
 
-    return FileResponse(invoice.pdf_path, media_type="application/pdf", filename=f"invoice_{invoice_id}.pdf")
+    patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == invoice.hospital_id).first()
+    items = json.loads(invoice.items_json)
+
+    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, invoice.grand_total, patient)
+    if invoice.pdf_path != pdf_path:
+        invoice.pdf_path = pdf_path
+        db.commit()
+
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"invoice_{invoice_id}.pdf")
 
 
 @router.get("/invoices")
@@ -221,6 +231,135 @@ def list_invoices(
             "generated_at": inv.generated_at.isoformat() if inv.generated_at else None
         })
     return result
+
+
+# Revenue History (admin) — aggregate totals, not individual invoices (that's /invoices above).
+# Deliberately bounded (3 months daily / 18 months monthly) rather than "since hospital
+# creation": covers every real use an admin has (this week, month-over-month, year-over-year
+# comparison) while keeping the query fast regardless of how long a hospital has been running.
+# Computed live from Invoice rows each call, no rollup table — fine at real single-hospital
+# invoice volumes, and each hospital's query only ever touches its own bounded window, so this
+# doesn't get slower as more hospitals use the platform. Revisit only if one specific hospital's
+# window genuinely gets big enough to matter, not preemptively.
+MAX_DAILY_RANGE_DAYS = 92          # ~3 months
+MAX_MONTHLY_RANGE_MONTHS = 18
+
+def _clamp_daily_range(from_date: str, to_date: str):
+    today = ist_today()
+    earliest = today - timedelta(days=MAX_DAILY_RANGE_DAYS)
+    to_d = datetime.fromisoformat(to_date).date() if to_date else today
+    from_d = datetime.fromisoformat(from_date).date() if from_date else earliest
+    to_d = min(to_d, today)
+    from_d = max(from_d, earliest)
+    if from_d > to_d:
+        from_d = to_d
+    return from_d, to_d
+
+@router.get("/revenue-history/daily")
+def revenue_history_daily(
+    from_date: str = None,
+    to_date: str = None,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from_d, to_d = _clamp_daily_range(from_date, to_date)
+    range_start_utc, _ = ist_day_bounds_utc(from_d)
+    _, range_end_utc = ist_day_bounds_utc(to_d)
+
+    invoices = db.query(Invoice).filter(
+        Invoice.hospital_id == current_doctor.hospital_id,
+        Invoice.generated_at >= range_start_utc,
+        Invoice.generated_at < range_end_utc
+    ).all()
+
+    buckets = {}
+    for inv in invoices:
+        d = ist_date(inv.generated_at)
+        if d not in buckets:
+            buckets[d] = {"total": 0.0, "invoice_count": 0}
+        buckets[d]["total"] += inv.grand_total
+        buckets[d]["invoice_count"] += 1
+
+    return {
+        "from_date": from_d.isoformat(),
+        "to_date": to_d.isoformat(),
+        "days": [
+            {"date": d.isoformat(), "total": round(v["total"], 2), "invoice_count": v["invoice_count"]}
+            for d, v in sorted(buckets.items())
+        ]
+    }
+
+def _clamp_monthly_range(from_month: str, to_month: str):
+    today = ist_today()
+    def month_start(y, m):
+        return datetime(y, m, 1).date()
+    def add_months(y, m, n):
+        total = (y * 12 + (m - 1)) + n
+        return total // 12, total % 12 + 1
+
+    ey, em = add_months(today.year, today.month, -(MAX_MONTHLY_RANGE_MONTHS - 1))
+    earliest = month_start(ey, em)
+    latest = month_start(today.year, today.month)
+
+    if to_month:
+        ty, tm = [int(x) for x in to_month.split("-")]
+        to_d = month_start(ty, tm)
+    else:
+        to_d = latest
+    if from_month:
+        fy, fm = [int(x) for x in from_month.split("-")]
+        from_d = month_start(fy, fm)
+    else:
+        from_d = earliest
+
+    to_d = min(to_d, latest)
+    from_d = max(from_d, earliest)
+    if from_d > to_d:
+        from_d = to_d
+    return from_d, to_d
+
+@router.get("/revenue-history/monthly")
+def revenue_history_monthly(
+    from_month: str = None,   # "YYYY-MM"
+    to_month: str = None,     # "YYYY-MM"
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from_d, to_d = _clamp_monthly_range(from_month, to_month)
+    range_start_utc, _ = ist_day_bounds_utc(from_d)
+    to_next_y, to_next_m = (to_d.year + 1, 1) if to_d.month == 12 else (to_d.year, to_d.month + 1)
+    range_end_ist = datetime(to_next_y, to_next_m, 1).date()
+    _, range_end_utc = ist_day_bounds_utc(range_end_ist - timedelta(days=1))
+
+    invoices = db.query(Invoice).filter(
+        Invoice.hospital_id == current_doctor.hospital_id,
+        Invoice.generated_at >= range_start_utc,
+        Invoice.generated_at < range_end_utc
+    ).all()
+
+    buckets = {}
+    for inv in invoices:
+        d = ist_date(inv.generated_at)
+        key = (d.year, d.month)
+        if key not in buckets:
+            buckets[key] = {"total": 0.0, "invoice_count": 0}
+        buckets[key]["total"] += inv.grand_total
+        buckets[key]["invoice_count"] += 1
+
+    return {
+        "from_month": f"{from_d.year:04d}-{from_d.month:02d}",
+        "to_month": f"{to_d.year:04d}-{to_d.month:02d}",
+        "months": [
+            {"month": f"{y:04d}-{m:02d}", "total": round(v["total"], 2), "invoice_count": v["invoice_count"]}
+            for (y, m), v in sorted(buckets.items())
+        ]
+    }
 
 
 @router.get("/checkins/{checkin_id}/preview-slip")

@@ -61,14 +61,14 @@ function _hideGlobalLoading() {
 let _activeRequests = 0;
 let _visibleRequests = 0;
 
-async function api(method, path, body = null, isFormData = false) {
+async function api(method, path, body = null, isFormData = false, silent = false) {
   const headers = { Authorization: `Bearer ${getToken()}` };
   if (!isFormData) headers["Content-Type"] = "application/json";
 
   const opts = { method, headers };
   if (body) opts.body = isFormData ? body : JSON.stringify(body);
 
-  const triggerBtn = document.activeElement && document.activeElement.tagName === "BUTTON" ? document.activeElement : null;
+  const triggerBtn = !silent && document.activeElement && document.activeElement.tagName === "BUTTON" ? document.activeElement : null;
   const alreadyDisabled = triggerBtn ? triggerBtn.disabled : true;
   if (triggerBtn && !alreadyDisabled) triggerBtn.disabled = true;
 

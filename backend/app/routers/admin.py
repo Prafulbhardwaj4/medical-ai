@@ -498,7 +498,8 @@ def list_doctors(
             ).count()
         result.append({
             "id": d.id,
-            "name": f"{d.title} {d.name}",
+            "name": d.name,
+            "title": d.title,
             "email": d.email,
             "phone": d.phone,
             "specialization": d.specialization,
@@ -636,7 +637,7 @@ def create_subadmin(
     email: str,
     phone: str,
     password: str,
-    specialization: str,
+    specialization: str = "",
     title: str = "Dr.",
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
@@ -925,6 +926,7 @@ def update_account(
     name: str,
     email: str,
     phone: str,
+    title: str = None,
     specialization: str = "",
     room_number: str = "",
     consultation_fee: float = None,
@@ -950,6 +952,8 @@ def update_account(
     account.name = name
     account.email = email
     account.phone = phone
+    if title:
+        account.title = title
     if specialization:
         account.specialization = specialization
     if room_number is not None:

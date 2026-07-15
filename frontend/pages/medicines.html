@@ -79,10 +79,29 @@
       gap: 10px 14px;
       margin-bottom: 10px;
     }
+    .btn-add-stock {
+      background: var(--success);
+      border: 1px solid var(--success);
+      color: var(--white);
+    }
+    .btn-add-stock:hover { filter: brightness(0.95); }
+    .stock-info-note {
+      font-size: 13px;
+      color: var(--slate);
+    }
+    .stock-info-note strong {
+      color: var(--navy);
+      font-family: 'DM Mono', monospace;
+    }
     @media (max-width: 640px) {
       .item-card-fields { grid-template-columns: repeat(2, 1fr); }
-      .item-card-actions { justify-content: stretch; }
-      .item-card-actions .btn { flex: 1; }
+      .item-card-fields > div:last-child { grid-column: 1 / -1; }
+      .item-card-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .item-card-actions .btn { width: 100%; }
     }
   </style>
 </head>
@@ -460,7 +479,7 @@
         <input class="form-control" id="m-form" placeholder="Type dosage form…" style="flex:1;display:none" />
       </div>
 
-      <div style="display:flex;gap:12px;margin-bottom:14px">
+      <div style="display:flex;gap:12px;margin-bottom:8px">
         <div style="flex:1">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Strength</label>
           <input class="form-control" id="m-strength" placeholder="e.g. 500mg" />
@@ -474,14 +493,8 @@
             <option value="x">X</option>
           </select>
         </div>
-        <div style="flex:1" id="m-stock-display-wrap">
-          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Current Stock</label>
-          <div style="display:flex;align-items:center;gap:8px;height:38px">
-            <span id="m-stock-display" style="font-weight:600;font-family:'DM Mono',monospace">0</span>
-            <button type="button" class="btn btn-outline btn-sm" id="m-add-stock-btn" style="display:none" onclick="openAddStockModal()">+ Add Stock</button>
-          </div>
-        </div>
       </div>
+      <div id="m-stock-info" class="stock-info-note" style="margin-bottom:14px"></div>
 
       <div id="pricing-fields-strip" style="display:flex;gap:12px;margin-bottom:6px">
         <div style="flex:1">
@@ -862,6 +875,7 @@
             </div>
           </div>
           <div class="item-card-actions">
+            <button class="btn btn-add-stock btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Stock</button>
             <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">View Batches</button>
             <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m)})'>Edit</button>
             <button class="btn btn-outline btn-sm" onclick="deactivateMedicine(${m.id})">Deactivate</button>
@@ -892,8 +906,7 @@
       document.getElementById('m-low-stock-threshold').value = '25';
       showStripPricing(true);
       updateComputedPrice();
-      document.getElementById('m-stock-display').textContent = '0 (save first, then add stock)';
-      document.getElementById('m-add-stock-btn').style.display = 'none';
+      document.getElementById('m-stock-info').innerHTML = 'Stock can be added from the medicine card once this is saved.';
       currentEditMedicineId = null;
       document.getElementById('medicine-modal-err').textContent = '';
       document.getElementById('modal-medicine').classList.add('open');
@@ -930,8 +943,7 @@
       document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER[document.getElementById('m-form-select').value] || 'e.g. 500mg';
 
       document.getElementById('m-schedule').value = m.schedule || 'otc';
-      document.getElementById('m-stock-display').textContent = m.stock_quantity != null ? m.stock_quantity : '0';
-      document.getElementById('m-add-stock-btn').style.display = '';
+      document.getElementById('m-stock-info').innerHTML = `Current stock: <strong>${m.stock_quantity != null ? m.stock_quantity : 0}</strong> — use "+ Add Stock" on the medicine card to add more.`;
       currentEditMedicineId = m.id;
       document.getElementById('m-pack-size').value = m.pack_size || '';
       document.getElementById('m-price-per-pack').value = m.price_per_pack != null ? m.price_per_pack : '';
@@ -999,9 +1011,11 @@
       } catch (e) { errEl.textContent = e.message; }
     }
 
-    function openAddStockModal() {
-      if (!currentEditMedicineId) return;
-      document.getElementById('stock-medicine-name').textContent = document.getElementById('m-generic').value;
+    let currentStockMedicineId = null;
+
+    function openAddStockModal(medicineId, medicineName) {
+      currentStockMedicineId = medicineId;
+      document.getElementById('stock-medicine-name').textContent = medicineName;
       document.getElementById('stock-qty').value = '';
       document.getElementById('stock-expiry').value = '';
       document.getElementById('stock-batch-number').value = '';
@@ -1025,10 +1039,9 @@
       };
 
       try {
-        await api("POST", `/admin/medicines/${currentEditMedicineId}/batches`, payload);
+        await api("POST", `/admin/medicines/${currentStockMedicineId}/batches`, payload);
         toast('Stock added.', 'success');
         closeAddStockModal();
-        closeMedicineModal();
         loadMedicines();
         loadExpiringSoon();
       } catch (e) { errEl.textContent = e.message; }

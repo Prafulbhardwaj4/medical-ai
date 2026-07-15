@@ -51,11 +51,15 @@
 
     .action-badge {
       display: inline-block;
+      max-width: 100%;
       padding: 3px 10px;
       border-radius: 99px;
       font-size: 12px;
       font-weight: 600;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: middle;
     }
 
     .badge-green { background: #dcfce7; color: #16a34a; }
@@ -149,6 +153,7 @@
           <circle cx="12" cy="8" r="4" />
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
+        <span class="profile-dot" id="profile-dot"></span>
       </button>
     </header>
 
@@ -433,12 +438,25 @@
                 <option value="account_created">Account Created</option>
                 <option value="account_activated">Account Activated</option>
                 <option value="account_deactivated">Account Deactivated</option>
+                <option value="account_updated">Account Updated</option>
                 <option value="role_changed">Role Changed</option>
-                <option value="prescription_confirmed">Prescription Confirmed</option>
-                <option value="consultation_voided">Consultation Voided</option>
-                <option value="prescription_dispensed">Prescription Dispensed</option>
                 <option value="patient_created">Patient Created</option>
                 <option value="patient_updated">Patient Updated</option>
+                <option value="patient_checked_in">Patient Checked In</option>
+                <option value="vitals_recorded">Vitals Recorded</option>
+                <option value="post_consult_task_completed">Post-Consult Task Completed</option>
+                <option value="prescription_confirmed">Prescription Confirmed</option>
+                <option value="consultation_voided">Consultation Voided</option>
+                <option value="payment_collected">Payment Collected</option>
+                <option value="payment_reverted">Payment Reverted</option>
+                <option value="test_fee_paid">Test Fee Paid</option>
+                <option value="test_fees_collected">Test Fees Collected</option>
+                <option value="test_fees_collected_anyday">Test Fees Collected (Late)</option>
+                <option value="medicine_created">Medicine Added</option>
+                <option value="medicine_updated">Medicine Updated</option>
+                <option value="medicine_deactivated">Medicine Deactivated</option>
+                <option value="medicine_stock_added">Medicine Stock Added</option>
+                <option value="medicine_fees_collected">Medicine Fees Collected</option>
               </select>
             </div>
             <div class="form-group" style="margin:0">
@@ -505,28 +523,50 @@
       account_created: "Account Created",
       account_activated: "Account Activated",
       account_deactivated: "Account Deactivated",
+      account_updated: "Account Updated",
       role_changed: "Role Changed",
-      hospital_activated: "Hospital Activated",
-      hospital_deactivated: "Hospital Deactivated",
+      patient_created: "Patient Created",
+      patient_updated: "Patient Updated",
+      patient_checked_in: "Patient Checked In",
+      vitals_recorded: "Vitals Recorded",
+      post_consult_task_completed: "Post-Consult Task Completed",
       prescription_confirmed: "Prescription Confirmed",
       consultation_voided: "Consultation Voided",
-      prescription_dispensed: "Prescription Dispensed",
-      patient_created: "Patient Created",
-      patient_updated: "Patient Updated"
+      payment_collected: "Payment Collected",
+      payment_reverted: "Payment Reverted",
+      test_fee_paid: "Test Fee Paid",
+      test_fees_collected: "Test Fees Collected",
+      test_fees_collected_anyday: "Test Fees Collected (Late)",
+      medicine_created: "Medicine Added",
+      medicine_updated: "Medicine Updated",
+      medicine_deactivated: "Medicine Deactivated",
+      medicine_stock_added: "Medicine Stock Added",
+      medicine_fees_collected: "Medicine Fees Collected"
     };
 
     const ACTION_BADGE = {
       account_created: "badge-green",
       account_activated: "badge-green",
       account_deactivated: "badge-red",
+      account_updated: "badge-orange",
       role_changed: "badge-purple",
-      hospital_activated: "badge-green",
-      hospital_deactivated: "badge-red",
+      patient_created: "badge-green",
+      patient_updated: "badge-orange",
+      patient_checked_in: "badge-green",
+      vitals_recorded: "badge-blue",
+      post_consult_task_completed: "badge-blue",
       prescription_confirmed: "badge-blue",
       consultation_voided: "badge-red",
-      prescription_dispensed: "badge-orange",
-      patient_created: "badge-green",
-      patient_updated: "badge-orange"
+      payment_collected: "badge-blue",
+      payment_reverted: "badge-red",
+      test_fee_paid: "badge-blue",
+      test_fees_collected: "badge-blue",
+      test_fees_collected_anyday: "badge-blue",
+      medicine_created: "badge-green",
+      medicine_updated: "badge-orange",
+      medicine_deactivated: "badge-red",
+      medicine_stock_added: "badge-green",
+      medicine_fees_collected: "badge-blue"
     };
 
     const ROLE_LABELS = {
@@ -587,7 +627,7 @@
             <td data-label="When" style="white-space:nowrap;color:var(--slate);font-size:13px">${formatDateTime(l.created_at)}</td>
             <td data-label="Actor" style="font-weight:500">${sanitize(l.actor_name)}</td>
             <td data-label="Role" style="font-size:13px;color:var(--slate)">${ROLE_LABELS[l.actor_role] || l.actor_role}</td>
-            <td data-label="Event"><span class="action-badge ${ACTION_BADGE[l.action] || 'badge-grey'}">${ACTION_LABELS[l.action] || l.action}</span></td>
+            <td data-label="Event"><span class="action-badge ${ACTION_BADGE[l.action] || 'badge-grey'}" title="${l.action}">${ACTION_LABELS[l.action] || l.action}</span></td>
             <td data-label="Target" style="font-size:13px">
               <span style="color:var(--slate)">${l.target_type}</span>
               ${l.target_label ? `<br><span style="font-weight:500">${sanitize(l.target_label)}</span>` : ""}
@@ -670,12 +710,26 @@
     async function loadNotifUnreadCount() {
       try {
         const data = await api("GET", "/notifications/unread-count");
+        const hasUnread = data.unread_count > 0;
         const badge = document.getElementById('notif-badge');
-        if (data.unread_count > 0) {
+        if (hasUnread) {
           badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
           badge.style.display = 'flex';
         } else {
           badge.style.display = 'none';
+        }
+
+        const profileDot = document.getElementById('profile-dot');
+        if (profileDot) profileDot.style.display = hasUnread ? 'block' : 'none';
+
+        const menuBadge = document.getElementById('profile-menu-notif-badge');
+        if (menuBadge) {
+          if (hasUnread) {
+            menuBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+            menuBadge.style.display = '';
+          } else {
+            menuBadge.style.display = 'none';
+          }
         }
       } catch (e) { }
     }

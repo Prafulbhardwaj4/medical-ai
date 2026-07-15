@@ -43,6 +43,7 @@
           <circle cx="12" cy="8" r="4" />
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
+        <span class="profile-dot" id="profile-dot"></span>
       </button>
     </header>
 
@@ -382,7 +383,7 @@
         <input class="form-control" id="d-phone" type="tel" placeholder="9876543210" maxlength="10" style="flex:1" />
       </div>
       <div id="doctor-only-fields">
-        <input class="form-control" id="d-specialization" placeholder="Specialization" style="margin-bottom:14px" />
+        <input class="form-control" id="d-specialization" placeholder="Specialization (optional)" style="margin-bottom:14px" />
         <input class="form-control" id="d-reg" placeholder="Registration Number (optional)" style="margin-bottom:14px" />
       <input class="form-control" id="d-room" placeholder="Room Number (optional, e.g. 101)" style="margin-bottom:14px" />
         <input class="form-control" id="d-fee" type="number" min="0" step="1" placeholder="Consultation Fee (Rs., optional)" style="margin-bottom:14px;display:none" />
@@ -430,7 +431,14 @@
       <input type="hidden" id="edit-staff-id" />
       <div class="form-group">
         <label class="form-label">Full Name</label>
-        <input class="form-control" id="edit-name" type="text" />
+        <div style="display:flex;gap:12px">
+          <select class="form-control" id="edit-title" style="width:100px">
+            <option>Dr.</option>
+            <option>Mr.</option>
+            <option>Ms.</option>
+          </select>
+          <input class="form-control" id="edit-name" type="text" style="flex:1" />
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Email</label>
@@ -480,11 +488,17 @@
       try {
         const data = await api("GET", "/notifications/unread-count");
         const badge = document.getElementById('notif-badge');
+        const dot = document.getElementById('profile-dot');
+        const pmBadge = document.getElementById('profile-menu-notif-badge');
         if (data.unread_count > 0) {
           badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
           badge.style.display = 'flex';
+          if (dot) dot.style.display = 'block';
+          if (pmBadge) { pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count; pmBadge.style.display = 'inline-block'; }
         } else {
           badge.style.display = 'none';
+          if (dot) dot.style.display = 'none';
+          if (pmBadge) pmBadge.style.display = 'none';
         }
       } catch (e) { }
     }
@@ -610,7 +624,7 @@
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
             <div style="min-width:0;flex:1">
               <div class="staff-name-row" style="font-weight:600;font-size:15px;display:flex;align-items:center;gap:6px">
-                <span>${sanitize(d.name)}</span>
+                <span>${sanitize(d.title ? d.title + ' ' : '')}${sanitize(d.name)}</span>
                 <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;${ROLE_BADGE_STYLE[d.role] || 'background:#f1f5f9;color:#64748b'}">
                   ${ROLE_LABEL[d.role] || 'Doctor'}
                 </span>
@@ -731,8 +745,8 @@
       const role = document.getElementById('d-role').value;
       const needsSpecialization = (role === 'doctor' || role === 'sub_admin');
 
-      if (!name || !email || !phone || !password || (needsSpecialization && !specialization)) {
-        err.textContent = 'All fields except registration number are required.'; return;
+      if (!name || !email || !phone || !password) {
+        err.textContent = 'Name, email, phone and password are required.'; return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         err.textContent = 'Enter a valid email.'; return;
@@ -811,6 +825,7 @@
       const d = staffMap[id];
       if (!d) return;
       document.getElementById('edit-staff-id').value = d.id;
+      document.getElementById('edit-title').value = d.title || 'Dr.';
       document.getElementById('edit-name').value = d.name;
       document.getElementById('edit-email').value = d.email;
       document.getElementById('edit-phone').value = (d.phone || '').replace('+91', '');
@@ -829,6 +844,7 @@
       const btn = document.getElementById('btn-save-edit');
       const err = document.getElementById('edit-err');
       const id = document.getElementById('edit-staff-id').value;
+      const title = document.getElementById('edit-title').value;
       const name = document.getElementById('edit-name').value.trim();
       const email = document.getElementById('edit-email').value.trim();
       const phone = document.getElementById('edit-phone').value.trim();
@@ -844,7 +860,7 @@
 
       const params = new URLSearchParams({
         name, email, phone: '+91' + phone, specialization,
-        room_number: room
+        room_number: room, title
       });
       if (fee) params.append('consultation_fee', fee);
 

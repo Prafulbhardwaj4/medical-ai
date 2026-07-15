@@ -335,34 +335,47 @@ def search_pending_pharmacy_tasks(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    """Patient-ID/name search for paid-but-not-dispensed medicines that fell
-    out of today's queue — free, repeatable, one-click requeue, as long as
-    still inside the 7-day/next-consultation window."""
+    """Paid-but-not-dispensed medicines that fell out of today's queue,
+    grouped by patient. With no query, lists everything pending; with a
+    query (2+ chars), filters to matching patients. Free, repeatable
+    requeue, as long as still inside the order's window."""
     require_pharmacy(current_doctor)
-    if not q or len(q.strip()) < 2:
-        return []
-
-    like = f"%{q.strip()}%"
-    patients = db.query(Patient).filter(
-        Patient.hospital_id == current_doctor.hospital_id,
-        (Patient.name.ilike(like)) | (Patient.patient_uid.ilike(like))
-    ).limit(15).all()
 
     today = ist_today()
-    result = []
-    for p in patients:
-        orders = db.query(MedicineOrder).filter(
-            MedicineOrder.patient_id == p.id,
-            MedicineOrder.hospital_id == current_doctor.hospital_id,
-            MedicineOrder.status == "paid"
-        ).all()
 
+    orders_query = db.query(MedicineOrder).join(
+        Patient, MedicineOrder.patient_id == Patient.id
+    ).filter(
+        MedicineOrder.hospital_id == current_doctor.hospital_id,
+        MedicineOrder.status == "paid"
+    )
+    if q and len(q.strip()) >= 2:
+        like = f"%{q.strip()}%"
+        orders_query = orders_query.filter(
+            (Patient.name.ilike(like)) | (Patient.patient_uid.ilike(like))
+        )
+
+    by_patient = {}
+    for o in orders_query.all():
+        if o.queued_at and o.queued_at.date() == today:
+            continue
+        if is_order_expired(db, o.patient_id, o.consultation_id, o.created_at):
+            continue
+        by_patient.setdefault(o.patient_id, []).append(o)
+
+    if not by_patient:
+        return []
+
+    patients = db.query(Patient).filter(Patient.id.in_(by_patient.keys())).all()
+    patient_map = {p.id: p for p in patients}
+
+    result = []
+    for patient_id, orders_list in by_patient.items():
+        p = patient_map.get(patient_id)
+        if not p:
+            continue
         pending = []
-        for o in orders:
-            if o.queued_at and o.queued_at.date() == today:
-                continue
-            if is_order_expired(db, p.id, o.consultation_id, o.created_at):
-                continue
+        for o in orders_list:
             consultation = db.query(Consultation).filter(Consultation.id == o.consultation_id).first()
             ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first() if consultation else None
             pending.append({
@@ -373,15 +386,63 @@ def search_pending_pharmacy_tasks(
                 "paid_at": o.paid_at.isoformat() if o.paid_at else None,
                 "token_number": consultation.token_number if consultation else None
             })
-
-        if pending:
-            result.append({
-                "patient_id": p.id,
-                "patient_name": p.name,
-                "patient_uid": p.patient_uid,
-                "pending": pending
-            })
+        result.append({
+            "patient_id": p.id,
+            "patient_name": p.name,
+            "patient_uid": p.patient_uid,
+            "pending": pending
+        })
     return result
+
+
+@router.post("/pending-tasks/{patient_id}/requeue-all")
+def requeue_all_for_patient(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Requeue every currently-pending (paid, not-yet-dispensed, not expired)
+    medicine order for one patient in a single action, rather than one
+    order at a time."""
+    require_pharmacy(current_doctor)
+
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    today = ist_today()
+    orders = db.query(MedicineOrder).filter(
+        MedicineOrder.patient_id == patient_id,
+        MedicineOrder.hospital_id == current_doctor.hospital_id,
+        MedicineOrder.status == "paid"
+    ).all()
+
+    requeued_ids = []
+    for o in orders:
+        if o.queued_at and o.queued_at.date() == today:
+            continue
+        if is_order_expired(db, o.patient_id, o.consultation_id, o.created_at):
+            continue
+        o.queued_at = datetime.utcnow()
+        requeued_ids.append(o.id)
+
+    if not requeued_ids:
+        raise HTTPException(status_code=400, detail="Nothing to requeue for this patient")
+
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="medicine_order_requeued",
+        target_type="patient",
+        target_id=patient.id,
+        target_label=f"{patient.name} — {len(requeued_ids)} medicine(s)",
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"patient_id": patient.id, "count": len(requeued_ids), "order_ids": requeued_ids}
 
 
 class AddMedicineIn(BaseModel):

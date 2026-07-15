@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
@@ -17,4 +17,4 @@ class AuditLog(Base):
     target_label = Column(String, nullable=True)
 
     details = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=now_ist_naive, nullable=False, index=True)

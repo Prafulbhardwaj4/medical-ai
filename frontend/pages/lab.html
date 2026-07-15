@@ -7,9 +7,9 @@
   <title>Lab — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
-    /* Tab sections (Home / Pending / Attendance) - only the active one shows,
-       on both mobile and desktop. Navigation lives in the sidebar on desktop
-       and the bottom nav on mobile. */
+    /* Tab sections (Home / Pending) - only the active one shows, on both
+       mobile and desktop. Attendance is a 3rd tab on mobile only; on
+       desktop it's a persistent block at the top, not tab-switched. */
     .mobile-section {
       display: none;
     }
@@ -25,6 +25,11 @@
 
       .mobile-section.active {
         display: block !important;
+      }
+
+      #section-attendance.mobile-section {
+        display: block !important;
+        margin-bottom: 20px;
       }
     }
 
@@ -82,11 +87,21 @@
       border-color: var(--teal);
     }
 
-    .lq-top {
+    .lq-card-head {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .lq-card-head button {
+      flex-shrink: 0;
+    }
+
+    .lq-top {
+      flex: 1;
+      min-width: 0;
     }
 
     .lq-name {
@@ -96,25 +111,14 @@
     .lq-sub {
       font-size: 13px;
       color: var(--slate);
-      margin-bottom: 2px;
+      margin-top: 2px;
     }
 
     @media (min-width: 901px) {
       .lq-card {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        flex-wrap: wrap;
         border: 1px solid var(--border);
         border-radius: var(--radius);
-        padding: 14px;
-      }
-
-      .lq-top {
-        flex: 1;
-        min-width: 200px;
-        display: block;
+        padding: 14px 16px;
       }
     }
 
@@ -192,7 +196,7 @@
     @media (min-width: 901px) {
       .lp-card {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 16px;
         flex-wrap: wrap;
@@ -209,6 +213,7 @@
 
       .lp-card button {
         width: auto;
+        margin-top: 2px;
       }
     }
   </style>
@@ -278,13 +283,6 @@
         </svg>
         Pending
       </div>
-      <div class="nav-item" id="sidebar-tab-attendance" onclick="showLabSection('attendance')">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        Attendance
-      </div>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
@@ -314,6 +312,29 @@
 
     <main class="main-content">
 
+      <!-- Attendance: mobile tab (3rd bottom-nav tab) / always-visible block on desktop -->
+      <div class="mobile-section" id="section-attendance">
+        <div class="card">
+          <div class="card-header">
+            <h2>Today's Status</h2>
+          </div>
+          <div class="lab-att-status">
+            <span class="label">Status</span>
+            <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
+          </div>
+          <div class="lab-att-actions">
+            <select class="form-control" id="lab-room-select" style="display:none"
+              onchange="markLabAttendance(labCurrentStatus)"></select>
+            <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
+              Present</button>
+            <button class="btn btn-outline" id="lab-btn-break" onclick="markLabAttendance('on_break')"
+              style="display:none">On Break</button>
+            <button class="btn btn-outline" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')"
+              style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Home tab -->
       <div class="mobile-section active" id="section-queue">
         <div class="card">
@@ -338,29 +359,6 @@
         </div>
       </div>
 
-      <!-- Attendance tab -->
-      <div class="mobile-section" id="section-attendance">
-        <div class="card">
-          <div class="card-header">
-            <h2>Today's Status</h2>
-          </div>
-          <div class="lab-att-status">
-            <span class="label">Status</span>
-            <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
-          </div>
-          <div class="lab-att-actions">
-            <select class="form-control" id="lab-room-select" style="display:none"
-              onchange="markLabAttendance(labCurrentStatus)"></select>
-            <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
-              Present</button>
-            <button class="btn btn-outline" id="lab-btn-break" onclick="markLabAttendance('on_break')"
-              style="display:none">On Break</button>
-            <button class="btn btn-outline" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')"
-              style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
-          </div>
-        </div>
-      </div>
-
     </main>
   </div>
 
@@ -375,6 +373,21 @@
         <button class="modal-close" onclick="closePatientTestsModal()">×</button>
       </div>
       <div id="patient-tests-list"></div>
+    </div>
+  </div>
+
+  <!-- Bulk "Mark Collected" confirmation -->
+  <div class="modal-overlay" id="modal-confirm-collect">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header">
+        <h2 style="font-size:16px;margin:0">Mark Samples Collected</h2>
+        <button class="modal-close" onclick="closeConfirmCollectModal()">×</button>
+      </div>
+      <p style="font-size:14px;color:var(--slate);margin:0 0 20px" id="confirm-collect-text"></p>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmCollectAll()">Confirm</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeConfirmCollectModal()">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -410,8 +423,10 @@
     function showLabSection(id) {
       ['queue', 'pending', 'attendance'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
-        document.getElementById('tab-btn-' + s).classList.toggle('active', s === id);
-        document.getElementById('sidebar-tab-' + s).classList.toggle('active', s === id);
+        const bottomBtn = document.getElementById('tab-btn-' + s);
+        if (bottomBtn) bottomBtn.classList.toggle('active', s === id);
+        const sideBtn = document.getElementById('sidebar-tab-' + s);
+        if (sideBtn) sideBtn.classList.toggle('active', s === id);
       });
       if (id === 'pending') runLabPendingSearch(document.getElementById('lab-pending-search').value);
     }
@@ -579,19 +594,60 @@
       const groups = groupQueueByPatient(items);
       el.innerHTML = groups.map(g => {
         const pendingCount = g.tests.filter(t => t.status !== 'completed').length;
+        const awaitingSampleCount = g.tests.filter(t => t.status === 'paid').length;
         const summaryBadge = pendingCount === 0
           ? '<span class="badge badge-green">All completed</span>'
           : `<span class="badge badge-amber">${pendingCount} pending</span>`;
         return `
         <div class="lq-card" onclick="openPatientTestsModal('${g.key}')">
-          <div class="lq-top">
-            <strong class="lq-name">${sanitize(g.patient_name)}</strong>
-            <div class="lq-sub">Token #${sanitize(g.token_number)} · ${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>
+          <div class="lq-card-head">
+            <div class="lq-top">
+              <strong class="lq-name">${sanitize(g.patient_name)}</strong>
+              <div class="lq-sub">Token #${sanitize(g.token_number)} · ${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>
+            </div>
+            ${awaitingSampleCount > 0 ? `<button class="btn btn-outline btn-sm" onclick="openConfirmCollectModal('${g.key}', event)">Collected</button>` : ''}
           </div>
           ${summaryBadge}
         </div>
       `;
       }).join('');
+    }
+
+    let pendingCollectKey = null;
+
+    function openConfirmCollectModal(key, evt) {
+      if (evt) evt.stopPropagation();
+      const group = groupQueueByPatient(labQueueData).find(g => g.key === key);
+      if (!group) return;
+      if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; }
+      const paidCount = group.tests.filter(t => t.status === 'paid').length;
+      if (paidCount === 0) { toast('No tests awaiting sample collection for this patient.', 'info'); return; }
+      pendingCollectKey = key;
+      document.getElementById('confirm-collect-text').textContent =
+        `Mark all ${paidCount} test${paidCount > 1 ? 's' : ''} as sample collected for ${group.patient_name}?`;
+      document.getElementById('modal-confirm-collect').classList.add('open');
+    }
+
+    function closeConfirmCollectModal() {
+      document.getElementById('modal-confirm-collect').classList.remove('open');
+      pendingCollectKey = null;
+    }
+
+    async function confirmCollectAll() {
+      const group = groupQueueByPatient(labQueueData).find(g => g.key === pendingCollectKey);
+      closeConfirmCollectModal();
+      if (!group) return;
+      const toCollect = group.tests.filter(t => t.status === 'paid');
+      try {
+        for (const t of toCollect) {
+          await api("PATCH", `/lab/orders/${t.id}/status`, { status: 'sample_collected' });
+          const order = labQueueData.find(o => o.id === t.id);
+          if (order) order.status = 'sample_collected';
+        }
+        renderQueue(labQueueData);
+        refreshOpenPatientModal();
+        toast(`Marked ${toCollect.length} test${toCollect.length > 1 ? 's' : ''} as sample collected.`, 'success');
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     let currentPatientKey = null;
@@ -628,7 +684,7 @@
             <div style="margin-top:4px"><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}" id="lp-status-${o.id}">${STATUS_LABEL[o.status] || o.status}</span></div>
           </div>
           <div>
-            ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="advanceStatus(${o.id}, 'sample_collected')">Collect Sample</button>` : ''}
+            ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} advanceStatus(${o.id}, 'sample_collected')">Sample Collected</button>` : ''}
             ${o.status === 'sample_collected' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} advanceStatus(${o.id}, 'processing')">Mark Processing</button>` : ''}
             ${o.status === 'processing' ? `<button class="btn btn-primary btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} openResultModal(${o.id}, '${sanitize(o.test_name)}', ${o.test_id != null ? o.test_id : 'null'})">Enter Results</button>` : ''}
             ${o.status === 'completed' ? `<button class="btn btn-outline btn-sm" onclick="downloadReport(${o.id})">Download Report</button>` : ''}

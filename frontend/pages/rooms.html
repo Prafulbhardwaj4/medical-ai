@@ -65,6 +65,9 @@
         max-width: none;
         width: 100%;
       }
+      .room-row-actions .room-seq-input {
+        grid-column: 1 / -1;
+      }
       .room-row-actions .btn { width: 100%; }
       .room-filter-mobile { display: block; }
       .room-filter-desktop { display: none; }
@@ -510,7 +513,7 @@
               <option value="Other" ${!ROOM_TYPE_PRESETS.includes(r.room_type) ? 'selected' : ''}>Other</option>
             </select>
             <input class="form-control" style="visibility:${ROOM_TYPE_PRESETS.includes(r.room_type) ? 'hidden' : 'visible'}" id="room-type-edit-other-${r.id}" placeholder="Custom type" value="${!ROOM_TYPE_PRESETS.includes(r.room_type) ? sanitize(r.room_type) : ''}" />
-            <input class="form-control" style="max-width:90px" id="room-seq-edit-${r.id}" type="number" min="1" placeholder="Seq #" value="${r.sequence_number != null ? r.sequence_number : ''}" />
+            <input class="form-control room-seq-input" style="max-width:90px" id="room-seq-edit-${r.id}" type="number" min="1" placeholder="Seq #" value="${r.sequence_number != null ? r.sequence_number : ''}" />
             <button class="btn btn-outline btn-sm" onclick="saveRoomType(${r.id})">Save</button>
             <button class="btn btn-outline btn-sm" onclick="deleteRoom(${r.id})">Delete</button>
           </div>
