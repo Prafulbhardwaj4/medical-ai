@@ -84,6 +84,7 @@ def serialize(m: HospitalMedicine):
 def list_medicines(
     category: Optional[str] = None,
     schedule: Optional[str] = None,
+    dosage_form: Optional[str] = None,
     search: Optional[str] = None,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
@@ -99,6 +100,8 @@ def list_medicines(
         query = query.filter(HospitalMedicine.category == category)
     if schedule:
         query = query.filter(HospitalMedicine.schedule == schedule)
+    if dosage_form:
+        query = query.filter(HospitalMedicine.dosage_forms == dosage_form)
     if search:
         like = f"%{search}%"
         query = query.filter(or_(

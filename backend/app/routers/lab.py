@@ -11,6 +11,7 @@ from app.models.test_order import TestOrder
 from app.models.consultation import Consultation
 from app.models.patient import Patient
 from app.models.test_catalog import TestCatalogItem
+from app.models.test_catalog_parameter import TestCatalogParameter
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds_utc, utc_naive_to_ist_date
 from app.utils.audit import log_action
 from app.utils.order_lifecycle import is_order_expired
@@ -64,8 +65,11 @@ def get_lab_queue(
 
         result.append({
             "id": o.id,
+            "patient_id": o.patient_id,
             "patient_name": patient.name if patient else "Unknown",
+            "patient_uid": patient.patient_uid if patient else "",
             "token_number": consultation.token_number if consultation else "",
+            "test_id": o.test_id,
             "test_name": o.test_name,
             "price": o.price,
             "status": o.status,
@@ -73,6 +77,49 @@ def get_lab_queue(
             "waiting_minutes": waiting_minutes
         })
     return result
+
+
+@router.get("/tests/{test_id}")
+def get_lab_test_detail(
+    test_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Lab-accessible read of a single catalog test's panel parameters (e.g. CBC's
+    Hemoglobin/WBC/Platelet sub-tests), used to pre-fill the result entry modal.
+    Separate from /admin/tests/{id} which is admin-only."""
+    require_lab(current_doctor)
+
+    test = db.query(TestCatalogItem).filter(
+        TestCatalogItem.id == test_id,
+        TestCatalogItem.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    parameters = []
+    if test.is_panel:
+        rows = db.query(TestCatalogParameter).filter(
+            TestCatalogParameter.test_catalog_item_id == test.id,
+            TestCatalogParameter.is_active == True
+        ).order_by(TestCatalogParameter.display_order).all()
+        parameters = [{
+            "id": p.id,
+            "name": p.name,
+            "unit": p.unit or "",
+            "reference_range_male": p.reference_range_male or "",
+            "reference_range_female": p.reference_range_female or ""
+        } for p in rows]
+
+    return {
+        "id": test.id,
+        "test_name": test.name,
+        "is_panel": test.is_panel,
+        "unit": test.unit or "",
+        "reference_range_male": test.reference_range_male or "",
+        "reference_range_female": test.reference_range_female or "",
+        "parameters": parameters
+    }
 
 
 @router.get("/pending-tasks")

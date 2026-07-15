@@ -7,7 +7,9 @@
   <title>Lab — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
-    /* Mobile tab sections: only one visible at a time on phones, all stacked normally on desktop */
+    /* Mobile tab sections: only one visible at a time on phones.
+       Scoped override (by id) so desktop now tabs too, instead of the
+       shared style.css default of stacking every .mobile-section on desktop. */
     .mobile-section {
       display: none;
     }
@@ -21,42 +23,114 @@
         display: block !important;
         margin-bottom: 20px;
       }
+
+      #section-queue.mobile-section,
+      #section-pending.mobile-section {
+        display: none !important;
+      }
+
+      #section-queue.mobile-section.active,
+      #section-pending.mobile-section.active {
+        display: block !important;
+      }
     }
 
-    /* Attendance tab */
-    .lab-att-status {
-      text-align: center;
-      padding: 24px 0 20px;
+    /* Desktop tabs (Home / Pending) */
+    .lab-desktop-tabs {
+      display: none;
+      gap: 8px;
+      margin-bottom: 16px;
     }
 
-    .lab-att-status .badge {
-      font-size: 15px;
-      padding: 8px 18px;
+    @media (min-width: 901px) {
+      .lab-desktop-tabs {
+        display: flex;
+      }
+    }
+
+    .lab-tab-chip {
+      padding: 6px 16px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      color: var(--slate);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .lab-tab-chip.active {
+      background: var(--teal);
+      border-color: var(--teal);
+      color: var(--white);
+    }
+
+    /* Persistent attendance bar — always visible, not a tab */
+    .lab-att-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: stretch;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      margin-bottom: 20px;
+      background: var(--white);
+    }
+
+    .lab-att-bar-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
     .lab-att-actions {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
+    }
+
+    .lab-att-actions button {
+      width: 100%;
+    }
+
+    #lab-room-select {
+      width: 100%;
     }
 
     @media (min-width: 901px) {
-      .lab-att-status {
-        display: none;
+      .lab-att-bar {
+        flex-direction: row;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 16px;
+      }
+
+      #lab-room-select {
+        width: 190px;
       }
 
       .lab-att-actions {
         flex-direction: row;
-        flex-wrap: wrap;
+        gap: 8px;
+        margin-left: auto;
+      }
+
+      .lab-att-actions button {
+        width: auto;
       }
     }
 
-    /* Queue cards */
+    /* Queue: one card per patient */
     .lq-card {
       border: 1.5px solid var(--border);
       border-radius: var(--radius);
       padding: 14px;
       margin-bottom: 10px;
+      cursor: pointer;
+    }
+
+    .lq-card:hover {
+      border-color: var(--teal);
     }
 
     .lq-top {
@@ -80,11 +154,6 @@
     .lq-wait {
       font-size: 12px;
       color: var(--slate-light);
-      margin-bottom: 10px;
-    }
-
-    .lq-actions button {
-      width: 100%;
     }
 
     @media (min-width: 901px) {
@@ -94,46 +163,29 @@
         justify-content: space-between;
         gap: 10px;
         flex-wrap: wrap;
-        border: none;
-        border-bottom: 1px solid var(--border);
-        border-radius: 0;
-        padding: 12px 0;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px;
       }
 
       .lq-top {
         flex: 1;
         min-width: 200px;
         display: block;
+        margin-bottom: 0;
       }
 
       .lq-wait {
         min-width: 100px;
-        margin-bottom: 0;
-      }
-
-      .lq-actions {
-        display: flex;
-        gap: 8px;
-      }
-
-      .lq-actions button {
-        width: auto;
       }
     }
 
-    /* Pending cards */
-    .lp-card {
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-      margin-bottom: 8px;
-    }
-
+    /* Patient tests modal — per-test rows */
     .lp-item {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      padding: 10px 0;
+      padding: 12px 0;
       border-top: 1px solid var(--border);
     }
 
@@ -155,6 +207,14 @@
       .lp-item button {
         width: auto;
       }
+    }
+
+    /* Pending cards (search results) */
+    .lp-card {
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-bottom: 8px;
     }
   </style>
 </head>
@@ -181,6 +241,7 @@
           <circle cx="12" cy="8" r="4" />
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
+        <span class="profile-dot" id="profile-dot"></span>
       </button>
     </header>
 
@@ -214,7 +275,7 @@
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
         </svg>
-        Lab Queue
+        Home
       </div>
     </nav>
 
@@ -226,7 +287,7 @@
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M9 3h6m-6 0v5.586a1 1 0 01-.293.707L4.293 13.707A1 1 0 004 14.414V19a2 2 0 002 2h12a2 2 0 002-2v-4.586a1 1 0 00-.293-.707l-4.414-4.414A1 1 0 0115 8.586V3" />
         </svg>
-        Queue
+        Home
       </button>
       <button class="bottom-nav-item" id="tab-btn-pending" onclick="showLabSection('pending')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -234,43 +295,36 @@
         </svg>
         Pending
       </button>
-      <button class="bottom-nav-item" id="tab-btn-attendance" onclick="showLabSection('attendance')">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        Attendance
-      </button>
-
     </nav>
 
     <main class="main-content">
 
-      <!-- Attendance tab -->
-      <div class="mobile-section" id="section-attendance">
-        <div class="card">
-          <div class="card-header" style="margin-bottom:0">
-            <h2>Today's Status</h2>
-          </div>
-          <div class="lab-att-status">
-            <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
-          </div>
-          <div class="lab-att-actions">
-            <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
-              Present</button>
-            <button class="btn btn-outline" id="lab-btn-break" onclick="markLabAttendance('on_break')"
-              style="display:none">On Break</button>
-            <button class="btn btn-outline" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')"
-              style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
-          </div>
+      <!-- Persistent attendance bar - always visible, not a tab -->
+      <div class="lab-att-bar">
+        <div class="lab-att-bar-top">
+          <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
+          <select class="form-control" id="lab-room-select" style="display:none" onchange="markLabAttendance(labCurrentStatus)"></select>
+        </div>
+        <div class="lab-att-actions">
+          <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
+            Present</button>
+          <button class="btn btn-outline" id="lab-btn-break" onclick="markLabAttendance('on_break')"
+            style="display:none">On Break</button>
+          <button class="btn btn-outline" id="lab-btn-offduty" onclick="markLabAttendance('off_duty')"
+            style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
         </div>
       </div>
 
-      <!-- Queue tab -->
+      <div class="lab-desktop-tabs">
+        <button class="lab-tab-chip active" id="desktop-tab-btn-queue" onclick="showLabSection('queue')">Home</button>
+        <button class="lab-tab-chip" id="desktop-tab-btn-pending" onclick="showLabSection('pending')">Pending</button>
+      </div>
+
+      <!-- Home tab -->
       <div class="mobile-section active" id="section-queue">
         <div class="card">
           <div class="card-header">
-            <h2>Lab Queue</h2>
+            <h2>Home</h2>
           </div>
           <div id="lab-queue-list">
             <p style="color:var(--slate)">Loading…</p>
@@ -284,17 +338,27 @@
           <div class="card-header">
             <h2>Pending Tasks</h2>
           </div>
-          <p style="font-size:13px;color:var(--slate);margin-bottom:10px">
-            Search a patient who paid for a test but wasn't queued the same day — you can add them back to today's queue
-            any time within their payment window.
-          </p>
-          <input class="form-control" id="lab-pending-search" placeholder="Search patient name, UID or token…"
+          <input class="form-control" id="lab-pending-search" placeholder="Search patient to requeue a paid test…"
             oninput="searchLabPendingTasks(this.value)" style="margin-bottom:12px" />
           <div id="lab-pending-results"></div>
         </div>
       </div>
 
     </main>
+  </div>
+
+  <!-- Patient Tests Modal -->
+  <div class="modal-overlay" id="modal-patient-tests">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="patient-tests-modal-title" style="margin:0"></h2>
+          <p style="margin:2px 0 0;font-size:13px;color:var(--slate)" id="patient-tests-modal-sub"></p>
+        </div>
+        <button class="modal-close" onclick="closePatientTestsModal()">×</button>
+      </div>
+      <div id="patient-tests-list"></div>
+    </div>
   </div>
 
   <!-- Result Entry Modal -->
@@ -323,11 +387,14 @@
 
     let labCurrentStatus = 'not_marked';
     let currentOrderId = null;
+    let currentResultMode = 'single';
+    let currentResultParams = [];
 
     function showLabSection(id) {
-      ['queue', 'pending', 'attendance'].forEach(s => {
+      ['queue', 'pending'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         document.getElementById('tab-btn-' + s).classList.toggle('active', s === id);
+        document.getElementById('desktop-tab-btn-' + s).classList.toggle('active', s === id);
       });
       if (id === 'pending') runLabPendingSearch(document.getElementById('lab-pending-search').value);
     }
@@ -342,14 +409,14 @@
     async function runLabPendingSearch(q) {
       try {
         const results = await api("GET", `/lab/pending-tasks?q=${encodeURIComponent(q)}`);
-        renderLabPendingResults(results);
+        renderLabPendingResults(results, q.trim().length > 0);
       } catch (e) { }
     }
 
-    function renderLabPendingResults(results) {
+    function renderLabPendingResults(results, hasQuery) {
       const el = document.getElementById('lab-pending-results');
       if (!results.length) {
-        el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No pending tasks found for this search.</p>';
+        el.innerHTML = `<p style="color:var(--slate-light);padding:8px 0">${hasQuery ? 'No matches for this search.' : 'No pending tasks right now.'}</p>`;
         return;
       }
       el.innerHTML = results.map(r => `
@@ -381,7 +448,17 @@
     async function loadLabAttendance() {
       try {
         const data = await api("GET", "/doctors/attendance/my-status");
+        await loadLabRoomOptions(data.room_id);
         renderLabBadge(data.status);
+      } catch (e) { }
+    }
+
+    async function loadLabRoomOptions(selectedId) {
+      try {
+        const rooms = await api("GET", "/admin/rooms?for_picker=lab");
+        document.getElementById('lab-room-select').innerHTML =
+          '<option value="">No room</option>' +
+          rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.display || r.name || r.room_number}</option>`).join('');
       } catch (e) { }
     }
 
@@ -391,6 +468,7 @@
       const btnPresent = document.getElementById('lab-btn-present');
       const btnBreak = document.getElementById('lab-btn-break');
       const btnOffDuty = document.getElementById('lab-btn-offduty');
+      document.getElementById('lab-room-select').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';
         btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
@@ -414,7 +492,9 @@
     async function markLabAttendance(status) {
       try {
         const wasAlreadyPresent = labCurrentStatus === status;
-        await api("POST", "/doctors/attendance", { status, room_id: null });
+        const roomVal = document.getElementById('lab-room-select').value;
+        const room_id = roomVal ? parseInt(roomVal) : null;
+        await api("POST", "/doctors/attendance", { status, room_id });
         renderLabBadge(status);
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
@@ -423,10 +503,14 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
+    let labQueueData = [];
+
     async function loadQueue() {
       try {
         const items = await api("GET", "/lab/queue");
+        labQueueData = items;
         renderQueue(items);
+        refreshOpenPatientModal();
       } catch (e) { toast(e.message, "error"); }
     }
 
@@ -443,26 +527,89 @@
       completed: "badge-green"
     };
 
+    function groupQueueByPatient(items) {
+      const map = new Map();
+      items.forEach(o => {
+        const key = o.patient_id != null ? `p${o.patient_id}` : `${o.patient_name}__${o.token_number}`;
+        if (!map.has(key)) {
+          map.set(key, {
+            key,
+            patient_id: o.patient_id,
+            patient_name: o.patient_name,
+            patient_uid: o.patient_uid,
+            token_number: o.token_number,
+            tests: []
+          });
+        }
+        map.get(key).tests.push(o);
+      });
+      return Array.from(map.values());
+    }
+
     function renderQueue(items) {
       const el = document.getElementById('lab-queue-list');
       if (!items.length) {
         el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No tests waiting in queue.</p>';
         return;
       }
-      el.innerHTML = items.map(o => `
-        <div class="lq-card">
+      const groups = groupQueueByPatient(items);
+      el.innerHTML = groups.map(g => {
+        const pendingCount = g.tests.filter(t => t.status !== 'completed').length;
+        const earliestWait = g.tests.reduce((max, t) => (t.waiting_minutes != null && t.waiting_minutes > max) ? t.waiting_minutes : max, -1);
+        const summaryBadge = pendingCount === 0
+          ? '<span class="badge badge-green">All completed</span>'
+          : `<span class="badge badge-amber">${pendingCount} pending</span>`;
+        return `
+        <div class="lq-card" onclick="openPatientTestsModal('${g.key}')">
           <div class="lq-top">
-            <div>
-              <strong class="lq-name">${sanitize(o.patient_name)}</strong>
-              <div class="lq-sub">Token ${sanitize(o.token_number)} · ${sanitize(o.test_name)}</div>
-            </div>
-            <span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}">${STATUS_LABEL[o.status] || o.status}</span>
+            <strong class="lq-name">${sanitize(g.patient_name)}</strong>
+            <div class="lq-sub">Token ${sanitize(g.token_number)} · ${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>
           </div>
-          <div class="lq-wait">${o.waiting_minutes != null ? o.waiting_minutes + ' min waiting' : '—'}</div>
-          <div class="lq-actions">
+          ${summaryBadge}
+          <div class="lq-wait">${earliestWait >= 0 ? earliestWait + ' min waiting' : '—'}</div>
+        </div>
+      `;
+      }).join('');
+    }
+
+    let currentPatientKey = null;
+
+    function openPatientTestsModal(key) {
+      const group = groupQueueByPatient(labQueueData).find(g => g.key === key);
+      if (!group) return;
+      currentPatientKey = key;
+      document.getElementById('patient-tests-modal-title').textContent = group.patient_name;
+      document.getElementById('patient-tests-modal-sub').textContent =
+        `Token ${group.token_number}${group.patient_uid ? ' · ' + group.patient_uid : ''}`;
+      renderPatientTestsList(group);
+      document.getElementById('modal-patient-tests').classList.add('open');
+    }
+
+    function closePatientTestsModal() {
+      document.getElementById('modal-patient-tests').classList.remove('open');
+      currentPatientKey = null;
+    }
+
+    function refreshOpenPatientModal() {
+      if (currentPatientKey == null) return;
+      const group = groupQueueByPatient(labQueueData).find(g => g.key === currentPatientKey);
+      if (group) renderPatientTestsList(group);
+      else closePatientTestsModal();
+    }
+
+    function renderPatientTestsList(group) {
+      const el = document.getElementById('patient-tests-list');
+      el.innerHTML = group.tests.map(o => `
+        <div class="lp-item">
+          <div style="font-size:13px">
+            <strong>${sanitize(o.test_name)}</strong>
+            <div style="margin-top:4px"><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}">${STATUS_LABEL[o.status] || o.status}</span></div>
+            <div style="color:var(--slate);font-size:12px;margin-top:4px">${o.waiting_minutes != null ? o.waiting_minutes + ' min waiting' : ''}</div>
+          </div>
+          <div>
             ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="advanceStatus(${o.id}, 'sample_collected')">Collect Sample</button>` : ''}
             ${o.status === 'sample_collected' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} advanceStatus(${o.id}, 'processing')">Mark Processing</button>` : ''}
-            ${o.status === 'processing' ? `<button class="btn btn-primary btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} openResultModal(${o.id}, '${sanitize(o.test_name)}')">Enter Results</button>` : ''}
+            ${o.status === 'processing' ? `<button class="btn btn-primary btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} openResultModal(${o.id}, '${sanitize(o.test_name)}', ${o.test_id != null ? o.test_id : 'null'})">Enter Results</button>` : ''}
             ${o.status === 'completed' ? `<button class="btn btn-outline btn-sm" onclick="downloadReport(${o.id})">Download Report</button>` : ''}
           </div>
         </div>
@@ -487,50 +634,91 @@
       try {
         await api("PATCH", `/lab/orders/${orderId}/status`, { status });
         toast('Status updated.', 'success');
-        loadQueue();
+        await loadQueue();
       } catch (e) { toast(e.message, 'error'); }
     }
 
-    function openResultModal(orderId, testLabel) {
+    async function openResultModal(orderId, testLabel, testId) {
       currentOrderId = orderId;
       document.getElementById('result-test-label').textContent = testLabel;
-      document.getElementById('result-fields').innerHTML = `
-        <div class="form-group">
-          <label class="form-label">Result Value</label>
-          <input class="form-control" id="result-value" placeholder="e.g. 13.5 g/dL" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Flag</label>
-          <select class="form-control" id="result-flag">
-            <option value="N">Normal</option>
-            <option value="H">High</option>
-            <option value="L">Low</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Notes (optional)</label>
-          <input class="form-control" id="result-notes" placeholder="Any observations…" />
-        </div>
-      `;
+      const fieldsEl = document.getElementById('result-fields');
+      fieldsEl.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
       document.getElementById('result-modal-err').textContent = '';
       document.getElementById('modal-result').classList.add('open');
+
+      let testDetail = null;
+      if (testId) {
+        try { testDetail = await api("GET", `/lab/tests/${testId}`); } catch (e) { }
+      }
+
+      if (testDetail && testDetail.is_panel && testDetail.parameters.length) {
+        currentResultMode = 'panel';
+        currentResultParams = testDetail.parameters;
+        fieldsEl.innerHTML = testDetail.parameters.map(p => `
+          <div class="form-group">
+            <label class="form-label">${sanitize(p.name)}${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}</label>
+            <input class="form-control" id="result-param-${p.id}" placeholder="${(p.reference_range_male || p.reference_range_female) ? 'Ref: ' + sanitize(p.reference_range_male || p.reference_range_female) : 'Value'}" />
+          </div>
+        `).join('') + `
+          <div class="form-group">
+            <label class="form-label">Notes (optional)</label>
+            <input class="form-control" id="result-notes" placeholder="Any observations…" />
+          </div>
+        `;
+      } else {
+        currentResultMode = 'single';
+        currentResultParams = [];
+        fieldsEl.innerHTML = `
+          <div class="form-group">
+            <label class="form-label">Result Value</label>
+            <input class="form-control" id="result-value" placeholder="e.g. 13.5 g/dL" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Flag</label>
+            <select class="form-control" id="result-flag">
+              <option value="N">Normal</option>
+              <option value="H">High</option>
+              <option value="L">Low</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes (optional)</label>
+            <input class="form-control" id="result-notes" placeholder="Any observations…" />
+          </div>
+        `;
+      }
     }
 
     function closeResultModal() {
       document.getElementById('modal-result').classList.remove('open');
       currentOrderId = null;
+      currentResultMode = 'single';
+      currentResultParams = [];
     }
 
     async function submitResult() {
-      const value = document.getElementById('result-value').value.trim();
       const errEl = document.getElementById('result-modal-err');
-      if (!value) { errEl.textContent = 'Result value is required.'; return; }
+      let results;
 
-      const results = {
-        value,
-        flag: document.getElementById('result-flag').value,
-        notes: document.getElementById('result-notes').value.trim()
-      };
+      if (currentResultMode === 'panel') {
+        results = {};
+        let anyFilled = false;
+        for (const p of currentResultParams) {
+          const val = document.getElementById(`result-param-${p.id}`).value.trim();
+          if (val) anyFilled = true;
+          results[p.name] = val;
+        }
+        if (!anyFilled) { errEl.textContent = 'Enter at least one value.'; return; }
+        results.notes = document.getElementById('result-notes').value.trim();
+      } else {
+        const value = document.getElementById('result-value').value.trim();
+        if (!value) { errEl.textContent = 'Result value is required.'; return; }
+        results = {
+          value,
+          flag: document.getElementById('result-flag').value,
+          notes: document.getElementById('result-notes').value.trim()
+        };
+      }
 
       try {
         await api("POST", `/lab/orders/${currentOrderId}/result`, { results });

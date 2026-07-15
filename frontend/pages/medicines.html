@@ -361,10 +361,13 @@
         </div>
         <input type="file" id="upload-input" accept=".pdf,.xlsx,.xls" style="display:none" onchange="handleFileSelected(event)" />
 
-        <div class="med-filter-row" style="display:grid;grid-template-columns:1fr 180px 160px;gap:10px;margin:16px 0 20px">
+        <div class="med-filter-row" style="display:grid;grid-template-columns:1fr 160px 160px 160px;gap:10px;margin:16px 0 20px">
           <input class="form-control" id="med-search" placeholder="Search by generic or brand name…" oninput="loadMedicines()" />
           <select class="form-control" id="med-category-filter" onchange="loadMedicines()">
             <option value="">All Categories</option>
+          </select>
+          <select class="form-control" id="med-form-filter" onchange="loadMedicines()">
+            <option value="">All Forms</option>
           </select>
           <select class="form-control" id="med-schedule-filter" onchange="loadMedicines()">
             <option value="">All Schedules</option>
@@ -754,9 +757,11 @@
         const params = new URLSearchParams();
         const search = document.getElementById('med-search').value.trim();
         const category = document.getElementById('med-category-filter').value;
+        const form = document.getElementById('med-form-filter').value;
         const schedule = document.getElementById('med-schedule-filter').value;
         if (search) params.append('search', search);
         if (category) params.append('category', category);
+        if (form) params.append('dosage_form', form);
         if (schedule) params.append('schedule', schedule);
 
         const [items, expiring, lowStock] = await Promise.all([
@@ -768,6 +773,7 @@
         lowStockMedicineIds = new Set(lowStock.map(l => l.medicine_id));
         renderMedicines(items);
         populateCategoryFilter(items);
+        populateFormFilter(items);
       } catch (e) { toast(e.message, "error"); }
     }
 
@@ -777,6 +783,15 @@
       const categories = [...new Set(items.map(i => i.category).filter(Boolean))].sort();
       select.innerHTML = '<option value="">All Categories</option>' +
         categories.map(c => `<option value="${sanitize(c)}">${sanitize(c)}</option>`).join('');
+      select.value = current;
+    }
+
+    function populateFormFilter(items) {
+      const select = document.getElementById('med-form-filter');
+      const current = select.value;
+      const forms = [...new Set(items.map(i => i.dosage_forms).filter(Boolean))].sort();
+      select.innerHTML = '<option value="">All Forms</option>' +
+        forms.map(f => `<option value="${sanitize(f)}">${sanitize(f)}</option>`).join('');
       select.value = current;
     }
 

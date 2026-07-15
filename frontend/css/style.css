@@ -447,6 +447,8 @@ tbody tr:hover { background: var(--smoke); }
   padding: 28px;
   width: 100%;
   max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
   transform: translateY(20px) scale(0.98);
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -1262,9 +1264,10 @@ tbody tr:hover { background: var(--smoke); }
   flex-shrink: 0;
 }
 @media (min-width: 901px) {
-  .topbar-profile-btn { display: flex; }
+  .topbar-profile-btn { display: flex; margin-left: 16px; }
   .topbar-doctor {
     margin-left: auto;
+    margin-right: 16px;
   }
   .topbar-doctor .topbar-divider,
   #topbar-clinic,

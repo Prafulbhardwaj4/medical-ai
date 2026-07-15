@@ -307,7 +307,7 @@ def update_hospital_details(
     db.commit()
     return {"address": hospital.address, "gstin": hospital.gstin}
 
-ROOM_TYPE_PICKER_MAP = {"doctor": "Doctor", "nurse": "Nurse"}
+ROOM_TYPE_PICKER_MAP = {"doctor": "Doctor", "nurse": "Nurse", "lab": "Lab"}
 
 def serialize_room(r):
     return {
@@ -319,6 +319,22 @@ def serialize_room(r):
         "sequence_number": r.sequence_number,
         "display": f"{r.name or ''}{' (' + r.room_number + ')' if r.room_number else ''}".strip()
     }
+
+def _make_room_slot(db, hospital_id, seq, exclude_room_id=None):
+    """Free up sequence_number `seq` by shifting every active room at/after it up by one,
+    so a new/moved room can drop into that slot (e.g. an inserted OPD room pushes the
+    Emergency block after it down, keeping each type's numbers contiguous)."""
+    from app.models.room import Room
+    query = db.query(Room).filter(
+        Room.hospital_id == hospital_id,
+        Room.is_active == True,
+        Room.sequence_number != None,
+        Room.sequence_number >= seq
+    )
+    if exclude_room_id is not None:
+        query = query.filter(Room.id != exclude_room_id)
+    for r in query.order_by(Room.sequence_number.desc()).all():
+        r.sequence_number += 1
 
 @router.get("/rooms")
 def list_rooms(
@@ -358,13 +374,7 @@ def create_room(
     if sequence_number is not None:
         if sequence_number < 1:
             raise HTTPException(status_code=400, detail="Sequence number must be positive")
-        clash = db.query(Room).filter(
-            Room.hospital_id == current_doctor.hospital_id,
-            Room.is_active == True,
-            Room.sequence_number == sequence_number
-        ).first()
-        if clash:
-            raise HTTPException(status_code=400, detail=f"Sequence number {sequence_number} is already used by another room")
+        _make_room_slot(db, current_doctor.hospital_id, sequence_number)
 
     room = Room(
         hospital_id=current_doctor.hospital_id,
@@ -406,15 +416,9 @@ def update_room_type(
     if sequence_number is not None:
         if sequence_number < 1:
             raise HTTPException(status_code=400, detail="Sequence number must be positive")
-        clash = db.query(Room).filter(
-            Room.hospital_id == current_doctor.hospital_id,
-            Room.is_active == True,
-            Room.sequence_number == sequence_number,
-            Room.id != room_id
-        ).first()
-        if clash:
-            raise HTTPException(status_code=400, detail=f"Sequence number {sequence_number} is already used by another room")
-        room.sequence_number = sequence_number
+        if room.sequence_number != sequence_number:
+            _make_room_slot(db, current_doctor.hospital_id, sequence_number, exclude_room_id=room.id)
+            room.sequence_number = sequence_number
     elif clear_sequence_number:
         room.sequence_number = None
 
@@ -963,6 +967,35 @@ def update_account(
         hospital_id=account.hospital_id
     )
     return {"id": account.id, "name": account.name, "email": account.email, "phone": account.phone}
+
+@router.patch("/accounts/{doctor_id}/toggle-active")
+def toggle_account_active(
+    doctor_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    account = db.query(Doctor).filter(
+        Doctor.id == doctor_id,
+        Doctor.role.in_([UserRole.admin, UserRole.sub_admin])
+    ).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    account.is_active = not account.is_active
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="account_activated" if account.is_active else "account_deactivated",
+        target_type="doctor",
+        target_id=account.id,
+        target_label=f"{account.title} {account.name}",
+        hospital_id=account.hospital_id
+    )
+    return {"id": account.id, "is_active": account.is_active}
 
 @router.post("/accounts/{doctor_id}/reset-password")
 def reset_account_password(
