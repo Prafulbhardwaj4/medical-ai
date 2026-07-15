@@ -106,38 +106,60 @@
 
     <nav class="sidebar">
       <div class="sidebar-section-label">Navigation</div>
-      <div class="nav-item" id="nav-queue-tab" onclick="switchPharmacyTab('queue')" style="cursor:pointer">
+      <div class="nav-item" id="nav-home-tab" onclick="switchPharmacyTab('home')" style="cursor:pointer">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
-        Pharmacy Queue
+        Home
+      </div>
+      <div class="nav-item" id="nav-pending-tab" onclick="switchPharmacyTab('pending')" style="cursor:pointer">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Pending
+      </div>
+      <div class="nav-item" id="nav-patients-tab" onclick="switchPharmacyTab('patients')" style="cursor:pointer">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Patients
       </div>
       <div class="nav-item" id="nav-stock-tab" onclick="switchPharmacyTab('stock')" style="cursor:pointer">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
         </svg>
-        Medicine Stock
+        Medicine Catalog
       </div>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <nav class="bottom-nav">
-      <button class="bottom-nav-item active" id="tab-btn-queue" onclick="switchPharmacyTab('queue')">
+      <button class="bottom-nav-item active" id="tab-btn-home" onclick="switchPharmacyTab('home')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
-        Queue
+        Home
+      </button>
+      <button class="bottom-nav-item" id="tab-btn-pending" onclick="switchPharmacyTab('pending')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Pending
+      </button>
+      <button class="bottom-nav-item" id="tab-btn-patients" onclick="switchPharmacyTab('patients')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Patients
       </button>
       <button class="bottom-nav-item" id="tab-btn-stock" onclick="switchPharmacyTab('stock')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
         </svg>
-        Stock
+        Meds
       </button>
       <button class="bottom-nav-item" id="tab-btn-attendance" onclick="switchPharmacyTab('attendance')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -168,11 +190,11 @@
         </div>
       </div>
 
-      <div id="pharmacy-queue-view" class="mobile-section active">
+      <div id="pharmacy-home-view" class="mobile-section active">
         <div class="card">
           <div class="card-header"
             style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-            <h2 style="margin:0">Pharmacy Queue</h2>
+            <h2 style="margin:0">Home</h2>
           </div>
 
           <div style="display:grid;grid-template-columns:1fr 200px;gap:10px;margin:16px 0 14px">
@@ -185,17 +207,33 @@
             </select>
           </div>
 
-          <input class="form-control" id="pharm-pending-search" placeholder="Find patient (pending medicine tasks)…"
-            style="margin-bottom:10px" oninput="searchPharmPendingTasks(this.value)" />
-          <div id="pharm-pending-results" style="margin-bottom:10px"></div>
-
-          <input class="form-control" id="pharm-doc-search" placeholder="Find patient (documents / generate bill)…"
-            style="margin-bottom:10px" oninput="searchPharmDocPatients(this.value)" />
-          <div id="pharm-doc-results" style="margin-bottom:10px"></div>
-
           <div id="pharmacy-queue-list">
             <p style="color:var(--slate)">Loading…</p>
           </div>
+        </div>
+      </div>
+
+      <div id="pharmacy-pending-view" class="mobile-section" style="display:none">
+        <div class="card">
+          <div class="card-header"
+            style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <h2 style="margin:0">Pending Dispenses</h2>
+          </div>
+          <input class="form-control" id="pharm-pending-search" placeholder="Search patient name or ID…"
+            style="margin:16px 0" oninput="searchPharmPendingTasks(this.value)" />
+          <div id="pharm-pending-results"><p style="color:var(--slate)">Loading…</p></div>
+        </div>
+      </div>
+
+      <div id="pharmacy-patients-view" class="mobile-section" style="display:none">
+        <div class="card">
+          <div class="card-header"
+            style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <h2 style="margin:0">Patients</h2>
+          </div>
+          <input class="form-control" id="pharm-patients-search" placeholder="Search patient name, phone or ID…"
+            style="margin:16px 0" oninput="searchPharmPatients(this.value)" />
+          <div id="pharm-patients-list"><p style="color:var(--slate)">Loading…</p></div>
         </div>
       </div>
 
@@ -214,7 +252,7 @@
         <div class="card">
           <div class="card-header"
             style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-            <h2 style="margin:0">Medicine Stock</h2>
+            <h2 style="margin:0">Medicine Catalog</h2>
             <button class="btn btn-outline btn-sm" onclick="loadStockMedicines()">Refresh</button>
           </div>
           <input class="form-control" id="stock-search" placeholder="Search medicines…" oninput="renderStockMedicines()"
@@ -501,48 +539,96 @@
     let pharmPendingSearchTimer;
     function searchPharmPendingTasks(val) {
       clearTimeout(pharmPendingSearchTimer);
-      pharmPendingSearchTimer = setTimeout(() => runPharmPendingSearch(val), 350);
+      pharmPendingSearchTimer = setTimeout(() => loadPendingTasks(val), 350);
     }
 
-    async function runPharmPendingSearch(q) {
+    async function loadPendingTasks(q = '') {
       const el = document.getElementById('pharm-pending-results');
-      if (!q || q.trim().length < 2) { el.innerHTML = ''; return; }
+      el.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
       try {
         const results = await api("GET", `/pharmacy/pending-tasks?q=${encodeURIComponent(q)}`);
         renderPharmPendingResults(results);
-      } catch (e) { }
+      } catch (e) { el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; }
     }
 
     function renderPharmPendingResults(results) {
       const el = document.getElementById('pharm-pending-results');
       if (!results.length) {
-        el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No pending tasks found for this search.</p>';
+        el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No pending dispenses.</p>';
         return;
       }
       el.innerHTML = results.map(r => `
         <div style="border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
-          <strong>${sanitize(r.patient_name)}</strong> <span class="badge badge-navy">${sanitize(r.patient_uid)}</span>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div><strong>${sanitize(r.patient_name)}</strong> <span class="badge badge-navy">${sanitize(r.patient_uid)}</span></div>
+            <button class="btn btn-primary btn-sm" onclick="requeueAllForPatient(${r.patient_id}, this)">Requeue All (${r.pending.length})</button>
+          </div>
           ${r.pending.map(p => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;flex-wrap:wrap;gap:8px">
+            <div style="padding:6px 0;flex-wrap:wrap;gap:8px">
               <div style="font-size:13px">
                 ${sanitize(p.medicine_name)} × ${p.quantity ?? '—'}
                 <div style="color:var(--slate);font-size:12px">Prescribed by ${sanitize(p.doctor_name)} · token ${sanitize(p.token_number || '—')} · paid ${p.paid_at ? new Date(p.paid_at + '+05:30').toLocaleDateString('en-IN') : '—'}</div>
               </div>
-              <button class="btn btn-primary btn-sm" onclick="requeueMedicineOrder(${p.order_id})">Requeue to Today</button>
             </div>
           `).join('')}
         </div>
       `).join('');
     }
 
-    async function requeueMedicineOrder(orderId) {
+    async function requeueAllForPatient(patientId, btnEl) {
+      btnEl.disabled = true;
+      btnEl.innerHTML = '<span class="spinner"></span>';
       try {
-        await api("POST", `/pharmacy/medicine-orders/${orderId}/requeue`, {});
-        toast('Requeued to today\'s list.', 'success');
-        document.getElementById('pharm-pending-search').value = '';
-        document.getElementById('pharm-pending-results').innerHTML = '';
+        const result = await api("POST", `/pharmacy/pending-tasks/${patientId}/requeue-all`, {});
+        toast(`Requeued ${result.count} medicine(s) to today's list.`, 'success');
+        loadPendingTasks(document.getElementById('pharm-pending-search').value);
         loadQueue();
-      } catch (e) { toast(e.message, 'error'); }
+      } catch (e) {
+        toast(e.message, 'error');
+        btnEl.disabled = false;
+        btnEl.textContent = 'Requeue All';
+      }
+    }
+
+    let pharmPatientsSearchTimer;
+    function searchPharmPatients(val) {
+      clearTimeout(pharmPatientsSearchTimer);
+      pharmPatientsSearchTimer = setTimeout(() => loadPharmPatients(val), 350);
+    }
+
+    async function loadPharmPatients(search = '') {
+      const el = document.getElementById('pharm-patients-list');
+      el.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+      try {
+        const data = await api("GET", `/patients/?search=${encodeURIComponent(search)}&limit=200`);
+        renderPharmPatients(data);
+      } catch (e) { el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; }
+    }
+
+    function renderPharmPatients(data) {
+      const el = document.getElementById('pharm-patients-list');
+      if (!data.length) {
+        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No patients found.</p>';
+        return;
+      }
+      const queueTokens = new Set(queueData.map(i => i.token_number));
+      el.innerHTML = data.map(p => {
+        const inQueue = p.checked_in_today && p.last_token && queueTokens.has(p.last_token);
+        return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+          <div>
+            <strong>${sanitize(p.name)}</strong> <span class="badge badge-navy">${sanitize(p.patient_uid)}</span>
+            <div style="font-size:12px;color:var(--slate)">${sanitize(p.phone)} · ${p.age}y / ${sanitize(p.gender || '')}</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="openDocumentsModal(${p.id}, '${sanitize(p.name).replace(/'/g, "\\'")}')">📄 Docs</button>
+            ${inQueue
+            ? `<button class="btn btn-primary btn-sm" onclick="openPrescription('${p.last_token}')">💊 Medicine</button>`
+            : `<button class="btn btn-outline btn-sm" disabled title="No active order in today's queue">💊 No Active Order</button>`}
+          </div>
+        </div>
+      `;
+      }).join('');
     }
 
     async function openPrescription(tokenNumber) {
@@ -748,25 +834,6 @@
       }
     }
 
-    let pharmDocSearchTimer = null;
-    async function searchPharmDocPatients(q) {
-      clearTimeout(pharmDocSearchTimer);
-      const box = document.getElementById('pharm-doc-results');
-      if (!q || q.trim().length < 2) { box.innerHTML = ''; return; }
-      pharmDocSearchTimer = setTimeout(async () => {
-        try {
-          const patients = await api("GET", `/patients/?search=${encodeURIComponent(q.trim())}&limit=8`);
-          if (!patients.length) { box.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No matches.</p>'; return; }
-          box.innerHTML = patients.map(p => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
-              <span style="font-size:14px">${sanitize(p.name)} <span style="color:var(--slate);font-size:12px">· ${sanitize(p.patient_uid)}</span></span>
-              <button class="btn btn-outline btn-sm" onclick="openDocumentsModal(${p.id}, '${p.name.replace(/'/g, "\\'")}')">📄 Docs</button>
-            </div>
-          `).join('');
-        } catch (e) { box.innerHTML = `<p style="color:var(--danger);font-size:13px">${e.message}</p>`; }
-      }, 300);
-    }
-
     const DOC_TYPE_LABEL = {
       token_slip: "🎫 Token Slip",
       prescription: "📋 Prescription",
@@ -911,16 +978,25 @@
     }
 
     function switchPharmacyTab(tab) {
-      document.getElementById('pharmacy-queue-view').style.display = tab === 'queue' ? 'block' : 'none';
+      document.getElementById('pharmacy-home-view').style.display = tab === 'home' ? 'block' : 'none';
+      document.getElementById('pharmacy-pending-view').style.display = tab === 'pending' ? 'block' : 'none';
+      document.getElementById('pharmacy-patients-view').style.display = tab === 'patients' ? 'block' : 'none';
       document.getElementById('pharmacy-stock-view').style.display = tab === 'stock' ? 'block' : 'none';
       document.getElementById('section-attendance').style.display = tab === 'attendance' ? 'block' : 'none';
-      document.getElementById('nav-queue-tab').classList.toggle('active', tab === 'queue');
+      document.getElementById('nav-home-tab').classList.toggle('active', tab === 'home');
+      document.getElementById('nav-pending-tab').classList.toggle('active', tab === 'pending');
+      document.getElementById('nav-patients-tab').classList.toggle('active', tab === 'patients');
       document.getElementById('nav-stock-tab').classList.toggle('active', tab === 'stock');
-      document.getElementById('tab-btn-queue').classList.toggle('active', tab === 'queue');
+      document.getElementById('tab-btn-home').classList.toggle('active', tab === 'home');
+      document.getElementById('tab-btn-pending').classList.toggle('active', tab === 'pending');
+      document.getElementById('tab-btn-patients').classList.toggle('active', tab === 'patients');
       document.getElementById('tab-btn-stock').classList.toggle('active', tab === 'stock');
       document.getElementById('tab-btn-attendance').classList.toggle('active', tab === 'attendance');
       if (tab === 'stock') loadStockMedicines();
+      if (tab === 'pending') loadPendingTasks();
+      if (tab === 'patients') loadPharmPatients();
     }
+
 
     let stockMedicinesData = [];
     let currentStockMedicineId = null;
@@ -1080,7 +1156,7 @@
     loadPharmAttendance();
     loadQueue();
     setInterval(loadQueue, 15000);
-    switchPharmacyTab('queue');
+    switchPharmacyTab('home');
   </script>
 </body>
 
