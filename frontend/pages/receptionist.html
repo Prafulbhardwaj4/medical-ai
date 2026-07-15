@@ -432,6 +432,13 @@
         <h2>Documents — <span id="doc-patient-name"></span></h2>
         <button class="modal-close" onclick="closeDocumentsModal()">×</button>
       </div>
+      <div class="doc-filter-chips" id="doc-filter-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="doc-filter-chip active" data-type="all" onclick="setDocFilter('all')">All</button>
+        <button class="doc-filter-chip" data-type="token_slip" onclick="setDocFilter('token_slip')">Token Slips</button>
+        <button class="doc-filter-chip" data-type="prescription" onclick="setDocFilter('prescription')">Prescriptions</button>
+        <button class="doc-filter-chip" data-type="test_report" onclick="setDocFilter('test_report')">Test Reports</button>
+        <button class="doc-filter-chip" data-type="invoice" onclick="setDocFilter('invoice')">Invoices</button>
+      </div>
       <div id="documents-list" style="max-height:60vh;overflow-y:auto"></div>
     </div>
   </div>
@@ -834,17 +841,33 @@
       invoice: "🧾 Invoice"
     };
 
+    let allDocuments = [];
+    let currentDocFilter = 'all';
+
+    function parseDocDate(d) {
+      return new Date(d.date && /[+-]\d\d:\d\d$|Z$/.test(d.date) ? d.date : d.date + "+05:30");
+    }
+
     async function openDocumentsModal(patientId, patientName) {
       window._docModalPatientId = patientId;
       document.getElementById('doc-patient-name').textContent = patientName;
       document.getElementById('documents-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
       document.getElementById('modal-documents').classList.add('open');
+      currentDocFilter = 'all';
+      document.querySelectorAll('.doc-filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === 'all'));
       try {
         const docs = await api("GET", `/patients/${patientId}/documents`);
-        renderDocuments(docs);
+        allDocuments = docs.slice().sort((a, b) => parseDocDate(b) - parseDocDate(a));
+        renderDocuments(allDocuments);
       } catch (e) {
         document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
       }
+    }
+
+    function setDocFilter(type) {
+      currentDocFilter = type;
+      document.querySelectorAll('.doc-filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === type));
+      renderDocuments(type === 'all' ? allDocuments : allDocuments.filter(d => d.type === type));
     }
 
     function closeDocumentsModal() {
@@ -854,11 +877,13 @@
     function renderDocuments(docs) {
       const el = document.getElementById('documents-list');
       if (!docs.length) {
-        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No documents yet for this patient.</p>';
+        el.innerHTML = currentDocFilter === 'all'
+          ? '<p style="color:var(--slate-light);padding:12px 0">No documents yet for this patient.</p>'
+          : '<p style="color:var(--slate-light);padding:12px 0">No documents match this filter.</p>';
         return;
       }
       el.innerHTML = docs.map(d => {
-        const dt = new Date(d.date && /[+-]\d\d:\d\d$|Z$/.test(d.date) ? d.date : d.date + "+05:30");
+        const dt = parseDocDate(d);
         const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         const billAction = (d.type === 'token_slip' && !d.has_invoice)
@@ -888,7 +913,8 @@
         const currentPatientId = window._docModalPatientId;
         if (currentPatientId) {
           const docs = await api("GET", `/patients/${currentPatientId}/documents`);
-          renderDocuments(docs);
+          allDocuments = docs.slice().sort((a, b) => parseDocDate(b) - parseDocDate(a));
+          renderDocuments(currentDocFilter === 'all' ? allDocuments : allDocuments.filter(d => d.type === currentDocFilter));
         }
       } catch (e) {
         toast(e.message, 'error');

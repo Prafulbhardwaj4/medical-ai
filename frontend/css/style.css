@@ -1430,6 +1430,21 @@ tbody tr:hover { background: var(--smoke); }
 .chip-scroll::-webkit-scrollbar { display: none; }
 .chip-scroll > * { flex: 0 0 auto; }
 
+.doc-filter-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  color: var(--slate);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.doc-filter-chip:hover { border-color: var(--teal); color: var(--teal); }
+.doc-filter-chip.active { background: var(--teal); border-color: var(--teal); color: white; }
+
 /* ── Staff row → real mobile card (not just a squeezed desktop row) ── */
 @media (max-width: 900px) {
   .staff-row {
