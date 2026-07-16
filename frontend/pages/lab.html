@@ -33,27 +33,9 @@
       }
     }
 
-    /* Attendance tab - now uses the shared .staff-att-status/.staff-att-actions
-       pattern from style.css (same as dashboard.html/pharmacy.html) instead of
-       lab.html's own custom desktop layout. */
-    @media (min-width: 901px) {
-      #lab-attendance-card {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 16px;
-      }
-      #lab-attendance-card .card-header {
-        margin-bottom: 0;
-        padding-bottom: 0;
-        border-bottom: none;
-        flex: 0 0 auto;
-      }
-      #lab-attendance-card .staff-att-actions {
-        flex: 0 0 auto;
-      }
-    }
+    /* Attendance tab uses the shared .staff-att-status/.staff-att-actions
+       pattern from style.css — intentionally no page-specific desktop
+       override here, so it renders identically to every other staff page. */
 
     .bulk-test-block {
       border: 1px solid var(--border);
@@ -435,25 +417,12 @@
           <h2 id="patient-tests-modal-title" style="margin:0"></h2>
           <p style="margin:2px 0 0;font-size:13px;color:var(--slate)" id="patient-tests-modal-sub"></p>
         </div>
-        <button class="modal-close" onclick="closePatientTestsModal()">×</button>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn btn-primary btn-sm" id="patient-tests-top-action" style="display:none"></button>
+          <button class="modal-close" onclick="closePatientTestsModal()">×</button>
+        </div>
       </div>
-      <button class="btn btn-primary" id="patient-tests-top-action" style="display:none;width:100%;margin-bottom:14px"></button>
       <div id="patient-tests-list"></div>
-    </div>
-  </div>
-
-  <!-- Bulk "Mark Collected" confirmation -->
-  <div class="modal-overlay" id="modal-confirm-collect">
-    <div class="modal" style="max-width:380px">
-      <div class="modal-header">
-        <h2 style="font-size:16px;margin:0">Mark Samples Collected</h2>
-        <button class="modal-close" onclick="closeConfirmCollectModal()">×</button>
-      </div>
-      <p style="font-size:14px;color:var(--slate);margin:0 0 20px" id="confirm-collect-text"></p>
-      <div style="display:flex;gap:12px">
-        <button class="btn btn-primary" style="flex:1" onclick="confirmCollectAll()">Confirm</button>
-        <button class="btn btn-outline" style="flex:1" onclick="closeConfirmCollectModal()">Cancel</button>
-      </div>
     </div>
   </div>
 
@@ -473,23 +442,6 @@
     </div>
   </div>
 
-  <!-- Result Entry Modal -->
-  <div class="modal-overlay" id="modal-result">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Enter Results</h2>
-        <button class="modal-close" onclick="closeResultModal()">×</button>
-      </div>
-      <p style="font-size:14px;color:var(--slate);margin-bottom:14px" id="result-test-label"></p>
-      <div id="result-fields"></div>
-      <div class="err-msg" id="result-modal-err" style="margin:12px 0"></div>
-      <div style="display:flex;gap:12px">
-        <button class="btn btn-primary" style="flex:1" onclick="submitResult()">Save Results</button>
-        <button class="btn btn-outline" style="flex:1" onclick="closeResultModal()">Cancel</button>
-      </div>
-    </div>
-  </div>
-
   <div id="toast"></div>
   <script src="../js/api.js?v=4"></script>
   <script>
@@ -498,9 +450,6 @@
     fillTopbar();
 
     let labCurrentStatus = 'not_marked';
-    let currentOrderId = null;
-    let currentResultMode = 'single';
-    let currentResultParams = [];
 
     function showLabSection(id) {
       ['queue', 'pending', 'attendance', 'reports'].forEach(s => {
@@ -727,7 +676,6 @@
       const groups = groupQueueByPatient(items);
       el.innerHTML = groups.map(g => {
         const pendingCount = g.tests.filter(t => t.status !== 'completed').length;
-        const awaitingSampleCount = g.tests.filter(t => t.status === 'paid').length;
         const summaryBadge = pendingCount === 0
           ? '<span class="badge badge-green">All completed</span>'
           : `<span class="badge badge-amber">${pendingCount} pending</span>`;
@@ -738,7 +686,6 @@
               <strong class="lq-name">${sanitize(g.patient_name)}</strong>
               <div class="lq-sub">Token #${sanitize(g.token_number)} · ${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>
             </div>
-            ${awaitingSampleCount > 0 ? `<button class="btn btn-outline btn-sm" onclick="openConfirmCollectModal('${g.key}', event)">Collected</button>` : ''}
           </div>
           ${summaryBadge}
         </div>
@@ -746,54 +693,25 @@
       }).join('');
     }
 
-    let pendingCollectKey = null;
-
-    function openConfirmCollectModal(key, evt) {
-      if (evt) evt.stopPropagation();
-      const group = groupQueueByPatient(labQueueData).find(g => g.key === key);
-      if (!group) return;
-      if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; }
-      const paidCount = group.tests.filter(t => t.status === 'paid').length;
-      if (paidCount === 0) { toast('No tests awaiting sample collection for this patient.', 'info'); return; }
-      pendingCollectKey = key;
-      document.getElementById('confirm-collect-text').textContent =
-        `Mark all ${paidCount} test${paidCount > 1 ? 's' : ''} as sample collected for ${group.patient_name}?`;
-      document.getElementById('modal-confirm-collect').classList.add('open');
-    }
-
-    function closeConfirmCollectModal() {
-      document.getElementById('modal-confirm-collect').classList.remove('open');
-      pendingCollectKey = null;
-    }
-
-    async function confirmCollectAll() {
-      const group = groupQueueByPatient(labQueueData).find(g => g.key === pendingCollectKey);
-      closeConfirmCollectModal();
-      if (!group) return;
-      const toCollect = group.tests.filter(t => t.status === 'paid');
-      try {
-        for (const t of toCollect) {
-          await api("PATCH", `/lab/orders/${t.id}/status`, { status: 'sample_collected' });
-          const order = labQueueData.find(o => o.id === t.id);
-          if (order) order.status = 'sample_collected';
-        }
-        renderQueue(labQueueData);
-        refreshOpenPatientModal();
-        toast(`Marked ${toCollect.length} test${toCollect.length > 1 ? 's' : ''} as sample collected.`, 'success');
-      } catch (e) { toast(e.message, 'error'); }
-    }
-
     let currentPatientKey = null;
+    let testDetailCache = {};
 
-    function openPatientTestsModal(key) {
+    async function openPatientTestsModal(key) {
       const group = groupQueueByPatient(labQueueData).find(g => g.key === key);
       if (!group) return;
       currentPatientKey = key;
       document.getElementById('patient-tests-modal-title').textContent = group.patient_name;
       document.getElementById('patient-tests-modal-sub').textContent =
         `Token #${group.token_number}${group.patient_uid ? ' · UID ' + group.patient_uid : ''}`;
-      renderPatientTestsList(group);
+      document.getElementById('patient-tests-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
       document.getElementById('modal-patient-tests').classList.add('open');
+
+      const uniqueIds = [...new Set(group.tests.map(t => t.test_id).filter(id => id != null && !testDetailCache[id]))];
+      await Promise.all(uniqueIds.map(async id => {
+        try { testDetailCache[id] = await api("GET", `/lab/tests/${id}`); } catch (e) { }
+      }));
+
+      renderPatientTestsList(group);
     }
 
     function closePatientTestsModal() {
@@ -810,45 +728,59 @@
 
     function renderPatientTestsList(group) {
       const el = document.getElementById('patient-tests-list');
-      el.innerHTML = group.tests.map(o => `
+      el.innerHTML = group.tests.map(o => {
+        const detail = o.test_id != null ? testDetailCache[o.test_id] : null;
+        const subtestsLine = (detail && detail.is_panel && detail.parameters.length)
+          ? `<div style="font-size:12px;color:var(--slate);margin-top:2px">${detail.parameters.map(p => sanitize(p.name)).join(', ')}</div>`
+          : '';
+        let actionHtml;
+        if (o.status === 'paid' && o._deferred) {
+          actionHtml = `<span style="font-size:12px;color:var(--slate-light);font-style:italic">Marked for later</span>`;
+        } else if (o.status === 'paid') {
+          actionHtml = `<button class="btn btn-outline btn-sm" onclick="deferTest(${o.id})">Mark for Later</button>`;
+        } else if (o.status === 'completed') {
+          actionHtml = `<button class="btn btn-outline btn-sm" onclick="downloadReport(${o.id})">Download Report</button>`;
+        } else {
+          actionHtml = '';
+        }
+        return `
         <div class="lp-item">
           <div style="font-size:13px">
             <strong>${sanitize(o.test_name)}</strong>
+            ${subtestsLine}
             <div style="margin-top:4px"><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}" id="lp-status-${o.id}">${STATUS_LABEL[o.status] || o.status}</span></div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-            ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="deferTest(${o.id})">Mark for Later</button>` : ''}
-            ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} bulkAdvanceFromModal()">Sample Collected</button>` : ''}
-            ${o.status === 'sample_collected' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} advanceStatus(${o.id}, 'processing')">Mark Processing</button>` : ''}
-            ${o.status === 'processing' ? `<button class="btn btn-primary btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} openBulkResultsModal()">Enter Results</button>` : ''}
-            ${o.status === 'completed' ? `<button class="btn btn-outline btn-sm" onclick="downloadReport(${o.id})">Download Report</button>` : ''}
+            ${actionHtml}
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
       updatePatientTestsTopAction(group);
     }
 
     async function deferTest(orderId) {
       try {
         await api("POST", `/lab/orders/${orderId}/defer`, {});
-        labQueueData = labQueueData.filter(o => o.id !== orderId);
+        const order = labQueueData.find(o => o.id === orderId);
+        if (order) order._deferred = true;
         renderQueue(labQueueData);
         refreshOpenPatientModal();
-        toast('Moved to Pending Tasks for later.', 'success');
+        toast('Marked for later — moved to Pending Tasks.', 'success');
       } catch (e) { toast(e.message, 'error'); }
     }
 
     function updatePatientTestsTopAction(group) {
       const btn = document.getElementById('patient-tests-top-action');
-      const hasPaid = group.tests.some(t => t.status === 'paid');
+      const hasPaid = group.tests.some(t => t.status === 'paid' && !t._deferred);
       const hasProcessing = group.tests.some(t => t.status === 'processing');
       if (hasPaid) {
         btn.style.display = '';
-        btn.textContent = 'Sample Collected';
+        btn.textContent = 'Samples Collected';
         btn.onclick = () => { if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; } bulkAdvanceFromModal(); };
       } else if (hasProcessing) {
         btn.style.display = '';
-        btn.textContent = 'Enter Results';
+        btn.textContent = 'Enter Test Results';
         btn.onclick = () => { if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; } openBulkResultsModal(); };
       } else {
         btn.style.display = 'none';
@@ -858,7 +790,7 @@
     async function bulkAdvanceFromModal() {
       const group = groupQueueByPatient(labQueueData).find(g => g.key === currentPatientKey);
       if (!group) return;
-      const toAdvance = group.tests.filter(t => t.status === 'paid');
+      const toAdvance = group.tests.filter(t => t.status === 'paid' && !t._deferred);
       if (!toAdvance.length) return;
       try {
         for (const t of toAdvance) {
@@ -1016,112 +948,6 @@
     async function downloadReport(orderId) {
       const w = window.open('', '_blank');
       await downloadCombinedReport([orderId], w);
-    }
-
-    async function advanceStatus(orderId, status) {
-      try {
-        await api("PATCH", `/lab/orders/${orderId}/status`, { status });
-        const order = labQueueData.find(o => o.id === orderId);
-        if (order) order.status = status;
-        renderQueue(labQueueData);
-        refreshOpenPatientModal();
-        const labels = { sample_collected: 'Sample collected.', processing: 'Marked as processing.' };
-        toast(labels[status] || 'Status updated.', 'success');
-      } catch (e) { toast(e.message, 'error'); }
-    }
-
-    async function openResultModal(orderId, testLabel, testId) {
-      currentOrderId = orderId;
-      document.getElementById('result-test-label').textContent = testLabel;
-      const fieldsEl = document.getElementById('result-fields');
-      fieldsEl.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
-      document.getElementById('result-modal-err').textContent = '';
-      document.getElementById('modal-result').classList.add('open');
-
-      let testDetail = null;
-      if (testId) {
-        try { testDetail = await api("GET", `/lab/tests/${testId}`); } catch (e) { }
-      }
-
-      if (testDetail && testDetail.is_panel && testDetail.parameters.length) {
-        currentResultMode = 'panel';
-        currentResultParams = testDetail.parameters;
-        fieldsEl.innerHTML = testDetail.parameters.map(p => `
-          <div class="form-group">
-            <label class="form-label">${sanitize(p.name)}${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}</label>
-            <input class="form-control" id="result-param-${p.id}" placeholder="${(p.reference_range_male || p.reference_range_female) ? 'Ref: ' + sanitize(p.reference_range_male || p.reference_range_female) : 'Value'}" />
-          </div>
-        `).join('') + `
-          <div class="form-group">
-            <label class="form-label">Notes (optional)</label>
-            <input class="form-control" id="result-notes" placeholder="Any observations…" />
-          </div>
-        `;
-      } else {
-        currentResultMode = 'single';
-        currentResultParams = [];
-        fieldsEl.innerHTML = `
-          <div class="form-group">
-            <label class="form-label">Result Value</label>
-            <input class="form-control" id="result-value" placeholder="e.g. 13.5 g/dL" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Flag</label>
-            <select class="form-control" id="result-flag">
-              <option value="N">Normal</option>
-              <option value="H">High</option>
-              <option value="L">Low</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Notes (optional)</label>
-            <input class="form-control" id="result-notes" placeholder="Any observations…" />
-          </div>
-        `;
-      }
-    }
-
-    function closeResultModal() {
-      document.getElementById('modal-result').classList.remove('open');
-      currentOrderId = null;
-      currentResultMode = 'single';
-      currentResultParams = [];
-    }
-
-    async function submitResult() {
-      const errEl = document.getElementById('result-modal-err');
-      let results;
-
-      if (currentResultMode === 'panel') {
-        results = {};
-        let anyFilled = false;
-        for (const p of currentResultParams) {
-          const val = document.getElementById(`result-param-${p.id}`).value.trim();
-          if (val) anyFilled = true;
-          results[p.name] = val;
-        }
-        if (!anyFilled) { errEl.textContent = 'Enter at least one value.'; return; }
-        results.notes = document.getElementById('result-notes').value.trim();
-      } else {
-        const value = document.getElementById('result-value').value.trim();
-        if (!value) { errEl.textContent = 'Result value is required.'; return; }
-        results = {
-          value,
-          flag: document.getElementById('result-flag').value,
-          notes: document.getElementById('result-notes').value.trim()
-        };
-      }
-
-      try {
-        await api("POST", `/lab/orders/${currentOrderId}/result`, { results });
-        await api("PATCH", `/lab/orders/${currentOrderId}/status`, { status: "completed" });
-        const order = labQueueData.find(o => o.id === currentOrderId);
-        if (order) order.status = 'completed';
-        renderQueue(labQueueData);
-        toast('Results saved — report ready to download.', 'success');
-        closeResultModal();
-        refreshOpenPatientModal();
-      } catch (e) { errEl.textContent = e.message; }
     }
 
     loadLabAttendance();
