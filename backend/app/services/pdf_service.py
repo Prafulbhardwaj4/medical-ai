@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from app.utils.auth import now_ist
 from reportlab.lib.pagesizes import A4
@@ -427,6 +428,132 @@ def generate_test_report_pdf(
         f"<b>Ordering Doctor:</b> {ordering_doctor.title} {ordering_doctor.name}" if ordering_doctor else "<b>Ordering Doctor:</b> —",
         footer_style
     ))
+    elements.append(Paragraph(
+        f"<b>Lab Staff:</b> {lab_staff.name}" if lab_staff else "<b>Lab Staff:</b> —",
+        footer_style
+    ))
+
+    doc.build(elements)
+    return filepath
+
+def _parse_range_bounds(range_str):
+    if not range_str:
+        return None
+    cleaned = range_str.replace(",", "").strip()
+    nums = re.findall(r'-?\d+\.?\d*', cleaned)
+    if len(nums) >= 2:
+        try:
+            return float(nums[0]), float(nums[1])
+        except ValueError:
+            return None
+    if len(nums) == 1:
+        try:
+            bound = float(nums[0])
+        except ValueError:
+            return None
+        low = cleaned.lower()
+        if cleaned.startswith("<") or "less" in low or "upto" in low or "up to" in low:
+            return None, bound
+        if cleaned.startswith(">") or "greater" in low or "above" in low:
+            return bound, None
+    return None
+
+def _is_out_of_range(value_str, range_str):
+    bounds = _parse_range_bounds(range_str)
+    if not bounds or not value_str:
+        return False
+    nums = re.findall(r'-?\d+\.?\d*', str(value_str).replace(",", ""))
+    if not nums:
+        return False
+    try:
+        val = float(nums[0])
+    except ValueError:
+        return False
+    low, high = bounds
+    if low is not None and val < low:
+        return True
+    if high is not None and val > high:
+        return True
+    return False
+
+def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, ordering_doctor, lab_staff, hospital_name) -> str:
+    ensure_reports_dir()
+
+    filename = f"combined_report_{order_id_key}.pdf"
+    filepath = os.path.join(REPORTS_DIR, filename)
+
+    doc = SimpleDocTemplate(
+        filepath,
+        pagesize=A4,
+        rightMargin=20*mm,
+        leftMargin=20*mm,
+        topMargin=15*mm,
+        bottomMargin=15*mm
+    )
+
+    styles = getSampleStyleSheet()
+    elements = []
+
+    header_style = ParagraphStyle("header", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"))
+    sub_style = ParagraphStyle("sub", fontSize=10, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
+    section_style = ParagraphStyle("section", fontSize=12, fontName="Helvetica-Bold", textColor=colors.HexColor("#1a237e"), spaceAfter=2*mm, spaceBefore=4*mm)
+    body_style = ParagraphStyle("body", fontSize=10, fontName="Helvetica", leading=14)
+
+    elements.append(Paragraph(hospital_name, header_style))
+    elements.append(Spacer(1, 2*mm))
+    elements.append(Paragraph("Laboratory Test Report", sub_style))
+    elements.append(Spacer(1, 3*mm))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a237e")))
+    elements.append(Spacer(1, 4*mm))
+
+    bg = f" | Blood Group: {patient.blood_group}" if patient.blood_group else ""
+    elements.append(Paragraph(
+        f"<b>Patient:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}{bg}",
+        styles["Normal"]
+    ))
+    elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Report Date:</b> {now_ist().strftime('%d %b %Y')}", styles["Normal"]))
+    elements.append(Spacer(1, 4*mm))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
+
+    for test in tests_payload:
+        elements.append(Spacer(1, 3*mm))
+        elements.append(Paragraph(test["test_name"], section_style))
+
+        table_data = [["Parameter", "Result", "Unit", "Reference Range"]]
+        row_styles = []
+        for i, row in enumerate(test["rows"]):
+            out = _is_out_of_range(row["value"], row["range"])
+            table_data.append([row["name"], row["value"] or "—", row["unit"] or "—", row["range"] or "—"])
+            if out:
+                row_styles.append(("FONTNAME", (1, i+1), (1, i+1), "Helvetica-Bold"))
+                row_styles.append(("TEXTCOLOR", (1, i+1), (1, i+1), colors.HexColor("#b91c1c")))
+
+        result_table = Table(table_data, colWidths=[55*mm, 30*mm, 25*mm, 45*mm])
+        result_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ] + row_styles))
+        elements.append(result_table)
+
+        if test.get("notes"):
+            elements.append(Spacer(1, 2*mm))
+            elements.append(Paragraph(f"<b>Notes:</b> {test['notes']}", body_style))
+
+    elements.append(Spacer(1, 5*mm))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
+    elements.append(Spacer(1, 4*mm))
+
+    footer_style = ParagraphStyle("footer", fontSize=9, fontName="Helvetica", textColor=colors.HexColor("#334155"))
+    doctor_line = f"<b>Ordering Doctor:</b> {ordering_doctor.title} {ordering_doctor.name}" if ordering_doctor else "<b>Ordering Doctor:</b> —"
+    if ordering_doctor and ordering_doctor.registration_number:
+        doctor_line += f" (Reg. No: {ordering_doctor.registration_number})"
+    elements.append(Paragraph(doctor_line, footer_style))
     elements.append(Paragraph(
         f"<b>Lab Staff:</b> {lab_staff.name}" if lab_staff else "<b>Lab Staff:</b> —",
         footer_style

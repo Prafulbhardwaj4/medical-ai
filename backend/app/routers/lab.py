@@ -16,7 +16,7 @@ from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds_utc, ut
 from app.utils.audit import log_action
 from app.utils.order_lifecycle import is_order_expired
 from app.routers.attendance import require_present
-from app.services.pdf_service import generate_test_report_pdf
+from app.services.pdf_service import generate_test_report_pdf, generate_combined_test_report_pdf
 from fastapi.responses import FileResponse
 import os
 
@@ -68,6 +68,7 @@ def get_lab_queue(
             "patient_id": o.patient_id,
             "patient_name": patient.name if patient else "Unknown",
             "patient_uid": patient.patient_uid if patient else "",
+            "patient_gender": patient.gender if patient else None,
             "token_number": consultation.token_number if consultation else "",
             "test_id": o.test_id,
             "test_name": o.test_name,
@@ -312,6 +313,90 @@ def get_test_report(
         order=order,
         patient=patient,
         catalog_item=catalog_item,
+        ordering_doctor=ordering_doctor,
+        lab_staff=lab_staff,
+        hospital_name=current_doctor.clinic_name
+    )
+
+    return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
+
+
+@router.get("/reports/combined")
+def get_combined_test_report(
+    order_ids: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    ids = [int(x) for x in order_ids.split(",") if x.strip().isdigit()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="No order IDs provided")
+
+    orders = db.query(TestOrder).filter(
+        TestOrder.id.in_(ids),
+        TestOrder.hospital_id == current_doctor.hospital_id
+    ).all()
+    if not orders:
+        raise HTTPException(status_code=404, detail="No matching test orders found")
+
+    if len(set(o.patient_id for o in orders)) > 1:
+        raise HTTPException(status_code=400, detail="All orders must belong to the same patient")
+
+    if any(o.status != "completed" for o in orders):
+        raise HTTPException(status_code=400, detail="Some results are not yet completed")
+
+    patient = db.query(Patient).filter(Patient.id == orders[0].patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    consultation = db.query(Consultation).filter(Consultation.id == orders[0].consultation_id).first()
+    ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first() if consultation else None
+    lab_staff_id = next((o.completed_by for o in orders if o.completed_by), None)
+    lab_staff = db.query(Doctor).filter(Doctor.id == lab_staff_id).first() if lab_staff_id else None
+
+    is_male = (patient.gender or "").lower() == "male"
+
+    tests_payload = []
+    for order in orders:
+        catalog_item = db.query(TestCatalogItem).filter(TestCatalogItem.id == order.test_id).first() if order.test_id else None
+        try:
+            result_data = json.loads(order.result_data or "{}")
+        except Exception:
+            result_data = {}
+
+        if catalog_item and catalog_item.is_panel:
+            params = db.query(TestCatalogParameter).filter(
+                TestCatalogParameter.test_catalog_item_id == catalog_item.id,
+                TestCatalogParameter.is_active == True
+            ).order_by(TestCatalogParameter.display_order).all()
+            rows = [{
+                "name": p.name,
+                "unit": p.unit or "",
+                "range": (p.reference_range_male if is_male else p.reference_range_female) or "",
+                "value": result_data.get(p.name, "")
+            } for p in params]
+        else:
+            range_str = ""
+            unit = ""
+            if catalog_item:
+                range_str = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) or ""
+                unit = catalog_item.unit or ""
+            rows = [{
+                "name": order.test_name,
+                "unit": unit,
+                "range": range_str,
+                "value": result_data.get("value", "")
+            }]
+
+        tests_payload.append({
+            "test_name": order.test_name,
+            "rows": rows,
+            "notes": result_data.get("notes", "")
+        })
+
+    filepath = generate_combined_test_report_pdf(
+        order_id_key=f"{orders[0].patient_id}_{'-'.join(str(o.id) for o in orders)}",
+        tests_payload=tests_payload,
+        patient=patient,
         ordering_doctor=ordering_doctor,
         lab_staff=lab_staff,
         hospital_name=current_doctor.clinic_name

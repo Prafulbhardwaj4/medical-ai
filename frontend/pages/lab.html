@@ -33,45 +33,55 @@
       }
     }
 
-    /* Attendance tab - same pattern as nurse.html, but the status badge
-       stays visible on desktop too (was hidden there before) */
-    .lab-att-status {
-      text-align: center;
-      padding: 20px 0 16px;
-    }
-
-    .lab-att-status .label {
-      display: block;
-      font-size: 13px;
-      color: var(--slate);
-      margin-bottom: 8px;
-    }
-
-    .lab-att-status .badge {
-      font-size: 15px;
-      padding: 8px 18px;
-    }
-
-    .lab-att-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .lab-att-actions select {
-      width: 100% !important;
-    }
-
+    /* Attendance tab - now uses the shared .staff-att-status/.staff-att-actions
+       pattern from style.css (same as dashboard.html/pharmacy.html) instead of
+       lab.html's own custom desktop layout. */
     @media (min-width: 901px) {
-      .lab-att-actions {
-        flex-direction: row;
+      #lab-attendance-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
         flex-wrap: wrap;
-        justify-content: center;
+        gap: 16px;
       }
+      #lab-attendance-card .card-header {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+        flex: 0 0 auto;
+      }
+      #lab-attendance-card .staff-att-actions {
+        flex: 0 0 auto;
+      }
+    }
 
-      .lab-att-actions select {
-        width: 170px !important;
-      }
+    .bulk-test-block {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .bulk-test-block h3 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      color: var(--navy);
+    }
+    .bulk-param-row {
+      display: grid;
+      grid-template-columns: 1fr 140px;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .bulk-param-meta { font-size: 13px; }
+    .bulk-param-meta .range-text {
+      display: block;
+      font-size: 12px;
+      color: var(--slate);
+      margin-top: 2px;
+    }
+    @media (max-width: 640px) {
+      .bulk-param-row { grid-template-columns: 1fr; }
     }
 
     /* Queue: one card per patient */
@@ -314,15 +324,14 @@
 
       <!-- Attendance: mobile tab (3rd bottom-nav tab) / always-visible block on desktop -->
       <div class="mobile-section" id="section-attendance">
-        <div class="card">
+        <div class="card" id="lab-attendance-card">
           <div class="card-header">
             <h2>Today's Status</h2>
           </div>
-          <div class="lab-att-status">
-            <span class="label">Status</span>
+          <div class="staff-att-status">
             <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
           </div>
-          <div class="lab-att-actions">
+          <div class="staff-att-actions">
             <select class="form-control" id="lab-room-select" style="display:none"
               onchange="markLabAttendance(labCurrentStatus)"></select>
             <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
@@ -370,7 +379,10 @@
           <h2 id="patient-tests-modal-title" style="margin:0"></h2>
           <p style="margin:2px 0 0;font-size:13px;color:var(--slate)" id="patient-tests-modal-sub"></p>
         </div>
-        <button class="modal-close" onclick="closePatientTestsModal()">×</button>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn btn-primary btn-sm" id="patient-tests-top-action" style="display:none"></button>
+          <button class="modal-close" onclick="closePatientTestsModal()">×</button>
+        </div>
       </div>
       <div id="patient-tests-list"></div>
     </div>
@@ -387,6 +399,22 @@
       <div style="display:flex;gap:12px">
         <button class="btn btn-primary" style="flex:1" onclick="confirmCollectAll()">Confirm</button>
         <button class="btn btn-outline" style="flex:1" onclick="closeConfirmCollectModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Results Entry Modal -->
+  <div class="modal-overlay" id="modal-bulk-results">
+    <div class="modal" style="max-width:720px;max-height:88vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <h2 style="margin:0">Enter Results</h2>
+        <button class="modal-close" onclick="closeBulkResultsModal()">×</button>
+      </div>
+      <div id="bulk-results-body" style="overflow-y:auto;flex:1;padding-right:4px"></div>
+      <div class="err-msg" id="bulk-results-err" style="margin:12px 0"></div>
+      <div style="display:flex;gap:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <button class="btn btn-primary" style="flex:1" id="btn-save-bulk-results" onclick="submitBulkResults()">Save All Results & Generate Report</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeBulkResultsModal()">Cancel</button>
       </div>
     </div>
   </div>
@@ -684,13 +712,184 @@
             <div style="margin-top:4px"><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}" id="lp-status-${o.id}">${STATUS_LABEL[o.status] || o.status}</span></div>
           </div>
           <div>
-            ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} advanceStatus(${o.id}, 'sample_collected')">Sample Collected</button>` : ''}
+            ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} bulkAdvanceFromModal()">Sample Collected</button>` : ''}
             ${o.status === 'sample_collected' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} advanceStatus(${o.id}, 'processing')">Mark Processing</button>` : ''}
-            ${o.status === 'processing' ? `<button class="btn btn-primary btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} openResultModal(${o.id}, '${sanitize(o.test_name)}', ${o.test_id != null ? o.test_id : 'null'})">Enter Results</button>` : ''}
+            ${o.status === 'processing' ? `<button class="btn btn-primary btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} openBulkResultsModal()">Enter Results</button>` : ''}
             ${o.status === 'completed' ? `<button class="btn btn-outline btn-sm" onclick="downloadReport(${o.id})">Download Report</button>` : ''}
           </div>
         </div>
       `).join('');
+      updatePatientTestsTopAction(group);
+    }
+
+    function updatePatientTestsTopAction(group) {
+      const btn = document.getElementById('patient-tests-top-action');
+      const hasPaid = group.tests.some(t => t.status === 'paid');
+      const hasProcessing = group.tests.some(t => t.status === 'processing');
+      if (hasPaid) {
+        btn.style.display = '';
+        btn.textContent = 'Sample Collected';
+        btn.onclick = () => { if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; } bulkAdvanceFromModal(); };
+      } else if (hasProcessing) {
+        btn.style.display = '';
+        btn.textContent = 'Enter Results';
+        btn.onclick = () => { if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; } openBulkResultsModal(); };
+      } else {
+        btn.style.display = 'none';
+      }
+    }
+
+    async function bulkAdvanceFromModal() {
+      const group = groupQueueByPatient(labQueueData).find(g => g.key === currentPatientKey);
+      if (!group) return;
+      const toAdvance = group.tests.filter(t => t.status === 'paid');
+      if (!toAdvance.length) return;
+      try {
+        for (const t of toAdvance) {
+          await api("PATCH", `/lab/orders/${t.id}/status`, { status: 'sample_collected' });
+          await api("PATCH", `/lab/orders/${t.id}/status`, { status: 'processing' });
+          const order = labQueueData.find(o => o.id === t.id);
+          if (order) order.status = 'processing';
+        }
+        renderQueue(labQueueData);
+        refreshOpenPatientModal();
+        toast(`Marked ${toAdvance.length} test${toAdvance.length > 1 ? 's' : ''} sample collected — ready for results.`, 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    let bulkResultOrders = [];
+
+    async function openBulkResultsModal() {
+      const group = groupQueueByPatient(labQueueData).find(g => g.key === currentPatientKey);
+      if (!group) return;
+      const processingTests = group.tests.filter(t => t.status === 'processing');
+      if (!processingTests.length) { toast('No tests ready for result entry.', 'info'); return; }
+
+      const bodyEl = document.getElementById('bulk-results-body');
+      bodyEl.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+      document.getElementById('bulk-results-err').textContent = '';
+      document.getElementById('modal-bulk-results').classList.add('open');
+
+      const isMale = (group.tests[0].patient_gender || '').toLowerCase() === 'male';
+      bulkResultOrders = [];
+
+      for (const t of processingTests) {
+        let detail = null;
+        if (t.test_id) {
+          try { detail = await api("GET", `/lab/tests/${t.test_id}`); } catch (e) { }
+        }
+        if (detail && detail.is_panel && detail.parameters.length) {
+          bulkResultOrders.push({
+            orderId: t.id,
+            testName: t.test_name,
+            mode: 'panel',
+            params: detail.parameters.map(p => ({
+              id: p.id, name: p.name, unit: p.unit,
+              range: isMale ? p.reference_range_male : p.reference_range_female
+            }))
+          });
+        } else {
+          bulkResultOrders.push({
+            orderId: t.id,
+            testName: t.test_name,
+            mode: 'single',
+            unit: detail ? detail.unit : '',
+            range: detail ? (isMale ? detail.reference_range_male : detail.reference_range_female) : ''
+          });
+        }
+      }
+
+      bodyEl.innerHTML = bulkResultOrders.map(test => `
+        <div class="bulk-test-block">
+          <h3>${sanitize(test.testName)}</h3>
+          ${test.mode === 'panel'
+            ? test.params.map(p => `
+              <div class="bulk-param-row">
+                <div class="bulk-param-meta">
+                  <strong>${sanitize(p.name)}</strong>${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}
+                  <span class="range-text">${p.range ? 'Reference: ' + sanitize(p.range) : 'No reference range set'}</span>
+                </div>
+                <input class="form-control" id="bulk-val-${test.orderId}-${p.id}" placeholder="Value" />
+              </div>
+            `).join('')
+            : `
+              <div class="bulk-param-row">
+                <div class="bulk-param-meta">
+                  <strong>Result</strong>${test.unit ? ' (' + sanitize(test.unit) + ')' : ''}
+                  <span class="range-text">${test.range ? 'Reference: ' + sanitize(test.range) : 'No reference range set'}</span>
+                </div>
+                <input class="form-control" id="bulk-val-${test.orderId}-single" placeholder="Value" />
+              </div>
+            `
+          }
+        </div>
+      `).join('');
+    }
+
+    function closeBulkResultsModal() {
+      document.getElementById('modal-bulk-results').classList.remove('open');
+      bulkResultOrders = [];
+    }
+
+    async function submitBulkResults() {
+      const errEl = document.getElementById('bulk-results-err');
+      errEl.textContent = '';
+      const btn = document.getElementById('btn-save-bulk-results');
+
+      let anyFilled = false;
+      const payloads = bulkResultOrders.map(test => {
+        let results;
+        if (test.mode === 'panel') {
+          results = {};
+          test.params.forEach(p => {
+            const val = document.getElementById(`bulk-val-${test.orderId}-${p.id}`).value.trim();
+            if (val) anyFilled = true;
+            results[p.name] = val;
+          });
+        } else {
+          const val = document.getElementById(`bulk-val-${test.orderId}-single`).value.trim();
+          if (val) anyFilled = true;
+          results = { value: val };
+        }
+        return { orderId: test.orderId, results };
+      });
+
+      if (!anyFilled) { errEl.textContent = 'Enter at least one result value.'; return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+
+      try {
+        for (const p of payloads) {
+          await api("POST", `/lab/orders/${p.orderId}/result`, { results: p.results });
+          await api("PATCH", `/lab/orders/${p.orderId}/status`, { status: 'completed' });
+          const order = labQueueData.find(o => o.id === p.orderId);
+          if (order) order.status = 'completed';
+        }
+        renderQueue(labQueueData);
+        toast('Results saved — generating report…', 'success');
+        closeBulkResultsModal();
+        refreshOpenPatientModal();
+        await downloadCombinedReport(payloads.map(p => p.orderId));
+      } catch (e) {
+        errEl.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save All Results & Generate Report';
+      }
+    }
+
+    async function downloadCombinedReport(orderIds) {
+      try {
+        const response = await fetch(`${BASE}/lab/reports/combined?order_ids=${orderIds.join(',')}`, {
+          headers: { "Authorization": `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error('Could not generate report');
+        const blob = await response.blob();
+        window.open(URL.createObjectURL(blob), "_blank");
+      } catch (e) {
+        toast(e.message, 'error');
+      }
     }
 
     async function downloadReport(orderId) {
