@@ -115,12 +115,11 @@
     }
 
     .btn-whatsapp {
-      background: #065f46;
-      border: 1px solid #065f46;
+      background: var(--success);
+      border: 1px solid var(--success);
       color: var(--white);
     }
     .btn-whatsapp:hover { filter: brightness(0.95); }
-    .badge-green { background: #065f46; color: var(--white); }
 
     /* Queue: one card per patient */
     .lq-card {
@@ -524,14 +523,13 @@
           <div class="lp-card-body">
             <div class="lp-card-top">
               <strong>${sanitize(r.patient_name)}</strong>
-              <span style="font-size:12px;color:var(--slate)">${r.token_number ? 'Token #' + sanitize(r.token_number) : ''}</span>
+              <span style="font-size:12px;color:var(--slate)">${r.patient_uid ? 'UID ' + sanitize(r.patient_uid) : ''}</span>
             </div>
-            <div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(r.test_names.join(', '))}</div>
-            <div style="font-size:12px;color:var(--slate-light);margin-top:2px">${r.completed_at ? formatDateTime(r.completed_at) : ''}</div>
+            <div style="font-size:13px;color:var(--slate);margin-top:4px">${r.visits.length} report day${r.visits.length > 1 ? 's' : ''}</div>
+            <div style="font-size:12px;color:var(--slate-light);margin-top:2px">Latest: ${r.latest_completed_at ? formatDateTime(r.latest_completed_at) : ''}</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-outline btn-sm" onclick="downloadReport([${r.tests.map(t => t.order_id).join(',')}])">Download</button>
-            <button class="btn btn-sm btn-whatsapp" onclick="event.stopPropagation();toast('Send on WhatsApp — Coming Soon','info')">Send on WhatsApp</button>
+            <button class="btn btn-outline btn-sm" onclick="openPatientReportsModal(${idx})">Report</button>
           </div>
         </div>
       `).join('');
@@ -544,17 +542,24 @@
       if (!r) return;
       document.getElementById('patient-reports-modal-title').textContent = r.patient_name;
       document.getElementById('patient-reports-modal-sub').textContent =
-        `Token #${r.token_number}${r.patient_uid ? ' · UID ' + r.patient_uid : ''}`;
-      document.getElementById('patient-reports-list').innerHTML = r.tests.map(t => `
+        r.patient_uid ? `UID ${r.patient_uid}` : '';
+      document.getElementById('patient-reports-list').innerHTML = r.visits.map((v, vIdx) => `
         <div class="lp-item">
           <div style="font-size:13px">
-            <strong>${sanitize(t.test_name)}</strong>
-            <div style="color:var(--slate);font-size:12px;margin-top:2px">${t.completed_at ? formatDateTime(t.completed_at) : ''}</div>
+            <strong>${v.token_number ? 'Token #' + sanitize(v.token_number) + ' — ' : ''}${sanitize(v.test_names.join(', '))}</strong>
+            <div style="color:var(--slate);font-size:12px;margin-top:2px">${v.completed_at ? formatDateTime(v.completed_at) : ''}</div>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="downloadReport(${t.order_id})">Download</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="downloadReport([${v.order_ids.join(',')}])">Download</button>
+            <button class="btn btn-sm btn-whatsapp" onclick="sendReportWhatsApp(${idx}, ${vIdx})">Send on WhatsApp</button>
+          </div>
         </div>
       `).join('');
       document.getElementById('modal-patient-reports').classList.add('open');
+    }
+
+    function sendReportWhatsApp(patientIdx, visitIdx) {
+      toast('Send on WhatsApp — Coming Soon', 'info');
     }
 
     function closePatientReportsModal() {

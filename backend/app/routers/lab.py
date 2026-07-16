@@ -370,46 +370,53 @@ def get_lab_reports_history(
         TestOrder.status == "completed"
     ).order_by(TestOrder.completed_at.desc()).limit(500).all()
 
-    groups = {}
+    # One "visit" per (patient, consultation) — this is a single day's tests.
+    visit_groups = {}
     for o in orders:
         key = (o.patient_id, o.consultation_id)
-        if key not in groups:
-            groups[key] = {
-                "order_ids": [], "test_names": [], "tests": [], "completed_at": None,
+        if key not in visit_groups:
+            visit_groups[key] = {
+                "order_ids": [], "test_names": [], "completed_at": None,
                 "patient_id": o.patient_id, "consultation_id": o.consultation_id
             }
-        g = groups[key]
-        g["order_ids"].append(o.id)
-        g["test_names"].append(o.test_name)
-        completed_iso = o.completed_at.isoformat() if o.completed_at else None
-        g["tests"].append({
-            "order_id": o.id,
-            "test_name": o.test_name,
-            "completed_at": completed_iso
+        v = visit_groups[key]
+        v["order_ids"].append(o.id)
+        v["test_names"].append(o.test_name)
+        completed_iso = (o.completed_at.isoformat() + "Z") if o.completed_at else None
+        if completed_iso and (v["completed_at"] is None or completed_iso > v["completed_at"]):
+            v["completed_at"] = completed_iso
+
+    # Roll visits up under their patient — one entry per patient in the main list.
+    patients_map = {}
+    for v in visit_groups.values():
+        consultation = db.query(Consultation).filter(Consultation.id == v["consultation_id"]).first()
+        entry = patients_map.setdefault(v["patient_id"], {"patient_id": v["patient_id"], "visits": []})
+        entry["visits"].append({
+            "consultation_id": v["consultation_id"],
+            "token_number": consultation.token_number if consultation else "",
+            "test_names": v["test_names"],
+            "order_ids": v["order_ids"],
+            "completed_at": v["completed_at"]
         })
-        if completed_iso and (g["completed_at"] is None or completed_iso > g["completed_at"]):
-            g["completed_at"] = completed_iso
 
     q_lower = q.strip().lower()
     result = []
-    for g in groups.values():
-        patient = db.query(Patient).filter(Patient.id == g["patient_id"]).first()
-        consultation = db.query(Consultation).filter(Consultation.id == g["consultation_id"]).first()
+    for entry in patients_map.values():
+        patient = db.query(Patient).filter(Patient.id == entry["patient_id"]).first()
         patient_name = patient.name if patient else "Unknown"
         patient_uid = patient.patient_uid if patient else ""
         if q_lower and q_lower not in patient_name.lower() and q_lower not in patient_uid.lower():
             continue
+        entry["visits"].sort(key=lambda v: v["completed_at"] or "", reverse=True)
         result.append({
+            "patient_id": entry["patient_id"],
             "patient_name": patient_name,
             "patient_uid": patient_uid,
-            "token_number": consultation.token_number if consultation else "",
-            "test_names": g["test_names"],
-            "order_ids": g["order_ids"],
-            "tests": g["tests"],
-            "completed_at": g["completed_at"]
+            "visits": entry["visits"],
+            "latest_completed_at": entry["visits"][0]["completed_at"] if entry["visits"] else None
         })
 
-    result.sort(key=lambda r: r["completed_at"] or "", reverse=True)
+    result.sort(key=lambda r: r["latest_completed_at"] or "", reverse=True)
     return result
 
 
