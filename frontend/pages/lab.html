@@ -33,9 +33,25 @@
       }
     }
 
-    /* Attendance tab uses the shared .staff-att-status/.staff-att-actions
-       pattern from style.css — intentionally no page-specific desktop
-       override here, so it renders identically to every other staff page. */
+    /* Attendance tab - custom desktop layout: title left, controls right, one row */
+    @media (min-width: 901px) {
+      #lab-attendance-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      #lab-attendance-card .card-header {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+        flex: 0 0 auto;
+      }
+      #lab-attendance-card .staff-att-actions {
+        flex: 0 0 auto;
+      }
+    }
 
     .bulk-test-block {
       border: 1px solid var(--border);
@@ -417,11 +433,9 @@
           <h2 id="patient-tests-modal-title" style="margin:0"></h2>
           <p style="margin:2px 0 0;font-size:13px;color:var(--slate)" id="patient-tests-modal-sub"></p>
         </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <button class="btn btn-primary btn-sm" id="patient-tests-top-action" style="display:none"></button>
-          <button class="modal-close" onclick="closePatientTestsModal()">×</button>
-        </div>
+        <button class="modal-close" onclick="closePatientTestsModal()">×</button>
       </div>
+      <button class="btn btn-primary" id="patient-tests-top-action" style="display:none;width:100%;margin-bottom:14px"></button>
       <div id="patient-tests-list"></div>
     </div>
   </div>
@@ -738,8 +752,6 @@
           actionHtml = `<span style="font-size:12px;color:var(--slate-light);font-style:italic">Marked for later</span>`;
         } else if (o.status === 'paid') {
           actionHtml = `<button class="btn btn-outline btn-sm" onclick="deferTest(${o.id})">Mark for Later</button>`;
-        } else if (o.status === 'completed') {
-          actionHtml = `<button class="btn btn-outline btn-sm" onclick="downloadReport(${o.id})">Download Report</button>`;
         } else {
           actionHtml = '';
         }
@@ -774,6 +786,7 @@
       const btn = document.getElementById('patient-tests-top-action');
       const hasPaid = group.tests.some(t => t.status === 'paid' && !t._deferred);
       const hasProcessing = group.tests.some(t => t.status === 'processing');
+      const completedTests = group.tests.filter(t => t.status === 'completed');
       if (hasPaid) {
         btn.style.display = '';
         btn.textContent = 'Samples Collected';
@@ -782,6 +795,10 @@
         btn.style.display = '';
         btn.textContent = 'Enter Test Results';
         btn.onclick = () => { if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; } openBulkResultsModal(); };
+      } else if (completedTests.length) {
+        btn.style.display = '';
+        btn.textContent = 'Download Report';
+        btn.onclick = () => downloadReport(completedTests.map(t => t.id));
       } else {
         btn.style.display = 'none';
       }
@@ -945,9 +962,10 @@
       }
     }
 
-    async function downloadReport(orderId) {
+    async function downloadReport(orderIds) {
+      const ids = Array.isArray(orderIds) ? orderIds : [orderIds];
       const w = window.open('', '_blank');
-      await downloadCombinedReport([orderId], w);
+      await downloadCombinedReport(ids, w);
     }
 
     loadLabAttendance();

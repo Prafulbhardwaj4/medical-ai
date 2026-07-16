@@ -533,7 +533,7 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
                 row_styles.append(("FONTNAME", (1, i+1), (1, i+1), "Helvetica-Bold"))
                 row_styles.append(("TEXTCOLOR", (1, i+1), (1, i+1), colors.HexColor("#ef4444")))
             elif row["value"]:
-                row_styles.append(("TEXTCOLOR", (1, i+1), (1, i+1), colors.HexColor("#10b981")))
+                row_styles.append(("TEXTCOLOR", (1, i+1), (1, i+1), colors.HexColor("#15803d")))
 
         result_table = Table(table_data, colWidths=[55*mm, 30*mm, 25*mm, 45*mm])
         result_table.setStyle(TableStyle([
