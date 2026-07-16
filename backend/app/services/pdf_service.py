@@ -440,29 +440,33 @@ def _parse_range_bounds(range_str):
     if not range_str:
         return None
     cleaned = range_str.replace(",", "").strip()
-    nums = re.findall(r'-?\d+\.?\d*', cleaned)
-    if len(nums) >= 2:
+    low_txt = cleaned.lower()
+    if cleaned.startswith("<") or "less" in low_txt or "upto" in low_txt or "up to" in low_txt:
+        nums = re.findall(r'\d+\.?\d*', cleaned)
+        return (None, float(nums[0])) if nums else None
+    if cleaned.startswith(">") or "greater" in low_txt or "above" in low_txt:
+        nums = re.findall(r'\d+\.?\d*', cleaned)
+        return (float(nums[0]), None) if nums else None
+
+    # Split only on a hyphen that directly follows a digit, so "0.6-1.1"
+    # splits into two positive bounds instead of the "-1.1" being read
+    # as a negative number.
+    parts = re.split(r'(?<=\d)\s*-\s*', cleaned)
+    if len(parts) == 2:
         try:
-            return float(nums[0]), float(nums[1])
+            low_nums = re.findall(r'\d+\.?\d*', parts[0])
+            high_nums = re.findall(r'\d+\.?\d*', parts[1])
+            if low_nums and high_nums:
+                return float(low_nums[0]), float(high_nums[0])
         except ValueError:
             return None
-    if len(nums) == 1:
-        try:
-            bound = float(nums[0])
-        except ValueError:
-            return None
-        low = cleaned.lower()
-        if cleaned.startswith("<") or "less" in low or "upto" in low or "up to" in low:
-            return None, bound
-        if cleaned.startswith(">") or "greater" in low or "above" in low:
-            return bound, None
     return None
 
 def _is_out_of_range(value_str, range_str):
     bounds = _parse_range_bounds(range_str)
     if not bounds or not value_str:
         return False
-    nums = re.findall(r'-?\d+\.?\d*', str(value_str).replace(",", ""))
+    nums = re.findall(r'\d+\.?\d*', str(value_str).replace(",", ""))
     if not nums:
         return False
     try:
@@ -500,11 +504,11 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     body_style = ParagraphStyle("body", fontSize=10, fontName="Helvetica", leading=14)
 
     elements.append(Paragraph(hospital_name, header_style))
-    elements.append(Spacer(1, 2*mm))
+    elements.append(Spacer(1, 5*mm))
     elements.append(Paragraph("Laboratory Test Report", sub_style))
-    elements.append(Spacer(1, 3*mm))
-    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a237e")))
     elements.append(Spacer(1, 4*mm))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a237e")))
+    elements.append(Spacer(1, 5*mm))
 
     bg = f" | Blood Group: {patient.blood_group}" if patient.blood_group else ""
     elements.append(Paragraph(
@@ -527,7 +531,9 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
             table_data.append([row["name"], row["value"] or "—", row["unit"] or "—", row["range"] or "—"])
             if out:
                 row_styles.append(("FONTNAME", (1, i+1), (1, i+1), "Helvetica-Bold"))
-                row_styles.append(("TEXTCOLOR", (1, i+1), (1, i+1), colors.HexColor("#b91c1c")))
+                row_styles.append(("TEXTCOLOR", (1, i+1), (1, i+1), colors.HexColor("#ef4444")))
+            elif row["value"]:
+                row_styles.append(("TEXTCOLOR", (1, i+1), (1, i+1), colors.HexColor("#10b981")))
 
         result_table = Table(table_data, colWidths=[55*mm, 30*mm, 25*mm, 45*mm])
         result_table.setStyle(TableStyle([
