@@ -263,6 +263,135 @@
         margin-top: 2px;
       }
     }
+
+    /* Report History: one card per patient (distinct from .lp-card so the
+       Pending tab's styling is untouched) */
+    .lr-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+
+    .lr-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .lr-card-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .lr-card-uid {
+      font-size: 12px;
+      color: var(--slate);
+      margin-top: 2px;
+    }
+
+    .lr-card-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+      font-size: 12px;
+      color: var(--slate);
+    }
+
+    .lr-card-meta strong {
+      color: var(--navy);
+      font-weight: 600;
+    }
+
+    .lr-card button {
+      width: 100%;
+    }
+
+    @media (min-width: 901px) {
+      .lr-card {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .lr-card-body {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .lr-card-meta {
+        border-top: none;
+        padding-top: 0;
+      }
+      .lr-card button {
+        width: auto;
+        flex-shrink: 0;
+      }
+    }
+
+    /* Report modal: one row per report day */
+    .lr-item {
+      background: var(--smoke);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .lr-item:last-child { margin-bottom: 0; }
+
+    .lr-item-date {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 4px;
+    }
+
+    .lr-item-tests {
+      font-size: 13px;
+      color: var(--slate);
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .lr-item-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .lr-item-actions .btn {
+      flex: 1;
+    }
+
+    @media (min-width: 901px) {
+      .lr-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .lr-item-body { flex: 1; }
+      .lr-item-tests { margin-bottom: 0; }
+      .lr-item-actions {
+        flex-shrink: 0;
+      }
+      .lr-item-actions .btn {
+        flex: none;
+        width: auto;
+      }
+    }
   </style>
 </head>
 
@@ -354,18 +483,18 @@
         </svg>
         Pending
       </button>
+      <button class="bottom-nav-item" id="tab-btn-reports" onclick="showLabSection('reports')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        Reports
+      </button>
       <button class="bottom-nav-item" id="tab-btn-attendance" onclick="showLabSection('attendance')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
         Attendance
-      </button>
-      <button class="bottom-nav-item" id="tab-btn-reports" onclick="showLabSection('reports')">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        Reports
       </button>
     </nav>
 
@@ -519,18 +648,20 @@
       }
       labReportsData = results;
       el.innerHTML = results.map((r, idx) => `
-        <div class="lp-card">
-          <div class="lp-card-body">
-            <div class="lp-card-top">
-              <strong>${sanitize(r.patient_name)}</strong>
-              <span style="font-size:12px;color:var(--slate)">${r.patient_uid ? 'UID ' + sanitize(r.patient_uid) : ''}</span>
+        <div class="lr-card">
+          <div class="lr-card-body">
+            <div class="lr-card-top">
+              <div>
+                <div class="lr-card-name">${sanitize(r.patient_name)}</div>
+                ${r.patient_uid ? `<div class="lr-card-uid">UID ${sanitize(r.patient_uid)}</div>` : ''}
+              </div>
             </div>
-            <div style="font-size:13px;color:var(--slate);margin-top:4px">${r.visits.length} report day${r.visits.length > 1 ? 's' : ''}</div>
-            <div style="font-size:12px;color:var(--slate-light);margin-top:2px">Latest: ${r.latest_completed_at ? formatDateTime(r.latest_completed_at) : ''}</div>
+            <div class="lr-card-meta">
+              <span><strong>${r.visits.length}</strong> report day${r.visits.length > 1 ? 's' : ''}</span>
+              <span>Latest: ${r.latest_completed_at ? formatDateTime(r.latest_completed_at) : '—'}</span>
+            </div>
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-outline btn-sm" onclick="openPatientReportsModal(${idx})">Report</button>
-          </div>
+          <button class="btn btn-primary btn-sm" onclick="openPatientReportsModal(${idx})">Report</button>
         </div>
       `).join('');
     }
@@ -544,12 +675,12 @@
       document.getElementById('patient-reports-modal-sub').textContent =
         r.patient_uid ? `UID ${r.patient_uid}` : '';
       document.getElementById('patient-reports-list').innerHTML = r.visits.map((v, vIdx) => `
-        <div class="lp-item">
-          <div style="font-size:13px">
-            <strong>${v.token_number ? 'Token #' + sanitize(v.token_number) + ' — ' : ''}${sanitize(v.test_names.join(', '))}</strong>
-            <div style="color:var(--slate);font-size:12px;margin-top:2px">${v.completed_at ? formatDateTime(v.completed_at) : ''}</div>
+        <div class="lr-item">
+          <div class="lr-item-body">
+            <div class="lr-item-date">${v.completed_at ? formatDateTime(v.completed_at) : 'Date unknown'}${v.token_number ? ' · Token #' + sanitize(v.token_number) : ''}</div>
+            <div class="lr-item-tests">${sanitize(v.test_names.join(', '))}</div>
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div class="lr-item-actions">
             <button class="btn btn-outline btn-sm" onclick="downloadReport([${v.order_ids.join(',')}])">Download</button>
             <button class="btn btn-sm btn-whatsapp" onclick="sendReportWhatsApp(${idx}, ${vIdx})">Send on WhatsApp</button>
           </div>
