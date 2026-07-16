@@ -115,11 +115,12 @@
     }
 
     .btn-whatsapp {
-      background: var(--success);
-      border: 1px solid var(--success);
+      background: #065f46;
+      border: 1px solid #065f46;
       color: var(--white);
     }
     .btn-whatsapp:hover { filter: brightness(0.95); }
+    .badge-green { background: #065f46; color: var(--white); }
 
     /* Queue: one card per patient */
     .lq-card {
@@ -529,7 +530,7 @@
             <div style="font-size:12px;color:var(--slate-light);margin-top:2px">${r.completed_at ? formatDateTime(r.completed_at) : ''}</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-outline btn-sm" onclick="openPatientReportsModal(${idx})">Reports</button>
+            <button class="btn btn-outline btn-sm" onclick="downloadReport([${r.tests.map(t => t.order_id).join(',')}])">Download</button>
             <button class="btn btn-sm btn-whatsapp" onclick="event.stopPropagation();toast('Send on WhatsApp — Coming Soon','info')">Send on WhatsApp</button>
           </div>
         </div>
