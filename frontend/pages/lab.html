@@ -81,7 +81,39 @@
       margin-top: 2px;
     }
     @media (max-width: 640px) {
-      .bulk-param-row { grid-template-columns: 1fr; }
+      #modal-bulk-results .modal {
+        max-width: 100%;
+        width: 100%;
+        height: 100%;
+        max-height: 100%;
+        margin: 0;
+        border-radius: 0;
+      }
+      .bulk-test-block {
+        padding: 0;
+        border: none;
+        border-bottom: 8px solid var(--smoke-mid);
+        border-radius: 0;
+        margin-bottom: 0;
+      }
+      .bulk-test-block h3 {
+        background: var(--teal-subtle);
+        color: var(--navy);
+        padding: 12px 14px;
+        margin: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .bulk-param-row {
+        grid-template-columns: 1fr;
+        padding: 12px 14px;
+        margin: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .bulk-param-row:last-child { border-bottom: none; }
+      .bulk-param-row input {
+        font-size: 16px;
+        padding: 10px 12px;
+      }
     }
 
     /* Queue: one card per patient */
@@ -293,6 +325,12 @@
         </svg>
         Pending
       </div>
+      <div class="nav-item" id="sidebar-tab-reports" onclick="showLabSection('reports')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        Reports
+      </div>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
@@ -317,6 +355,12 @@
             d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
         Attendance
+      </button>
+      <button class="bottom-nav-item" id="tab-btn-reports" onclick="showLabSection('reports')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        Reports
       </button>
     </nav>
 
@@ -368,6 +412,18 @@
         </div>
       </div>
 
+      <!-- Reports tab -->
+      <div class="mobile-section" id="section-reports">
+        <div class="card">
+          <div class="card-header">
+            <h2>Reports</h2>
+          </div>
+          <input class="form-control" id="lab-reports-search" placeholder="Search by patient name or UID…"
+            oninput="searchLabReports(this.value)" style="margin-bottom:12px" />
+          <div id="lab-reports-list"><p style="color:var(--slate)">Loading…</p></div>
+        </div>
+      </div>
+
     </main>
   </div>
 
@@ -379,11 +435,9 @@
           <h2 id="patient-tests-modal-title" style="margin:0"></h2>
           <p style="margin:2px 0 0;font-size:13px;color:var(--slate)" id="patient-tests-modal-sub"></p>
         </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <button class="btn btn-primary btn-sm" id="patient-tests-top-action" style="display:none"></button>
-          <button class="modal-close" onclick="closePatientTestsModal()">×</button>
-        </div>
+        <button class="modal-close" onclick="closePatientTestsModal()">×</button>
       </div>
+      <button class="btn btn-primary" id="patient-tests-top-action" style="display:none;width:100%;margin-bottom:14px"></button>
       <div id="patient-tests-list"></div>
     </div>
   </div>
@@ -449,7 +503,7 @@
     let currentResultParams = [];
 
     function showLabSection(id) {
-      ['queue', 'pending', 'attendance'].forEach(s => {
+      ['queue', 'pending', 'attendance', 'reports'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         const bottomBtn = document.getElementById('tab-btn-' + s);
         if (bottomBtn) bottomBtn.classList.toggle('active', s === id);
@@ -457,6 +511,47 @@
         if (sideBtn) sideBtn.classList.toggle('active', s === id);
       });
       if (id === 'pending') runLabPendingSearch(document.getElementById('lab-pending-search').value);
+      if (id === 'reports') runLabReportsSearch(document.getElementById('lab-reports-search').value);
+    }
+
+    let labReportsSearchTimer;
+    function searchLabReports(val) {
+      clearTimeout(labReportsSearchTimer);
+      labReportsSearchTimer = setTimeout(() => runLabReportsSearch(val), 350);
+    }
+
+    async function runLabReportsSearch(q) {
+      try {
+        const results = await api("GET", `/lab/reports/history?q=${encodeURIComponent(q)}`);
+        renderLabReports(results);
+      } catch (e) { }
+    }
+
+    function renderLabReports(results) {
+      const el = document.getElementById('lab-reports-list');
+      if (!results.length) {
+        el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No completed reports yet.</p>';
+        return;
+      }
+      el.innerHTML = results.map(r => `
+        <div class="lp-card">
+          <div class="lp-card-body">
+            <div class="lp-card-top">
+              <strong>${sanitize(r.patient_name)}</strong>
+              <span style="font-size:12px;color:var(--slate)">${r.token_number ? 'Token #' + sanitize(r.token_number) : ''}</span>
+            </div>
+            <div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(r.test_names.join(', '))}</div>
+            <div style="font-size:12px;color:var(--slate-light);margin-top:2px">${r.completed_at ? formatDateTime(r.completed_at) : ''}</div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="downloadReportsGroup('${r.order_ids.join(',')}', event)">Download</button>
+        </div>
+      `).join('');
+    }
+
+    function downloadReportsGroup(orderIdsStr, evt) {
+      if (evt) evt.stopPropagation();
+      const w = window.open('', '_blank');
+      downloadCombinedReport(orderIdsStr.split(',').map(Number), w);
     }
 
     let labPendingSearchTimer;
@@ -500,13 +595,23 @@
       }).join('');
     }
 
+    function formatDateTime(iso) {
+      if (!iso) return '';
+      const ist = /[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30";
+      return new Date(ist).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit", hour12: true
+      });
+    }
+
     async function requeueAllForPatient(orderIdsCsv) {
       const orderIds = orderIdsCsv.split(',').map(Number);
       try {
         for (const id of orderIds) {
           await api("POST", `/lab/orders/${id}/requeue`, {});
         }
-        toast(orderIds.length > 1 ? `Requeued ${orderIds.length} tests.` : 'Requeued.', 'success');
+        toast('Requeued.', 'success');
         runLabPendingSearch(document.getElementById('lab-pending-search').value);
         loadQueue();
       } catch (e) { toast(e.message, 'error'); }
@@ -711,7 +816,8 @@
             <strong>${sanitize(o.test_name)}</strong>
             <div style="margin-top:4px"><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}" id="lp-status-${o.id}">${STATUS_LABEL[o.status] || o.status}</span></div>
           </div>
-          <div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="deferTest(${o.id})">Mark for Later</button>` : ''}
             ${o.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} bulkAdvanceFromModal()">Sample Collected</button>` : ''}
             ${o.status === 'sample_collected' ? `<button class="btn btn-outline btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} advanceStatus(${o.id}, 'processing')">Mark Processing</button>` : ''}
             ${o.status === 'processing' ? `<button class="btn btn-primary btn-sm" onclick="if(!isLabPresent()){toast('Mark yourself Present first.','info');return;} openBulkResultsModal()">Enter Results</button>` : ''}
@@ -720,6 +826,16 @@
         </div>
       `).join('');
       updatePatientTestsTopAction(group);
+    }
+
+    async function deferTest(orderId) {
+      try {
+        await api("POST", `/lab/orders/${orderId}/defer`, {});
+        labQueueData = labQueueData.filter(o => o.id !== orderId);
+        renderQueue(labQueueData);
+        refreshOpenPatientModal();
+        toast('Moved to Pending Tasks for later.', 'success');
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     function updatePatientTestsTopAction(group) {
@@ -835,6 +951,7 @@
       const errEl = document.getElementById('bulk-results-err');
       errEl.textContent = '';
       const btn = document.getElementById('btn-save-bulk-results');
+      const reportWindow = window.open('', '_blank');
 
       let anyFilled = false;
       const payloads = bulkResultOrders.map(test => {
@@ -870,8 +987,9 @@
         toast('Results saved — generating report…', 'success');
         closeBulkResultsModal();
         refreshOpenPatientModal();
-        await downloadCombinedReport(payloads.map(p => p.orderId));
+        await downloadCombinedReport(payloads.map(p => p.orderId), reportWindow);
       } catch (e) {
+        if (reportWindow) reportWindow.close();
         errEl.textContent = e.message;
       } finally {
         btn.disabled = false;
@@ -879,31 +997,25 @@
       }
     }
 
-    async function downloadCombinedReport(orderIds) {
+    async function downloadCombinedReport(orderIds, preOpenedWindow) {
+      const w = preOpenedWindow || window.open('', '_blank');
       try {
         const response = await fetch(`${BASE}/lab/reports/combined?order_ids=${orderIds.join(',')}`, {
           headers: { "Authorization": `Bearer ${getToken()}` }
         });
         if (!response.ok) throw new Error('Could not generate report');
         const blob = await response.blob();
-        window.open(URL.createObjectURL(blob), "_blank");
+        const url = URL.createObjectURL(blob);
+        if (w) w.location = url; else window.open(url, "_blank");
       } catch (e) {
+        if (w) w.close();
         toast(e.message, 'error');
       }
     }
 
     async function downloadReport(orderId) {
-      try {
-        const response = await fetch(`${BASE}/lab/orders/${orderId}/report`, {
-          headers: { "Authorization": `Bearer ${getToken()}` }
-        });
-        if (!response.ok) throw new Error("Report not found");
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        window.open(url, "_blank");
-      } catch (e) {
-        toast("Could not load report", "error");
-      }
+      const w = window.open('', '_blank');
+      await downloadCombinedReport([orderId], w);
     }
 
     async function advanceStatus(orderId, status) {

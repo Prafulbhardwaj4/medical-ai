@@ -576,8 +576,9 @@
 
             <!-- BILLING -->
             <div id="section-billing" class="section" style="display:none">
-                <div class="page-header">
+                <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
                     <h1>Billing</h1>
+                    <button class="btn btn-primary" onclick="openRevenueHistoryModal()">📊 Revenue History</button>
                 </div>
                 <div class="stats-row" style="margin-bottom:20px">
                     <div class="stat-card">
@@ -590,9 +591,12 @@
                         <div class="stat-value" id="stat-unpaid-today">—</div>
                         <div class="stat-sub" id="stat-unpaid-count">—</div>
                     </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Collected in Last 30 Days</div>
+                        <div class="stat-value" id="stat-collected-30d">—</div>
+                        <div class="stat-sub" id="stat-collected-30d-count">—</div>
+                    </div>
                 </div>
-                <button class="btn btn-outline" style="margin-bottom:20px" onclick="openRevenueHistoryModal()">📊 Revenue
-                    History</button>
                 <div class="card" style="margin-bottom:20px">
                     <div class="card-header">
                         <h2>Default Consultation Fee</h2>
@@ -814,7 +818,24 @@
             } catch (e) {
                 toast(e.message, "error");
             }
+            loadCollected30Days();
             loadBillingHistory();
+        }
+
+        async function loadCollected30Days() {
+            try {
+                const to = new Date();
+                const from = new Date(to);
+                from.setDate(from.getDate() - 29);
+                const params = new URLSearchParams({ from_date: from.toISOString().slice(0, 10), to_date: to.toISOString().slice(0, 10) });
+                const data = await api("GET", `/billing/revenue-history/daily?${params.toString()}`);
+                const total = data.days.reduce((s, d) => s + d.total, 0);
+                const count = data.days.reduce((s, d) => s + d.invoice_count, 0);
+                document.getElementById('stat-collected-30d').textContent = `Rs.${total.toFixed(2)}`;
+                document.getElementById('stat-collected-30d-count').textContent = `${count} invoice${count !== 1 ? 's' : ''}`;
+            } catch (e) {
+                document.getElementById('stat-collected-30d').textContent = '—';
+            }
         }
 
         async function loadBillingHistory() {
@@ -1169,18 +1190,32 @@
 
         // ── Revenue History (admin) ─────────────────────────────
         let revenueHistoryMode = 'daily';
+        const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+        function formatMonthLabel(ym) {
+            const [y, m] = ym.split('-').map(Number);
+            return `${MONTH_NAMES[m - 1]} ${y}`;
+        }
+
+        function formatDayLabel(iso) {
+            const dt = new Date(iso + "T00:00:00");
+            return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
 
         function openRevenueHistoryModal() {
             document.getElementById('modal-revenue-history').classList.add('open');
             const today = new Date();
             const todayStr = today.toISOString().slice(0, 10);
             const threeMoAgo = new Date(today);
-            threeMoAgo.setDate(threeMoAgo.getDate() - 30);
-            document.getElementById('rh-daily-from').value = threeMoAgo.toISOString().slice(0, 10);
-            document.getElementById('rh-daily-to').value = todayStr;
-            const curMonth = todayStr.slice(0, 7);
-            document.getElementById('rh-monthly-from').value = curMonth;
-            document.getElementById('rh-monthly-to').value = curMonth;
+            threeMoAgo.setDate(threeMoAgo.getDate() - 92);
+
+            const dayInput = document.getElementById('rh-day');
+            dayInput.min = threeMoAgo.toISOString().slice(0, 10);
+            dayInput.max = todayStr;
+            dayInput.value = todayStr;
+
+            document.getElementById('rh-month').value = '';
+
             setRevenueHistoryMode('daily');
         }
 
@@ -1190,12 +1225,17 @@
 
         function setRevenueHistoryMode(mode) {
             revenueHistoryMode = mode;
-            const dailyTab = document.getElementById('rh-tab-daily');
-            const monthlyTab = document.getElementById('rh-tab-monthly');
-            dailyTab.className = mode === 'daily' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
-            monthlyTab.className = mode === 'monthly' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
-            document.getElementById('rh-daily-filters').style.display = mode === 'daily' ? 'grid' : 'none';
-            document.getElementById('rh-monthly-filters').style.display = mode === 'monthly' ? 'grid' : 'none';
+            document.getElementById('rh-tab-daily').className = mode === 'daily' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+            document.getElementById('rh-tab-monthly').className = mode === 'monthly' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+            document.getElementById('rh-tab-range').className = mode === 'range' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+            document.getElementById('rh-daily-filters').style.display = mode === 'daily' ? 'block' : 'none';
+            document.getElementById('rh-monthly-filters').style.display = mode === 'monthly' ? 'block' : 'none';
+            document.getElementById('rh-range-filters').style.display = mode === 'range' ? 'block' : 'none';
+            loadRevenueHistory();
+        }
+
+        function clearMonthFilter() {
+            document.getElementById('rh-month').value = '';
             loadRevenueHistory();
         }
 
@@ -1204,19 +1244,42 @@
             listEl.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
             try {
                 if (revenueHistoryMode === 'daily') {
-                    const from = document.getElementById('rh-daily-from').value;
-                    const to = document.getElementById('rh-daily-to').value;
-                    const data = await api("GET", `/billing/revenue-history/daily?from_date=${from}&to_date=${to}`);
-                    if (data.from_date !== from) document.getElementById('rh-daily-from').value = data.from_date;
-                    if (data.to_date !== to) document.getElementById('rh-daily-to').value = data.to_date;
-                    renderRevenueHistory(data.days.map(d => ({ label: d.date, total: d.total, count: d.invoice_count })), "Past 3 months max");
+                    const day = document.getElementById('rh-day').value;
+                    if (!day) { listEl.innerHTML = '<p style="color:var(--slate-light)">Pick a day.</p>'; return; }
+                    const data = await api("GET", `/billing/revenue-history/daily?from_date=${day}&to_date=${day}`);
+                    const d = data.days[0];
+                    renderRevenueHistory(
+                        d ? [{ label: formatDayLabel(data.from_date), total: d.total, count: d.invoice_count }] : [],
+                        "Any single day in the last 3 months"
+                    );
+                } else if (revenueHistoryMode === 'monthly') {
+                    const month = document.getElementById('rh-month').value;
+                    if (month) {
+                        const data = await api("GET", `/billing/revenue-history/monthly?from_month=${month}&to_month=${month}`);
+                        const m = data.months[0];
+                        renderRevenueHistory(
+                            m ? [{ label: formatMonthLabel(data.from_month), total: m.total, count: m.invoice_count }] : [],
+                            "Selected month"
+                        );
+                    } else {
+                        const data = await api("GET", "/billing/revenue-history/monthly");
+                        renderRevenueHistory(
+                            data.months.map(m => ({ label: formatMonthLabel(m.month), total: m.total, count: m.invoice_count })),
+                            "Past 18 months"
+                        );
+                    }
                 } else {
-                    const from = document.getElementById('rh-monthly-from').value;
-                    const to = document.getElementById('rh-monthly-to').value;
-                    const data = await api("GET", `/billing/revenue-history/monthly?from_month=${from}&to_month=${to}`);
-                    if (data.from_month !== from) document.getElementById('rh-monthly-from').value = data.from_month;
-                    if (data.to_month !== to) document.getElementById('rh-monthly-to').value = data.to_month;
-                    renderRevenueHistory(data.months.map(m => ({ label: m.month, total: m.total, count: m.invoice_count })), "Past 18 months max");
+                    const to = new Date();
+                    const from = new Date(to);
+                    from.setDate(from.getDate() - 89);
+                    const params = new URLSearchParams({ from_date: from.toISOString().slice(0, 10), to_date: to.toISOString().slice(0, 10) });
+                    const data = await api("GET", `/billing/revenue-history/daily?${params.toString()}`);
+                    const total = data.days.reduce((s, d) => s + d.total, 0);
+                    const count = data.days.reduce((s, d) => s + d.invoice_count, 0);
+                    renderRevenueHistory(
+                        [{ label: `${formatDayLabel(data.from_date)} – ${formatDayLabel(data.to_date)}`, total, count }],
+                        "Past 3 months, totaled"
+                    );
                 }
             } catch (e) {
                 listEl.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
@@ -1232,8 +1295,10 @@
             const grandTotal = rows.reduce((s, r) => s + r.total, 0);
             const totalCount = rows.reduce((s, r) => s + r.count, 0);
             const bodyRows = rows.map(r => `
-                <tr><td>${r.label}</td><td>${r.count}</td><td>Rs.${r.total.toFixed(2)}</td></tr>
-            `).join('') + `<tr style="font-weight:600"><td>Total</td><td>${totalCount}</td><td>Rs.${grandTotal.toFixed(2)}</td></tr>`;
+                <tr><td data-label="Period">${r.label}</td><td data-label="Invoices">${r.count}</td><td data-label="Revenue">Rs.${r.total.toFixed(2)}</td></tr>
+            `).join('') + (rows.length > 1
+                ? `<tr style="font-weight:600"><td data-label="Period">Total</td><td data-label="Invoices">${totalCount}</td><td data-label="Revenue">Rs.${grandTotal.toFixed(2)}</td></tr>`
+                : '');
             listEl.innerHTML = `<p style="color:var(--slate);font-size:12px;margin-bottom:10px">${boundNote}</p>` +
                 makeTable(["Period", "Invoices", "Revenue"], bodyRows);
         }
@@ -1246,29 +1311,24 @@
                 <h2>Revenue History</h2>
                 <button class="modal-close" onclick="closeRevenueHistoryModal()">×</button>
             </div>
-            <div style="display:flex;gap:8px;margin-bottom:16px">
+            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
                 <button class="btn btn-outline btn-sm" id="rh-tab-daily" onclick="setRevenueHistoryMode('daily')">Per Day</button>
                 <button class="btn btn-outline btn-sm" id="rh-tab-monthly" onclick="setRevenueHistoryMode('monthly')">Per Month</button>
+                <button class="btn btn-outline btn-sm" id="rh-tab-range" onclick="setRevenueHistoryMode('range')">Range</button>
             </div>
-            <div id="rh-daily-filters" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-                <div>
-                    <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">From</label>
-                    <input class="form-control" id="rh-daily-from" type="date" onchange="loadRevenueHistory()" />
-                </div>
-                <div>
-                    <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">To</label>
-                    <input class="form-control" id="rh-daily-to" type="date" onchange="loadRevenueHistory()" />
+            <div id="rh-daily-filters" style="margin-bottom:16px">
+                <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">Select a Day (last 3 months)</label>
+                <input class="form-control" id="rh-day" type="date" onchange="loadRevenueHistory()" />
+            </div>
+            <div id="rh-monthly-filters" style="display:none;margin-bottom:16px">
+                <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">Filter to One Month (optional — leave blank to see all 18)</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <input class="form-control" id="rh-month" type="month" onchange="loadRevenueHistory()" style="flex:1;min-width:160px" />
+                    <button class="btn btn-outline btn-sm" onclick="clearMonthFilter()">Show All 18</button>
                 </div>
             </div>
-            <div id="rh-monthly-filters" style="display:none;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-                <div>
-                    <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">From Month</label>
-                    <input class="form-control" id="rh-monthly-from" type="month" onchange="loadRevenueHistory()" />
-                </div>
-                <div>
-                    <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">To Month</label>
-                    <input class="form-control" id="rh-monthly-to" type="month" onchange="loadRevenueHistory()" />
-                </div>
+            <div id="rh-range-filters" style="display:none;margin-bottom:16px">
+                <p style="color:var(--slate);font-size:13px;margin:0">Total revenue across the past 3 months, added up into one figure.</p>
             </div>
             <div id="revenue-history-list" style="max-height:50vh;overflow-y:auto"></div>
         </div>

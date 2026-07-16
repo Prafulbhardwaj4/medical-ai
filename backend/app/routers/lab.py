@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pydantic import BaseModel
 from typing import Optional
 import json
@@ -213,6 +213,42 @@ def requeue_test_order(
     return {"id": order.id, "queued_at": order.queued_at.isoformat()}
 
 
+@router.post("/orders/{order_id}/defer")
+def defer_test_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Push a single test out of today's active queue (e.g. fasting-only
+    test that can't be done today) without touching any other test on the
+    same visit. It reappears via Pending Tasks, same as an order that
+    naturally aged out — 'Requeue' there brings it back exactly as before."""
+    require_lab(current_doctor)
+
+    order = db.query(TestOrder).filter(
+        TestOrder.id == order_id,
+        TestOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Test order not found")
+    if order.status != "paid":
+        raise HTTPException(status_code=400, detail="Only paid, uncollected tests can be deferred")
+
+    today_start_utc, _ = ist_day_bounds_utc()
+    order.queued_at = today_start_utc - timedelta(minutes=1)
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="test_order_requeued",
+        target_type="test_order",
+        target_id=order.id,
+        target_label=f"{order.test_name} (deferred)",
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"id": order.id, "status": order.status}
+
+
 @router.patch("/orders/{order_id}/status")
 def update_order_status(
     order_id: int,
@@ -319,6 +355,56 @@ def get_test_report(
     )
 
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
+
+
+@router.get("/reports/history")
+def get_lab_reports_history(
+    q: str = "",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_lab(current_doctor)
+
+    orders = db.query(TestOrder).filter(
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.status == "completed"
+    ).order_by(TestOrder.completed_at.desc()).limit(500).all()
+
+    groups = {}
+    for o in orders:
+        key = (o.patient_id, o.consultation_id)
+        if key not in groups:
+            groups[key] = {
+                "order_ids": [], "test_names": [], "completed_at": None,
+                "patient_id": o.patient_id, "consultation_id": o.consultation_id
+            }
+        g = groups[key]
+        g["order_ids"].append(o.id)
+        g["test_names"].append(o.test_name)
+        completed_iso = o.completed_at.isoformat() if o.completed_at else None
+        if completed_iso and (g["completed_at"] is None or completed_iso > g["completed_at"]):
+            g["completed_at"] = completed_iso
+
+    q_lower = q.strip().lower()
+    result = []
+    for g in groups.values():
+        patient = db.query(Patient).filter(Patient.id == g["patient_id"]).first()
+        consultation = db.query(Consultation).filter(Consultation.id == g["consultation_id"]).first()
+        patient_name = patient.name if patient else "Unknown"
+        patient_uid = patient.patient_uid if patient else ""
+        if q_lower and q_lower not in patient_name.lower() and q_lower not in patient_uid.lower():
+            continue
+        result.append({
+            "patient_name": patient_name,
+            "patient_uid": patient_uid,
+            "token_number": consultation.token_number if consultation else "",
+            "test_names": g["test_names"],
+            "order_ids": g["order_ids"],
+            "completed_at": g["completed_at"]
+        })
+
+    result.sort(key=lambda r: r["completed_at"] or "", reverse=True)
+    return result
 
 
 @router.get("/reports/combined")
