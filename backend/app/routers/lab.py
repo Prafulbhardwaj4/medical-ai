@@ -375,13 +375,18 @@ def get_lab_reports_history(
         key = (o.patient_id, o.consultation_id)
         if key not in groups:
             groups[key] = {
-                "order_ids": [], "test_names": [], "completed_at": None,
+                "order_ids": [], "test_names": [], "tests": [], "completed_at": None,
                 "patient_id": o.patient_id, "consultation_id": o.consultation_id
             }
         g = groups[key]
         g["order_ids"].append(o.id)
         g["test_names"].append(o.test_name)
         completed_iso = o.completed_at.isoformat() if o.completed_at else None
+        g["tests"].append({
+            "order_id": o.id,
+            "test_name": o.test_name,
+            "completed_at": completed_iso
+        })
         if completed_iso and (g["completed_at"] is None or completed_iso > g["completed_at"]):
             g["completed_at"] = completed_iso
 
@@ -400,6 +405,7 @@ def get_lab_reports_history(
             "token_number": consultation.token_number if consultation else "",
             "test_names": g["test_names"],
             "order_ids": g["order_ids"],
+            "tests": g["tests"],
             "completed_at": g["completed_at"]
         })
 

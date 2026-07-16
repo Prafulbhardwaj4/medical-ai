@@ -114,6 +114,13 @@
       }
     }
 
+    .btn-whatsapp {
+      background: var(--success);
+      border: 1px solid var(--success);
+      color: var(--white);
+    }
+    .btn-whatsapp:hover { filter: brightness(0.95); }
+
     /* Queue: one card per patient */
     .lq-card {
       border: 1.5px solid var(--border);
@@ -440,6 +447,20 @@
     </div>
   </div>
 
+  <!-- Patient Reports Modal (Reports tab) -->
+  <div class="modal-overlay" id="modal-patient-reports">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="patient-reports-modal-title" style="margin:0"></h2>
+          <p style="margin:2px 0 0;font-size:13px;color:var(--slate)" id="patient-reports-modal-sub"></p>
+        </div>
+        <button class="modal-close" onclick="closePatientReportsModal()">×</button>
+      </div>
+      <div id="patient-reports-list"></div>
+    </div>
+  </div>
+
   <!-- Bulk Results Entry Modal -->
   <div class="modal-overlay" id="modal-bulk-results">
     <div class="modal" style="max-width:720px;max-height:88vh;display:flex;flex-direction:column">
@@ -496,7 +517,8 @@
         el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No completed reports yet.</p>';
         return;
       }
-      el.innerHTML = results.map(r => `
+      labReportsData = results;
+      el.innerHTML = results.map((r, idx) => `
         <div class="lp-card">
           <div class="lp-card-body">
             <div class="lp-card-top">
@@ -506,15 +528,36 @@
             <div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(r.test_names.join(', '))}</div>
             <div style="font-size:12px;color:var(--slate-light);margin-top:2px">${r.completed_at ? formatDateTime(r.completed_at) : ''}</div>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="downloadReportsGroup('${r.order_ids.join(',')}', event)">Download</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="openPatientReportsModal(${idx})">Reports</button>
+            <button class="btn btn-sm btn-whatsapp" onclick="event.stopPropagation();toast('Send on WhatsApp — Coming Soon','info')">Send on WhatsApp</button>
+          </div>
         </div>
       `).join('');
     }
 
-    function downloadReportsGroup(orderIdsStr, evt) {
-      if (evt) evt.stopPropagation();
-      const w = window.open('', '_blank');
-      downloadCombinedReport(orderIdsStr.split(',').map(Number), w);
+    let labReportsData = [];
+
+    function openPatientReportsModal(idx) {
+      const r = labReportsData[idx];
+      if (!r) return;
+      document.getElementById('patient-reports-modal-title').textContent = r.patient_name;
+      document.getElementById('patient-reports-modal-sub').textContent =
+        `Token #${r.token_number}${r.patient_uid ? ' · UID ' + r.patient_uid : ''}`;
+      document.getElementById('patient-reports-list').innerHTML = r.tests.map(t => `
+        <div class="lp-item">
+          <div style="font-size:13px">
+            <strong>${sanitize(t.test_name)}</strong>
+            <div style="color:var(--slate);font-size:12px;margin-top:2px">${t.completed_at ? formatDateTime(t.completed_at) : ''}</div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="downloadReport(${t.order_id})">Download</button>
+        </div>
+      `).join('');
+      document.getElementById('modal-patient-reports').classList.add('open');
+    }
+
+    function closePatientReportsModal() {
+      document.getElementById('modal-patient-reports').classList.remove('open');
     }
 
     let labPendingSearchTimer;
