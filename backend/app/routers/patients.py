@@ -727,7 +727,8 @@ def todays_queue(
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.doctor_id == current_doctor.id,
-        Checkin.visit_date == ist_today()
+        Checkin.visit_date == ist_today(),
+        Checkin.is_paid == True
     ).order_by(Checkin.created_at.asc()).all()
 
     patient_ids = [c.patient_id for c in checkins]

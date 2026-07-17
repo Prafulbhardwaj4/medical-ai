@@ -22,24 +22,7 @@
       .no-print { display: none !important; }
     }
 
-    /* #5 — Today's Status attendance card (receptionist-only layout) */
-    .rec-att-row { display: flex; flex-direction: column; align-items: center; gap: 16px; }
-    .rec-att-left { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
-    .rec-att-left .badge { font-size: 15px; padding: 8px 18px; }
-    .rec-att-card .staff-att-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-    @media (min-width: 901px) {
-      .rec-att-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 20px; }
-      .rec-att-left { flex-direction: row; text-align: left; gap: 14px; }
-      .rec-att-card .staff-att-actions { flex-direction: row; flex-wrap: wrap; width: auto; }
-    }
-
     /* #7 — Home / Patients List are switched from the sidebar nav on desktop now */
-    @media (min-width: 901px) {
-      .rec-att-card { padding: 14px 24px; }
-      .rec-att-left h2 { font-size: 1rem; }
-      .rec-att-left .badge { font-size: 12.5px; padding: 5px 13px; }
-      .rec-att-card .staff-att-actions .btn { padding: 6px 14px; font-size: 0.82rem; }
-    }
 
     /* Select Patient modal (Docs / Pending chooser) */
     .sel-patient-option {
@@ -177,17 +160,17 @@
 
     <main class="main-content">
       <div class="mobile-section" id="section-attendance">
-      <div class="card rec-att-card">
-        <div class="rec-att-row">
-          <div class="rec-att-left">
-            <h2 style="margin:0">Today's Status</h2>
-            <span class="badge badge-grey" id="rec-attendance-badge">Not marked</span>
-          </div>
-          <div class="staff-att-actions">
-            <button class="btn btn-primary" id="rec-btn-present" onclick="markRecAttendance('present')">Mark Present</button>
-            <button class="btn btn-outline" id="rec-btn-break" onclick="markRecAttendance('on_break')" style="display:none">On Break</button>
-            <button class="btn btn-outline" id="rec-btn-offduty" onclick="markRecAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
-          </div>
+      <div class="card" id="rec-attendance-card">
+        <div class="card-header">
+          <h2>Today's Status</h2>
+        </div>
+        <div class="staff-att-status">
+          <span class="badge badge-grey" id="rec-attendance-badge">Not marked</span>
+        </div>
+        <div class="staff-att-actions">
+          <button class="btn btn-primary" id="rec-btn-present" onclick="markRecAttendance('present')">Mark Present</button>
+          <button class="btn btn-outline" id="rec-btn-break" onclick="markRecAttendance('on_break')" style="display:none">On Break</button>
+          <button class="btn btn-outline" id="rec-btn-offduty" onclick="markRecAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
         </div>
       </div>
       </div>
@@ -634,7 +617,7 @@
 
     async function loadRoomsForCheckin() {
       try {
-        const rooms = await api("GET", "/admin/rooms");
+        const rooms = await api("GET", "/admin/rooms?for_picker=doctor");
         allRoomsForCheckin = rooms;
         const sorted = [...rooms].sort((a, b) => {
           if (a.sequence_number != null && b.sequence_number != null) return a.sequence_number - b.sequence_number;

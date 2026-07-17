@@ -27,7 +27,8 @@ def vitals_queue(
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.vitals_status == "pending",
-        Checkin.visit_date == ist_today()
+        Checkin.visit_date == ist_today(),
+        Checkin.is_paid == True
     ).order_by(Checkin.created_at.asc()).all()
 
     patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}

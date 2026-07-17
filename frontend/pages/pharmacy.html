@@ -975,6 +975,7 @@
         toast('Marked as dispensed.', 'success');
         closePrescriptionModal();
         loadQueue();
+        loadStockMedicines();
       } catch (e) {
         document.getElementById('rx-modal-err').textContent = e.message;
         btn.disabled = false;
