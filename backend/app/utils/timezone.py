@@ -38,17 +38,19 @@ def ist_day_bounds_utc(d: date = None):
 
 
 def utc_naive_to_ist_date(dt: datetime):
-    """Given a naive UTC datetime, return the IST calendar date it falls on."""
-    if dt is None:
-        return None
-    return (dt + IST_OFFSET).date()
+    """DEPRECATED — kept only so any stray old import doesn't crash. All
+    naive datetimes in this app are now IST already; use ist_date() or
+    dt.date() directly instead of this."""
+    return ist_date(dt)
 
 
 def ist_date(dt: datetime):
-    """Convert any datetime (naive - assumed UTC, or timezone-aware) to its
-    IST calendar date."""
+    """Convert a stored datetime to its IST calendar date. Naive datetimes
+    are assumed to already be IST wall-clock (this app's storage convention
+    as of the IST migration) — no offset is added. Timezone-aware datetimes
+    are converted to IST first."""
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return (dt + IST_OFFSET).date()
+        return dt.date()
     return dt.astimezone(IST).date()

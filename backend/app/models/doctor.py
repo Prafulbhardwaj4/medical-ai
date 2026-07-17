@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Enum, Float
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 import enum
 
 class UserRole(enum.Enum):
@@ -26,7 +26,7 @@ class Doctor(Base):
     registration_number = Column(String, nullable=True)
     clinic_name = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ist_naive)
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True)
 

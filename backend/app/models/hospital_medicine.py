@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class HospitalMedicine(Base):
     __tablename__ = "hospital_medicines"
@@ -21,4 +21,4 @@ class HospitalMedicine(Base):
     stock_quantity = Column(Integer, nullable=True, default=0)
     low_stock_threshold = Column(Integer, nullable=False, default=25)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ist_naive)

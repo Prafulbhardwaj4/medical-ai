@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class TestOrder(Base):
     __tablename__ = "test_orders"
@@ -22,4 +22,4 @@ class TestOrder(Base):
     completed_at = Column(DateTime, nullable=True)
     completed_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     result_data = Column(Text, nullable=True)  # JSON: {param_name: value}
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ist_naive)

@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class Consultation(Base):
     __tablename__ = "consultations"
@@ -33,6 +33,6 @@ class Consultation(Base):
     is_dispensed = Column(Boolean, default=False)
     dispensed_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ist_naive)
 
     patient = relationship("Patient", back_populates="consultations")

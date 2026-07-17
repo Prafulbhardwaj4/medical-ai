@@ -16,7 +16,8 @@ from app.models.test_order import TestOrder
 from app.models.checkin import Checkin
 import os
 from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate
-from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds_utc
+from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
+from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
 from app.models.attendance import AttendanceRecord
 from app.utils.order_lifecycle import is_order_expired
@@ -645,7 +646,7 @@ def mark_checkin_paid(
         raise HTTPException(status_code=404, detail="Check-in not found")
 
     checkin.is_paid = True
-    checkin.paid_at = datetime.utcnow()
+    checkin.paid_at = now_ist_naive()
     db.commit()
 
     patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
@@ -771,7 +772,7 @@ def reception_pending_payments(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     today = ist_today()
-    day_start, day_end = ist_day_bounds_utc(today)
+    day_start, day_end = ist_day_bounds(today)
 
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
@@ -904,7 +905,7 @@ def collect_test_payment_anyday(
         raise HTTPException(status_code=400, detail="No payable tests pending — window may have closed")
 
     total = 0
-    now = datetime.utcnow()
+    now = now_ist_naive()
     for o in payable:
         o.status = "paid"
         o.paid_at = now
@@ -935,7 +936,7 @@ def get_pending_test_fees(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    today_start, today_end = ist_day_bounds_utc()
+    today_start, today_end = ist_day_bounds()
 
     orders = db.query(TestOrder).filter(
         TestOrder.patient_id == patient_id,
@@ -977,7 +978,7 @@ def collect_test_payment(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    today_start, today_end = ist_day_bounds_utc()
+    today_start, today_end = ist_day_bounds()
 
     orders = db.query(TestOrder).filter(
         TestOrder.patient_id == patient_id,
@@ -992,7 +993,7 @@ def collect_test_payment(
         raise HTTPException(status_code=400, detail="No included tests pending payment")
 
     total = 0
-    now = datetime.utcnow()
+    now = now_ist_naive()
     for o in orders:
         o.status = "paid"
         o.paid_at = now
@@ -1029,7 +1030,7 @@ def mark_test_order_paid(
         raise HTTPException(status_code=400, detail="Test order is not pending payment")
 
     order.status = "paid"
-    order.paid_at = datetime.utcnow()
+    order.paid_at = now_ist_naive()
     order.queued_at = order.paid_at
     db.commit()
 

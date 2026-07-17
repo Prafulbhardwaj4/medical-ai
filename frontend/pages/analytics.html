@@ -667,10 +667,27 @@
                         <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Address</label>
                         <input class="form-control" id="hd-address" placeholder="Street, area, pincode…" />
                     </div>
-                    <div style="max-width:280px;margin-bottom:14px">
-                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GSTIN <span
-                                style="color:var(--slate-light);font-weight:400">(optional)</span></label>
-                        <input class="form-control" id="hd-gstin" placeholder="e.g. 07AAAAA0000A1Z5" />
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:600px;margin-bottom:14px">
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GSTIN <span
+                                    style="color:var(--slate-light);font-weight:400">(optional)</span></label>
+                            <input class="form-control" id="hd-gstin" placeholder="e.g. 07AAAAA0000A1Z5" />
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Phone <span
+                                    style="color:var(--slate-light);font-weight:400">(optional)</span></label>
+                            <input class="form-control" id="hd-phone" placeholder="e.g. +911234567890" />
+                        </div>
+                    </div>
+                    <div style="max-width:600px;margin-bottom:14px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Logo <span
+                                style="color:var(--slate-light);font-weight:400">(optional, shows on all printed PDFs)</span></label>
+                        <div style="display:flex;align-items:center;gap:14px">
+                            <img id="hd-logo-preview" style="display:none;max-height:48px;max-width:120px;border:1px solid var(--smoke-mid);border-radius:4px" />
+                            <input type="file" accept="image/*" id="hd-logo-file" onchange="onLogoFileChosen(this)" />
+                            <button class="btn btn-outline btn-sm" id="hd-logo-remove-btn" style="display:none" onclick="removeLogo()">Remove</button>
+                        </div>
+                        <div class="err-msg" id="hd-logo-err" style="margin-top:6px"></div>
                     </div>
                     <button class="btn btn-primary" onclick="saveHospitalDetails()">Save</button>
                 </div>
@@ -888,6 +905,8 @@
             } catch (e) { toast('Could not load invoice', 'error'); }
         }
 
+        let currentLogoBase64 = null; // null = unchanged, '' = removed, data URI = new upload
+
         async function loadHospitalDetails() {
             try {
                 const h = await api("GET", "/admin/hospital/details");
@@ -897,19 +916,63 @@
                 document.getElementById('hd-state').value = h.state || '';
                 document.getElementById('hd-address').value = h.address || '';
                 document.getElementById('hd-gstin').value = h.gstin || '';
+                document.getElementById('hd-phone').value = h.phone || '';
+                currentLogoBase64 = null;
+                const preview = document.getElementById('hd-logo-preview');
+                const removeBtn = document.getElementById('hd-logo-remove-btn');
+                if (h.logo_base64) {
+                    preview.src = h.logo_base64;
+                    preview.style.display = '';
+                    removeBtn.style.display = '';
+                } else {
+                    preview.style.display = 'none';
+                    removeBtn.style.display = 'none';
+                }
                 if (h.default_consultation_fee != null) {
                     document.getElementById('default-fee-input').value = h.default_consultation_fee;
                 }
             } catch (e) { }
         }
 
+        function onLogoFileChosen(input) {
+            const file = input.files[0];
+            const err = document.getElementById('hd-logo-err');
+            err.textContent = '';
+            if (!file) return;
+            if (file.size > 500 * 1024) {
+                err.textContent = 'Logo image is too large (max ~500KB).';
+                input.value = '';
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => {
+                currentLogoBase64 = reader.result;
+                const preview = document.getElementById('hd-logo-preview');
+                preview.src = currentLogoBase64;
+                preview.style.display = '';
+                document.getElementById('hd-logo-remove-btn').style.display = '';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeLogo() {
+            currentLogoBase64 = '';
+            document.getElementById('hd-logo-preview').style.display = 'none';
+            document.getElementById('hd-logo-remove-btn').style.display = 'none';
+            document.getElementById('hd-logo-file').value = '';
+        }
+
         async function saveHospitalDetails() {
             try {
-                await api("PATCH", "/admin/hospital/details", {
+                const payload = {
                     address: document.getElementById('hd-address').value.trim(),
-                    gstin: document.getElementById('hd-gstin').value.trim()
-                });
+                    gstin: document.getElementById('hd-gstin').value.trim(),
+                    phone: document.getElementById('hd-phone').value.trim()
+                };
+                if (currentLogoBase64 !== null) payload.logo_base64 = currentLogoBase64;
+                await api("PATCH", "/admin/hospital/details", payload);
                 toast('Hospital details saved.', 'success');
+                currentLogoBase64 = null;
             } catch (e) { toast(e.message, 'error'); }
         }
 

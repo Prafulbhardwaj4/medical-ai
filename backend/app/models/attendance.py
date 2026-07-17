@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, UniqueConstraint, Integer as Int
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
@@ -15,4 +15,4 @@ class AttendanceRecord(Base):
     room_number = Column(String, nullable=True)
     room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
     shift_started_at = Column(DateTime, nullable=True)  # set once, the first time they mark Present each day — never overwritten by later status changes that same day
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ist_naive)

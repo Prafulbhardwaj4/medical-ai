@@ -7,17 +7,38 @@
   <title>Pharmacy — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
-    .mobile-section { display: none; }
-    .mobile-section.active { display: block; }
+    .mobile-section {
+      display: none;
+    }
+
+    .mobile-section.active {
+      display: block;
+    }
+
     @media (min-width: 901px) {
-      .mobile-section { display: block !important; }
+      .mobile-section {
+        display: block !important;
+      }
+
       /* On desktop, Home / Pending / Patients / Medicine Catalog act as real tabs (switched from the sidebar);
          Attendance stays always visible above them. */
-      #pharmacy-home-view.mobile-section:not(.d-active) { display: none !important; }
-      #pharmacy-pending-view.mobile-section:not(.d-active) { display: none !important; }
-      #pharmacy-patients-view.mobile-section:not(.d-active) { display: none !important; }
-      #pharmacy-stock-view.mobile-section:not(.d-active) { display: none !important; }
+      #pharmacy-home-view.mobile-section:not(.d-active) {
+        display: none !important;
+      }
+
+      #pharmacy-pending-view.mobile-section:not(.d-active) {
+        display: none !important;
+      }
+
+      #pharmacy-patients-view.mobile-section:not(.d-active) {
+        display: none !important;
+      }
+
+      #pharmacy-stock-view.mobile-section:not(.d-active) {
+        display: none !important;
+      }
     }
+
     @media (min-width: 901px) {
       #pharm-attendance-card {
         display: flex;
@@ -26,12 +47,14 @@
         flex-wrap: wrap;
         gap: 16px;
       }
+
       #pharm-attendance-card .card-header {
         margin-bottom: 0;
         padding-bottom: 0;
         border-bottom: none;
         flex: 0 0 auto;
       }
+
       #pharm-attendance-card .staff-att-actions {
         flex: 0 0 auto;
       }
@@ -119,7 +142,8 @@
       <div class="sidebar-section-label">Navigation</div>
       <div class="nav-item" id="nav-home-tab" onclick="showPharmDesktopTab('home')" style="cursor:pointer">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
         Home
       </div>
@@ -131,7 +155,8 @@
       </div>
       <div class="nav-item" id="nav-patients-tab" onclick="showPharmDesktopTab('patients')" style="cursor:pointer">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
         Patients
       </div>
@@ -149,7 +174,8 @@
     <nav class="bottom-nav">
       <button class="bottom-nav-item active" id="tab-btn-home" onclick="showPharmSection('home')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
         Home
       </button>
@@ -161,7 +187,8 @@
       </button>
       <button class="bottom-nav-item" id="tab-btn-patients" onclick="showPharmSection('patients')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
         Patients
       </button>
@@ -232,7 +259,9 @@
           </div>
           <input class="form-control" id="pharm-pending-search" placeholder="Search patient name or ID…"
             style="margin:16px 0" oninput="searchPharmPendingTasks(this.value)" />
-          <div id="pharm-pending-results"><p style="color:var(--slate)">Loading…</p></div>
+          <div id="pharm-pending-results">
+            <p style="color:var(--slate)">Loading…</p>
+          </div>
         </div>
       </div>
 
@@ -244,7 +273,9 @@
           </div>
           <input class="form-control" id="pharm-patients-search" placeholder="Search patient name, phone or ID…"
             style="margin:16px 0" oninput="searchPharmPatients(this.value)" />
-          <div id="pharm-patients-list"><p style="color:var(--slate)">Loading…</p></div>
+          <div id="pharm-patients-list">
+            <p style="color:var(--slate)">Loading…</p>
+          </div>
         </div>
       </div>
 
@@ -670,9 +701,12 @@
       }
       el.innerHTML = currentMedicineOrders.map(m => {
         const locked = m.status !== 'advised';
-        const lowStock = m.stock_quantity != null && m.low_stock_threshold != null && m.stock_quantity < m.low_stock_threshold;
+        const outOfStock = m.included && m.status === 'advised' && m.stock_quantity != null && m.stock_quantity <= 0;
+        const lowStock = !outOfStock && m.stock_quantity != null && m.low_stock_threshold != null && m.stock_quantity < m.low_stock_threshold;
         const billedNote = (m.billed_quantity != null && m.quantity != null && m.billed_quantity < m.quantity)
           ? `<div style="color:var(--danger);font-size:12px;margin-top:4px">Only ${m.billed_quantity} of ${m.quantity} charged — rest out of stock</div>` : '';
+        const outOfStockNote = outOfStock
+          ? `<div style="color:var(--danger);font-weight:600;font-size:12px;margin-top:2px">Out of stock — substitute or mark advised outside</div>` : '';
         return `
         <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:14px;${m.included ? '' : 'opacity:0.45'}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
@@ -683,6 +717,7 @@
                 <strong>${sanitize(m.medicine_name)}</strong>${m.brand_name ? ` (${sanitize(m.brand_name)})` : ''}
                 <div style="color:var(--slate);font-size:12px">${sanitize(m.dosage || '')} — ${sanitize(m.frequency || '')}${m.duration ? ' × ' + sanitize(m.duration) : ''}</div>
                 ${lowStock ? `<div style="color:var(--danger);font-size:12px;margin-top:2px">Stock: ${m.stock_quantity} left</div>` : ''}
+                ${outOfStockNote}
                 ${billedNote}
               </span>
             </label>
@@ -834,8 +869,11 @@
       }
 
       const hasUnpaidIncluded = currentMedicineOrders.some(m => m.included && m.status === 'advised');
+      const hasBlockingStock = currentMedicineOrders.some(m => m.included && m.status === 'advised' && m.stock_quantity != null && m.stock_quantity <= 0);
       if (hasUnpaidIncluded) {
         payBtn.style.display = '';
+        payBtn.disabled = hasBlockingStock;
+        payBtn.textContent = hasBlockingStock ? 'Resolve out-of-stock items first' : 'Collect Payment';
         dispenseBtn.style.display = 'none';
       } else {
         payBtn.style.display = 'none';

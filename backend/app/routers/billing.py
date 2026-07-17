@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from datetime import datetime, timedelta
 import json, os
 
@@ -16,7 +17,7 @@ from app.models.invoice import Invoice
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 from app.services.pdf_service import generate_invoice_pdf
-from app.utils.timezone import ist_today, ist_day_bounds_utc, ist_date
+from app.utils.timezone import ist_today, ist_day_bounds, ist_date
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -40,7 +41,11 @@ def gather_invoice_items(db: Session, checkin: Checkin):
 
     consultation_ids = [
         c.id for c in db.query(Consultation).filter(
-            Consultation.patient_id == checkin.patient_id
+            Consultation.patient_id == checkin.patient_id,
+            or_(
+                Consultation.token_number == checkin.token_number,
+                Consultation.token_number.like(f"{checkin.token_number}-%")
+            )
         ).all()
     ]
 
@@ -266,13 +271,13 @@ def revenue_history_daily(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     from_d, to_d = _clamp_daily_range(from_date, to_date)
-    range_start_utc, _ = ist_day_bounds_utc(from_d)
-    _, range_end_utc = ist_day_bounds_utc(to_d)
+    range_start, _ = ist_day_bounds(from_d)
+    _, range_end = ist_day_bounds(to_d)
 
     invoices = db.query(Invoice).filter(
         Invoice.hospital_id == current_doctor.hospital_id,
-        Invoice.generated_at >= range_start_utc,
-        Invoice.generated_at < range_end_utc
+        Invoice.generated_at >= range_start,
+        Invoice.generated_at < range_end
     ).all()
 
     buckets = {}
@@ -332,15 +337,15 @@ def revenue_history_monthly(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     from_d, to_d = _clamp_monthly_range(from_month, to_month)
-    range_start_utc, _ = ist_day_bounds_utc(from_d)
+    range_start, _ = ist_day_bounds(from_d)
     to_next_y, to_next_m = (to_d.year + 1, 1) if to_d.month == 12 else (to_d.year, to_d.month + 1)
     range_end_ist = datetime(to_next_y, to_next_m, 1).date()
-    _, range_end_utc = ist_day_bounds_utc(range_end_ist - timedelta(days=1))
+    _, range_end = ist_day_bounds(range_end_ist - timedelta(days=1))
 
     invoices = db.query(Invoice).filter(
         Invoice.hospital_id == current_doctor.hospital_id,
-        Invoice.generated_at >= range_start_utc,
-        Invoice.generated_at < range_end_utc
+        Invoice.generated_at >= range_start,
+        Invoice.generated_at < range_end
     ).all()
 
     buckets = {}

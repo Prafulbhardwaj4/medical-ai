@@ -13,7 +13,8 @@ from app.models.patient import Patient
 from app.models.consultation import Consultation
 from app.models.medicine_order import MedicineOrder
 from app.models.hospital_medicine import HospitalMedicine
-from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds_utc
+from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
+from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
 from app.utils.order_lifecycle import is_order_expired
 from app.routers.attendance import require_present
@@ -33,7 +34,7 @@ def get_pharmacy_queue(
 ):
     require_pharmacy(current_doctor)
 
-    today_start, today_end = ist_day_bounds_utc()
+    today_start, today_end = ist_day_bounds()
 
     requeued_consultation_ids = [
         row[0] for row in db.query(MedicineOrder.consultation_id).filter(
@@ -293,10 +294,22 @@ def collect_medicine_payment(
             detail=f"Set price and quantity first for: {', '.join(missing_price)}"
         )
 
+    blocking = []
+    for o in orders:
+        if o.catalog_medicine_id:
+            catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == o.catalog_medicine_id).first()
+            if catalog_item and catalog_item.stock_quantity is not None and catalog_item.stock_quantity <= 0:
+                blocking.append(o.medicine_name)
+    if blocking:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Out of stock — substitute or mark advised-outside before collecting payment: {', '.join(blocking)}"
+        )
+
     total = 0
     charged_count = 0
     skipped = []
-    now = datetime.utcnow()
+    now = now_ist_naive()
     for o in orders:
         available = None
         if o.catalog_medicine_id:
@@ -426,7 +439,7 @@ def requeue_all_for_patient(
             continue
         if is_order_expired(db, o.patient_id, o.consultation_id, o.created_at):
             continue
-        o.queued_at = datetime.utcnow()
+        o.queued_at = now_ist_naive()
         requeued_ids.append(o.id)
 
     if not requeued_ids:
@@ -486,6 +499,9 @@ def add_medicine_order(
         ).first()
         if not original:
             raise HTTPException(status_code=404, detail="Original medicine order not found")
+        if original.status != "advised":
+            raise HTTPException(status_code=400, detail="Cannot substitute — original medicine already resolved")
+        original.included = False
 
     new_order = MedicineOrder(
         consultation_id=consultation.id,
@@ -568,7 +584,7 @@ def requeue_medicine_order(
     if is_order_expired(db, order.patient_id, order.consultation_id, order.created_at):
         raise HTTPException(status_code=400, detail="This order's window has closed — a fresh order is needed")
 
-    order.queued_at = datetime.utcnow()
+    order.queued_at = now_ist_naive()
     db.commit()
 
     log_action(

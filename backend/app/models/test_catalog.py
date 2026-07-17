@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class TestCatalogItem(Base):
     __tablename__ = "test_catalog_items"
@@ -10,7 +10,7 @@ class TestCatalogItem(Base):
     name = Column(String, nullable=False)
     fee = Column(Float, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ist_naive)
     category = Column(String, nullable=True)
     is_panel = Column(Boolean, default=False, nullable=False)
     purpose = Column(Text, nullable=True)

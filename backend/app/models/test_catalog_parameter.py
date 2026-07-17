@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class TestCatalogParameter(Base):
     """A single sub-parameter of a panel test (e.g. Hemoglobin under CBC).
@@ -19,4 +19,4 @@ class TestCatalogParameter(Base):
     purpose = Column(Text, nullable=True)
     display_order = Column(Integer, default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ist_naive)

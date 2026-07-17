@@ -12,7 +12,8 @@ from app.models.consultation import Consultation
 from app.models.patient import Patient
 from app.models.test_catalog import TestCatalogItem
 from app.models.test_catalog_parameter import TestCatalogParameter
-from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds_utc, utc_naive_to_ist_date
+from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
+from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
 from app.utils.order_lifecycle import is_order_expired
 from app.routers.attendance import require_present
@@ -45,7 +46,7 @@ def get_lab_queue(
 ):
     require_lab(current_doctor)
 
-    today_start, today_end = ist_day_bounds_utc()
+    today_start, today_end = ist_day_bounds()
 
     orders = db.query(TestOrder).filter(
         TestOrder.hospital_id == current_doctor.hospital_id,
@@ -61,7 +62,7 @@ def get_lab_queue(
 
         waiting_minutes = None
         if o.paid_at:
-            waiting_minutes = int((datetime.utcnow() - o.paid_at).total_seconds() // 60)
+            waiting_minutes = int((now_ist_naive() - o.paid_at).total_seconds() // 60)
 
         result.append({
             "id": o.id,
@@ -156,7 +157,7 @@ def search_pending_lab_tasks(
 
         pending = []
         for o in orders:
-            if o.queued_at and utc_naive_to_ist_date(o.queued_at) == today:
+            if o.queued_at and o.queued_at.date() == today:
                 continue  # already active in today's queue
             if is_order_expired(db, p.id, o.consultation_id, o.created_at):
                 continue
@@ -199,7 +200,7 @@ def requeue_test_order(
     if is_order_expired(db, order.patient_id, order.consultation_id, order.created_at):
         raise HTTPException(status_code=400, detail="This order's window has closed — a fresh order is needed")
 
-    order.queued_at = datetime.utcnow()
+    order.queued_at = now_ist_naive()
     db.commit()
 
     log_action(
@@ -234,8 +235,8 @@ def defer_test_order(
     if order.status != "paid":
         raise HTTPException(status_code=400, detail="Only paid, uncollected tests can be deferred")
 
-    today_start_utc, _ = ist_day_bounds_utc()
-    order.queued_at = today_start_utc - timedelta(minutes=1)
+    today_start, _ = ist_day_bounds()
+    order.queued_at = today_start - timedelta(minutes=1)
     db.commit()
 
     log_action(
@@ -272,9 +273,9 @@ def update_order_status(
 
     order.status = status
     if status == "sample_collected":
-        order.collected_at = datetime.utcnow()
+        order.collected_at = now_ist_naive()
     elif status == "completed":
-        order.completed_at = datetime.utcnow()
+        order.completed_at = now_ist_naive()
         order.completed_by = current_doctor.id
 
     db.commit()
@@ -351,7 +352,7 @@ def get_test_report(
         catalog_item=catalog_item,
         ordering_doctor=ordering_doctor,
         lab_staff=lab_staff,
-        hospital_name=current_doctor.clinic_name
+        hospital=current_doctor.hospital
     )
 
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
@@ -498,7 +499,7 @@ def get_combined_test_report(
         patient=patient,
         ordering_doctor=ordering_doctor,
         lab_staff=lab_staff,
-        hospital_name=current_doctor.clinic_name
+        hospital=current_doctor.hospital
     )
 
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))

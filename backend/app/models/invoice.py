@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class Invoice(Base):
     __tablename__ = "invoices"
@@ -14,4 +14,4 @@ class Invoice(Base):
     generated_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     generated_from = Column(String, nullable=True)  # "reception" or "pharmacy"
     pdf_path = Column(String, nullable=True)
-    generated_at = Column(DateTime, default=datetime.utcnow)
+    generated_at = Column(DateTime, default=now_ist_naive)

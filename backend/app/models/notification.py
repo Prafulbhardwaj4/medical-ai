@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class Notification(Base):
     __tablename__ = "notifications"
@@ -15,5 +15,5 @@ class Notification(Base):
     link_type = Column(String, nullable=True)
     link_id = Column(Integer, nullable=True)
     is_read = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ist_naive)
+    updated_at = Column(DateTime, default=now_ist_naive, onupdate=now_ist_naive)

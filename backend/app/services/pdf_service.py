@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import base64
 from app.utils.auth import now_ist
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -35,6 +36,62 @@ def cap_sentence(text: str) -> str:
             result.append(s)
     return "".join(result)
 
+def _decode_logo_image(logo_base64):
+    """Decode a data URI (data:image/...;base64,...) into a small ReportLab Image flowable.
+    Returns None if missing or unreadable — logo is optional everywhere it's used."""
+    if not logo_base64:
+        return None
+    try:
+        raw = logo_base64.split(",", 1)[1] if "," in logo_base64 else logo_base64
+        img_bytes = base64.b64decode(raw)
+        img = Image(io.BytesIO(img_bytes))
+        max_h = 16 * mm
+        ratio = (img.imageWidth / img.imageHeight) if img.imageHeight else 1
+        img.drawHeight = max_h
+        img.drawWidth = max_h * ratio
+        img.hAlign = "CENTER"
+        return img
+    except Exception:
+        return None
+
+def build_letterhead(hospital, subtitle=None):
+    """Shared header for every PDF: logo (if set) + hospital name + address/city/state
+    + phone/GSTIN (only whichever are actually set), optional subtitle line under it."""
+    header_style = ParagraphStyle("lh_header", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"))
+    sub_style = ParagraphStyle("lh_sub", fontSize=9.5, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
+
+    elements = []
+
+    logo_img = _decode_logo_image(getattr(hospital, "logo_base64", None))
+    if logo_img:
+        elements.append(logo_img)
+        elements.append(Spacer(1, 1.5*mm))
+
+    elements.append(Paragraph(hospital.name, header_style))
+
+    location_bits = []
+    if hospital.address:
+        location_bits.append(hospital.address)
+    city_state = ", ".join([p for p in [hospital.city, hospital.state] if p])
+    if city_state:
+        location_bits.append(city_state)
+    if location_bits:
+        elements.append(Paragraph(" | ".join(location_bits), sub_style))
+
+    contact_bits = []
+    if getattr(hospital, "phone", None):
+        contact_bits.append(f"Ph: {hospital.phone}")
+    if hospital.gstin:
+        contact_bits.append(f"GSTIN: {hospital.gstin}")
+    if contact_bits:
+        elements.append(Paragraph(" | ".join(contact_bits), sub_style))
+
+    if subtitle:
+        elements.append(Spacer(1, 1.5*mm))
+        elements.append(Paragraph(subtitle, sub_style))
+
+    return elements
+
 def generate_prescription_pdf(
     doctor: object,
     patient: object,
@@ -64,7 +121,10 @@ def generate_prescription_pdf(
     sub_style = ParagraphStyle("sub", fontSize=10, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
     token_style = ParagraphStyle("token", fontSize=11, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#1a237e"))
 
-    elements.append(Paragraph(doctor.clinic_name, header_style))
+    if doctor.hospital:
+        elements.extend(build_letterhead(doctor.hospital))
+    else:
+        elements.append(Paragraph(doctor.clinic_name, header_style))
     elements.append(Spacer(1, 2*mm))
     elements.append(Paragraph(f"{doctor.title} {doctor.name} | {doctor.specialization}", sub_style))
     reg_text = f" | Reg. No: {doctor.registration_number}" if doctor.registration_number else ""
@@ -331,7 +391,7 @@ def generate_test_report_pdf(
     catalog_item: object,
     ordering_doctor: object,
     lab_staff: object,
-    hospital_name: str
+    hospital: object
 ) -> str:
     ensure_reports_dir()
 
@@ -355,9 +415,7 @@ def generate_test_report_pdf(
     section_style = ParagraphStyle("section", fontSize=11, fontName="Helvetica-Bold", textColor=colors.HexColor("#1a237e"), spaceAfter=2*mm)
     body_style = ParagraphStyle("body", fontSize=10, fontName="Helvetica", leading=14)
 
-    elements.append(Paragraph(hospital_name, header_style))
-    elements.append(Spacer(1, 2*mm))
-    elements.append(Paragraph("Laboratory Test Report", sub_style))
+    elements.extend(build_letterhead(hospital, subtitle="Laboratory Test Report"))
     elements.append(Spacer(1, 3*mm))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a237e")))
     elements.append(Spacer(1, 4*mm))
@@ -480,7 +538,7 @@ def _is_out_of_range(value_str, range_str):
         return True
     return False
 
-def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, ordering_doctor, lab_staff, hospital_name) -> str:
+def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, ordering_doctor, lab_staff, hospital) -> str:
     ensure_reports_dir()
 
     filename = f"combined_report_{order_id_key}.pdf"
@@ -503,9 +561,7 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     section_style = ParagraphStyle("section", fontSize=12, fontName="Helvetica-Bold", textColor=colors.HexColor("#1a237e"), spaceAfter=2*mm, spaceBefore=4*mm)
     body_style = ParagraphStyle("body", fontSize=10, fontName="Helvetica", leading=14)
 
-    elements.append(Paragraph(hospital_name, header_style))
-    elements.append(Spacer(1, 5*mm))
-    elements.append(Paragraph("Laboratory Test Report", sub_style))
+    elements.extend(build_letterhead(hospital, subtitle="Laboratory Test Report"))
     elements.append(Spacer(1, 4*mm))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a237e")))
     elements.append(Spacer(1, 5*mm))
@@ -585,11 +641,7 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
     header_style = ParagraphStyle("header", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"))
     sub_style = ParagraphStyle("sub", fontSize=9, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
 
-    elements.append(Paragraph(hospital.name, header_style))
-    if hospital.address:
-        elements.append(Paragraph(hospital.address, sub_style))
-    if hospital.gstin:
-        elements.append(Paragraph(f"GSTIN: {hospital.gstin}", sub_style))
+    elements.extend(build_letterhead(hospital))
     elements.append(Spacer(1, 3*mm))
     elements.append(Paragraph("INVOICE", ParagraphStyle("inv", fontSize=13, fontName="Helvetica-Bold", alignment=TA_CENTER)))
     elements.append(Spacer(1, 4*mm))

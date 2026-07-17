@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, DateTime, UniqueConstraint
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class MedicineBatch(Base):
     __tablename__ = "medicine_batches"
@@ -13,4 +13,4 @@ class MedicineBatch(Base):
     quantity = Column(Integer, nullable=False)
     expiry_date = Column(Date, nullable=True)
     received_date = Column(Date, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ist_naive)

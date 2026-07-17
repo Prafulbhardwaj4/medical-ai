@@ -7,6 +7,7 @@ from app.models.doctor import Doctor
 from app.schemas.doctor import DoctorCreate, DoctorLogin, DoctorOut, Token
 from app.utils.auth import hash_password, verify_password, create_access_token
 from app.utils.auth import blacklist_token, get_current_doctor
+from app.utils.timezone import now_ist_naive
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -31,15 +32,15 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Check if account is locked
-    if doctor.locked_until and datetime.utcnow() < doctor.locked_until:
-        minutes_left = int((doctor.locked_until - datetime.utcnow()).seconds / 60) + 1
+    if doctor.locked_until and now_ist_naive() < doctor.locked_until:
+        minutes_left = int((doctor.locked_until - now_ist_naive()).seconds / 60) + 1
         raise HTTPException(
             status_code=429,
             detail=f"Account temporarily locked. Try again in {minutes_left} minute(s)."
         )
 
     # Reset lock if lockout period has passed
-    if doctor.locked_until and datetime.utcnow() >= doctor.locked_until:
+    if doctor.locked_until and now_ist_naive() >= doctor.locked_until:
         doctor.failed_login_attempts = 0
         doctor.locked_until = None
 
@@ -55,7 +56,7 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
     if not verify_password(payload.password, doctor.hashed_password):
         doctor.failed_login_attempts += 1
         if doctor.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
-            doctor.locked_until = datetime.utcnow() + timedelta(minutes=LOCKOUT_MINUTES)
+            doctor.locked_until = now_ist_naive() + timedelta(minutes=LOCKOUT_MINUTES)
             db.commit()
             raise HTTPException(
                 status_code=429,

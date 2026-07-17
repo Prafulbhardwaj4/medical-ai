@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
-from datetime import datetime
 from app.database import Base
+from app.utils.timezone import now_ist_naive
 
 class MedicineOrder(Base):
     __tablename__ = "medicine_orders"
@@ -24,4 +24,4 @@ class MedicineOrder(Base):
     dispensed_at = Column(DateTime, nullable=True)
     billed_quantity = Column(Integer, nullable=True)  # actually charged/dispensed qty, capped by stock at payment time
     substitute_for_id = Column(Integer, ForeignKey("medicine_orders.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_ist_naive)

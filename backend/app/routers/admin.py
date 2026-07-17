@@ -274,6 +274,8 @@ def get_hospital_details(
         # Editable by hospital admin
         "address": hospital.address,
         "gstin": hospital.gstin,
+        "phone": hospital.phone,
+        "logo_base64": hospital.logo_base64,
         "default_consultation_fee": hospital.default_consultation_fee
     }
 
@@ -281,6 +283,8 @@ def get_hospital_details(
 class HospitalDetailsUpdate(BaseModel):
     address: Optional[str] = None
     gstin: Optional[str] = None
+    phone: Optional[str] = None
+    logo_base64: Optional[str] = None
     # Deliberately no name/city/state/hospital_code/hospital_type here —
     # those are set once by super admin at hospital creation and tied to
     # billing/plan tracking. Admin cannot touch them even via direct API call.
@@ -303,9 +307,26 @@ def update_hospital_details(
         hospital.address = payload.address.strip()
     if payload.gstin is not None:
         hospital.gstin = payload.gstin.strip() or None
+    if payload.phone is not None:
+        hospital.phone = payload.phone.strip() or None
+    if payload.logo_base64 is not None:
+        logo = payload.logo_base64.strip()
+        if not logo:
+            hospital.logo_base64 = None
+        else:
+            if not logo.startswith("data:image/"):
+                raise HTTPException(status_code=400, detail="Logo must be an image upload")
+            if len(logo) > 700_000:
+                raise HTTPException(status_code=400, detail="Logo image is too large (max ~500KB)")
+            hospital.logo_base64 = logo
 
     db.commit()
-    return {"address": hospital.address, "gstin": hospital.gstin}
+    return {
+        "address": hospital.address,
+        "gstin": hospital.gstin,
+        "phone": hospital.phone,
+        "logo_base64": hospital.logo_base64
+    }
 
 ROOM_TYPE_PICKER_MAP = {"doctor": "Doctor", "nurse": "Nurse", "lab": "Lab"}
 

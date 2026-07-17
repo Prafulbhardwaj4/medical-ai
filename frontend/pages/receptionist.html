@@ -14,6 +14,22 @@
       #section-home.mobile-section:not(.d-active) { display: none !important; }
       #section-pending.mobile-section:not(.d-active) { display: none !important; }
       #section-patients.mobile-section:not(.d-active) { display: none !important; }
+      #rec-attendance-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      #rec-attendance-card .card-header {
+        margin-bottom: 0;
+        padding-bottom: 0;
+        border-bottom: none;
+        flex: 0 0 auto;
+      }
+      #rec-attendance-card .staff-att-actions {
+        flex: 0 0 auto;
+      }
     }
     @media print {
       body * { visibility: hidden; }
