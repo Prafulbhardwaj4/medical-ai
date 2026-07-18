@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.database import get_db
 from app.models.doctor import Doctor
-from app.schemas.doctor import DoctorCreate, DoctorLogin, DoctorOut, Token
+from app.schemas.doctor import DoctorCreate, DoctorLogin, DoctorOut, EditMeIn, Token
 from app.utils.auth import hash_password, verify_password, create_access_token
 from app.utils.auth import blacklist_token, get_current_doctor
 from app.utils.timezone import now_ist_naive
+from app.utils.audit import log_action
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -75,6 +76,35 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
 
 @router.get("/me", response_model=DoctorOut)
 def me(current_doctor: Doctor = Depends(get_current_doctor)):
+    return current_doctor
+
+@router.patch("/me", response_model=DoctorOut)
+def update_me(
+    payload: EditMeIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    name = payload.name.strip()
+    phone = payload.phone.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not phone:
+        raise HTTPException(status_code=400, detail="Contact number is required")
+
+    current_doctor.name = name
+    current_doctor.phone = phone
+    current_doctor.registration_number = (payload.registration_number or "").strip()
+    db.commit()
+    db.refresh(current_doctor)
+
+    log_action(
+        db, current_doctor,
+        action="self_details_updated",
+        target_type="doctor",
+        target_id=current_doctor.id,
+        target_label=f"{current_doctor.title} {current_doctor.name}",
+        hospital_id=current_doctor.hospital_id
+    )
     return current_doctor
 
 @router.post("/logout")

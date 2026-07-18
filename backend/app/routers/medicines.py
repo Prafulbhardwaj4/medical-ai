@@ -335,7 +335,7 @@ def bulk_confirm_medicines(
             billing_mode=billing_mode,
             gst_percent=item.gst_percent,
             price=compute_unit_price(item.price_per_pack, pack_size),
-            stock_quantity=item.stock_quantity,
+            stock_quantity=0,
             is_active=True
         )
         db.add(medicine)

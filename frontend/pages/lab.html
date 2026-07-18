@@ -435,6 +435,10 @@
         </svg>
         Settings
       </button>
+      <button class="profile-menu-item" onclick="openEditDetailsModal()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        Edit My Details
+      </button>
       <button class="profile-menu-item danger" onclick="logout()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -600,8 +604,23 @@
       <div id="bulk-results-body" style="overflow-y:auto;flex:1;padding-right:4px"></div>
       <div class="err-msg" id="bulk-results-err" style="margin:12px 0"></div>
       <div style="display:flex;gap:12px;padding-top:12px;border-top:1px solid var(--border)">
-        <button class="btn btn-primary" style="flex:1" id="btn-save-bulk-results" onclick="submitBulkResults()">Save All Results & Generate Report</button>
+        <button class="btn btn-primary" style="flex:1" id="btn-save-bulk-results" onclick="saveAllResults()">Save All Results</button>
         <button class="btn btn-outline" style="flex:1" onclick="closeBulkResultsModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results Confirmation Modal (new file — required for #12) -->
+  <div class="modal-overlay" id="modal-results-confirm">
+    <div class="modal" style="max-width:600px;max-height:88vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <h2 style="margin:0">Confirm Results</h2>
+        <button class="modal-close" onclick="editBulkResults()">×</button>
+      </div>
+      <div id="results-confirm-body" style="overflow-y:auto;flex:1;padding-right:4px"></div>
+      <div style="display:flex;gap:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <button class="btn btn-outline" style="flex:1;background:#fff" onclick="editBulkResults()">Edit</button>
+        <button class="btn" style="flex:1;background:var(--success);color:#fff" id="btn-generate-report-confirm" onclick="confirmGenerateReport()">Generate Report</button>
       </div>
     </div>
   </div>
@@ -1076,36 +1095,64 @@
       bulkResultOrders = [];
     }
 
-    async function submitBulkResults() {
+    let bulkResultsDraft = null;
+
+    function validateBulkResults() {
       const errEl = document.getElementById('bulk-results-err');
       errEl.textContent = '';
-      const btn = document.getElementById('btn-save-bulk-results');
-      const reportWindow = window.open('', '_blank');
+      const review = [];
+      const payloads = [];
+      const NUM_RE = /^-?\d+(\.\d+)?$/;
 
-      let anyFilled = false;
-      const payloads = bulkResultOrders.map(test => {
-        let results;
+      for (const test of bulkResultOrders) {
         if (test.mode === 'panel') {
-          results = {};
-          test.params.forEach(p => {
+          const results = {};
+          for (const p of test.params) {
             const val = document.getElementById(`bulk-val-${test.orderId}-${p.id}`).value.trim();
-            if (val) anyFilled = true;
+            if (!val) { errEl.textContent = `Enter a value for ${test.testName} — ${p.name}.`; return null; }
+            if (p.unit && !NUM_RE.test(val)) { errEl.textContent = `${test.testName} — ${p.name} must be a number.`; return null; }
             results[p.name] = val;
-          });
+            review.push({ test: test.testName, param: p.name, value: val, unit: p.unit });
+          }
+          payloads.push({ orderId: test.orderId, results });
         } else {
           const val = document.getElementById(`bulk-val-${test.orderId}-single`).value.trim();
-          if (val) anyFilled = true;
-          results = { value: val };
+          if (!val) { errEl.textContent = `Enter a result value for ${test.testName}.`; return null; }
+          if (test.unit && !NUM_RE.test(val)) { errEl.textContent = `${test.testName} must be a number.`; return null; }
+          payloads.push({ orderId: test.orderId, results: { value: val } });
+          review.push({ test: test.testName, param: null, value: val, unit: test.unit });
         }
-        return { orderId: test.orderId, results };
-      });
+      }
+      return { payloads, review };
+    }
 
-      if (!anyFilled) { errEl.textContent = 'Enter at least one result value.'; return; }
+    function saveAllResults() {
+      const validated = validateBulkResults();
+      if (!validated) return;
+      bulkResultsDraft = validated;
+      document.getElementById('results-confirm-body').innerHTML = bulkResultsDraft.review.map(r => `
+        <div class="bulk-param-row">
+          <div class="bulk-param-meta"><strong>${sanitize(r.test)}${r.param ? ' — ' + sanitize(r.param) : ''}</strong></div>
+          <div>${sanitize(r.value)}${r.unit ? ' ' + sanitize(r.unit) : ''}</div>
+        </div>
+      `).join('');
+      document.getElementById('modal-bulk-results').classList.remove('open');
+      document.getElementById('modal-results-confirm').classList.add('open');
+    }
 
+    function editBulkResults() {
+      document.getElementById('modal-results-confirm').classList.remove('open');
+      document.getElementById('modal-bulk-results').classList.add('open');
+    }
+
+    async function confirmGenerateReport() {
+      const btn = document.getElementById('btn-generate-report-confirm');
+      const reportWindow = window.open('', '_blank');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
 
       try {
+        const payloads = bulkResultsDraft.payloads;
         for (const p of payloads) {
           await api("POST", `/lab/orders/${p.orderId}/result`, { results: p.results });
           await api("PATCH", `/lab/orders/${p.orderId}/status`, { status: 'completed' });
@@ -1114,15 +1161,17 @@
         }
         renderQueue(labQueueData);
         toast('Results saved — generating report…', 'success');
+        document.getElementById('modal-results-confirm').classList.remove('open');
         closeBulkResultsModal();
         refreshOpenPatientModal();
         await downloadCombinedReport(payloads.map(p => p.orderId), reportWindow);
+        bulkResultsDraft = null;
       } catch (e) {
         if (reportWindow) reportWindow.close();
-        errEl.textContent = e.message;
+        toast(e.message, 'error');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Save All Results & Generate Report';
+        btn.textContent = 'Generate Report';
       }
     }
 

@@ -2,7 +2,9 @@ import os
 import re
 import json
 import base64
+import hashlib
 from app.utils.auth import now_ist
+from app.config import settings
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
@@ -57,7 +59,7 @@ def _decode_logo_image(logo_base64):
 def build_letterhead(hospital, subtitle=None):
     """Shared header for every PDF: logo (if set) + hospital name + address/city/state
     + phone/GSTIN (only whichever are actually set), optional subtitle line under it."""
-    header_style = ParagraphStyle("lh_header", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"), spaceAfter=4, leading=22)
+    header_style = ParagraphStyle("lh_header", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"), spaceAfter=8, spaceBefore=2, leading=22)
     sub_style = ParagraphStyle("lh_sub", fontSize=9.5, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey, spaceAfter=2, leading=12)
 
     elements = []
@@ -624,7 +626,7 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     doc.build(elements)
     return filepath
 
-def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient) -> str:
+def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None) -> str:
     ensure_reports_dir()
     invoices_dir = os.path.join(os.path.dirname(__file__), "..", "..", "invoices")
     os.makedirs(invoices_dir, exist_ok=True)
@@ -650,7 +652,10 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
 
     elements.append(Paragraph(f"<b>Patient:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}", styles["Normal"]))
     elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Invoice #:</b> INV-{invoice_id} &nbsp;&nbsp; <b>Date:</b> {now_ist().strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
+    invoice_hash = hashlib.sha256(f"invoice-{invoice_id}-{settings.SECRET_KEY}".encode()).hexdigest()[:8].upper()
+    elements.append(Paragraph(f"<b>Invoice #:</b> INV-{invoice_hash} &nbsp;&nbsp; <b>Date:</b> {now_ist().strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
+    if doctor:
+        elements.append(Paragraph(f"<b>Consulting Doctor:</b> {doctor.title} {doctor.name}", styles["Normal"]))
     elements.append(Spacer(1, 5*mm))
 
     table_data = [["Description", "Qty", "Unit Price", "Amount"]]

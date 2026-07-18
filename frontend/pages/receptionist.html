@@ -117,6 +117,10 @@
         </svg>
         Settings
       </button>
+      <button class="profile-menu-item" onclick="openEditDetailsModal()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        Edit My Details
+      </button>
       <button class="profile-menu-item danger" onclick="logout()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
@@ -828,7 +832,7 @@
     async function collectTestPayment(patientId) {
       try {
         const result = await api("POST", `/patients/${patientId}/collect-test-payment`, {});
-        toast(`Rs.${result.charged} collected for ${result.count} test(s).`, 'success');
+        toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} test(s).`, 'success');
         loadPendingTestFees(patientId);
       } catch (e) { toast(e.message, 'error'); }
     }
@@ -1036,6 +1040,7 @@
       const row = paymentToggleRow;
       const body = document.getElementById('payment-toggle-body');
       let html = '';
+      const needsTestLines = row.buckets.tests && row.buckets.tests.status !== 'paid';
 
       if (row.buckets.consultation) {
         const paid = row.buckets.consultation.status === 'paid';
@@ -1056,20 +1061,32 @@
       }
       if (row.buckets.tests) {
         const paid = row.buckets.tests.status === 'paid';
-        html += `
-          <div class="pay-toggle-row">
-            <div class="pay-toggle-info">
-              <span class="pay-toggle-icon">🧪</span>
-              <div>
-                <div class="pay-toggle-label">Tests</div>
-                <div class="pay-toggle-sub ${paid ? 'is-paid' : 'is-unpaid'}">${paid ? 'Paid' : `Rs.${row.buckets.tests.pending_total} pending`}</div>
+        if (paid) {
+          html += `
+            <div class="pay-toggle-row">
+              <div class="pay-toggle-info">
+                <span class="pay-toggle-icon">🧪</span>
+                <div>
+                  <div class="pay-toggle-label">Tests</div>
+                  <div class="pay-toggle-sub is-paid">Paid</div>
+                </div>
               </div>
-            </div>
-            <label class="pay-toggle-switch">
-              <input type="checkbox" ${paid ? 'checked' : ''} onchange="togglePaymentSwitch('tests', this.checked)" />
-              <span class="pay-toggle-slider"></span>
-            </label>
-          </div>`;
+              <button class="btn btn-outline btn-sm" onclick="togglePaymentSwitch('tests', false)">Revert</button>
+            </div>`;
+        } else {
+          html += `
+            <div class="pay-toggle-row" style="flex-direction:column;align-items:stretch">
+              <div class="pay-toggle-info" style="margin-bottom:8px">
+                <span class="pay-toggle-icon">🧪</span>
+                <div class="pay-toggle-label">Tests</div>
+              </div>
+              <div id="pt-tests-list">Loading…</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+                <strong>Total: Rs.<span id="pt-tests-total">0</span></strong>
+                <button class="btn btn-primary btn-sm" onclick="collectTestsFromToggleModal()">Collect Payment</button>
+              </div>
+            </div>`;
+        }
       }
       if (row.buckets.pharmacy) {
         html += `
@@ -1084,6 +1101,41 @@
           </div>`;
       }
       body.innerHTML = html || '<p style="color:var(--slate-light)">Nothing to show.</p>';
+      if (needsTestLines) loadPaymentToggleTestLines(row.patient_id);
+    }
+
+    async function loadPaymentToggleTestLines(patientId) {
+      try {
+        const orders = await api("GET", `/patients/${patientId}/pending-test-fees`);
+        const list = document.getElementById('pt-tests-list');
+        if (!list) return;
+        list.innerHTML = orders.map(o => `
+          <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;${o.included ? '' : 'opacity:0.45'}">
+            <input type="checkbox" ${o.included ? 'checked' : ''} onchange="toggleTestIncludeInModal(${o.id}, ${patientId})" style="width:16px;height:16px" />
+            <span>${o.test_name} — Rs.${o.price}</span>
+          </label>
+        `).join('') || '<p style="color:var(--slate-light)">Nothing pending.</p>';
+        const total = orders.filter(o => o.included).reduce((s, o) => s + (o.price || 0), 0);
+        document.getElementById('pt-tests-total').textContent = total.toFixed(2);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function toggleTestIncludeInModal(orderId, patientId) {
+      try {
+        await api("PATCH", `/patients/test-orders/${orderId}/toggle-include`, {});
+        loadPaymentToggleTestLines(patientId);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function collectTestsFromToggleModal() {
+      const row = paymentToggleRow;
+      try {
+        const result = await api("POST", `/patients/${row.patient_id}/collect-test-payment`, {});
+        toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
+        row.buckets.tests.status = 'paid';
+        renderPaymentToggleBody();
+        loadPendingPayments();
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     async function togglePaymentSwitch(kind, turningOn) {
@@ -1100,7 +1152,7 @@
         } else if (kind === 'tests') {
           if (turningOn) {
             const result = await api("POST", `/patients/${row.patient_id}/collect-test-payment`, {});
-            toast(`Rs.${result.charged} collected.`, 'success');
+            toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
           } else {
             if (!confirm('Mark tests as unpaid? Only tests not yet started at the lab can be reverted.')) { renderPaymentToggleBody(); return; }
             await api("POST", `/patients/${row.patient_id}/revert-test-payment`, {});
@@ -1161,7 +1213,7 @@
     async function collectAnydayTestPayment(patientId) {
       try {
         const result = await api("POST", `/patients/${patientId}/collect-test-payment-anyday`, {});
-        toast(`Rs.${result.charged} collected for ${result.count} test(s).`, 'success');
+        toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} test(s).`, 'success');
         openPendingTasksModal(patientId, document.getElementById('pt-patient-name').textContent);
         loadPendingPayments();
       } catch (e) { toast(e.message, 'error'); }

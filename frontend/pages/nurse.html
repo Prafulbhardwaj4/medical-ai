@@ -95,6 +95,10 @@
         </svg>
         Settings
       </button>
+      <button class="profile-menu-item" onclick="openEditDetailsModal()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        Edit My Details
+      </button>
       <button class="profile-menu-item danger" onclick="logout()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
@@ -315,12 +319,12 @@
 
     function fieldRow(label, value, locked, rule) {
       const ruleAttr = rule ? ` data-rule='${JSON.stringify(rule).replace(/'/g, "&#39;")}'` : '';
-      const unitHtml = rule && rule.unit ? `<span style="font-size:12px;color:var(--slate);white-space:nowrap;align-self:center">${rule.unit}</span>` : '';
+      const unitHtml = `<span style="font-size:12px;color:var(--slate);white-space:nowrap;align-self:center;width:44px;flex:0 0 44px">${rule && rule.unit ? rule.unit : ''}</span>`;
       return `
         <div style="margin-bottom:8px" data-row>
           <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-control" placeholder="Field" value="${(label || '').replace(/"/g, '&quot;')}" style="flex:1${locked ? ';background:var(--smoke,#f5f5f5);color:var(--navy);font-weight:600' : ''}" data-label ${locked ? 'readonly' : ''} />
-            <input class="form-control" placeholder="Value" value="${(value || '').replace(/"/g, '&quot;')}" style="flex:1" data-value${ruleAttr} oninput="validateVitalInput(this)" />
+            <input class="form-control" placeholder="Field" value="${(label || '').replace(/"/g, '&quot;')}" style="flex:1;min-width:0${locked ? ';background:var(--smoke,#f5f5f5);color:var(--navy);font-weight:600' : ''}" data-label ${locked ? 'readonly' : ''} />
+            <input class="form-control" placeholder="Value" value="${(value || '').replace(/"/g, '&quot;')}" style="flex:1;min-width:0" data-value${ruleAttr} oninput="validateVitalInput(this)" />
             ${unitHtml}
           </div>
           <div style="font-size:12px;color:var(--danger);margin-top:2px;display:none" data-warn></div>

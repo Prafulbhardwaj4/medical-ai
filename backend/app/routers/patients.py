@@ -677,6 +677,9 @@ def mark_checkin_unpaid(
 
     checkin.is_paid = False
     checkin.paid_at = None
+    if checkin.is_finalized:
+        checkin.is_finalized = False
+        checkin.invoice_id = None
     db.commit()
 
     patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
@@ -729,6 +732,11 @@ def revert_test_payment(
         o.status = "payment_pending"
         o.paid_at = None
         o.queued_at = None
+
+    if todays_checkin.is_finalized:
+        todays_checkin.is_finalized = False
+        todays_checkin.invoice_id = None
+
     db.commit()
 
     log_action(

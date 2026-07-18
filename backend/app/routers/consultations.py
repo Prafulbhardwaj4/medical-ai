@@ -451,12 +451,13 @@ def get_prescription_pdf(
     if not consultation:
         raise HTTPException(status_code=404, detail="Prescription not found")
 
-    safe_token = os.path.basename(token_number)
-    pdf_path = os.path.join("prescriptions", f"{safe_token}.pdf")
-    if not os.path.exists(pdf_path):
-        raise HTTPException(status_code=404, detail="PDF file not found")
+    patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
+    prescribing_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first()
 
-    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{safe_token}.pdf")
+    safe_token = os.path.basename(token_number)
+    pdf_path = generate_prescription_pdf(prescribing_doctor, patient, consultation, safe_token, consultation.verify_hash or "")
+
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{safe_token}.pdf", headers={"Cache-Control": "no-store"})
 
 
 @router.get("/verify/{token_number}")
@@ -662,6 +663,9 @@ def confirm_prescription(
         Checkin.visit_date == ist_today()
     ).order_by(desc(Checkin.created_at)).first()
 
+    if todays_checkin and todays_checkin.consultation_fee and not todays_checkin.is_paid:
+        raise HTTPException(status_code=400, detail="Consultation fee hasn't been paid yet. Send the patient back to reception first.")
+
     if todays_checkin:
         token_number = todays_checkin.token_number
         clash = db.query(Consultation).filter(
@@ -731,8 +735,6 @@ def confirm_prescription(
         if total_test_fee > 0:
             billing_target = todays_checkin if todays_checkin else fallback_checkin
             billing_target.test_fee = total_test_fee
-            if billing_target.is_paid:
-                billing_target.is_paid = False
 
         for t in test_items:
             db.add(TestOrder(

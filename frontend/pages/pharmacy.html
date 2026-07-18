@@ -116,6 +116,10 @@
         </svg>
         Settings
       </button>
+      <button class="profile-menu-item" onclick="openEditDetailsModal()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        Edit My Details
+      </button>
       <button class="profile-menu-item danger" onclick="logout()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -295,7 +299,6 @@
           <div class="card-header"
             style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <h2 style="margin:0">Medicine Catalog</h2>
-            <button class="btn btn-outline btn-sm" onclick="loadStockMedicines()">Refresh</button>
           </div>
           <input class="form-control" id="stock-search" placeholder="Search medicines…" oninput="renderStockMedicines()"
             style="margin:16px 0" />
@@ -364,6 +367,7 @@
       <p style="font-size:14px;color:var(--slate);margin-bottom:14px"><strong>Doctor:</strong> <span
           id="rx-doctor"></span></p>
       <div id="rx-medicines" style="margin-bottom:16px"></div>
+      <div id="rx-payment-total" style="display:none;font-weight:700;text-align:right;margin-bottom:10px;font-size:15px"></div>
       <div class="err-msg" id="rx-modal-err" style="margin-bottom:12px"></div>
       <button class="btn btn-primary" id="rx-pay-btn" style="width:100%;margin-bottom:8px"
         onclick="collectMedicinePayment()">Collect Payment</button>
@@ -384,6 +388,22 @@
       <input class="form-control" id="link-search" placeholder="Search catalog…" oninput="searchLinkCatalog()"
         style="margin-bottom:12px" />
       <div id="link-results"></div>
+    </div>
+  </div>
+
+  <!-- Quantity Modal (replaces prompt()) -->
+  <div class="modal-overlay" id="modal-add-qty">
+    <div class="modal" style="max-width:340px">
+      <div class="modal-header">
+        <h2>Quantity</h2>
+        <button class="modal-close" onclick="closeAddQtyModal()">×</button>
+      </div>
+      <input class="form-control" id="add-qty-input" type="number" min="1" value="1" style="margin-bottom:16px" />
+      <div class="err-msg" id="add-qty-err" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" style="flex:1" onclick="closeAddQtyModal()">Cancel</button>
+        <button class="btn btn-primary" style="flex:1" onclick="confirmAddQty()">Add</button>
+      </div>
     </div>
   </div>
 
@@ -531,11 +551,7 @@
 
     function timeSince(iso) {
       const ist = /[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30";
-      const mins = Math.floor((Date.now() - new Date(ist).getTime()) / 60000);
-      if (mins < 1) return "just now";
-      if (mins < 60) return `${mins} min ago`;
-      const hrs = Math.floor(mins / 60);
-      return `${hrs} hr ${mins % 60}m ago`;
+      return new Date(ist).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
     }
 
     function renderQueue() {
@@ -653,9 +669,10 @@
         el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No patients found.</p>';
         return;
       }
-      const queueTokens = new Set(queueData.map(i => i.token_number));
+      const queueByToken = new Map(queueData.map(i => [i.token_number, i]));
       el.innerHTML = data.map(p => {
-        const inQueue = p.checked_in_today && p.last_token && queueTokens.has(p.last_token);
+        const queueEntry = p.checked_in_today && p.last_token ? queueByToken.get(p.last_token) : null;
+        const inQueue = !!queueEntry && !queueEntry.is_dispensed;
         return `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
           <div>
@@ -701,12 +718,17 @@
       }
       el.innerHTML = currentMedicineOrders.map(m => {
         const locked = m.status !== 'advised';
-        const outOfStock = m.included && m.status === 'advised' && m.stock_quantity != null && m.stock_quantity <= 0;
-        const lowStock = !outOfStock && m.stock_quantity != null && m.low_stock_threshold != null && m.stock_quantity < m.low_stock_threshold;
+        const notInCatalog = m.included && m.status === 'advised' && !m.catalog_medicine_id;
+        const zeroStock = m.stock_quantity != null && m.stock_quantity <= 0;
+        const qtyExceedsStock = m.stock_quantity != null && m.quantity != null && m.quantity > m.stock_quantity;
+        const outOfStock = m.included && m.status === 'advised' && (notInCatalog || zeroStock);
+        const partialStock = m.included && m.status === 'advised' && !outOfStock && qtyExceedsStock;
         const billedNote = (m.billed_quantity != null && m.quantity != null && m.billed_quantity < m.quantity)
           ? `<div style="color:var(--danger);font-size:12px;margin-top:4px">Only ${m.billed_quantity} of ${m.quantity} charged — rest out of stock</div>` : '';
         const outOfStockNote = outOfStock
           ? `<div style="color:var(--danger);font-weight:600;font-size:12px;margin-top:2px">Out of stock — substitute or mark advised outside</div>` : '';
+        const partialStockNote = partialStock
+          ? `<div style="color:var(--danger);font-size:12px;margin-top:2px">Only ${m.stock_quantity} left</div>` : '';
         return `
         <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:14px;${m.included ? '' : 'opacity:0.45'}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
@@ -716,7 +738,7 @@
               <span>
                 <strong>${sanitize(m.medicine_name)}</strong>${m.brand_name ? ` (${sanitize(m.brand_name)})` : ''}
                 <div style="color:var(--slate);font-size:12px">${sanitize(m.dosage || '')} — ${sanitize(m.frequency || '')}${m.duration ? ' × ' + sanitize(m.duration) : ''}</div>
-                ${lowStock ? `<div style="color:var(--danger);font-size:12px;margin-top:2px">Stock: ${m.stock_quantity} left</div>` : ''}
+                ${partialStockNote}
                 ${outOfStockNote}
                 ${billedNote}
               </span>
@@ -725,7 +747,7 @@
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;padding-left:24px">
             ${m.catalog_medicine_id
-            ? `<span style="font-size:13px;color:var(--slate)">Rs.${m.unit_price}/unit</span>`
+            ? `<span style="font-size:13px;color:var(--slate)">Rs.${Number(m.unit_price).toFixed(2)}/unit</span>`
             : `<button class="btn btn-outline btn-sm" ${locked ? 'disabled' : ''} onclick="openLinkCatalogModal(${m.id})">Link to Catalog for Price</button>`}
             <label style="font-size:13px;color:var(--slate);display:flex;align-items:center;gap:6px">
               Qty:
@@ -733,30 +755,29 @@
                 value="${m.quantity != null ? m.quantity : ''}" ${locked ? 'disabled' : ''}
                 onchange="updateMedicineQuantity(${m.id}, this.value)" />
             </label>
-            ${m.line_total != null ? `<span style="font-size:13px;font-weight:600">= Rs.${m.line_total}</span>` : ''}
+            ${m.line_total != null ? `<span style="font-size:13px;font-weight:600">= Rs.${Number(m.line_total).toFixed(2)}</span>` : ''}
             ${!locked ? `<button class="btn btn-outline btn-sm" onclick="openAddMedicineModal(${m.id})">Add Substitute</button>` : ''}
-            ${!locked ? `<button class="btn btn-outline btn-sm" onclick="markMedicineUnavailable(${m.id})">Advise Outside</button>` : ''}
           </div>
         </div>
       `}).join('') + '<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="openAddMedicineModal()">+ Add Medicine</button>';
-    }
 
-    async function markMedicineUnavailable(orderId) {
-      if (!confirm('Mark this medicine as advised outside (not billed here)?')) return;
-      try {
-        const updated = await api("PATCH", `/pharmacy/medicine-orders/${orderId}/mark-unavailable`, {});
-        const idx = currentMedicineOrders.findIndex(m => m.id === orderId);
-        if (idx > -1) currentMedicineOrders[idx] = updated;
-        renderMedicineOrders();
-        toast('Marked as advised outside.', 'info');
-      } catch (e) { toast(e.message, 'error'); }
+      const totalEl = document.getElementById('rx-payment-total');
+      const payableTotal = currentMedicineOrders
+        .filter(m => m.included && m.status === 'advised')
+        .reduce((s, m) => s + (m.line_total || 0), 0);
+      if (payableTotal > 0) {
+        totalEl.style.display = '';
+        totalEl.textContent = `Total: Rs.${payableTotal.toFixed(2)}`;
+      } else {
+        totalEl.style.display = 'none';
+      }
     }
 
     async function toggleMedicineInclude(orderId) {
       try {
-        await api("PATCH", `/pharmacy/medicine-orders/${orderId}/toggle-include`, {});
-        const order = currentMedicineOrders.find(m => m.id === orderId);
-        if (order) order.included = !order.included;
+        const updated = await api("PATCH", `/pharmacy/medicine-orders/${orderId}/toggle-include`, {});
+        const idx = currentMedicineOrders.findIndex(m => m.id === orderId);
+        if (idx > -1) currentMedicineOrders[idx] = { ...currentMedicineOrders[idx], ...updated };
         renderMedicineOrders();
       } catch (e) { toast(e.message, 'error'); }
     }
@@ -780,6 +801,7 @@
       document.getElementById('link-results').innerHTML = '';
       document.querySelector('#modal-link-catalog h2').textContent = 'Link to Catalog Medicine';
       document.getElementById('modal-link-catalog').classList.add('open');
+      searchLinkCatalog();
     }
 
     function openAddMedicineModal(substituteForId) {
@@ -790,6 +812,7 @@
       document.getElementById('link-results').innerHTML = '';
       document.querySelector('#modal-link-catalog h2').textContent = substituteForId ? 'Add Substitute Medicine' : 'Add Medicine';
       document.getElementById('modal-link-catalog').classList.add('open');
+      searchLinkCatalog();
     }
 
     function closeLinkCatalogModal() {
@@ -838,22 +861,36 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
-    async function addMedicineFromCatalog(catalogId) {
-      const qtyStr = prompt('Quantity:', '1');
-      if (qtyStr === null) return;
-      const qty = parseInt(qtyStr);
-      if (!qty || qty <= 0) { toast('Enter a valid quantity.', 'error'); return; }
+    let pendingAddQtyCatalogId = null;
+
+    function addMedicineFromCatalog(catalogId) {
+      pendingAddQtyCatalogId = catalogId;
+      document.getElementById('add-qty-input').value = '1';
+      document.getElementById('add-qty-err').textContent = '';
+      document.getElementById('modal-add-qty').classList.add('open');
+    }
+
+    function closeAddQtyModal() {
+      document.getElementById('modal-add-qty').classList.remove('open');
+      pendingAddQtyCatalogId = null;
+    }
+
+    async function confirmAddQty() {
+      const qty = parseInt(document.getElementById('add-qty-input').value);
+      const errEl = document.getElementById('add-qty-err');
+      if (!qty || qty <= 0) { errEl.textContent = 'Enter a valid quantity.'; return; }
       try {
         const newOrder = await api("POST", `/pharmacy/prescription/${currentRxToken}/add-medicine`, {
-          catalog_medicine_id: catalogId,
+          catalog_medicine_id: pendingAddQtyCatalogId,
           quantity: qty,
           substitute_for_id: addMedicineSubstituteFor
         });
         currentMedicineOrders.push(newOrder);
         renderMedicineOrders();
+        closeAddQtyModal();
         closeLinkCatalogModal();
         toast('Medicine added.', 'success');
-      } catch (e) { toast(e.message, 'error'); }
+      } catch (e) { errEl.textContent = e.message; }
     }
 
     function updateRxActionButtons(isDispensed) {
@@ -869,7 +906,7 @@
       }
 
       const hasUnpaidIncluded = currentMedicineOrders.some(m => m.included && m.status === 'advised');
-      const hasBlockingStock = currentMedicineOrders.some(m => m.included && m.status === 'advised' && m.stock_quantity != null && m.stock_quantity <= 0);
+      const hasBlockingStock = currentMedicineOrders.some(m => m.included && m.status === 'advised' && (!m.catalog_medicine_id || (m.stock_quantity != null && m.stock_quantity <= 0)));
       if (hasUnpaidIncluded) {
         payBtn.style.display = '';
         payBtn.disabled = hasBlockingStock;
@@ -987,9 +1024,9 @@
       try {
         const result = await api("POST", `/pharmacy/prescription/${currentRxToken}/collect-payment`, {});
         if (result.skipped && result.skipped.length) {
-          toast(`Rs.${result.charged} collected for ${result.count} medicine(s). Out of stock, not charged: ${result.skipped.join(', ')}`, 'info');
+          toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} medicine(s). Out of stock, not charged: ${result.skipped.join(', ')}`, 'info');
         } else {
-          toast(`Rs.${result.charged} collected for ${result.count} medicine(s).`, 'success');
+          toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} medicine(s).`, 'success');
         }
         openPrescription(currentRxToken);
       } catch (e) {
@@ -1009,8 +1046,8 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
       try {
-        await api("POST", `/consultations/verify/${currentRxToken}/dispense?hash=${encodeURIComponent(currentRxHash)}`, {});
-        toast('Marked as dispensed.', 'success');
+        await api("POST", `/pharmacy/prescription/${currentRxToken}/dispense`, {});
+        toast('Dispensed — stock deducted.', 'success');
         closePrescriptionModal();
         loadQueue();
         loadStockMedicines();

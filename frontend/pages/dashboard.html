@@ -71,6 +71,10 @@
         </svg>
         Settings
       </button>
+      <button class="profile-menu-item" onclick="openEditDetailsModal()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        Edit My Details
+      </button>
       <button class="profile-menu-item danger" onclick="logout()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
         Sign out
@@ -191,7 +195,14 @@
         <div class="card" id="queue-card">
           <div class="card-header">
             <h2>Today's Queue</h2>
-            <span id="queue-count" style="color:var(--slate);font-size:0.9rem"></span>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span id="queue-count" style="color:var(--slate);font-size:0.9rem"></span>
+              <select id="queue-filter" class="form-control" style="width:auto;padding:4px 8px;font-size:0.85rem" onchange="renderQueueRows()">
+                <option value="all">All</option>
+                <option value="waiting">Waiting</option>
+                <option value="consulted">Consulted</option>
+              </select>
+            </div>
           </div>
           <div class="table-wrap">
             <table id="queue-table" class="responsive-cards">
@@ -322,6 +333,20 @@
       <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
         <button class="btn btn-outline" onclick="closeAddPatient()">Cancel</button>
         <button class="btn btn-primary" id="btn-save-patient" onclick="savePatient()">Save Patient</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fee Pending Modal -->
+  <div class="modal-overlay" id="modal-fee-pending">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Consultation Fee Pending</h2>
+        <button class="modal-close" onclick="document.getElementById('modal-fee-pending').classList.remove('open')">×</button>
+      </div>
+      <p style="color:var(--slate);margin-bottom:20px">This patient's consultation fee hasn't been collected yet today. Send them to reception first.</p>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn btn-primary" onclick="document.getElementById('modal-fee-pending').classList.remove('open')">OK</button>
       </div>
     </div>
   </div>
@@ -533,6 +558,10 @@
       if (!requirePresent()) return;
       try {
         const status = await api("GET", `/patients/${id}/checkin-today`);
+        if (status.exists && !status.is_paid) {
+          document.getElementById('modal-fee-pending').classList.add('open');
+          return;
+        }
         if (status.exists) {
           window.location.href = `/pages/patient.html?${token}`;
         } else {
@@ -643,28 +672,37 @@
       if (e.target === this) closeAddPatient();
     });
 
+    let _queueData = [];
+
     async function loadQueue() {
       try {
-        const data = await api("GET", "/patients/queue/today");
-        const tbody = document.getElementById("queue-tbody");
-        const waiting = data.filter(q => q.status === 'waiting').length;
-        document.getElementById("queue-count").textContent = `${waiting} waiting`;
-
-        if (!data.length) {
-          tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No patients checked in today.</p></div></td></tr>`;
-          return;
-        }
-        tbody.innerHTML = data.map(q => `
-          <tr>
-            <td data-label="Token"><strong>${q.token_number}</strong></td>
-            <td data-label="Patient">${q.patient_name}</td>
-            <td data-label="Reason">${q.issue_category}</td>
-            <td data-label="Checked In" style="color:var(--slate)">${new Date(toIST(q.created_at)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
-            <td data-label="Status"><span class="badge ${q.status === 'waiting' ? 'badge-amber' : 'badge-teal'}">${q.status === 'waiting' ? 'Waiting' : 'Consulted'}</span></td>
-            <td data-label="" style="text-align:left"><button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button></td>
-          </tr>
-        `).join('');
+        _queueData = await api("GET", "/patients/queue/today");
+        renderQueueRows();
       } catch (e) { toast(e.message, "error"); }
+    }
+
+    function renderQueueRows() {
+      const tbody = document.getElementById("queue-tbody");
+      const filter = document.getElementById("queue-filter").value;
+      const waiting = _queueData.filter(q => q.status === 'waiting').length;
+      document.getElementById("queue-count").textContent = `${waiting} waiting`;
+
+      const data = filter === 'all' ? _queueData : _queueData.filter(q => q.status === filter);
+
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No patients checked in today.</p></div></td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(q => `
+        <tr>
+          <td data-label="Token"><strong>${q.token_number}</strong></td>
+          <td data-label="Patient">${q.patient_name}</td>
+          <td data-label="Reason">${q.issue_category}</td>
+          <td data-label="Checked In" style="color:var(--slate)">${new Date(toIST(q.created_at)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
+          <td data-label="Status"><span class="badge ${q.status === 'waiting' ? 'badge-amber' : 'badge-teal'}">${q.status === 'waiting' ? 'Waiting' : 'Consulted'}</span></td>
+          <td data-label="" style="text-align:left"><button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button></td>
+        </tr>
+      `).join('');
     }
 
     loadQueue();

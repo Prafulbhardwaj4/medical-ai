@@ -16,6 +16,11 @@ class DoctorLogin(BaseModel):
     email: EmailStr
     password: str
 
+class EditMeIn(BaseModel):
+    name: str
+    phone: str
+    registration_number: Optional[str] = ""
+
 class DoctorOut(BaseModel):
     hospital_id: Optional[int] = None
     hospital_type: Optional[str] = None

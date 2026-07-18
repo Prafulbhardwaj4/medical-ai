@@ -123,8 +123,9 @@ def finalize_invoice(
 
     patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first()
 
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient)
+    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, consulting_doctor)
     invoice.pdf_path = pdf_path
 
     checkin.is_finalized = True
@@ -193,12 +194,14 @@ def download_invoice_pdf(
     hospital = db.query(Hospital).filter(Hospital.id == invoice.hospital_id).first()
     items = json.loads(invoice.items_json)
 
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, invoice.grand_total, patient)
+    checkin_for_doctor = db.query(Checkin).filter(Checkin.id == invoice.checkin_id).first()
+    consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin_for_doctor.doctor_id).first() if checkin_for_doctor else None
+    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, invoice.grand_total, patient, consulting_doctor)
     if invoice.pdf_path != pdf_path:
         invoice.pdf_path = pdf_path
         db.commit()
 
-    return FileResponse(pdf_path, media_type="application/pdf", filename=f"invoice_{invoice_id}.pdf")
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"invoice_{invoice_id}.pdf", headers={"Cache-Control": "no-store"})
 
 
 @router.get("/invoices")

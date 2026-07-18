@@ -254,3 +254,67 @@ function redirectByRole(role) {
     window.location.href = '/pages/dashboard.html';
   }
 }
+
+// Shared "Edit My Details" modal — every role, name + contact/credential number only.
+function ensureEditDetailsModal() {
+  if (document.getElementById('modal-edit-details')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <div class="modal-overlay" id="modal-edit-details">
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+          <h2>Edit My Details</h2>
+          <button class="modal-close" onclick="closeEditDetailsModal()">&times;</button>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Name</label>
+          <input class="form-control" id="ed-name" />
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Contact Number</label>
+          <input class="form-control" id="ed-phone" />
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Registration / Credential No. <span style="color:var(--slate-light);font-weight:400">(optional)</span></label>
+          <input class="form-control" id="ed-reg" />
+        </div>
+        <div class="err-msg" id="ed-err" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline" style="flex:1" onclick="closeEditDetailsModal()">Cancel</button>
+          <button class="btn btn-primary" style="flex:1" onclick="submitEditDetails()">Save</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap.firstElementChild);
+}
+
+function openEditDetailsModal() {
+  closeProfileMenu();
+  ensureEditDetailsModal();
+  const doc = getDoctor() || {};
+  document.getElementById('ed-name').value = doc.name || '';
+  document.getElementById('ed-phone').value = doc.phone || '';
+  document.getElementById('ed-reg').value = doc.registration_number || '';
+  document.getElementById('ed-err').textContent = '';
+  document.getElementById('modal-edit-details').classList.add('open');
+}
+
+function closeEditDetailsModal() {
+  document.getElementById('modal-edit-details')?.classList.remove('open');
+}
+
+async function submitEditDetails() {
+  const errEl = document.getElementById('ed-err');
+  const name = document.getElementById('ed-name').value.trim();
+  const phone = document.getElementById('ed-phone').value.trim();
+  const registration_number = document.getElementById('ed-reg').value.trim();
+  if (!name) { errEl.textContent = 'Name is required.'; return; }
+  if (!phone) { errEl.textContent = 'Contact number is required.'; return; }
+  try {
+    const updated = await api("PATCH", "/auth/me", { name, phone, registration_number });
+    saveSession(getToken(), { ...getDoctor(), ...updated });
+    fillTopbar();
+    closeEditDetailsModal();
+    toast('Details updated.', 'success');
+  } catch (e) { errEl.textContent = e.message; }
+}

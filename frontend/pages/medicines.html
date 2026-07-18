@@ -157,6 +157,10 @@
                 </svg>
                 Settings
             </button>
+            <button class="profile-menu-item" onclick="openEditDetailsModal()">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                Edit My Details
+            </button>
             <button class="profile-menu-item danger" onclick="logout()">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -563,8 +567,8 @@
         <h2>Add Stock — <span id="stock-medicine-name"></span></h2>
         <button class="modal-close" onclick="closeAddStockModal()">×</button>
       </div>
-      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Quantity Received</label>
-      <input class="form-control" id="stock-qty" type="number" min="1" step="1" placeholder="e.g. 100" style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Quantity Received (in strips/packs)</label>
+      <input class="form-control" id="stock-qty" type="number" min="1" step="1" placeholder="e.g. 10 strips" style="margin-bottom:14px" />
       <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Expiry Date</label>
       <input class="form-control" id="stock-expiry" type="date" style="margin-bottom:14px" />
       <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Batch / Lot Number (optional)</label>
@@ -875,7 +879,7 @@
             </div>
           </div>
           <div class="item-card-actions">
-            <button class="btn btn-add-stock btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Stock</button>
+            <button class="btn btn-add-stock btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">+ Add Stock</button>
             <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">View Batches</button>
             <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m)})'>Edit</button>
             <button class="btn btn-outline btn-sm" onclick="deactivateMedicine(${m.id})">Deactivate</button>
@@ -1013,8 +1017,13 @@
 
     let currentStockMedicineId = null;
 
-    function openAddStockModal(medicineId, medicineName) {
+    let currentStockPackSize = 1;
+    let editingBatchId = null;
+
+    function openAddStockModal(medicineId, medicineName, packSize) {
       currentStockMedicineId = medicineId;
+      currentStockPackSize = packSize || 1;
+      editingBatchId = null;
       document.getElementById('stock-medicine-name').textContent = medicineName;
       document.getElementById('stock-qty').value = '';
       document.getElementById('stock-expiry').value = '';
@@ -1029,18 +1038,23 @@
 
     async function submitAddStock() {
       const errEl = document.getElementById('stock-modal-err');
-      const qty = parseInt(document.getElementById('stock-qty').value);
-      if (!qty || qty <= 0) { errEl.textContent = 'Enter a valid quantity.'; return; }
+      const strips = parseInt(document.getElementById('stock-qty').value);
+      if (!strips || strips <= 0) { errEl.textContent = 'Enter a valid quantity.'; return; }
 
       const payload = {
-        quantity: qty,
+        quantity: strips * currentStockPackSize,
         expiry_date: document.getElementById('stock-expiry').value || null,
         batch_number: document.getElementById('stock-batch-number').value.trim()
       };
 
       try {
-        await api("POST", `/admin/medicines/${currentStockMedicineId}/batches`, payload);
-        toast('Stock added.', 'success');
+        if (editingBatchId) {
+          await api("PATCH", `/admin/medicines/batches/${editingBatchId}`, payload);
+          toast('Batch updated.', 'success');
+        } else {
+          await api("POST", `/admin/medicines/${currentStockMedicineId}/batches`, payload);
+          toast('Stock added.', 'success');
+        }
         closeAddStockModal();
         loadMedicines();
         loadExpiringSoon();
@@ -1082,11 +1096,26 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               ${badge}
+              <button class="btn btn-outline btn-sm" onclick='editBatch(${JSON.stringify(b)}, ${medicineId}, "${medicineName.replace(/"/g, "&quot;")}")'>Edit</button>
               <button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}')">Remove</button>
             </div>
           </div>
         `;
       }).join('');
+    }
+
+    function editBatch(batch, medicineId, medicineName) {
+      const medicine = allMedicines.find(m => m.id === medicineId);
+      currentStockMedicineId = medicineId;
+      currentStockPackSize = (medicine && medicine.pack_size) || 1;
+      editingBatchId = batch.id;
+      document.getElementById('stock-medicine-name').textContent = medicineName + ' (editing batch)';
+      document.getElementById('stock-qty').value = Math.round(batch.quantity / currentStockPackSize);
+      document.getElementById('stock-expiry').value = batch.expiry_date || '';
+      document.getElementById('stock-batch-number').value = batch.batch_number || '';
+      document.getElementById('stock-modal-err').textContent = '';
+      document.getElementById('modal-batches').classList.remove('open');
+      document.getElementById('modal-add-stock').classList.add('open');
     }
 
     async function deleteBatch(batchId, medicineId, medicineName) {

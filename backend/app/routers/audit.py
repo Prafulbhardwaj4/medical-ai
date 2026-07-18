@@ -39,7 +39,8 @@ def get_audit_logs(
 
     query = db.query(AuditLog).filter(
         AuditLog.hospital_id == current_doctor.hospital_id,
-        AuditLog.action.in_(LOGGED_ACTIONS)
+        AuditLog.action.in_(LOGGED_ACTIONS),
+        AuditLog.actor_role != "super_admin"
     )
 
     if action:
@@ -97,7 +98,8 @@ def get_audit_summary(
 
     query = db.query(AuditLog).filter(
         AuditLog.hospital_id == current_doctor.hospital_id,
-        AuditLog.action.in_(LOGGED_ACTIONS)
+        AuditLog.action.in_(LOGGED_ACTIONS),
+        AuditLog.actor_role != "super_admin"
     )
 
     total = query.count()

@@ -174,8 +174,12 @@ def toggle_medicine_order_include(
         raise HTTPException(status_code=400, detail="Cannot change inclusion after payment")
 
     order.included = not order.included
+    # Unchecking now behaves exactly like "advised outside" — excluded from
+    # payment AND from stock deduction at dispense. Re-checking reverts it
+    # to a normal advised line so it can be paid/dispensed again.
+    order.status = "unavailable" if not order.included else "advised"
     db.commit()
-    return {"id": order.id, "included": order.included}
+    return {"id": order.id, "included": order.included, "status": order.status}
 
 
 @router.patch("/medicine-orders/{order_id}/quantity")
@@ -530,6 +534,59 @@ def add_medicine_order(
     )
 
     return serialize_medicine_order(new_order, db)
+
+
+@router.post("/prescription/{token_number}/dispense")
+def dispense_prescription(
+    token_number: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """The REAL in-hospital dispense action — deducts actual stock via FEFO
+    batches. Do not confuse with /consultations/verify/{token}/dispense,
+    which is the public third-party-pharmacy endpoint and must never touch
+    stock."""
+    require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
+
+    consultation = db.query(Consultation).filter(
+        Consultation.token_number == token_number,
+        Consultation.is_voided == False
+    ).first()
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    if consultation.is_dispensed:
+        raise HTTPException(status_code=400, detail="Already marked as dispensed")
+
+    from app.utils.inventory import deduct_stock_fefo
+
+    paid_orders = db.query(MedicineOrder).filter(
+        MedicineOrder.consultation_id == consultation.id,
+        MedicineOrder.status == "paid"
+    ).all()
+
+    for o in paid_orders:
+        if o.catalog_medicine_id and o.billed_quantity:
+            deduct_stock_fefo(db, o.catalog_medicine_id, o.billed_quantity)
+        o.status = "dispensed"
+        o.dispensed_at = now_ist_naive()
+
+    consultation.is_dispensed = True
+    consultation.dispensed_at = now_ist_naive()
+    db.commit()
+
+    from app.utils.notify import sync_stock_notifications
+    sync_stock_notifications(db, current_doctor.hospital_id)
+
+    log_action(
+        db, current_doctor,
+        action="prescription_dispensed",
+        target_type="consultation",
+        target_id=consultation.id,
+        target_label=f"{token_number} (in-hospital — stock deducted)",
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"message": "Dispensed and stock deducted", "dispensed_at": consultation.dispensed_at.isoformat()}
 
 
 @router.patch("/medicine-orders/{order_id}/mark-unavailable")
