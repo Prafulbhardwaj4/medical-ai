@@ -880,8 +880,8 @@
         <div class="item-card">
           <div class="item-card-top">
             <div>
-              <div class="item-card-title">${sanitize(m.generic_name)}${m.strength ? ' ' + sanitize(m.strength) : ''}${m.brand_name ? ' — ' + sanitize(m.brand_name) : ''}</div>
-              <div class="item-card-subtitle">${m.brand_name ? 'Brand entry — own price &amp; stock' : (m.brand_names ? sanitize(m.brand_names) : 'No brand names listed')}</div>
+              <div class="item-card-title">${sanitize(m.generic_name)}${m.strength ? ' ' + sanitize(m.strength) : ''}</div>
+              <div class="item-card-subtitle">${m.brand_name ? sanitize(m.brand_name) : (m.brand_names ? sanitize(m.brand_names) : 'No brand names listed')}</div>
             </div>
             <div class="item-card-badges">
               ${scheduleBadge(m.schedule)}

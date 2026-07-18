@@ -785,13 +785,30 @@ def confirm_prescription(
                     if (cm.strength or "").strip().lower().replace(" ", "") == dosage_norm
                 ]
                 if strength_matches:
+                    # No brand named — pick any matching brand (or the unbranded
+                    # row) that actually has stock, so an in-stock brand isn't
+                    # skipped in favor of an empty unbranded template row.
+                    in_stock = [cm for cm in strength_matches if (cm.stock_quantity or 0) > 0]
+                    if in_stock:
+                        return in_stock[0]
+                    # Nothing in stock — prefer the unbranded row for a clean
+                    # fallback price, else just take the first match.
                     for cm in strength_matches:
                         if not cm.brand_name:
                             return cm
                     return strength_matches[0]
+                # No candidate's strength/form matches what was prescribed — don't force
+                # a wrong match; leave unmatched so pharmacy links the correct item (or
+                # adds a new catalog entry) manually.
                 return None
             if len(candidates) == 1:
                 return candidates[0]
+            # Multiple same-name candidates and no dosage text to disambiguate with —
+            # same preference: any in-stock brand first, else the unbranded row,
+            # else fall back to the first.
+            in_stock = [cm for cm in candidates if (cm.stock_quantity or 0) > 0]
+            if in_stock:
+                return in_stock[0]
             for cm in candidates:
                 if not cm.brand_name:
                     return cm
