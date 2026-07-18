@@ -16,6 +16,7 @@ from app.models.test_order import TestOrder
 from app.models.checkin import Checkin
 import os
 from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate
+from sqlalchemy import or_
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
@@ -696,14 +697,33 @@ def revert_test_payment(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    todays_checkin = db.query(Checkin).filter(
+        Checkin.patient_id == patient_id,
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == ist_today()
+    ).order_by(desc(Checkin.created_at)).first()
+    if not todays_checkin:
+        raise HTTPException(status_code=404, detail="No visit found for today")
+
+    consultation_ids = [
+        c.id for c in db.query(Consultation).filter(
+            Consultation.patient_id == patient_id,
+            or_(
+                Consultation.token_number == todays_checkin.token_number,
+                Consultation.token_number.like(f"{todays_checkin.token_number}-%")
+            )
+        ).all()
+    ]
+
     orders = db.query(TestOrder).filter(
         TestOrder.patient_id == patient_id,
         TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.consultation_id.in_(consultation_ids),
         TestOrder.status == "paid"
     ).all()
 
     if not orders:
-        raise HTTPException(status_code=400, detail="No paid tests to revert — they may already be in progress at the lab")
+        raise HTTPException(status_code=400, detail="No paid tests to revert for today's visit — they may already be in progress at the lab")
 
     for o in orders:
         o.status = "payment_pending"
@@ -980,13 +1000,21 @@ def collect_test_payment(
 ):
     today_start, today_end = ist_day_bounds()
 
+    voided_consultation_ids = [
+        c.id for c in db.query(Consultation).filter(
+            Consultation.patient_id == patient_id,
+            Consultation.is_voided == True
+        ).all()
+    ]
+
     orders = db.query(TestOrder).filter(
         TestOrder.patient_id == patient_id,
         TestOrder.hospital_id == current_doctor.hospital_id,
         TestOrder.status == "payment_pending",
         TestOrder.included == True,
         TestOrder.created_at >= today_start,
-        TestOrder.created_at <= today_end
+        TestOrder.created_at <= today_end,
+        ~TestOrder.consultation_id.in_(voided_consultation_ids) if voided_consultation_ids else True
     ).all()
 
     if not orders:
@@ -1028,6 +1056,9 @@ def mark_test_order_paid(
 
     if order.status != "payment_pending":
         raise HTTPException(status_code=400, detail="Test order is not pending payment")
+
+    if is_order_expired(db, order.patient_id, order.consultation_id, order.created_at):
+        raise HTTPException(status_code=400, detail="This test order has expired and can no longer be paid for")
 
     order.status = "paid"
     order.paid_at = now_ist_naive()

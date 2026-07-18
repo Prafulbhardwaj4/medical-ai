@@ -7,7 +7,7 @@ from app.models.hospital import Hospital
 from app.models.doctor import Doctor, UserRole
 from app.config import settings
 import secrets
-from app.utils.auth import hash_password, get_current_doctor, now_ist_naive, ist_today
+from app.utils.auth import hash_password, get_current_doctor, now_ist_naive, ist_today, ist_day_bounds
 from app.utils.audit import log_action
 import re
 from app.models.consultation import Consultation
@@ -216,6 +216,8 @@ def billing_today(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     from app.models.checkin import Checkin
+    from app.models.medicine_order import MedicineOrder
+
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.visit_date == ist_today()
@@ -227,8 +229,19 @@ def billing_today(
     total_collected = sum((c.consultation_fee or 0) + (c.test_fee or 0) for c in paid)
     total_unpaid = sum((c.consultation_fee or 0) + (c.test_fee or 0) for c in unpaid)
 
+    today_start, today_end = ist_day_bounds()
+    medicine_total = db.query(MedicineOrder).filter(
+        MedicineOrder.hospital_id == current_doctor.hospital_id,
+        MedicineOrder.status.in_(["paid", "dispensed"]),
+        MedicineOrder.paid_at >= today_start,
+        MedicineOrder.paid_at < today_end
+    ).all()
+    pharmacy_collected = sum((m.unit_price or 0) * ((m.billed_quantity if m.billed_quantity is not None else m.quantity) or 0) for m in medicine_total)
+
     return {
-        "total_collected": total_collected,
+        "total_collected": total_collected + pharmacy_collected,
+        "consultation_and_test_collected": total_collected,
+        "pharmacy_collected": pharmacy_collected,
         "paid_count": len(paid),
         "unpaid_count": len(unpaid),
         "unpaid_amount": total_unpaid
@@ -478,10 +491,12 @@ def list_doctors(
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    doctors = db.query(Doctor).filter(
-        Doctor.hospital_id == current_doctor.hospital_id,
+    doctors_query = db.query(Doctor).filter(
         Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.receptionist, UserRole.nurse, UserRole.lab, UserRole.pharmacy])
-    ).all()
+    )
+    if current_doctor.role.value != "super_admin":
+        doctors_query = doctors_query.filter(Doctor.hospital_id == current_doctor.hospital_id)
+    doctors = doctors_query.all()
 
     now = now_ist_naive()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -543,10 +558,10 @@ def toggle_doctor_active(
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    doctor = db.query(Doctor).filter(
-        Doctor.id == doctor_id,
-        Doctor.hospital_id == current_doctor.hospital_id
-    ).first()
+    doctor_query = db.query(Doctor).filter(Doctor.id == doctor_id)
+    if current_doctor.role.value != "super_admin":
+        doctor_query = doctor_query.filter(Doctor.hospital_id == current_doctor.hospital_id)
+    doctor = doctor_query.first()
 
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
@@ -586,10 +601,10 @@ def toggle_doctor_role(
     if current_doctor.role.value not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Only admin or super admin can change roles")
 
-    doctor = db.query(Doctor).filter(
-        Doctor.id == doctor_id,
-        Doctor.hospital_id == current_doctor.hospital_id
-    ).first()
+    doctor_query = db.query(Doctor).filter(Doctor.id == doctor_id)
+    if current_doctor.role.value != "super_admin":
+        doctor_query = doctor_query.filter(Doctor.hospital_id == current_doctor.hospital_id)
+    doctor = doctor_query.first()
 
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found")
@@ -879,11 +894,7 @@ def superadmin_stats(
     if current_doctor.role.value != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    from datetime import datetime
-    import pytz
-    ist = pytz.timezone("Asia/Kolkata")
-    now = datetime.now(ist)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_start = now_ist_naive().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     total_hospitals = db.query(Hospital).filter(Hospital.is_active == True).count()
     total_doctors = db.query(Doctor).filter(

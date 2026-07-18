@@ -42,6 +42,7 @@ def gather_invoice_items(db: Session, checkin: Checkin):
     consultation_ids = [
         c.id for c in db.query(Consultation).filter(
             Consultation.patient_id == checkin.patient_id,
+            Consultation.is_voided == False,
             or_(
                 Consultation.token_number == checkin.token_number,
                 Consultation.token_number.like(f"{checkin.token_number}-%")

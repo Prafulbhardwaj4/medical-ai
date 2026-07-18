@@ -57,8 +57,8 @@ def _decode_logo_image(logo_base64):
 def build_letterhead(hospital, subtitle=None):
     """Shared header for every PDF: logo (if set) + hospital name + address/city/state
     + phone/GSTIN (only whichever are actually set), optional subtitle line under it."""
-    header_style = ParagraphStyle("lh_header", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"))
-    sub_style = ParagraphStyle("lh_sub", fontSize=9.5, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
+    header_style = ParagraphStyle("lh_header", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"), spaceAfter=4, leading=22)
+    sub_style = ParagraphStyle("lh_sub", fontSize=9.5, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey, spaceAfter=2, leading=12)
 
     elements = []
 

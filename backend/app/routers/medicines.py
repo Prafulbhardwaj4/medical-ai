@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models.doctor import Doctor
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.medicine_batch import MedicineBatch
-from app.utils.auth import get_current_doctor
+from app.utils.auth import get_current_doctor, ist_today
 from app.utils.audit import log_action
 from app.services.groq_service import extract_medicines
 from app.utils.notify import sync_stock_notifications
@@ -44,7 +44,6 @@ class MedicineIn(BaseModel):
     price_per_pack: Optional[float] = None
     billing_mode: Optional[str] = "per_unit"
     gst_percent: Optional[float] = None
-    stock_quantity: Optional[int] = None
 
 
 VALID_BILLING_MODES = {"per_unit", "per_pack"}
@@ -147,7 +146,7 @@ def create_medicine(
         billing_mode=billing_mode,
         gst_percent=payload.gst_percent,
         price=compute_unit_price(payload.price_per_pack, pack_size),
-        stock_quantity=payload.stock_quantity,
+        stock_quantity=0,
         is_active=True
     )
     db.add(medicine)
@@ -205,7 +204,9 @@ def update_medicine(
     medicine.billing_mode = billing_mode
     medicine.gst_percent = payload.gst_percent
     medicine.price = compute_unit_price(payload.price_per_pack, pack_size)
-    medicine.stock_quantity = payload.stock_quantity
+    # stock_quantity is deliberately NOT touched here — it's owned exclusively
+    # by the batch endpoints (add/edit/delete batch). Editing catalog details
+    # must never affect live stock.
     db.commit()
 
     log_action(
@@ -406,7 +407,7 @@ def add_batch(
         batch_number=batch_number or None,
         quantity=payload.quantity,
         expiry_date=payload.expiry_date,
-        received_date=date.today()
+        received_date=ist_today()
     )
     db.add(batch)
 
@@ -521,7 +522,7 @@ def get_expiring_batches(
 ):
     require_admin_or_pharmacy(current_doctor)
 
-    cutoff = date.today() + timedelta(days=within_days)
+    cutoff = ist_today() + timedelta(days=within_days)
 
     batches = db.query(MedicineBatch).filter(
         MedicineBatch.hospital_id == current_doctor.hospital_id,
@@ -535,7 +536,7 @@ def get_expiring_batches(
         medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == b.medicine_id).first()
         if not medicine or not medicine.is_active:
             continue
-        days_left = (b.expiry_date - date.today()).days
+        days_left = (b.expiry_date - ist_today()).days
         result.append({
             "batch_id": b.id,
             "medicine_id": b.medicine_id,

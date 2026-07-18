@@ -271,6 +271,9 @@ def update_order_status(
     if not order:
         raise HTTPException(status_code=404, detail="Test order not found")
 
+    if status == "completed" and not order.result_data:
+        raise HTTPException(status_code=400, detail="Save the test results before marking this order completed")
+
     order.status = status
     if status == "sample_collected":
         order.collected_at = now_ist_naive()
@@ -383,7 +386,7 @@ def get_lab_reports_history(
         v = visit_groups[key]
         v["order_ids"].append(o.id)
         v["test_names"].append(o.test_name)
-        completed_iso = (o.completed_at.isoformat() + "Z") if o.completed_at else None
+        completed_iso = o.completed_at.isoformat() if o.completed_at else None
         if completed_iso and (v["completed_at"] is None or completed_iso > v["completed_at"]):
             v["completed_at"] = completed_iso
 

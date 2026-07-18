@@ -7,7 +7,7 @@ from app.models.consultation import Consultation
 from app.models.patient import Patient
 from app.models.doctor import Doctor, UserRole
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem, StructureRequest
-from app.utils.auth import get_current_doctor, now_ist_naive, ist_day_bounds, decode_access_token, is_token_blacklisted
+from app.utils.auth import get_current_doctor, now_ist_naive, ist_day_bounds, ist_today, decode_access_token, is_token_blacklisted
 from app.utils.audit import log_action
 from app.services.whisper import transcribe_audio
 from app.services.groq_service import structure_transcript, match_tests_to_catalog
@@ -519,6 +519,13 @@ def mark_dispensed(
     consultation.is_dispensed = True
     consultation.dispensed_at = now_ist_naive()
 
+    # This is the public, unauthenticated verify-link endpoint — used when a
+    # patient gets medicines from a THIRD-PARTY pharmacy outside this hospital.
+    # It records that dispensing happened, but must NEVER touch this hospital's
+    # own stock — only pharmacy.html's own collect-payment/dispense flow (which
+    # runs through authenticated hospital pharmacy staff) is allowed to deduct
+    # real inventory. Marking these orders "dispensed" here also correctly
+    # freezes them out of the hospital's own pending-tasks/requeue queues.
     paid_medicine_orders = db.query(MedicineOrder).filter(
         MedicineOrder.consultation_id == consultation.id,
         MedicineOrder.status == "paid"
@@ -526,20 +533,6 @@ def mark_dispensed(
     for mo in paid_medicine_orders:
         mo.status = "dispensed"
         mo.dispensed_at = now_ist_naive()
-
-        dispense_qty = mo.billed_quantity if mo.billed_quantity is not None else mo.quantity
-        if mo.catalog_medicine_id and dispense_qty:
-            result = deduct_stock_fefo(db, mo.catalog_medicine_id, dispense_qty)
-            db.commit()
-            sync_stock_notifications(db, mo.hospital_id)
-            log_action(
-                db, None,
-                action="medicine_dispensed",
-                target_type="hospital_medicine",
-                target_id=mo.catalog_medicine_id,
-                target_label=f"{result['medicine_name']} -{dispense_qty}" + (f" (shortfall {result['shortfall']})" if result["shortfall"] > 0 else ""),
-                hospital_id=mo.hospital_id
-            )
     db.commit()
 
     log_action(
@@ -547,7 +540,7 @@ def mark_dispensed(
         action="prescription_dispensed",
         target_type="consultation",
         target_id=consultation.id,
-        target_label=consultation.token_number,
+        target_label=consultation.token_number + " (dispensed outside — no hospital stock deducted)",
         hospital_id=None
     )
 
@@ -666,7 +659,7 @@ def confirm_prescription(
 
     todays_checkin = db.query(Checkin).filter(
         Checkin.patient_id == consultation.patient_id,
-        Checkin.visit_date == date.today()
+        Checkin.visit_date == ist_today()
     ).order_by(desc(Checkin.created_at)).first()
 
     if todays_checkin:
@@ -685,11 +678,11 @@ def confirm_prescription(
         hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
         hospital_code = hospital.hospital_code if hospital else "GEN"
         prefix = hospital_code.replace("-", "")[:4].upper()
-        date_part = date.today().strftime("%d%m%y")
+        date_part = ist_today().strftime("%d%m%y")
         while True:
             count = db.query(Checkin).filter(
                 Checkin.hospital_id == current_doctor.hospital_id,
-                Checkin.visit_date == date.today()
+                Checkin.visit_date == ist_today()
             ).count() + 1
             token_number = f"{prefix}-{date_part}-{count:03d}"
             if not db.query(Checkin).filter(Checkin.token_number == token_number).first():
@@ -702,7 +695,7 @@ def confirm_prescription(
             issue_category="General OPD",
             doctor_id=current_doctor.id,
             created_by=current_doctor.id,
-            visit_date=date.today()
+            visit_date=ist_today()
         )
         db.add(fallback_checkin)
 
@@ -884,6 +877,8 @@ def void_consultation(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    from app.models.test_order import TestOrder
+    from app.models.medicine_order import MedicineOrder
     consultation = db.query(Consultation).filter(
         Consultation.id == consultation_id,
         Consultation.doctor_id == current_doctor.id
@@ -892,6 +887,25 @@ def void_consultation(
         raise HTTPException(status_code=404, detail="Consultation not found")
 
     consultation.is_voided = True
+
+    # Cascade: exclude any not-yet-paid test/medicine lines under this
+    # consultation so they can't still be paid for or invoiced after voiding.
+    # Already-paid lines are left alone — voiding doesn't refund; that's a
+    # separate, explicit action.
+    excluded_count = 0
+    for order in db.query(TestOrder).filter(
+        TestOrder.consultation_id == consultation.id,
+        TestOrder.status == "payment_pending"
+    ).all():
+        order.included = False
+        excluded_count += 1
+    for order in db.query(MedicineOrder).filter(
+        MedicineOrder.consultation_id == consultation.id,
+        MedicineOrder.status == "advised"
+    ).all():
+        order.included = False
+        excluded_count += 1
+
     db.commit()
 
     log_action(
@@ -900,7 +914,7 @@ def void_consultation(
         target_type="consultation",
         target_id=consultation.id,
         target_label=consultation.token_number or f"Draft #{consultation.id}",
-        details=f"Patient ID: {consultation.patient_id}"
+        details=f"Patient ID: {consultation.patient_id}" + (f" — {excluded_count} unpaid line(s) excluded" if excluded_count else "")
     )
 
     return {"message": "Consultation voided"}
@@ -1296,12 +1310,12 @@ def admin_consultations(
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    hospital_doctor_ids = [
-        d.id for d in db.query(DoctorModel).filter(
-            DoctorModel.hospital_id == current_doctor.hospital_id,
-            DoctorModel.role.in_([UserRole.doctor, UserRole.sub_admin])
-        ).all()
-    ]
+    doctor_id_query = db.query(DoctorModel).filter(
+        DoctorModel.role.in_([UserRole.doctor, UserRole.sub_admin])
+    )
+    if current_doctor.role.value != "super_admin":
+        doctor_id_query = doctor_id_query.filter(DoctorModel.hospital_id == current_doctor.hospital_id)
+    hospital_doctor_ids = [d.id for d in doctor_id_query.all()]
 
     query = db.query(Consultation).filter(
         Consultation.doctor_id.in_(hospital_doctor_ids),
