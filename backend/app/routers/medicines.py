@@ -59,11 +59,19 @@ class MedicineBulkConfirm(BaseModel):
     medicines: list[MedicineIn]
 
 
+class BrandIn(BaseModel):
+    brand_name: str
+    price_per_pack: Optional[float] = None
+    low_stock_threshold: Optional[int] = None
+
+
 def serialize(m: HospitalMedicine):
     return {
         "id": m.id,
         "generic_name": m.generic_name,
         "brand_names": m.brand_names or "",
+        "brand_name": m.brand_name or "",
+        "parent_medicine_id": m.parent_medicine_id,
         "category": m.category or "",
         "dosage_forms": m.dosage_forms or "",
         "strength": m.strength or "",
@@ -105,7 +113,8 @@ def list_medicines(
         like = f"%{search}%"
         query = query.filter(or_(
             HospitalMedicine.generic_name.ilike(like),
-            HospitalMedicine.brand_names.ilike(like)
+            HospitalMedicine.brand_names.ilike(like),
+            HospitalMedicine.brand_name.ilike(like)
         ))
 
     items = query.order_by(HospitalMedicine.generic_name).all()
@@ -118,7 +127,7 @@ def create_medicine(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    require_admin(current_doctor)
+    require_admin_or_pharmacy(current_doctor)
 
     schedule = (payload.schedule or "otc").lower()
     if schedule not in VALID_SCHEDULES:
@@ -162,6 +171,70 @@ def create_medicine(
         hospital_id=current_doctor.hospital_id
     )
     return serialize(medicine)
+
+
+@router.post("/{medicine_id}/brands", status_code=201)
+def add_medicine_brand(
+    medicine_id: int,
+    payload: BrandIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_admin_or_pharmacy(current_doctor)
+
+    parent = db.query(HospitalMedicine).filter(
+        HospitalMedicine.id == medicine_id,
+        HospitalMedicine.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not parent:
+        raise HTTPException(status_code=404, detail="Medicine not found")
+
+    brand_name = (payload.brand_name or "").strip()
+    if not brand_name:
+        raise HTTPException(status_code=400, detail="Brand name is required")
+
+    root_id = parent.parent_medicine_id or parent.id
+    existing = db.query(HospitalMedicine).filter(
+        HospitalMedicine.hospital_id == current_doctor.hospital_id,
+        or_(HospitalMedicine.id == root_id, HospitalMedicine.parent_medicine_id == root_id),
+        HospitalMedicine.brand_name.ilike(brand_name)
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"'{brand_name}' already exists for this medicine")
+
+    root = db.query(HospitalMedicine).filter(HospitalMedicine.id == root_id).first()
+
+    brand_row = HospitalMedicine(
+        hospital_id=current_doctor.hospital_id,
+        generic_name=root.generic_name,
+        category=root.category,
+        dosage_forms=root.dosage_forms,
+        strength=root.strength,
+        schedule=root.schedule,
+        brand_name=brand_name,
+        parent_medicine_id=root.id,
+        low_stock_threshold=payload.low_stock_threshold or root.low_stock_threshold or 25,
+        pack_size=root.pack_size,
+        price_per_pack=payload.price_per_pack,
+        billing_mode=root.billing_mode,
+        gst_percent=root.gst_percent,
+        price=compute_unit_price(payload.price_per_pack, root.pack_size),
+        stock_quantity=0,
+        is_active=True
+    )
+    db.add(brand_row)
+    db.commit()
+    db.refresh(brand_row)
+
+    log_action(
+        db, current_doctor,
+        action="medicine_brand_added",
+        target_type="hospital_medicine",
+        target_id=brand_row.id,
+        target_label=f"{root.generic_name} — {brand_name}",
+        hospital_id=current_doctor.hospital_id
+    )
+    return serialize(brand_row)
 
 
 @router.patch("/{medicine_id}")
@@ -277,7 +350,7 @@ async def upload_medicines(
     file: UploadFile = File(...),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    require_admin(current_doctor)
+    require_admin_or_pharmacy(current_doctor)
 
     filename = (file.filename or "").lower()
     content = await file.read()
@@ -306,7 +379,7 @@ def bulk_confirm_medicines(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    require_admin(current_doctor)
+    require_admin_or_pharmacy(current_doctor)
 
     created = []
     for item in payload.medicines:

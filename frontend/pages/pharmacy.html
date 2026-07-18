@@ -299,6 +299,7 @@
           <div class="card-header"
             style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <h2 style="margin:0">Medicine Catalog</h2>
+            <a class="btn btn-primary btn-sm" href="medicines.html">+ Add Medicine / Upload PDF·Excel</a>
           </div>
           <input class="form-control" id="stock-search" placeholder="Search medicines…" oninput="renderStockMedicines()"
             style="margin:16px 0" />
@@ -717,7 +718,8 @@
         return;
       }
       el.innerHTML = currentMedicineOrders.map(m => {
-        const locked = m.status !== 'advised';
+        const locked = m.status === 'paid' || m.status === 'dispensed';
+        const checkboxLocked = locked;
         const notInCatalog = m.included && m.status === 'advised' && !m.catalog_medicine_id;
         const zeroStock = m.stock_quantity != null && m.stock_quantity <= 0;
         const qtyExceedsStock = m.stock_quantity != null && m.quantity != null && m.quantity > m.stock_quantity;
@@ -732,8 +734,8 @@
         return `
         <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:14px;${m.included ? '' : 'opacity:0.45'}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-            <label style="display:flex;align-items:flex-start;gap:8px;cursor:${locked ? 'default' : 'pointer'};flex:1">
-              <input type="checkbox" ${m.included ? 'checked' : ''} ${locked ? 'disabled' : ''}
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:${checkboxLocked ? 'default' : 'pointer'};flex:1">
+              <input type="checkbox" ${m.included ? 'checked' : ''} ${checkboxLocked ? 'disabled' : ''}
                 onchange="toggleMedicineInclude(${m.id})" style="width:16px;height:16px;margin-top:2px" />
               <span>
                 <strong>${sanitize(m.medicine_name)}</strong>${m.brand_name ? ` (${sanitize(m.brand_name)})` : ''}
@@ -779,6 +781,7 @@
         const idx = currentMedicineOrders.findIndex(m => m.id === orderId);
         if (idx > -1) currentMedicineOrders[idx] = { ...currentMedicineOrders[idx], ...updated };
         renderMedicineOrders();
+        updateRxActionButtons(false);
       } catch (e) { toast(e.message, 'error'); }
     }
 
@@ -790,6 +793,7 @@
         const idx = currentMedicineOrders.findIndex(m => m.id === orderId);
         if (idx > -1) currentMedicineOrders[idx] = updated;
         renderMedicineOrders();
+        updateRxActionButtons(false);
       } catch (e) { toast(e.message, 'error'); }
     }
 
@@ -856,6 +860,7 @@
         const idx = currentMedicineOrders.findIndex(m => m.id === linkingOrderId);
         if (idx > -1) currentMedicineOrders[idx] = updated;
         renderMedicineOrders();
+        updateRxActionButtons(false);
         closeLinkCatalogModal();
         toast('Linked to catalog.', 'success');
       } catch (e) { toast(e.message, 'error'); }
@@ -887,6 +892,7 @@
         });
         currentMedicineOrders.push(newOrder);
         renderMedicineOrders();
+        updateRxActionButtons(false);
         closeAddQtyModal();
         closeLinkCatalogModal();
         toast('Medicine added.', 'success');

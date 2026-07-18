@@ -592,13 +592,48 @@
     </div>
   </div>
 
+  <!-- Add Brand Modal -->
+  <div class="modal-overlay" id="modal-add-brand">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Add Brand — <span id="brand-medicine-name"></span></h2>
+        <button class="modal-close" onclick="closeAddBrandModal()">×</button>
+      </div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:14px">Category, form and strength are copied from
+        the medicine above — just add the brand name and its price. It gets its own stock and batches.</p>
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Brand Name</label>
+      <input class="form-control" id="brand-name-input" placeholder="e.g. Dolo" style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Price per Pack/Unit
+        (Rs.)</label>
+      <input class="form-control" id="brand-price-input" type="number" min="0" step="0.01" placeholder="e.g. 30"
+        style="margin-bottom:14px" />
+      <div class="err-msg" id="brand-modal-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="submitAddBrand()">Add Brand</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeAddBrandModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <script src="../js/api.js?v=4"></script>
   <script>
     const doc = getDoctor();
-    if (!doc || !["admin", "sub_admin"].includes(doc.role)) window.location.href = "dashboard.html";
+    if (!doc || !["admin", "sub_admin", "pharmacy"].includes(doc.role)) window.location.href = "dashboard.html";
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
+
+    if (doc.role === 'pharmacy') {
+      document.querySelectorAll('.sidebar .nav-item, .bottom-nav .bottom-nav-item').forEach(el => {
+        if (!/medicines\.html/.test(el.getAttribute('href') || '')) el.style.display = 'none';
+      });
+      const backLink = document.createElement('a');
+      backLink.href = 'pharmacy.html';
+      backLink.className = 'nav-item';
+      backLink.style.marginBottom = '10px';
+      backLink.textContent = '← Back to Pharmacy';
+      document.querySelector('.sidebar').prepend(backLink);
+    }
 
     if (["admin", "sub_admin", "pharmacy"].includes(getDoctor()?.role)) {
       document.getElementById('notif-bell-btn').style.display = '';
@@ -845,8 +880,8 @@
         <div class="item-card">
           <div class="item-card-top">
             <div>
-              <div class="item-card-title">${sanitize(m.generic_name)}${m.strength ? ' ' + sanitize(m.strength) : ''}</div>
-              <div class="item-card-subtitle">${m.brand_names ? sanitize(m.brand_names) : 'No brand names listed'}</div>
+              <div class="item-card-title">${sanitize(m.generic_name)}${m.strength ? ' ' + sanitize(m.strength) : ''}${m.brand_name ? ' — ' + sanitize(m.brand_name) : ''}</div>
+              <div class="item-card-subtitle">${m.brand_name ? 'Brand entry — own price &amp; stock' : (m.brand_names ? sanitize(m.brand_names) : 'No brand names listed')}</div>
             </div>
             <div class="item-card-badges">
               ${scheduleBadge(m.schedule)}
@@ -881,8 +916,10 @@
           <div class="item-card-actions">
             <button class="btn btn-add-stock btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">+ Add Stock</button>
             <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">View Batches</button>
+            ${!m.brand_name ? `<button class="btn btn-outline btn-sm" onclick="openAddBrandModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Brand</button>` : ''}
+            ${doc.role !== 'pharmacy' ? `
             <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m)})'>Edit</button>
-            <button class="btn btn-outline btn-sm" onclick="deactivateMedicine(${m.id})">Deactivate</button>
+            <button class="btn btn-outline btn-sm" onclick="deactivateMedicine(${m.id})">Deactivate</button>` : ''}
           </div>
         </div>
       `).join('');
@@ -1130,6 +1167,38 @@
 
     function closeBatchesModal() {
       document.getElementById('modal-batches').classList.remove('open');
+    }
+
+    let currentBrandParentId = null;
+
+    function openAddBrandModal(medicineId, medicineName) {
+      currentBrandParentId = medicineId;
+      document.getElementById('brand-medicine-name').textContent = medicineName;
+      document.getElementById('brand-name-input').value = '';
+      document.getElementById('brand-price-input').value = '';
+      document.getElementById('brand-modal-err').textContent = '';
+      document.getElementById('modal-add-brand').classList.add('open');
+    }
+
+    function closeAddBrandModal() {
+      document.getElementById('modal-add-brand').classList.remove('open');
+      currentBrandParentId = null;
+    }
+
+    async function submitAddBrand() {
+      const errEl = document.getElementById('brand-modal-err');
+      const brandName = document.getElementById('brand-name-input').value.trim();
+      if (!brandName) { errEl.textContent = 'Enter a brand name.'; return; }
+      const priceVal = document.getElementById('brand-price-input').value;
+      try {
+        await api("POST", `/admin/medicines/${currentBrandParentId}/brands`, {
+          brand_name: brandName,
+          price_per_pack: priceVal !== '' ? parseFloat(priceVal) : null
+        });
+        toast('Brand added.', 'success');
+        closeAddBrandModal();
+        loadMedicines();
+      } catch (e) { errEl.textContent = e.message; }
     }
 
     async function loadExpiringSoon() {

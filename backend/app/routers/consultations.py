@@ -759,29 +759,42 @@ def confirm_prescription(
         ).all()
 
         def match_catalog(name, brand, dosage):
-            search_terms = [t for t in [(name or "").strip().lower(), (brand or "").strip().lower()] if t]
+            name_l = (name or "").strip().lower()
+            brand_l = (brand or "").strip().lower()
             candidates = []
             for cm in catalog_medicines:
                 cm_generic = (cm.generic_name or "").strip().lower()
-                cm_brands = [b.strip().lower() for b in (cm.brand_names or "").split(",") if b.strip()]
-                for term in search_terms:
-                    if term and (term == cm_generic or term in cm_brands or cm_generic in term):
-                        candidates.append(cm)
-                        break
+                cm_brand = (cm.brand_name or "").strip().lower()
+                cm_brands_legacy = [b.strip().lower() for b in (cm.brand_names or "").split(",") if b.strip()]
+                name_matches = name_l and (name_l == cm_generic or name_l in cm_brands_legacy or name_l == cm_brand or cm_generic in name_l)
+                brand_matches = brand_l and (brand_l == cm_brand or brand_l in cm_brands_legacy or brand_l == cm_generic)
+                if name_matches or brand_matches:
+                    candidates.append(cm)
             if not candidates:
+                return None
+
+            if brand_l:
+                for cm in candidates:
+                    if (cm.brand_name or "").strip().lower() == brand_l:
+                        return cm
+
+            dosage_norm = (dosage or "").strip().lower().replace(" ", "")
+            if dosage_norm:
+                strength_matches = [
+                    cm for cm in candidates
+                    if (cm.strength or "").strip().lower().replace(" ", "") == dosage_norm
+                ]
+                if strength_matches:
+                    for cm in strength_matches:
+                        if not cm.brand_name:
+                            return cm
+                    return strength_matches[0]
                 return None
             if len(candidates) == 1:
                 return candidates[0]
-            # Multiple catalog entries share this generic/brand name (e.g. Paracetamol
-            # 500mg Tablet vs Paracetamol 125mg Syrup) — name/brand alone isn't unique
-            # enough, so disambiguate by strength against the prescribed dosage.
-            dosage_norm = (dosage or "").strip().lower().replace(" ", "")
-            if dosage_norm:
-                for cm in candidates:
-                    cm_strength = (cm.strength or "").strip().lower().replace(" ", "")
-                    if cm_strength and cm_strength == dosage_norm:
-                        return cm
-            # No strength match found — fall back to first candidate, same as before.
+            for cm in candidates:
+                if not cm.brand_name:
+                    return cm
             return candidates[0]
 
         for med in prescribed_medicines:

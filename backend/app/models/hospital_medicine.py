@@ -9,6 +9,8 @@ class HospitalMedicine(Base):
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     generic_name = Column(String, nullable=False)
     brand_names = Column(Text, nullable=True)
+    brand_name = Column(String, nullable=True)  # set only on a brand-specific row (this row's own price/stock)
+    parent_medicine_id = Column(Integer, ForeignKey("hospital_medicines.id"), nullable=True)  # links a brand row to its generic entry
     category = Column(String, nullable=True)
     dosage_forms = Column(String, nullable=True)
     strength = Column(String, nullable=True)  # e.g. "500mg" for tablets, "125mg/5ml" for syrups

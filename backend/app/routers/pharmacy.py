@@ -170,7 +170,7 @@ def toggle_medicine_order_include(
     ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Medicine order not found")
-    if order.status != "advised":
+    if order.status not in ("advised", "unavailable"):
         raise HTTPException(status_code=400, detail="Cannot change inclusion after payment")
 
     order.included = not order.included
@@ -256,11 +256,15 @@ def search_medicines_for_linking(
     )
     if q:
         like = f"%{q}%"
-        query = query.filter(HospitalMedicine.generic_name.ilike(like) | HospitalMedicine.brand_names.ilike(like))
+        query = query.filter(
+            HospitalMedicine.generic_name.ilike(like)
+            | HospitalMedicine.brand_names.ilike(like)
+            | HospitalMedicine.brand_name.ilike(like)
+        )
 
     items = query.order_by(HospitalMedicine.generic_name).limit(20).all()
     return [
-        {"id": m.id, "generic_name": m.generic_name, "brand_names": m.brand_names or "", "price": m.price, "strength": m.strength or ""}
+        {"id": m.id, "generic_name": m.generic_name, "brand_names": m.brand_name or m.brand_names or "", "price": m.price, "strength": m.strength or ""}
         for m in items
     ]
 
