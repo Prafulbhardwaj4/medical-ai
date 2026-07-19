@@ -113,7 +113,8 @@ def _auto_complete_matching_appointment(db: Session, patient: Patient, hospital_
     today_end = today_start + timedelta(days=1)
 
     from app.models.portal import PatientAccount
-    account = db.query(PatientAccount).filter(PatientAccount.phone == patient.phone).first()
+    from app.utils.phone import normalize_phone
+    account = db.query(PatientAccount).filter(PatientAccount.phone == normalize_phone(patient.phone)).first()
     if not account:
         return
 
@@ -134,8 +135,9 @@ def _auto_link_portal_profile(db: Session, patient: Patient) -> None:
     step right now since there's no messaging channel yet to confirm via.
     Revisit before public launch (shared/family numbers can auto-link)."""
     from app.models.portal import PatientAccount, PatientProfileLink
+    from app.utils.phone import normalize_phone
 
-    account = db.query(PatientAccount).filter(PatientAccount.phone == patient.phone).first()
+    account = db.query(PatientAccount).filter(PatientAccount.phone == normalize_phone(patient.phone)).first()
     if not account:
         return
     existing_link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == patient.id).first()
