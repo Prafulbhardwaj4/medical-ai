@@ -719,7 +719,12 @@
     // right after structuring) — this just reads that answer back for the ⚠ badge.
     function isTestMatched(term) {
       const t = (term || "").trim().toLowerCase();
-      return matchedTestsFromAI.some(m => m.test_id && (m.raw_term || "").trim().toLowerCase() === t);
+      if (!t) return false;
+      if (matchedTestsFromAI.some(m => m.test_id && (m.raw_term || "").trim().toLowerCase() === t)) return true;
+      return hospitalTests.some(ct => {
+        const name = (ct.test_name || "").trim().toLowerCase();
+        return name === t || name.includes(t) || t.includes(name);
+      });
     }
 
     // Auto-fills the billable "Recommended Tests" chip list from the server's catalog match,

@@ -7,6 +7,10 @@
   <title>Pharmacy — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <style>
+    .item-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; transition: box-shadow 0.15s, border-color 0.15s; }
+    .item-card:hover { box-shadow: var(--shadow-sm); border-color: var(--border-mid); }
+    .item-field-label { font-size: 0.68rem; font-weight: 700; color: var(--slate-light); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+    .preview-field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 14px; margin-bottom: 10px; }
     .mobile-section {
       display: none;
     }
@@ -299,7 +303,11 @@
           <div class="card-header"
             style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <h2 style="margin:0">Medicine Catalog</h2>
-            <a class="btn btn-primary btn-sm" href="medicines.html">+ Add Medicine / Upload PDF·Excel</a>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" onclick="triggerUpload()">Upload PDF/Excel</button>
+              <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Add Medicine</button>
+              <input type="file" id="upload-input" accept=".pdf,.xlsx,.xls" style="display:none" onchange="handleFileSelected(event)" />
+            </div>
           </div>
           <input class="form-control" id="stock-search" placeholder="Search medicines…" oninput="renderStockMedicines()"
             style="margin:16px 0" />
@@ -367,6 +375,7 @@
           id="rx-patient"></span></p>
       <p style="font-size:14px;color:var(--slate);margin-bottom:14px"><strong>Doctor:</strong> <span
           id="rx-doctor"></span></p>
+      <input class="form-control" id="rx-medicine-filter" placeholder="Filter medicines in this list…" oninput="renderMedicineOrders()" style="margin-bottom:12px" />
       <div id="rx-medicines" style="margin-bottom:16px"></div>
       <div id="rx-payment-total" style="display:none;font-weight:700;text-align:right;margin-bottom:10px;font-size:15px"></div>
       <div class="err-msg" id="rx-modal-err" style="margin-bottom:12px"></div>
@@ -713,11 +722,21 @@
 
     function renderMedicineOrders() {
       const el = document.getElementById('rx-medicines');
+      const filterInput = document.getElementById('rx-medicine-filter');
+      if (filterInput) filterInput.style.display = currentMedicineOrders.length > 3 ? '' : 'none';
       if (!currentMedicineOrders.length) {
         el.innerHTML = '<p style="color:var(--slate-light)">No medicines listed.</p><button class="btn btn-outline btn-sm" onclick="openAddMedicineModal()">+ Add Medicine</button>';
         return;
       }
-      el.innerHTML = currentMedicineOrders.map(m => {
+      const filterVal = (filterInput?.value || '').trim().toLowerCase();
+      const visibleOrders = filterVal
+        ? currentMedicineOrders.filter(m => (m.medicine_name || '').toLowerCase().includes(filterVal) || (m.brand_name || '').toLowerCase().includes(filterVal))
+        : currentMedicineOrders;
+      if (!visibleOrders.length) {
+        el.innerHTML = '<p style="color:var(--slate-light)">No medicines match that filter.</p>';
+        return;
+      }
+      el.innerHTML = visibleOrders.map(m => {
         const locked = m.status === 'paid' || m.status === 'dispensed';
         const checkboxLocked = locked;
         const notInCatalog = m.included && m.status === 'advised' && !m.catalog_medicine_id;
@@ -1159,9 +1178,11 @@
             <div style="font-size:12px;color:var(--slate)">${sanitize(m.category || '—')} · ${sanitize(m.dosage_forms || '—')}</div>
           </div>
           <div style="font-size:13px;min-width:80px">Stock: <strong>${m.stock_quantity != null ? m.stock_quantity : '—'}</strong></div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">View Batches</button>
-            <button class="btn btn-primary btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Stock</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="openEditModal(${JSON.stringify(m).replace(/"/g, '&quot;')})">Edit</button>
+            ${!m.brand_name && !m.parent_medicine_id ? `<button class="btn btn-outline btn-sm" onclick="openAddBrandModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Brand</button>` : ''}
+            <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">View Batches</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">+ Add Stock</button>
           </div>
         </div>
       `).join('');
@@ -1199,19 +1220,19 @@
       } catch (e) { errEl.textContent = e.message; }
     }
 
-    async function openBatchesModal(medicineId, medicineName) {
+    async function openBatchesModal(medicineId, medicineName, packSize) {
       document.getElementById('batches-medicine-name').textContent = medicineName;
       document.getElementById('batches-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
       document.getElementById('modal-batches').classList.add('open');
       try {
         const batches = await api("GET", `/admin/medicines/${medicineId}/batches`);
-        renderBatches(batches, medicineId, medicineName);
+        renderBatches(batches, medicineId, medicineName, packSize);
       } catch (e) {
         document.getElementById('batches-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
       }
     }
 
-    function renderBatches(batches, medicineId, medicineName) {
+    function renderBatches(batches, medicineId, medicineName, packSize) {
       const el = document.getElementById('batches-list');
       if (!batches.length) {
         el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No stock batches recorded yet.</p>';
@@ -1234,18 +1255,32 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               ${badge}
-              <button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}')">Remove</button>
+              <button class="btn btn-outline btn-sm" onclick='editBatch(${JSON.stringify(b)}, ${medicineId}, "${medicineName.replace(/"/g, "&quot;")}", ${packSize})'>Edit</button>
+              <button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Remove</button>
             </div>
           </div>
         `;
       }).join('');
     }
 
-    async function deleteBatch(batchId, medicineId, medicineName) {
+    function editBatch(batch, medicineId, medicineName, packSize) {
+      currentStockMedicineId = medicineId;
+      currentStockPackSize = packSize || 1;
+      editingBatchId = batch.id;
+      document.getElementById('stock-medicine-name').textContent = medicineName + ' (edit batch)';
+      document.getElementById('stock-qty').value = Math.round(batch.quantity / currentStockPackSize);
+      document.getElementById('stock-expiry').value = batch.expiry_date || '';
+      document.getElementById('stock-batch-number').value = batch.batch_number || '';
+      document.getElementById('stock-modal-err').textContent = '';
+      document.getElementById('modal-batches').classList.remove('open');
+      document.getElementById('modal-add-stock').classList.add('open');
+    }
+
+    async function deleteBatch(batchId, medicineId, medicineName, packSize) {
       try {
         await api("DELETE", `/admin/medicines/batches/${batchId}`);
         toast('Batch removed.', 'success');
-        openBatchesModal(medicineId, medicineName);
+        openBatchesModal(medicineId, medicineName, packSize);
         loadStockMedicines();
       } catch (e) { toast(e.message, 'error'); }
     }

@@ -507,15 +507,11 @@
             </div>` : ""}
             ${(testOrdersByConsultation[v.id] || []).length ? `<div class="detail-section">
               <div class="detail-label">Lab Reports</div>
-              <div style="display:flex;flex-wrap:wrap;gap:8px">
-                ${(testOrdersByConsultation[v.id] || []).map(o => `
-                  <span class="test-pill" style="display:flex;align-items:center;gap:6px">
-                    ${o.test_name}
-                    ${o.status === 'completed'
-                      ? `<button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick="downloadTestReport(${o.id})">View Report</button>`
-                      : `<span class="badge badge-grey" style="font-size:10px">${o.status.replace('_',' ')}</span>`}
-                  </span>
-                `).join("")}
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                ${(testOrdersByConsultation[v.id] || []).map(o => `<span class="test-pill">${o.test_name}${o.status !== 'completed' ? ` <span class="badge badge-grey" style="font-size:10px">${o.status.replace('_',' ')}</span>` : ''}</span>`).join("")}
+                ${(testOrdersByConsultation[v.id] || []).every(o => o.status === 'completed')
+                  ? `<button class="btn btn-outline btn-sm" onclick="downloadTestReport([${(testOrdersByConsultation[v.id] || []).map(o => o.id).join(',')}])">View Combined Report</button>`
+                  : ''}
               </div>
             </div>` : ""}
             ${v.advice ? `<div class="detail-section"><div class="detail-label">Advice</div><div class="detail-value">${v.advice}</div></div>` : ""}
@@ -529,16 +525,22 @@
       }
     }
 
-    async function downloadTestReport(orderId) {
+    async function downloadTestReport(orderIds) {
+      const ids = Array.isArray(orderIds) ? orderIds : [orderIds];
+      const w = window.open('', '_blank');
       try {
-        const response = await fetch(`${BASE}/lab/orders/${orderId}/report`, {
+        const response = await fetch(`${BASE}/lab/reports/combined?order_ids=${ids.join(',')}`, {
           headers: { "Authorization": `Bearer ${getToken()}` }
         });
-        if (!response.ok) throw new Error("Report not found");
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => null);
+          throw new Error(errBody?.detail || "Report not found");
+        }
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
-        window.open(url, "_blank");
+        if (w) w.location = url; else window.open(url, "_blank");
       } catch (e) {
+        if (w) w.document.write(`<p style="font-family:sans-serif;padding:20px;color:#c0392b">${e.message}</p>`);
         toast("Could not load report", "error");
       }
     }

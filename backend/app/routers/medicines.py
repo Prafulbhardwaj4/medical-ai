@@ -237,14 +237,13 @@ def add_medicine_brand(
     return serialize(brand_row)
 
 
-@router.patch("/{medicine_id}")
 def update_medicine(
     medicine_id: int,
     payload: MedicineIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    require_admin(current_doctor)
+    require_admin_or_pharmacy(current_doctor)
 
     medicine = db.query(HospitalMedicine).filter(
         HospitalMedicine.id == medicine_id,

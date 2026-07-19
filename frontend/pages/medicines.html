@@ -499,6 +499,7 @@
         </div>
       </div>
       <div id="m-stock-info" class="stock-info-note" style="margin-bottom:14px"></div>
+      <div id="m-brands-list" style="margin-bottom:14px"></div>
 
       <div id="pricing-fields-strip" style="display:flex;gap:12px;margin-bottom:6px">
         <div style="flex:1">
@@ -804,6 +805,7 @@
     let expiringMedicineIds = new Set();
     let lowStockMedicineIds = new Set();
 
+    let medicinesCache = [];
     async function loadMedicines() {
       try {
         const params = new URLSearchParams();
@@ -821,6 +823,7 @@
           api("GET", "/admin/medicines/expiring?within_days=30").catch(() => []),
           api("GET", "/admin/medicines/low-stock").catch(() => [])
         ]);
+        medicinesCache = items;
         expiringMedicineIds = new Set(expiring.map(e => e.medicine_id));
         lowStockMedicineIds = new Set(lowStock.map(l => l.medicine_id));
         renderMedicines(items);
@@ -982,9 +985,25 @@
       showStripPricing(isDivisible);
       document.getElementById('m-strength').value = m.strength || '';
       document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER[document.getElementById('m-form-select').value] || 'e.g. 500mg';
+      document.getElementById('m-strength').onblur = function() {
+        const v = this.value.trim();
+        if (v && /^\d+(\.\d+)?$/.test(v)) this.value = v + 'mg';
+      };
 
       document.getElementById('m-schedule').value = m.schedule || 'otc';
       document.getElementById('m-stock-info').innerHTML = `Current stock: <strong>${m.stock_quantity != null ? m.stock_quantity : 0}</strong> — use "+ Add Stock" on the medicine card to add more.`;
+      const rootId = m.parent_medicine_id || m.id;
+      const brandRows = medicinesCache.filter(x => (x.parent_medicine_id || x.id) === rootId && x.id !== rootId);
+      const brandsListEl = document.getElementById('m-brands-list');
+      if (brandRows.length) {
+        brandsListEl.innerHTML = `<label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Brands added</label>` +
+          brandRows.map(b => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--smoke);border-radius:6px;margin-bottom:6px;font-size:13px">
+            <span>${sanitize(b.brand_name || '')}</span>
+            <span style="color:var(--slate)">Rs. ${b.price_per_pack != null ? b.price_per_pack : '—'} · stock ${b.stock_quantity != null ? b.stock_quantity : 0}</span>
+          </div>`).join('');
+      } else {
+        brandsListEl.innerHTML = '';
+      }
       currentEditMedicineId = m.id;
       document.getElementById('m-pack-size').value = m.pack_size || '';
       document.getElementById('m-price-per-pack').value = m.price_per_pack != null ? m.price_per_pack : '';

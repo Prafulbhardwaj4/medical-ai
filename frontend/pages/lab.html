@@ -1181,12 +1181,15 @@
         const response = await fetch(`${BASE}/lab/reports/combined?order_ids=${orderIds.join(',')}`, {
           headers: { "Authorization": `Bearer ${getToken()}` }
         });
-        if (!response.ok) throw new Error('Could not generate report');
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => null);
+          throw new Error(errBody?.detail || 'Could not generate report');
+        }
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         if (w) w.location = url; else window.open(url, "_blank");
       } catch (e) {
-        if (w) w.close();
+        if (w) w.document.write(`<p style="font-family:sans-serif;padding:20px;color:#c0392b">${e.message}</p>`);
         toast(e.message, 'error');
       }
     }
