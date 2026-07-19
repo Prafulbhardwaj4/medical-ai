@@ -192,6 +192,19 @@
       </div>
 
       <div class="mobile-section active" id="section-home">
+
+      <div class="card" id="expected-today-card" style="margin-bottom:20px">
+        <div class="card-header">
+          <h2>Expected Today (Health Portal)</h2>
+        </div>
+        <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
+          Patients who booked ahead or reserved a queue-from-home slot for today. This does not change how you check anyone in — it's just a heads-up.
+        </p>
+        <div id="expected-today-list">
+          <p style="color:var(--slate-light);font-size:13px">Loading...</p>
+        </div>
+      </div>
+
       <div class="card">
 
         <!-- STEP 1: Search / Select / New -->
@@ -1434,6 +1447,31 @@
     }
 
     loadRecAttendance();
+    loadExpectedToday();
+
+    async function loadExpectedToday() {
+      const el = document.getElementById("expected-today-list");
+      try {
+        const appts = await api("GET", "/portal-appointments-staff/today");
+        if (!appts.length) {
+          el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No portal bookings for today.</p>`;
+          return;
+        }
+        el.innerHTML = appts.map(a => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-weight:500">${sanitize(a.patient_name || 'Name not linked yet')}</div>
+              <div style="font-size:12px;color:var(--slate-light)">
+                ${a.type === 'queue_home' ? 'Queue from home' : 'Booked appointment'} · ${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
+                ${a.notes ? ' · ' + sanitize(a.notes) : ''}
+              </div>
+            </div>
+            <span class="badge badge-teal">${a.status}</span>
+          </div>`).join('');
+      } catch (e) {
+        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
 
     loadAllPatients();
     loadPendingPayments();
