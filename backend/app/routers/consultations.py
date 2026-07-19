@@ -678,30 +678,16 @@ def confirm_prescription(
                 suffix += 1
             token_number = f"{token_number}-{suffix}"
     else:
-        # Fallback: no check-in exists yet (shouldn't normally happen), create one now
-        hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
-        hospital_code = hospital.hospital_code if hospital else "GEN"
-        prefix = hospital_code.replace("-", "")[:4].upper()
-        date_part = ist_today().strftime("%d%m%y")
-        while True:
-            count = db.query(Checkin).filter(
-                Checkin.hospital_id == current_doctor.hospital_id,
-                Checkin.visit_date == ist_today()
-            ).count() + 1
-            token_number = f"{prefix}-{date_part}-{count:03d}"
-            if not db.query(Checkin).filter(Checkin.token_number == token_number).first():
-                break
-
-        fallback_checkin = Checkin(
-            hospital_id=current_doctor.hospital_id,
-            patient_id=consultation.patient_id,
-            token_number=token_number,
-            issue_category="General OPD",
-            doctor_id=current_doctor.id,
-            created_by=current_doctor.id,
-            visit_date=ist_today()
+        # No check-in exists for today — this happens when a doctor opens a
+        # patient directly from their own patient list instead of the queue.
+        # Never silently create a fee-free checkin here: that was letting a
+        # consultation get confirmed without the consultation fee ever being
+        # charged. Require the patient to be checked in through reception
+        # first, same as the normal flow.
+        raise HTTPException(
+            status_code=400,
+            detail="This patient hasn't been checked in today. Send them to reception to check in and pay the consultation fee first."
         )
-        db.add(fallback_checkin)
 
     if todays_checkin and todays_checkin.vitals_data:
         try:

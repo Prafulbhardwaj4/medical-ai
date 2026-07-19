@@ -517,7 +517,7 @@ def add_medicine_order(
         hospital_id=current_doctor.hospital_id,
         catalog_medicine_id=catalog_item.id,
         medicine_name=catalog_item.generic_name,
-        brand_name=catalog_item.brand_names,
+        brand_name=catalog_item.brand_name,
         unit_price=catalog_item.price,
         quantity=payload.quantity,
         included=True,

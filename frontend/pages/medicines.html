@@ -915,7 +915,7 @@
           </div>
           <div class="item-card-actions">
             <button class="btn btn-add-stock btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">+ Add Stock</button>
-            <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">View Batches</button>
+            <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">View Batches</button>
             ${!m.brand_name ? `<button class="btn btn-outline btn-sm" onclick="openAddBrandModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Brand</button>` : ''}
             ${doc.role !== 'pharmacy' ? `
             <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m)})'>Edit</button>
@@ -1098,19 +1098,19 @@
       } catch (e) { errEl.textContent = e.message; }
     }
 
-    async function openBatchesModal(medicineId, medicineName) {
+    async function openBatchesModal(medicineId, medicineName, packSize) {
       document.getElementById('batches-medicine-name').textContent = medicineName;
       document.getElementById('batches-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
       document.getElementById('modal-batches').classList.add('open');
       try {
         const batches = await api("GET", `/admin/medicines/${medicineId}/batches`);
-        renderBatches(batches, medicineId, medicineName);
+        renderBatches(batches, medicineId, medicineName, packSize);
       } catch (e) {
         document.getElementById('batches-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
       }
     }
 
-    function renderBatches(batches, medicineId, medicineName) {
+    function renderBatches(batches, medicineId, medicineName, packSize) {
       const el = document.getElementById('batches-list');
       if (!batches.length) {
         el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No stock batches recorded yet.</p>';
@@ -1133,18 +1133,17 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               ${badge}
-              <button class="btn btn-outline btn-sm" onclick='editBatch(${JSON.stringify(b)}, ${medicineId}, "${medicineName.replace(/"/g, "&quot;")}")'>Edit</button>
-              <button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}')">Remove</button>
+              <button class="btn btn-outline btn-sm" onclick='editBatch(${JSON.stringify(b)}, ${medicineId}, "${medicineName.replace(/"/g, "&quot;")}", ${packSize})'>Edit</button>
+              <button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Remove</button>
             </div>
           </div>
         `;
       }).join('');
     }
 
-    function editBatch(batch, medicineId, medicineName) {
-      const medicine = allMedicines.find(m => m.id === medicineId);
+    function editBatch(batch, medicineId, medicineName, packSize) {
       currentStockMedicineId = medicineId;
-      currentStockPackSize = (medicine && medicine.pack_size) || 1;
+      currentStockPackSize = packSize || 1;
       editingBatchId = batch.id;
       document.getElementById('stock-medicine-name').textContent = medicineName + ' (editing batch)';
       document.getElementById('stock-qty').value = Math.round(batch.quantity / currentStockPackSize);
@@ -1155,11 +1154,11 @@
       document.getElementById('modal-add-stock').classList.add('open');
     }
 
-    async function deleteBatch(batchId, medicineId, medicineName) {
+    async function deleteBatch(batchId, medicineId, medicineName, packSize) {
       try {
         await api("DELETE", `/admin/medicines/batches/${batchId}`);
         toast('Batch removed.', 'success');
-        openBatchesModal(medicineId, medicineName);
+        openBatchesModal(medicineId, medicineName, packSize);
         loadMedicines();
         loadExpiringSoon();
       } catch (e) { toast(e.message, 'error'); }

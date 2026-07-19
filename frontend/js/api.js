@@ -263,9 +263,10 @@ function ensureEditDetailsModal() {
     <div class="modal-overlay" id="modal-edit-details">
       <div class="modal" style="max-width:420px">
         <div class="modal-header">
-          <h2>Edit My Details</h2>
+          <h2>Settings</h2>
           <button class="modal-close" onclick="closeEditDetailsModal()">&times;</button>
         </div>
+        <div style="font-size:13px;font-weight:600;color:var(--slate);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.3px">Edit My Details</div>
         <div style="margin-bottom:12px">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Name</label>
           <input class="form-control" id="ed-name" />
