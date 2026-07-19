@@ -80,7 +80,6 @@
         <!-- SET PASSWORD / REGISTER FORM (patients, first login only) -->
         <div id="form-register" style="display:none">
           <div style="text-align:center;margin-bottom:20px">
-            <h2 style="margin-bottom:4px">Set your password</h2>
             <p style="color:var(--slate);font-size:13px">This is your first time signing in. Choose a new password to finish registering.</p>
           </div>
           <div class="form-group">
@@ -160,6 +159,7 @@
             pendingPatientPhone = identifier;
             document.getElementById("form-login").style.display = "none";
             document.getElementById("form-register").style.display = "block";
+            document.getElementById("auth-subtitle").textContent = "Set your password";
           } else {
             saveSession(json.access_token, json.doctor);
             redirectByRole(json.doctor.role);

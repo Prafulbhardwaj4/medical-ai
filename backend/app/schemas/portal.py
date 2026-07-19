@@ -83,6 +83,7 @@ class BookAppointmentIn(BaseModel):
 class AppointmentOut(BaseModel):
     id: int
     hospital_id: int
+    hospital_name: Optional[str] = None
     doctor_id: Optional[int]
     type: str
     requested_time: datetime
@@ -91,6 +92,54 @@ class AppointmentOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class DashboardStatsOut(BaseModel):
+    profile_count: int
+    consultation_count: int
+    visit_count: int
+
+
+class ProfileSummaryOut(BaseModel):
+    id: int  # profile_link_id
+    patient_id: int
+    hospital_id: int
+    hospital_name: str
+    display_name: str
+    relation: str
+    visit_count: int
+
+
+class VisitOut(BaseModel):
+    checkin_id: int
+    token_number: str
+    visit_date: str
+    hospital_name: str
+    doctor_name: Optional[str]
+    patient_name: str
+    has_prescription: bool
+    has_invoice: bool
+    test_count: int
+
+
+class VisitTestOut(BaseModel):
+    id: int
+    test_name: str
+    status: str
+
+
+class VisitDetailOut(BaseModel):
+    checkin_id: int
+    token_number: str
+    visit_date: str
+    hospital_name: str
+    doctor_name: Optional[str]
+    patient_name: str
+    consultation_id: Optional[int]
+    diagnosis: Optional[str]
+    invoice_id: Optional[int]
+    invoice_total: Optional[float]
+    tests: List[VisitTestOut]
 
 class CompleteRegisterIn(BaseModel):
     phone: str

@@ -124,14 +124,15 @@ function toast(msg, type = "info") {
 function fillTopbar() {
   const doc = getDoctor();
   if (!doc) return;
+  const fullName = doc.title ? `${doc.title} ${doc.name}` : doc.name;
   const el = document.getElementById("topbar-doctor-name");
-  if (el) el.textContent = `${doc.title} ${doc.name}`;
+  if (el) el.textContent = fullName;
   const cl = document.getElementById("topbar-clinic");
-  if (cl) cl.textContent = doc.clinic_name;
+  if (cl) cl.textContent = doc.clinic_name || "";
   const sb = document.getElementById("sidebar-doctor-name");
-  if (sb) sb.textContent = `${doc.title} ${doc.name}`;
+  if (sb) sb.textContent = fullName;
   const pmName = document.getElementById("profile-menu-name");
-  if (pmName) pmName.textContent = `${doc.title} ${doc.name}`;
+  if (pmName) pmName.textContent = fullName;
   const pmClinic = document.getElementById("profile-menu-clinic");
   if (pmClinic) pmClinic.textContent = doc.clinic_name || "";
 }
