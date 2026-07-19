@@ -353,12 +353,183 @@
     </div>
   </div>
 
+  <!-- Add/Edit Medicine Modal -->
+  <div class="modal-overlay" id="modal-medicine">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="medicine-modal-title">Add Medicine</h2>
+        <button class="modal-close" onclick="closeMedicineModal()">×</button>
+      </div>
+      <input type="hidden" id="m-id" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Generic Name</label>
+      <input class="form-control" id="m-generic" placeholder="e.g. Paracetamol" style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Brand Names</label>
+      <input class="form-control" id="m-brands" placeholder="Comma separated, e.g. Crocin, Dolo" style="margin-bottom:14px" />
+
+      <div style="display:flex;gap:12px;margin-bottom:6px">
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Category</label>
+          <select class="form-control" id="m-category-select" onchange="onCategorySelectChange()">
+            <option value="Analgesic">Analgesic</option>
+            <option value="Antibiotic">Antibiotic</option>
+            <option value="Antipyretic">Antipyretic</option>
+            <option value="Antihistamine">Antihistamine</option>
+            <option value="Antacid/PPI">Antacid/PPI</option>
+            <option value="Antidiabetic">Antidiabetic</option>
+            <option value="Antihypertensive">Antihypertensive</option>
+            <option value="Antiviral">Antiviral</option>
+            <option value="Antifungal">Antifungal</option>
+            <option value="Anxiolytic/Sedative">Anxiolytic/Sedative</option>
+            <option value="Cardiac">Cardiac</option>
+            <option value="Corticosteroid">Corticosteroid</option>
+            <option value="NSAID">NSAID</option>
+            <option value="Vitamin/Supplement">Vitamin/Supplement</option>
+            <option value="Vaccine">Vaccine</option>
+            <option value="Other">Other (type below)</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Dosage Form</label>
+          <select class="form-control" id="m-form-select" onchange="onDosageFormChange()">
+            <option value="Tablet">Tablet</option>
+            <option value="Capsule">Capsule</option>
+            <option value="Sachet">Sachet</option>
+            <option value="Suppository">Suppository</option>
+            <option value="Patch">Patch</option>
+            <option value="Syrup">Syrup</option>
+            <option value="Suspension">Suspension</option>
+            <option value="Injection">Injection</option>
+            <option value="Drops">Drops</option>
+            <option value="Ointment">Ointment</option>
+            <option value="Cream">Cream</option>
+            <option value="Gel">Gel</option>
+            <option value="Lotion">Lotion</option>
+            <option value="Inhaler">Inhaler</option>
+            <option value="Spray">Spray</option>
+            <option value="Powder">Powder</option>
+            <option value="Other">Other (type below)</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:14px">
+        <input class="form-control" id="m-category" placeholder="Type category…" style="flex:1;display:none" />
+        <input class="form-control" id="m-form" placeholder="Type dosage form…" style="flex:1;display:none" />
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:8px">
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Strength</label>
+          <input class="form-control" id="m-strength" placeholder="e.g. 500mg" />
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Schedule</label>
+          <select class="form-control" id="m-schedule">
+            <option value="otc">OTC</option>
+            <option value="h">H</option>
+            <option value="h1">H1</option>
+            <option value="x">X</option>
+          </select>
+        </div>
+      </div>
+      <div id="m-stock-info" class="stock-info-note" style="margin-bottom:14px"></div>
+      <div id="m-brands-list" style="margin-bottom:14px"></div>
+
+      <div id="pricing-fields-strip" style="display:flex;gap:12px;margin-bottom:6px">
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Units per Strip</label>
+          <input class="form-control" id="m-pack-size" type="number" min="1" step="1" placeholder="e.g. 10" oninput="updateComputedPrice()" />
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Price per Strip (Rs.)</label>
+          <input class="form-control" id="m-price-per-pack" type="number" min="0" step="0.01" placeholder="e.g. 25" oninput="updateComputedPrice()" />
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Bill By</label>
+          <select class="form-control" id="m-billing-mode">
+            <option value="per_unit">Per Tablet</option>
+            <option value="per_pack">Per Full Strip</option>
+          </select>
+        </div>
+      </div>
+      <div id="pricing-fields-single" style="display:none;margin-bottom:6px">
+        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Price (Rs.)</label>
+        <input class="form-control" id="m-price-per-pack-single" type="number" min="0" step="0.01" placeholder="e.g. 60" oninput="updateComputedPrice()" />
+      </div>
+      <p id="computed-price-hint" style="font-size:12px;color:var(--slate);margin:0 0 14px"></p>
+
+      <div style="display:flex;gap:12px;margin-bottom:14px">
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GST % (optional)</label>
+          <input class="form-control" id="m-gst" type="number" min="0" step="0.01" placeholder="e.g. 12 — leave blank for none" />
+        </div>
+        <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Low Stock Alert At</label>
+          <input class="form-control" id="m-low-stock-threshold" type="number" min="0" step="1" placeholder="25" />
+        </div>
+      </div>
+
+      <div class="err-msg" id="medicine-modal-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="submitMedicineForm()">Save</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeMedicineModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Preview Modal -->
+  <div class="modal-overlay" id="modal-upload-preview">
+    <div class="modal" style="max-width:900px;width:95%">
+      <div class="modal-header">
+        <h2>Review Extracted Medicines</h2>
+        <button class="modal-close" onclick="closeUploadPreview()">×</button>
+      </div>
+      <p style="color:var(--slate);font-size:13px;margin-bottom:14px">Edit any field before confirming. Rows are not saved until you click Confirm & Save All.</p>
+      <div id="upload-loading" style="display:none;padding:30px;text-align:center;color:var(--slate)">Extracting medicines, please wait…</div>
+      <div id="upload-preview-table" style="max-height:50vh;overflow-y:auto"></div>
+      <div class="err-msg" id="upload-modal-err" style="margin:12px 0"></div>
+      <div style="display:flex;gap:12px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmBulkImport()">Confirm & Save All</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeUploadPreview()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Brand Modal -->
+  <div class="modal-overlay" id="modal-add-brand">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Add Brand — <span id="brand-medicine-name"></span></h2>
+        <button class="modal-close" onclick="closeAddBrandModal()">×</button>
+      </div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:14px">Category, form and strength are copied from
+        the medicine above — just add the brand name and its price. It gets its own stock and batches.</p>
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Brand Name</label>
+      <input class="form-control" id="brand-name-input" placeholder="e.g. Dolo" style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Price per Pack/Unit
+        (Rs.)</label>
+      <input class="form-control" id="brand-price-input" type="number" min="0" step="0.01" placeholder="e.g. 30"
+        style="margin-bottom:14px" />
+      <div class="err-msg" id="brand-modal-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="submitAddBrand()">Add Brand</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeAddBrandModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Documents / Bills Modal -->
   <div class="modal-overlay" id="modal-documents">
     <div class="modal" style="max-width:600px">
       <div class="modal-header">
         <h2>Documents — <span id="doc-patient-name"></span></h2>
         <button class="modal-close" onclick="closeDocumentsModal()">×</button>
+      </div>
+      <div class="doc-filter-chips" id="doc-filter-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="doc-filter-chip active" data-type="all" onclick="setDocFilter('all')">All</button>
+        <button class="doc-filter-chip" data-type="token_slip" onclick="setDocFilter('token_slip')">Token Slips</button>
+        <button class="doc-filter-chip" data-type="prescription" onclick="setDocFilter('prescription')">Prescriptions</button>
+        <button class="doc-filter-chip" data-type="test_report" onclick="setDocFilter('test_report')">Test Reports</button>
+        <button class="doc-filter-chip" data-type="invoice" onclick="setDocFilter('invoice')">Invoices</button>
       </div>
       <div id="documents-list" style="max-height:60vh;overflow-y:auto"></div>
     </div>
@@ -952,17 +1123,33 @@
       invoice: "🧾 Invoice"
     };
 
+    let allDocuments = [];
+    let currentDocFilter = 'all';
+
+    function parseDocDate(d) {
+      return new Date(d.date && /[+-]\d\d:\d\d$|Z$/.test(d.date) ? d.date : d.date + "+05:30");
+    }
+
     async function openDocumentsModal(patientId, patientName) {
       window._docModalPatientId = patientId;
       document.getElementById('doc-patient-name').textContent = patientName;
       document.getElementById('documents-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
       document.getElementById('modal-documents').classList.add('open');
+      currentDocFilter = 'all';
+      document.querySelectorAll('.doc-filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === 'all'));
       try {
         const docs = await api("GET", `/patients/${patientId}/documents`);
-        renderDocuments(docs);
+        allDocuments = docs.slice().sort((a, b) => parseDocDate(b) - parseDocDate(a));
+        renderDocuments(allDocuments);
       } catch (e) {
         document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
       }
+    }
+
+    function setDocFilter(type) {
+      currentDocFilter = type;
+      document.querySelectorAll('.doc-filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === type));
+      renderDocuments(type === 'all' ? allDocuments : allDocuments.filter(d => d.type === type));
     }
 
     function closeDocumentsModal() {
@@ -972,7 +1159,9 @@
     function renderDocuments(docs) {
       const el = document.getElementById('documents-list');
       if (!docs.length) {
-        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No documents yet for this patient.</p>';
+        el.innerHTML = currentDocFilter === 'all'
+          ? '<p style="color:var(--slate-light);padding:12px 0">No documents yet for this patient.</p>'
+          : '<p style="color:var(--slate-light);padding:12px 0">No documents match this filter.</p>';
         return;
       }
       el.innerHTML = docs.map(d => {
@@ -990,7 +1179,7 @@
             </div>
             <div style="display:flex;gap:8px">
               ${billAction}
-              <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', ${d.ref_id})">View / Print</button>
+              <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', '${d.type === 'test_report' && d.order_ids ? d.order_ids.join(',') : d.ref_id}')">View / Print</button>
             </div>
           </div>
         `;
@@ -1006,7 +1195,8 @@
         const currentPatientId = window._docModalPatientId;
         if (currentPatientId) {
           const docs = await api("GET", `/patients/${currentPatientId}/documents`);
-          renderDocuments(docs);
+          allDocuments = docs.slice().sort((a, b) => parseDocDate(b) - parseDocDate(a));
+          renderDocuments(currentDocFilter === 'all' ? allDocuments : allDocuments.filter(d => d.type === currentDocFilter));
         }
       } catch (e) {
         toast(e.message, 'error');
@@ -1019,7 +1209,7 @@
       try {
         let url = null;
         if (type === 'prescription') url = `${BASE}/patients/prescriptions/${refId}/download`;
-        else if (type === 'test_report') url = `${BASE}/lab/orders/${refId}/report`;
+        else if (type === 'test_report') url = `${BASE}/lab/reports/combined?order_ids=${refId}`;
         else if (type === 'invoice') url = `${BASE}/billing/invoices/${refId}/pdf`;
         else if (type === 'token_slip') { toast('Reopen this token from reception to reprint the slip.', 'info'); return; }
 
@@ -1186,6 +1376,358 @@
           </div>
         </div>
       `).join('');
+    }
+
+    const DIVISIBLE_FORMS = ['Tablet', 'Capsule', 'Sachet', 'Suppository', 'Patch'];
+    const STRENGTH_PLACEHOLDER = {
+      'Tablet': 'e.g. 500mg', 'Capsule': 'e.g. 250mg', 'Sachet': 'e.g. 5g',
+      'Suppository': 'e.g. 10mg', 'Patch': 'e.g. 25mcg/hr',
+      'Syrup': 'e.g. 125mg/5ml', 'Suspension': 'e.g. 250mg/5ml', 'Drops': 'e.g. 10mg/ml',
+      'Injection': 'e.g. 40mg/ml or 1g/vial',
+      'Ointment': 'e.g. 1% w/w', 'Cream': 'e.g. 1% w/w', 'Gel': 'e.g. 1% w/w', 'Lotion': 'e.g. 1% w/w',
+      'Inhaler': 'e.g. 100mcg/dose', 'Spray': 'e.g. 50mcg/dose', 'Powder': 'e.g. 250mg/sachet',
+      'Other': 'e.g. 500mg or 5mg/ml'
+    };
+    let previewData = [];
+    let currentEditMedicineId = null;
+    let currentBrandParentId = null;
+
+    function onCategorySelectChange() {
+      const select = document.getElementById('m-category-select');
+      const freeInput = document.getElementById('m-category');
+      if (select.value === 'Other') {
+        freeInput.style.display = '';
+        freeInput.value = '';
+        freeInput.focus();
+      } else {
+        freeInput.style.display = 'none';
+        freeInput.value = select.value;
+      }
+    }
+
+    function onDosageFormChange() {
+      const select = document.getElementById('m-form-select');
+      const freeInput = document.getElementById('m-form');
+      if (select.value === 'Other') {
+        freeInput.style.display = '';
+        freeInput.value = '';
+        freeInput.focus();
+        showStripPricing(true);
+      } else {
+        freeInput.style.display = 'none';
+        freeInput.value = select.value;
+        showStripPricing(DIVISIBLE_FORMS.includes(select.value));
+      }
+      document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER[select.value] || 'e.g. 500mg';
+      updateComputedPrice();
+    }
+
+    function showStripPricing(isDivisible) {
+      document.getElementById('pricing-fields-strip').style.display = isDivisible ? 'flex' : 'none';
+      document.getElementById('pricing-fields-single').style.display = isDivisible ? 'none' : 'block';
+    }
+
+    function isCurrentFormDivisible() {
+      return document.getElementById('pricing-fields-strip').style.display !== 'none';
+    }
+
+    function updateComputedPrice() {
+      const hint = document.getElementById('computed-price-hint');
+      if (isCurrentFormDivisible()) {
+        const packSize = parseInt(document.getElementById('m-pack-size').value) || 0;
+        const pricePerPack = parseFloat(document.getElementById('m-price-per-pack').value) || 0;
+        if (packSize > 0 && pricePerPack > 0) {
+          hint.textContent = `≈ Rs.${(pricePerPack / packSize).toFixed(2)} per unit`;
+        } else {
+          hint.textContent = '';
+        }
+      } else {
+        hint.textContent = '';
+      }
+    }
+
+    function openAddModal() {
+      document.getElementById('medicine-modal-title').textContent = 'Add Medicine';
+      document.getElementById('m-id').value = '';
+      document.getElementById('m-generic').value = '';
+      document.getElementById('m-brands').value = '';
+      document.getElementById('m-category-select').value = 'Analgesic';
+      document.getElementById('m-category').style.display = 'none';
+      document.getElementById('m-category').value = '';
+      document.getElementById('m-form-select').value = 'Tablet';
+      document.getElementById('m-form').style.display = 'none';
+      document.getElementById('m-form').value = '';
+      document.getElementById('m-strength').value = '';
+      document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER['Tablet'];
+      document.getElementById('m-schedule').value = 'otc';
+      document.getElementById('m-pack-size').value = '';
+      document.getElementById('m-price-per-pack').value = '';
+      document.getElementById('m-price-per-pack-single').value = '';
+      document.getElementById('m-billing-mode').value = 'per_unit';
+      document.getElementById('m-gst').value = '';
+      document.getElementById('m-low-stock-threshold').value = '25';
+      showStripPricing(true);
+      updateComputedPrice();
+      document.getElementById('m-stock-info').innerHTML = 'Stock can be added from the medicine card once this is saved.';
+      currentEditMedicineId = null;
+      document.getElementById('medicine-modal-err').textContent = '';
+      document.getElementById('modal-medicine').classList.add('open');
+    }
+
+    function openEditModal(m) {
+      document.getElementById('medicine-modal-title').textContent = 'Edit Medicine';
+      document.getElementById('m-id').value = m.id;
+      document.getElementById('m-generic').value = m.generic_name || '';
+      document.getElementById('m-brands').value = m.brand_names || '';
+
+      const knownCategories = Array.from(document.getElementById('m-category-select').options).map(o => o.value);
+      if (m.category && knownCategories.includes(m.category)) {
+        document.getElementById('m-category-select').value = m.category;
+        document.getElementById('m-category').style.display = 'none';
+      } else {
+        document.getElementById('m-category-select').value = 'Other';
+        document.getElementById('m-category').style.display = '';
+        document.getElementById('m-category').value = m.category || '';
+      }
+
+      const knownForms = Array.from(document.getElementById('m-form-select').options).map(o => o.value);
+      const isDivisible = DIVISIBLE_FORMS.includes(m.dosage_forms);
+      if (m.dosage_forms && knownForms.includes(m.dosage_forms)) {
+        document.getElementById('m-form-select').value = m.dosage_forms;
+        document.getElementById('m-form').style.display = 'none';
+      } else {
+        document.getElementById('m-form-select').value = 'Other';
+        document.getElementById('m-form').style.display = '';
+        document.getElementById('m-form').value = m.dosage_forms || '';
+      }
+      showStripPricing(isDivisible);
+      document.getElementById('m-strength').value = m.strength || '';
+      document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER[document.getElementById('m-form-select').value] || 'e.g. 500mg';
+      document.getElementById('m-strength').onblur = function() {
+        const v = this.value.trim();
+        if (v && /^\d+(\.\d+)?$/.test(v)) this.value = v + 'mg';
+      };
+
+      document.getElementById('m-schedule').value = m.schedule || 'otc';
+      document.getElementById('m-stock-info').innerHTML = `Current stock: <strong>${m.stock_quantity != null ? m.stock_quantity : 0}</strong> — use "+ Add Stock" on the medicine card to add more.`;
+      const rootId = m.parent_medicine_id || m.id;
+      const brandRows = stockMedicinesData.filter(x => (x.parent_medicine_id || x.id) === rootId && x.id !== rootId);
+      const brandsListEl = document.getElementById('m-brands-list');
+      if (brandRows.length) {
+        brandsListEl.innerHTML = `<label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Brands added</label>` +
+          brandRows.map(b => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--smoke);border-radius:6px;margin-bottom:6px;font-size:13px">
+            <span>${sanitize(b.brand_name || '')}</span>
+            <span style="color:var(--slate)">Rs. ${b.price_per_pack != null ? b.price_per_pack : '—'} · stock ${b.stock_quantity != null ? b.stock_quantity : 0}</span>
+          </div>`).join('');
+      } else {
+        brandsListEl.innerHTML = '';
+      }
+      currentEditMedicineId = m.id;
+      document.getElementById('m-pack-size').value = m.pack_size || '';
+      document.getElementById('m-price-per-pack').value = m.price_per_pack != null ? m.price_per_pack : '';
+      document.getElementById('m-price-per-pack-single').value = m.price_per_pack != null ? m.price_per_pack : '';
+      document.getElementById('m-billing-mode').value = m.billing_mode || 'per_unit';
+      document.getElementById('m-gst').value = m.gst_percent != null ? m.gst_percent : '';
+      document.getElementById('m-low-stock-threshold').value = m.low_stock_threshold != null ? m.low_stock_threshold : 25;
+      updateComputedPrice();
+      document.getElementById('medicine-modal-err').textContent = '';
+      document.getElementById('modal-medicine').classList.add('open');
+    }
+
+    function closeMedicineModal() {
+      document.getElementById('modal-medicine').classList.remove('open');
+    }
+
+    async function submitMedicineForm() {
+      const id = document.getElementById('m-id').value;
+      const generic_name = document.getElementById('m-generic').value.trim();
+      const errEl = document.getElementById('medicine-modal-err');
+      if (!generic_name) { errEl.textContent = 'Generic name is required.'; return; }
+
+      const categorySelect = document.getElementById('m-category-select').value;
+      const category = categorySelect === 'Other' ? document.getElementById('m-category').value.trim() : categorySelect;
+
+      const formSelect = document.getElementById('m-form-select').value;
+      const dosage_forms = formSelect === 'Other' ? document.getElementById('m-form').value.trim() : formSelect;
+      const strength = document.getElementById('m-strength').value.trim();
+
+      const isDivisible = isCurrentFormDivisible();
+      const pack_size = isDivisible ? (parseInt(document.getElementById('m-pack-size').value) || 1) : 1;
+      const price_per_pack = isDivisible
+        ? (document.getElementById('m-price-per-pack').value ? parseFloat(document.getElementById('m-price-per-pack').value) : null)
+        : (document.getElementById('m-price-per-pack-single').value ? parseFloat(document.getElementById('m-price-per-pack-single').value) : null);
+      const billing_mode = isDivisible ? document.getElementById('m-billing-mode').value : 'per_pack';
+      const gst_percent = document.getElementById('m-gst').value ? parseFloat(document.getElementById('m-gst').value) : null;
+      const low_stock_threshold = document.getElementById('m-low-stock-threshold').value ? parseInt(document.getElementById('m-low-stock-threshold').value) : 25;
+
+      const payload = {
+        generic_name,
+        brand_names: document.getElementById('m-brands').value.trim(),
+        category,
+        dosage_forms,
+        strength,
+        schedule: document.getElementById('m-schedule').value,
+        pack_size,
+        price_per_pack,
+        billing_mode,
+        gst_percent,
+        low_stock_threshold
+      };
+
+      try {
+        if (id) {
+          await api("PATCH", `/admin/medicines/${id}`, payload);
+          toast('Medicine updated.', 'success');
+        } else {
+          await api("POST", `/admin/medicines`, payload);
+          toast('Medicine added.', 'success');
+        }
+        closeMedicineModal();
+        loadStockMedicines();
+      } catch (e) { errEl.textContent = e.message; }
+    }
+
+    function openAddBrandModal(medicineId, medicineName) {
+      currentBrandParentId = medicineId;
+      document.getElementById('brand-medicine-name').textContent = medicineName;
+      document.getElementById('brand-name-input').value = '';
+      document.getElementById('brand-price-input').value = '';
+      document.getElementById('brand-modal-err').textContent = '';
+      document.getElementById('modal-add-brand').classList.add('open');
+    }
+
+    function closeAddBrandModal() {
+      document.getElementById('modal-add-brand').classList.remove('open');
+      currentBrandParentId = null;
+    }
+
+    async function submitAddBrand() {
+      const errEl = document.getElementById('brand-modal-err');
+      const brandName = document.getElementById('brand-name-input').value.trim();
+      if (!brandName) { errEl.textContent = 'Enter a brand name.'; return; }
+      const priceVal = document.getElementById('brand-price-input').value;
+      try {
+        await api("POST", `/admin/medicines/${currentBrandParentId}/brands`, {
+          brand_name: brandName,
+          price_per_pack: priceVal !== '' ? parseFloat(priceVal) : null
+        });
+        toast('Brand added.', 'success');
+        closeAddBrandModal();
+        loadStockMedicines();
+      } catch (e) { errEl.textContent = e.message; }
+    }
+
+    function triggerUpload() {
+      document.getElementById('upload-input').click();
+    }
+
+    async function handleFileSelected(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      event.target.value = '';
+
+      document.getElementById('modal-upload-preview').classList.add('open');
+      document.getElementById('upload-loading').style.display = 'block';
+      document.getElementById('upload-preview-table').innerHTML = '';
+      document.getElementById('upload-modal-err').textContent = '';
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const result = await api("POST", "/admin/medicines/upload", formData, true);
+        previewData = (result.medicines || []).map(m => ({
+          generic_name: m.generic_name || '',
+          brand_names: m.brand_names || '',
+          category: m.category || '',
+          dosage_forms: m.dosage_forms || '',
+          strength: m.strength || '',
+          schedule: m.schedule || 'h',
+          pack_size: m.pack_size || 1,
+          price_per_pack: m.price_per_pack != null ? m.price_per_pack : '',
+          gst_percent: m.gst_percent != null ? m.gst_percent : ''
+        }));
+        renderPreviewTable();
+      } catch (e) {
+        document.getElementById('upload-modal-err').textContent = e.message;
+      } finally {
+        document.getElementById('upload-loading').style.display = 'none';
+      }
+    }
+
+    function previewFieldRow(labels) {
+      return `<div class="preview-field-grid">${labels.map(([label, html]) => `
+        <div>
+          <div class="item-field-label">${label}</div>
+          ${html}
+        </div>
+      `).join('')}</div>`;
+    }
+
+    function renderPreviewTable() {
+      const el = document.getElementById('upload-preview-table');
+      if (!previewData.length) {
+        el.innerHTML = '<p style="color:var(--slate-light)">No medicines extracted from this file.</p>';
+        return;
+      }
+      el.innerHTML = previewData.map((m, i) => `
+        <div class="item-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <span style="font-size:12px;color:var(--slate-light);font-weight:700">ROW ${i + 1}</span>
+            <button class="btn btn-outline btn-sm" onclick="removePreviewRow(${i})">Remove Row</button>
+          </div>
+          ${previewFieldRow([
+            ['Generic Name', `<input class="form-control" value="${sanitize(m.generic_name)}" oninput="previewData[${i}].generic_name=this.value" />`],
+            ['Brand Names', `<input class="form-control" value="${sanitize(m.brand_names)}" oninput="previewData[${i}].brand_names=this.value" />`]
+          ])}
+          ${previewFieldRow([
+            ['Category', `<input class="form-control" value="${sanitize(m.category)}" oninput="previewData[${i}].category=this.value" />`],
+            ['Dosage Form', `<input class="form-control" value="${sanitize(m.dosage_forms)}" oninput="previewData[${i}].dosage_forms=this.value" />`],
+            ['Strength', `<input class="form-control" value="${sanitize(m.strength)}" oninput="previewData[${i}].strength=this.value" />`]
+          ])}
+          ${previewFieldRow([
+            ['Schedule', `<select class="form-control" onchange="previewData[${i}].schedule=this.value">${['otc','h','h1','x'].map(s => `<option value="${s}" ${m.schedule === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}</select>`],
+            ['Units per Pack', `<input class="form-control" type="number" value="${m.pack_size}" oninput="previewData[${i}].pack_size=this.value" />`],
+            ['Price per Pack (Rs.)', `<input class="form-control" type="number" value="${m.price_per_pack}" oninput="previewData[${i}].price_per_pack=this.value" />`],
+            ['GST %', `<input class="form-control" type="number" value="${m.gst_percent}" oninput="previewData[${i}].gst_percent=this.value" />`]
+          ])}
+        </div>
+      `).join('');
+    }
+
+    function removePreviewRow(i) {
+      previewData.splice(i, 1);
+      renderPreviewTable();
+    }
+
+    function closeUploadPreview() {
+      document.getElementById('modal-upload-preview').classList.remove('open');
+      previewData = [];
+    }
+
+    async function confirmBulkImport() {
+      const errEl = document.getElementById('upload-modal-err');
+      if (!previewData.length) { errEl.textContent = 'No rows to save.'; return; }
+
+      const medicines = previewData
+        .filter(m => m.generic_name && m.generic_name.trim())
+        .map(m => ({
+          generic_name: m.generic_name.trim(),
+          brand_names: m.brand_names || '',
+          category: m.category || '',
+          dosage_forms: m.dosage_forms || '',
+          strength: m.strength || '',
+          schedule: m.schedule || 'h',
+          pack_size: m.pack_size !== '' && m.pack_size != null ? parseInt(m.pack_size) : 1,
+          price_per_pack: m.price_per_pack !== '' && m.price_per_pack != null ? parseFloat(m.price_per_pack) : null,
+          gst_percent: m.gst_percent !== '' && m.gst_percent != null ? parseFloat(m.gst_percent) : null
+        }));
+
+      try {
+        await api("POST", "/admin/medicines/bulk-confirm", { medicines });
+        toast(`${medicines.length} medicines saved.`, 'success');
+        closeUploadPreview();
+        loadStockMedicines();
+      } catch (e) { errEl.textContent = e.message; }
     }
 
     function openAddStockModal(medicineId, medicineName) {

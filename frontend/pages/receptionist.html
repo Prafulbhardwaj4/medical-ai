@@ -896,7 +896,7 @@
             </div>
             <div style="display:flex;gap:8px">
               ${billAction}
-              <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', ${d.ref_id})">View / Print</button>
+              <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', '${d.type === 'test_report' && d.order_ids ? d.order_ids.join(',') : d.ref_id}')">View / Print</button>
             </div>
           </div>
         `;
@@ -926,7 +926,7 @@
       try {
         let url = null;
         if (type === 'prescription') url = `${BASE}/patients/prescriptions/${refId}/download`;
-        else if (type === 'test_report') url = `${BASE}/lab/orders/${refId}/report`;
+        else if (type === 'test_report') url = `${BASE}/lab/reports/combined?order_ids=${refId}`;
         else if (type === 'invoice') url = `${BASE}/billing/invoices/${refId}/pdf`;
         else if (type === 'token_slip') { openPastSlipModal(refId); return; }
 

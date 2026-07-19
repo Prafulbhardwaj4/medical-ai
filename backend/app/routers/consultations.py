@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List
+import re
 from app.database import get_db
 from app.models.consultation import Consultation
 from app.models.patient import Patient
@@ -744,6 +745,18 @@ def confirm_prescription(
             HospitalMedicine.is_active == True
         ).all()
 
+        def _strength_prefix(s):
+            # Catalog strength for concentration-based forms is often written as
+            # "125mg/5ml" while the prescribed dosage is just "125mg" — compare
+            # only the leading number+unit so a syrup/suspension/drops entry can
+            # still match instead of silently falling through to unmatched (or,
+            # worse, a same-name tablet/capsule row with a different strength).
+            if not s:
+                return ""
+            s = s.strip().lower().replace(" ", "")
+            m = re.match(r"(\d+(?:\.\d+)?)(mg|mcg|g|ml|iu|%)", s)
+            return m.group(0) if m else s
+
         def match_catalog(name, brand, dosage):
             name_l = (name or "").strip().lower()
             brand_l = (brand or "").strip().lower()
@@ -764,11 +777,11 @@ def confirm_prescription(
                     if (cm.brand_name or "").strip().lower() == brand_l:
                         return cm
 
-            dosage_norm = (dosage or "").strip().lower().replace(" ", "")
+            dosage_norm = _strength_prefix(dosage)
             if dosage_norm:
                 strength_matches = [
                     cm for cm in candidates
-                    if (cm.strength or "").strip().lower().replace(" ", "") == dosage_norm
+                    if _strength_prefix(cm.strength) == dosage_norm
                 ]
                 if strength_matches:
                     # No brand named — pick any matching brand (or the unbranded

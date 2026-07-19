@@ -1186,13 +1186,21 @@ def get_patient_documents(
         TestOrder.status == "completed"
     ).order_by(TestOrder.completed_at.desc()).all()
 
+    grouped_by_consultation = {}
     for t in test_orders:
+        grouped_by_consultation.setdefault(t.consultation_id, []).append(t)
+
+    for consultation_id, orders in grouped_by_consultation.items():
+        orders_sorted = sorted(orders, key=lambda o: o.id)
+        latest_date = max((o.completed_at for o in orders if o.completed_at), default=None)
+        test_names = ", ".join(o.test_name for o in orders_sorted)
         documents.append({
             "type": "test_report",
-            "label": f"Test Report — {t.test_name}",
-            "ref_id": t.id,
+            "label": f"Test Report — {test_names}",
+            "ref_id": orders_sorted[0].id,
+            "order_ids": [o.id for o in orders_sorted],
             "extra": None,
-            "date": t.completed_at.isoformat() if t.completed_at else None
+            "date": latest_date.isoformat() if latest_date else None
         })
 
     documents.sort(key=lambda d: d["date"] or "", reverse=True)
