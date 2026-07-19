@@ -28,9 +28,22 @@ class LoginIn(BaseModel):
     password: str
 
 
+class PatientSessionOut(BaseModel):
+    role: str
+    name: str
+    phone: str
+
+
+class LoginResultOut(BaseModel):
+    status: str
+    access_token: Optional[str] = None
+    doctor: Optional[PatientSessionOut] = None
+
+
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    doctor: Optional[PatientSessionOut] = None
 
 
 class HospitalOut(BaseModel):
