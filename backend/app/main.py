@@ -19,6 +19,12 @@ from app.routers import lab as lab_router
 from app.routers import pharmacy as pharmacy_router
 from app.routers import billing as billing_router
 from app.routers import notifications as notifications_router
+from app.routers import portal_auth as portal_auth_router
+from app.routers import portal_dashboard as portal_dashboard_router
+from app.routers import portal_hospitals as portal_hospitals_router
+from app.routers import portal_appointments as portal_appointments_router
+from app.models.portal import PatientAccount, PatientProfileLink, InviteStatus, OTPCode, Appointment
+from app.routers import portal_appointments_staff as portal_appointments_staff_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 from app.models.audit_log import AuditLog
@@ -60,7 +66,7 @@ app.add_middleware(
         "http://127.0.0.1:5500",
         "https://medical-s-ai.vercel.app",
         "https://medical-ai-mvv1.onrender.com",
-    ],
+        ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +85,11 @@ app.include_router(lab_router.router)
 app.include_router(pharmacy_router.router)
 app.include_router(billing_router.router)
 app.include_router(notifications_router.router)
+app.include_router(portal_auth_router.router)
+app.include_router(portal_dashboard_router.router)
+app.include_router(portal_hospitals_router.router)
+app.include_router(portal_appointments_router.router)
+app.include_router(portal_appointments_staff_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
 

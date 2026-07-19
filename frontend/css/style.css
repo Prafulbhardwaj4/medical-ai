@@ -1139,6 +1139,42 @@ tbody tr:hover { background: var(--smoke); }
   .card-header > div:last-child > .btn { width: 100%; }
 }
 
+/* ── Patient Portal additions ── */
+.hosp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.hosp-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.hosp-card:hover { box-shadow: var(--shadow-sm); border-color: var(--border-mid); }
+.appt-type-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.appt-type-btn {
+  flex: 1;
+  padding: 10px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--slate);
+  background: var(--white);
+}
+.appt-type-btn.active {
+  border-color: var(--teal);
+  background: var(--teal-subtle);
+  color: var(--teal);
+}
+
 /* ── Bottom Tab Nav (mobile) ── */
 .bottom-nav {
   display: none;

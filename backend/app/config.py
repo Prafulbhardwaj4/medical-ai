@@ -18,6 +18,18 @@ class Settings(BaseSettings):
     FAST2SMS_API_KEY: str = ""
     BASE_URL: str = "http://localhost:8000"
 
+    # --- Patient Portal ---
+    PORTAL_INVITE_SECRET: str = "changeme-invite-secret"
+    PORTAL_INVITE_EXPIRE_DAYS: int = 30
+    PORTAL_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
+    PORTAL_LINK_CONFIRM_EXPIRE_HOURS: int = 24
+    PORTAL_FRONTEND_URL: str = "http://localhost:5501"
+
+    # Temporary, pre-launch only: every hospital-registered phone number can
+    # log in to the patient portal for the first time using this password.
+    # Remove this entirely once real OTP delivery (WhatsApp/SMS) is wired up.
+    PORTAL_DEFAULT_TEMP_PASSWORD: str = "Test1234"
+
     class Config:
         env_file = ".env"
 

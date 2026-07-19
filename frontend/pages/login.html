@@ -52,8 +52,8 @@
         <!-- LOGIN FORM -->
         <div id="form-login">
           <div class="form-group">
-            <label class="form-label">Email</label>
-            <input class="form-control" id="login-email" type="email" placeholder="doctor@clinic.com" />
+            <label class="form-label">Email (staff) or Mobile Number (patient)</label>
+            <input class="form-control" id="login-id" type="text" placeholder="doctor@clinic.com or 10-digit mobile" />
           </div>
           <div class="form-group">
             <label class="form-label">Password</label>
@@ -64,6 +64,9 @@
                 style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px"
                 id="login-eye-icon">👁</span>
             </div>
+            <div style="font-size:12px;color:var(--slate-light);margin-top:6px">
+              Patients: if this is your first time, use <strong>Test1234</strong> as your password.
+            </div>
           </div>
 
           <div class="err-msg" id="login-err"></div>
@@ -72,8 +75,28 @@
           </button>
 
           <div style="text-align:center;margin-top:20px;font-size:13px;color:var(--slate-light)">
-            Don't have an account? Contact your hospital admin.
+            Staff: contact your hospital admin. Patients: your number must already have a hospital visit on record.
           </div>
+        </div>
+
+        <!-- SET PASSWORD / REGISTER FORM (patients, first login only) -->
+        <div id="form-register" style="display:none">
+          <div style="text-align:center;margin-bottom:20px">
+            <h2 style="margin-bottom:4px">Set your password</h2>
+            <p style="color:var(--slate);font-size:13px">This is your first time signing in. Choose a new password to finish registering.</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label">New Password</label>
+            <input class="form-control" id="reg-password" type="password" placeholder="At least 6 characters" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirm Password</label>
+            <input class="form-control" id="reg-password-confirm" type="password" placeholder="Re-enter password" />
+          </div>
+          <div class="err-msg" id="register-err"></div>
+          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-register" onclick="doRegister()">
+            Register
+          </button>
         </div>
       </div>
     </div>
@@ -83,6 +106,8 @@
   <script>
     // Redirect if already logged in
     if (getToken()) redirectByRole(getDoctor()?.role);
+
+    let pendingPatientPhone = null;
 
     function toggleLoginPasswordVisibility() {
       const input = document.getElementById("login-password");
@@ -96,41 +121,97 @@
       }
     }
 
+    function isEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+    function isPhone(v) { return /^\d{10}$/.test(v); }
+
     async function doLogin() {
       const btn = document.getElementById("btn-login");
       const err = document.getElementById("login-err");
       err.textContent = "";
-      const verr = validateLogin(
-        document.getElementById("login-email").value,
-        document.getElementById("login-password").value
-      );
-      if (verr) { err.textContent = verr; btn.disabled = false; btn.textContent = "Sign In"; return; }
+
+      const identifier = document.getElementById("login-id").value.trim();
+      const password = document.getElementById("login-password").value;
+
+      if (!identifier) { err.textContent = "Enter your email or mobile number"; return; }
+      if (!password) { err.textContent = "Please enter your password."; return; }
+
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
 
       try {
-        const data = await fetch(`${BASE}/auth/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: document.getElementById("login-email").value.trim(),
-            password: document.getElementById("login-password").value
-          })
-        });
-        const json = await data.json();
-        if (!data.ok) throw new Error(json.detail || "Login failed");
-        saveSession(json.access_token, json.doctor);
-        redirectByRole(json.doctor.role);
+        if (isEmail(identifier)) {
+          const res = await fetch(`${BASE}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: identifier, password })
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.detail || "Login failed");
+          saveSession(json.access_token, json.doctor);
+          redirectByRole(json.doctor.role);
+        } else if (isPhone(identifier)) {
+          const res = await fetch(`${BASE}/portal/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: identifier, password })
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.detail || "Login failed");
+
+          if (json.status === "needs_registration") {
+            pendingPatientPhone = identifier;
+            document.getElementById("form-login").style.display = "none";
+            document.getElementById("form-register").style.display = "block";
+          } else {
+            saveSession(json.access_token, json.doctor);
+            redirectByRole(json.doctor.role);
+          }
+        } else {
+          throw new Error("Enter a valid email address or a 10-digit mobile number");
+        }
       } catch (e) {
         err.textContent = e.message;
+      } finally {
         btn.disabled = false;
         btn.textContent = "Sign In";
       }
     }
 
-    // Enter key support
+    async function doRegister() {
+      const btn = document.getElementById("btn-register");
+      const err = document.getElementById("register-err");
+      err.textContent = "";
+
+      const pw = document.getElementById("reg-password").value;
+      const cpw = document.getElementById("reg-password-confirm").value;
+
+      if (pw.length < 6) { err.textContent = "Password must be at least 6 characters"; return; }
+      if (pw !== cpw) { err.textContent = "Passwords do not match"; return; }
+      if (pw === "Test1234") { err.textContent = "Please choose a different password than the temporary one"; return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const res = await fetch(`${BASE}/portal/auth/register/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: pendingPatientPhone, new_password: pw })
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.detail || "Registration failed");
+        saveSession(json.access_token, json.doctor);
+        redirectByRole(json.doctor.role);
+      } catch (e) {
+        err.textContent = e.message;
+        btn.disabled = false;
+        btn.textContent = "Register";
+      }
+    }
+
     document.addEventListener("keydown", e => {
-      if (e.key === "Enter") doLogin();
+      if (e.key !== "Enter") return;
+      if (document.getElementById("form-register").style.display !== "none") doRegister();
+      else doLogin();
     });
   </script>
 </body>

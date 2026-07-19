@@ -30,7 +30,7 @@ class Doctor(Base):
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True)
 
-    role = Column(Enum(UserRole), default=UserRole.doctor, nullable=False)
+    role = Column(Enum(UserRole, native_enum=False), default=UserRole.doctor, nullable=False)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)

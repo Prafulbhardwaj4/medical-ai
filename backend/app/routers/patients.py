@@ -96,7 +96,56 @@ def create_patient(
         target_label=f"{patient.name} ({patient.patient_uid})"
     )
 
+    _auto_link_portal_profile(db, patient)
+    _auto_complete_matching_appointment(db, patient, current_doctor.hospital_id)
+
     return patient
+
+
+def _auto_complete_matching_appointment(db: Session, patient: Patient, hospital_id: int) -> None:
+    """If this patient had booked ahead or reserved a queue-from-home slot
+    for today at this hospital, mark it completed now that they've actually
+    been checked in. Does not touch the check-in/queue logic itself."""
+    from datetime import datetime, timedelta
+    from app.models.portal import Appointment, AppointmentStatus
+
+    today_start = datetime.combine(now_ist_naive().date(), datetime.min.time())
+    today_end = today_start + timedelta(days=1)
+
+    from app.models.portal import PatientAccount
+    account = db.query(PatientAccount).filter(PatientAccount.phone == patient.phone).first()
+    if not account:
+        return
+
+    for a in db.query(Appointment).filter(
+        Appointment.account_id == account.id,
+        Appointment.hospital_id == hospital_id,
+        Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed]),
+        Appointment.requested_time >= today_start,
+        Appointment.requested_time < today_end,
+    ).all():
+        a.status = AppointmentStatus.completed
+    db.commit()
+
+
+def _auto_link_portal_profile(db: Session, patient: Patient) -> None:
+    """If this phone number already has a registered Health Portal account,
+    link this new hospital record to it automatically — no confirmation
+    step right now since there's no messaging channel yet to confirm via.
+    Revisit before public launch (shared/family numbers can auto-link)."""
+    from app.models.portal import PatientAccount, PatientProfileLink
+
+    account = db.query(PatientAccount).filter(PatientAccount.phone == patient.phone).first()
+    if not account:
+        return
+    existing_link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == patient.id).first()
+    if existing_link:
+        return
+    db.add(PatientProfileLink(
+        account_id=account.id, patient_id=patient.id,
+        relation="self", linked_at=now_ist_naive()
+    ))
+    db.commit()
 
 @router.get("/", response_model=List[PatientSummary])
 def list_patients(
