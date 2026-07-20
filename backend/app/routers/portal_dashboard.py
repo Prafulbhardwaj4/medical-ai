@@ -66,6 +66,38 @@ def list_profiles(account: PatientAccount = Depends(get_current_patient_account)
     return out
 
 
+@router.get("/visits", response_model=list[VisitOut])
+def list_all_visits(account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
+    """Flat list of visits across every linked profile — used for the
+    searchable/filterable Health Records view."""
+    out = []
+    for link in account.profiles:
+        patient = link.patient
+        if not patient:
+            continue
+        hospital = db.query(Hospital).filter(Hospital.id == patient.hospital_id).first()
+        checkins = db.query(Checkin).filter(Checkin.patient_id == patient.id).order_by(Checkin.visit_date.desc()).all()
+        for c in checkins:
+            h = db.query(Hospital).filter(Hospital.id == c.hospital_id).first() or hospital
+            doctor = db.query(Doctor).filter(Doctor.id == c.doctor_id).first()
+            consultation = db.query(Consultation).filter(
+                Consultation.token_number == c.token_number, Consultation.is_voided == False  # noqa: E712
+            ).first()
+            test_count = db.query(TestOrder).filter(TestOrder.consultation_id == consultation.id).count() if consultation else 0
+            out.append(VisitOut(
+                checkin_id=c.id, token_number=c.token_number,
+                visit_date=c.visit_date.isoformat(),
+                hospital_name=h.name if h else "Unknown hospital",
+                doctor_name=f"{doctor.title} {doctor.name}" if doctor else None,
+                patient_name=patient.name,
+                has_prescription=consultation is not None,
+                has_invoice=c.invoice_id is not None,
+                test_count=test_count,
+            ))
+    out.sort(key=lambda v: v.visit_date, reverse=True)
+    return out
+
+
 @router.get("/profiles/{profile_link_id}/visits", response_model=list[VisitOut])
 def list_visits(
     profile_link_id: int,
