@@ -69,7 +69,8 @@ def upgrade():
             sa.Column('slot_date', sa.Date(), nullable=False),
             sa.Column('slot_time', sa.String(), nullable=False),
             sa.Column('period', sa.String(), nullable=False),
-            sa.Column('is_booked', sa.Boolean(), nullable=False, server_default=sa.false()),
+            sa.Column('capacity', sa.Integer(), nullable=False, server_default='1'),
+            sa.Column('booked_count', sa.Integer(), nullable=False, server_default='0'),
             sa.Column('created_at', sa.DateTime(), nullable=True),
             sa.UniqueConstraint('doctor_id', 'slot_date', 'slot_time', name='uq_doctor_slot'),
         )

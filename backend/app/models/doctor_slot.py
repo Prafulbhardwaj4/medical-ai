@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, Boolean, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, UniqueConstraint
 from app.database import Base
 from app.utils.timezone import now_ist_naive
 
@@ -11,7 +11,8 @@ class DoctorSlot(Base):
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     slot_date = Column(Date, nullable=False, index=True)
-    slot_time = Column(String, nullable=False)   # "09:30" 24h
-    period = Column(String, nullable=False)      # morning | afternoon | evening
-    is_booked = Column(Boolean, default=False, nullable=False)
+    slot_time = Column(String, nullable=False)
+    period = Column(String, nullable=False)
+    capacity = Column(Integer, nullable=False, default=1)
+    booked_count = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=now_ist_naive)

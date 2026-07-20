@@ -12,6 +12,42 @@ from app.utils.timezone import now_ist_naive
 router = APIRouter(prefix="/portal-appointments-staff", tags=["portal-appointments-staff"])
 
 
+@router.get("/analytics")
+def appointment_analytics(
+    doctor_id: int = Query(None),
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Paid appointments in the last 45 days, grouped by doctor."""
+    cutoff = now_ist_naive() - timedelta(days=45)
+
+    q = db.query(Appointment).filter(
+        Appointment.hospital_id == current_doctor.hospital_id,
+        Appointment.payment_status == "paid",
+        Appointment.requested_time >= cutoff,
+    )
+    if doctor_id:
+        q = q.filter(Appointment.doctor_id == doctor_id)
+
+    appts = q.all()
+    counts = {}
+    for a in appts:
+        if not a.doctor_id:
+            continue
+        counts[a.doctor_id] = counts.get(a.doctor_id, 0) + 1
+
+    result = []
+    for d_id, count in counts.items():
+        doctor = db.query(Doctor).filter(Doctor.id == d_id).first()
+        result.append({
+            "doctor_id": d_id,
+            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unknown",
+            "appointment_count": count,
+        })
+    result.sort(key=lambda x: x["appointment_count"], reverse=True)
+    return {"total": len(appts), "by_doctor": result}
+
+
 @router.get("/today")
 def list_expected_today(
     doctor_id: int = Query(None),

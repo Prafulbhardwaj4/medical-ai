@@ -99,10 +99,17 @@ class AppointmentOut(BaseModel):
 
 class GenerateSlotsIn(BaseModel):
     doctor_id: Optional[int] = None  # required if caller is admin/sub_admin/super_admin
-    date: str  # "YYYY-MM-DD"
+    start_date: str        # "YYYY-MM-DD"
+    days_count: int = 30   # how many days forward to generate
+    weekdays: List[int]    # 0=Monday ... 6=Sunday — which days of week get slots
     morning_times: List[str] = []
     afternoon_times: List[str] = []
     evening_times: List[str] = []
+    capacity_mode: str = "same"  # "same" | "per_period"
+    capacity_same: int = 1
+    capacity_morning: int = 1
+    capacity_afternoon: int = 1
+    capacity_evening: int = 1
 
 
 class SlotOut(BaseModel):
@@ -110,10 +117,17 @@ class SlotOut(BaseModel):
     slot_date: str
     slot_time: str
     period: str
-    is_booked: bool
+    capacity: int
+    booked_count: int
 
     class Config:
         from_attributes = True
+
+
+class DoctorAppointmentCountOut(BaseModel):
+    doctor_id: int
+    doctor_name: str
+    appointment_count: int
 
 
 class DashboardStatsOut(BaseModel):

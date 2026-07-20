@@ -11,15 +11,26 @@ from app.schemas.portal import HospitalOut
 router = APIRouter(prefix="/portal/hospitals", tags=["portal-hospitals"])
 
 
+@router.get("/states")
+def list_states(db: Session = Depends(get_db)):
+    rows = db.query(Hospital.state).filter(Hospital.is_active == True, Hospital.state.isnot(None)).distinct().all()  # noqa: E712
+    return sorted({r[0] for r in rows if r[0]})
+
+
 @router.get("/cities")
-def list_cities(db: Session = Depends(get_db)):
-    rows = db.query(Hospital.city).filter(Hospital.is_active == True, Hospital.city.isnot(None)).distinct().all()  # noqa: E712
+def list_cities(state: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    q = db.query(Hospital.city).filter(Hospital.is_active == True, Hospital.city.isnot(None))  # noqa: E712
+    if state:
+        q = q.filter(Hospital.state == state)
+    rows = q.distinct().all()
     return sorted({r[0] for r in rows if r[0]})
 
 
 @router.get("", response_model=list[HospitalOut])
-def list_hospitals(city: Optional[str] = Query(None), db: Session = Depends(get_db)):
+def list_hospitals(city: Optional[str] = Query(None), state: Optional[str] = Query(None), db: Session = Depends(get_db)):
     q = db.query(Hospital).filter(Hospital.is_active == True)  # noqa: E712
+    if state:
+        q = q.filter(Hospital.state == state)
     if city:
         q = q.filter(Hospital.city.ilike(f"%{city}%"))
     return q.order_by(Hospital.name).all()
@@ -54,12 +65,22 @@ def list_doctor_slots(hospital_id: int, doctor_id: int, date: str, db: Session =
 
     slots = db.query(DoctorSlot).filter(
         DoctorSlot.hospital_id == hospital_id, DoctorSlot.doctor_id == doctor_id,
-        DoctorSlot.slot_date == slot_date, DoctorSlot.is_booked == False  # noqa: E712
+        DoctorSlot.slot_date == slot_date
     ).order_by(DoctorSlot.slot_time).all()
+
+    def _level(s):
+        if s.booked_count >= s.capacity:
+            return "red"
+        ratio = s.booked_count / s.capacity if s.capacity else 0
+        return "yellow" if ratio >= 0.5 else "green"
 
     grouped = {"morning": [], "afternoon": [], "evening": []}
     for s in slots:
-        grouped[s.period].append({"id": s.id, "time": s.slot_time})
+        grouped[s.period].append({
+            "id": s.id, "time": s.slot_time,
+            "capacity": s.capacity, "booked_count": s.booked_count,
+            "level": _level(s), "full": s.booked_count >= s.capacity,
+        })
     return grouped
 
 

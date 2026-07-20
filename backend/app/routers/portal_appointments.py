@@ -57,10 +57,10 @@ def book_appointment(
         ).first()
         if not slot:
             raise HTTPException(status_code=404, detail="Slot not found")
-        if slot.is_booked:
-            raise HTTPException(status_code=400, detail="This slot has just been booked by someone else. Please pick another.")
+        if slot.booked_count >= slot.capacity:
+            raise HTTPException(status_code=400, detail="This slot just filled up. Please pick another.")
 
-        slot.is_booked = True
+        slot.booked_count += 1
         doctor_id = slot.doctor_id
         requested_time = datetime.combine(slot.slot_date, datetime.strptime(slot.slot_time, "%H:%M").time())
         slot_id = slot.id
@@ -130,8 +130,8 @@ def cancel_appointment(
 
     if appt.slot_id:
         slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.slot_id).first()
-        if slot:
-            slot.is_booked = False
+        if slot and slot.booked_count > 0:
+            slot.booked_count -= 1
 
     appt.status = AppointmentStatus.cancelled
     db.commit()

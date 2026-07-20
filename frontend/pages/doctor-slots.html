@@ -6,6 +6,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — My Availability</title>
   <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .option-card {
+      border: 1.5px solid var(--border); border-radius: 12px; padding: 16px;
+      cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    .option-card.selected { border-color: var(--teal); background: var(--teal-subtle); }
+    .option-card h4 { margin: 0 0 4px; font-size: 14.5px; color: var(--navy); }
+    .option-card p { margin: 0; font-size: 12.5px; color: var(--slate); }
+    .day-chip {
+      padding: 8px 14px; border-radius: 20px; border: 1.5px solid var(--border);
+      font-size: 13px; font-weight: 500; cursor: pointer; background: var(--white);
+    }
+    .day-chip.selected { background: var(--teal); border-color: var(--teal); color: #fff; }
+    .preset-chip {
+      padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border);
+      font-size: 13px; font-weight: 500; cursor: pointer; background: var(--white);
+    }
+    .preset-chip.selected { background: var(--navy); border-color: var(--navy); color: #fff; }
+    .period-block { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    .period-block h4 { margin: 0 0 10px; font-size: 14px; color: var(--navy); }
+  </style>
 </head>
 
 <body>
@@ -60,14 +81,18 @@
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         My Availability
       </a>
+      <a class="nav-item" href="appointments-analytics.html">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 012-2h2a2 2 0 012 2v6m-9 0h14M5 19V9m14 10V5"/></svg>
+        Appointment Analytics
+      </a>
     </nav>
 
     <nav class="bottom-nav">
-      <button class="bottom-nav-item active" data-page="slots" onclick="location.href='doctor-slots.html'">
+      <button class="bottom-nav-item active" onclick="location.href='doctor-slots.html'">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Slots
       </button>
-      <button class="bottom-nav-item" data-page="dashboard" onclick="location.href='dashboard.html'">
+      <button class="bottom-nav-item" onclick="location.href='dashboard.html'">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3"/></svg>
         Dashboard
       </button>
@@ -76,36 +101,129 @@
     <main class="main-content">
       <div style="margin-bottom:20px">
         <h1>My Availability</h1>
-        <p>Set the time slots patients can book through the Health Portal.</p>
+        <p style="color:var(--slate)">Set the time slots patients can book through the Health Portal.</p>
       </div>
 
-      <div class="card" style="margin-bottom:20px" id="doctor-picker-card" style="display:none">
+      <div class="card" id="doctor-picker-card" style="display:none;margin-bottom:20px">
         <div class="form-group" style="max-width:320px">
           <label class="form-label">Doctor</label>
           <select class="form-control" id="pick-doctor"></select>
         </div>
       </div>
 
+      <!-- Step 1: weekday pattern -->
       <div class="card" style="margin-bottom:20px">
-        <div class="card-header"><h2>Add Slots</h2></div>
-        <div class="form-group" style="max-width:220px">
-          <label class="form-label">Date</label>
-          <input class="form-control" type="date" id="slot-date" />
+        <div class="card-header"><h2>1. Which days?</h2></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+          <div class="option-card selected" id="opt-mon-sat" onclick="selectPattern('mon-sat')">
+            <h4>Monday – Saturday</h4>
+            <p>Sundays off</p>
+          </div>
+          <div class="option-card" id="opt-all-week" onclick="selectPattern('all-week')">
+            <h4>All Week</h4>
+            <p>Every day, including Sunday</p>
+          </div>
+          <div class="option-card" id="opt-custom" onclick="selectPattern('custom')">
+            <h4>Custom</h4>
+            <p id="custom-days-summary">Choose specific days</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: times -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><h2>2. Available Times</h2></div>
+
+        <div class="period-block">
+          <h4>Morning</h4>
+          <div style="display:flex;flex-wrap:wrap;gap:8px" id="preset-morning"></div>
+          <div class="form-group" style="margin-top:12px">
+            <label class="form-label">Add custom time (24h, e.g. 09:15)</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-control" id="custom-morning" placeholder="09:15" style="max-width:140px" />
+              <button class="btn btn-outline btn-sm" onclick="addCustomTime('morning')">Add</button>
+            </div>
+          </div>
         </div>
 
-        <div id="period-inputs">
-          ${''}
+        <div class="period-block">
+          <h4>Afternoon</h4>
+          <div style="display:flex;flex-wrap:wrap;gap:8px" id="preset-afternoon"></div>
+          <div class="form-group" style="margin-top:12px">
+            <label class="form-label">Add custom time (24h, e.g. 14:15)</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-control" id="custom-afternoon" placeholder="14:15" style="max-width:140px" />
+              <button class="btn btn-outline btn-sm" onclick="addCustomTime('afternoon')">Add</button>
+            </div>
+          </div>
         </div>
 
+        <div class="period-block">
+          <h4>Evening</h4>
+          <div style="display:flex;flex-wrap:wrap;gap:8px" id="preset-evening"></div>
+          <div class="form-group" style="margin-top:12px">
+            <label class="form-label">Add custom time (24h, e.g. 18:15)</label>
+            <div style="display:flex;gap:8px">
+              <input class="form-control" id="custom-evening" placeholder="18:15" style="max-width:140px" />
+              <button class="btn btn-outline btn-sm" onclick="addCustomTime('evening')">Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: capacity -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><h2>3. Patients Allowed Per Slot</h2></div>
+        <div style="display:flex;gap:10px;margin-bottom:14px">
+          <div class="option-card selected" id="cap-mode-same" style="flex:1" onclick="setCapacityMode('same')">
+            <h4>Same for every slot</h4>
+          </div>
+          <div class="option-card" id="cap-mode-period" style="flex:1" onclick="setCapacityMode('per_period')">
+            <h4>Different per period</h4>
+          </div>
+        </div>
+        <div id="capacity-same-input" class="form-group" style="max-width:200px">
+          <label class="form-label">Patients per slot</label>
+          <input class="form-control" type="number" min="1" id="cap-same" value="1" />
+        </div>
+        <div id="capacity-period-inputs" style="display:none;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:480px">
+          <div class="form-group"><label class="form-label">Morning</label><input class="form-control" type="number" min="1" id="cap-morning" value="1" /></div>
+          <div class="form-group"><label class="form-label">Afternoon</label><input class="form-control" type="number" min="1" id="cap-afternoon" value="1" /></div>
+          <div class="form-group"><label class="form-label">Evening</label><input class="form-control" type="number" min="1" id="cap-evening" value="1" /></div>
+        </div>
+      </div>
+
+      <!-- Step 4: apply -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><h2>4. Apply</h2></div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div class="form-group"><label class="form-label">Starting from</label><input class="form-control" type="date" id="start-date" /></div>
+          <div class="form-group"><label class="form-label">For how many days</label><input class="form-control" type="number" min="1" max="90" id="days-count" value="30" /></div>
+        </div>
         <div class="err-msg" id="gen-err"></div>
-        <button class="btn btn-primary" onclick="generateSlots()">Add Slots</button>
+        <button class="btn btn-primary" onclick="generateSlots()">Generate Slots</button>
       </div>
 
       <div class="card">
-        <div class="card-header"><h2>Slots for Selected Date</h2></div>
-        <div id="slot-list"><p style="color:var(--slate-light)">Pick a date above.</p></div>
+        <div class="card-header">
+          <h2>Preview</h2>
+          <input class="form-control" type="date" id="preview-date" style="max-width:180px" />
+        </div>
+        <div id="slot-list"><p style="color:var(--slate-light)">Pick a date above to preview generated slots.</p></div>
       </div>
     </main>
+  </div>
+
+  <!-- Custom days modal -->
+  <div class="modal-overlay" id="modal-custom-days">
+    <div class="modal" style="max-width:360px">
+      <div class="modal-header">
+        <h2>Choose Days</h2>
+        <button class="modal-close" onclick="closeCustomDaysModal()">&times;</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px" id="custom-days-chips"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:18px" onclick="saveCustomDays()">Done</button>
+    </div>
   </div>
 
   <script src="../js/api.js"></script>
@@ -118,95 +236,166 @@
 
     let targetDoctorId = doc?.role === 'doctor' ? doc.id : null;
 
-    function buildPeriodInputs() {
-      const periods = [["morning", "Morning"], ["afternoon", "Afternoon"], ["evening", "Evening"]];
-      document.getElementById("period-inputs").innerHTML = periods.map(([key, label]) => `
-        <div class="form-group">
-          <label class="form-label">${label} Times (comma-separated, 24h format e.g. 09:00, 09:30, 10:00)</label>
-          <input class="form-control" id="times-${key}" placeholder="e.g. 09:00, 09:30, 10:00" />
-        </div>`).join('');
-    }
-    buildPeriodInputs();
+    const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    let pattern = "mon-sat";
+    let customDays = [0, 1, 2, 3, 4, 5]; // Mon-Sat by default
 
+    function patternWeekdays() {
+      if (pattern === "mon-sat") return [0, 1, 2, 3, 4, 5];
+      if (pattern === "all-week") return [0, 1, 2, 3, 4, 5, 6];
+      return customDays;
+    }
+
+    function selectPattern(p) {
+      pattern = p;
+      ['mon-sat', 'all-week', 'custom'].forEach(k => document.getElementById(`opt-${k}`).classList.toggle('selected', k === p));
+      if (p === 'custom') openCustomDaysModal();
+      else updateCustomSummary();
+    }
+
+    function updateCustomSummary() {
+      if (pattern !== 'custom') { document.getElementById("custom-days-summary").textContent = "Choose specific days"; return; }
+      document.getElementById("custom-days-summary").textContent = customDays.length
+        ? customDays.sort((a,b)=>a-b).map(d => WEEKDAY_LABELS[d]).join(', ')
+        : "No days selected";
+    }
+
+    function openCustomDaysModal() {
+      const wrap = document.getElementById("custom-days-chips");
+      wrap.innerHTML = WEEKDAY_LABELS.map((l, i) => `<button class="day-chip ${customDays.includes(i) ? 'selected' : ''}" data-day="${i}">${l}</button>`).join('');
+      wrap.querySelectorAll('.day-chip').forEach(chip => chip.addEventListener('click', () => chip.classList.toggle('selected')));
+      document.getElementById("modal-custom-days").classList.add("open");
+    }
+    function closeCustomDaysModal() { document.getElementById("modal-custom-days").classList.remove("open"); }
+    function saveCustomDays() {
+      customDays = Array.from(document.querySelectorAll('#custom-days-chips .day-chip.selected')).map(c => parseInt(c.dataset.day));
+      updateCustomSummary();
+      closeCustomDaysModal();
+    }
+
+    // ---------- Preset times (2-hour gaps) ----------
+    const PRESETS = {
+      morning: ["07:00", "09:00", "11:00"],
+      afternoon: ["12:00", "14:00", "16:00"],
+      evening: ["17:00", "19:00", "21:00"],
+    };
+    const selectedTimes = { morning: new Set(), afternoon: new Set(), evening: new Set() };
+    const customTimes = { morning: [], afternoon: [], evening: [] };
+
+    function renderPresets() {
+      ['morning', 'afternoon', 'evening'].forEach(period => {
+        const wrap = document.getElementById(`preset-${period}`);
+        const all = [...PRESETS[period], ...customTimes[period]];
+        wrap.innerHTML = all.map(t => `<div class="preset-chip ${selectedTimes[period].has(t) ? 'selected' : ''}" data-time="${t}" data-period="${period}">${t}</div>`).join('');
+        wrap.querySelectorAll('.preset-chip').forEach(chip => chip.addEventListener('click', () => {
+          const p = chip.dataset.period, t = chip.dataset.time;
+          if (selectedTimes[p].has(t)) selectedTimes[p].delete(t); else selectedTimes[p].add(t);
+          chip.classList.toggle('selected');
+        }));
+      });
+    }
+    renderPresets();
+
+    function addCustomTime(period) {
+      const input = document.getElementById(`custom-${period}`);
+      const t = input.value.trim();
+      if (!/^\d{2}:\d{2}$/.test(t)) { toast("Enter time as HH:MM, e.g. 09:15", "error"); return; }
+      if (!customTimes[period].includes(t)) customTimes[period].push(t);
+      selectedTimes[period].add(t);
+      input.value = "";
+      renderPresets();
+    }
+
+    // ---------- Capacity ----------
+    let capacityMode = "same";
+    function setCapacityMode(mode) {
+      capacityMode = mode;
+      document.getElementById("cap-mode-same").classList.toggle("selected", mode === "same");
+      document.getElementById("cap-mode-period").classList.toggle("selected", mode === "per_period");
+      document.getElementById("capacity-same-input").style.display = mode === "same" ? "block" : "none";
+      document.getElementById("capacity-period-inputs").style.display = mode === "per_period" ? "grid" : "none";
+    }
+
+    // ---------- Doctor picker (admin/subadmin/superadmin) ----------
     async function initDoctorPicker() {
       if (!isManager) return;
       document.getElementById("doctor-picker-card").style.display = "block";
       try {
-        // Reuses the existing hospital-side doctor list — assumes GET /doctors exists on hospital side already
         const res = await fetch(`${BASE}/doctors`, { headers: { Authorization: `Bearer ${getToken()}` } });
         const doctors = await res.json();
         const sel = document.getElementById("pick-doctor");
         sel.innerHTML = doctors.filter(d => d.role === 'doctor').map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
         targetDoctorId = sel.value ? parseInt(sel.value) : null;
-        sel.addEventListener("change", () => { targetDoctorId = parseInt(sel.value); loadSlots(); });
+        sel.addEventListener("change", () => { targetDoctorId = parseInt(sel.value); loadPreview(); });
       } catch (e) {
         document.getElementById("doctor-picker-card").innerHTML = `<p class="err-msg" style="display:block">Could not load doctor list.</p>`;
       }
     }
 
+    // ---------- Generate ----------
     async function generateSlots() {
       const err = document.getElementById("gen-err");
       err.textContent = "";
-      const date = document.getElementById("slot-date").value;
-      if (!date) { err.textContent = "Pick a date first"; return; }
+      const startDate = document.getElementById("start-date").value;
+      const daysCount = parseInt(document.getElementById("days-count").value) || 30;
+      if (!startDate) { err.textContent = "Pick a starting date"; return; }
 
-      const parseTimes = (id) => document.getElementById(id).value.split(',').map(t => t.trim()).filter(Boolean);
+      const morning = [...selectedTimes.morning];
+      const afternoon = [...selectedTimes.afternoon];
+      const evening = [...selectedTimes.evening];
+      if (!morning.length && !afternoon.length && !evening.length) { err.textContent = "Select at least one time slot"; return; }
+
       const payload = {
         doctor_id: targetDoctorId,
-        date,
-        morning_times: parseTimes("times-morning"),
-        afternoon_times: parseTimes("times-afternoon"),
-        evening_times: parseTimes("times-evening"),
+        start_date: startDate,
+        days_count: daysCount,
+        weekdays: patternWeekdays(),
+        morning_times: morning,
+        afternoon_times: afternoon,
+        evening_times: evening,
+        capacity_mode: capacityMode,
+        capacity_same: parseInt(document.getElementById("cap-same").value) || 1,
+        capacity_morning: parseInt(document.getElementById("cap-morning").value) || 1,
+        capacity_afternoon: parseInt(document.getElementById("cap-afternoon").value) || 1,
+        capacity_evening: parseInt(document.getElementById("cap-evening").value) || 1,
       };
 
-      if (!payload.morning_times.length && !payload.afternoon_times.length && !payload.evening_times.length) {
-        err.textContent = "Enter at least one time slot";
-        return;
-      }
-
       try {
-        await api("POST", "/doctor-slots/generate", payload);
-        toast("Slots added", "success");
-        ["times-morning", "times-afternoon", "times-evening"].forEach(id => document.getElementById(id).value = "");
-        loadSlots();
-      } catch (e) {
-        err.textContent = e.message;
-      }
+        const created = await api("POST", "/doctor-slots/generate", payload);
+        toast(`${created.length} slots created`, "success");
+        loadPreview();
+      } catch (e) { err.textContent = e.message; }
     }
 
-    async function loadSlots() {
-      const date = document.getElementById("slot-date").value;
+    // ---------- Preview ----------
+    async function loadPreview() {
+      const date = document.getElementById("preview-date").value;
       const list = document.getElementById("slot-list");
-      if (!date || !targetDoctorId) { list.innerHTML = `<p style="color:var(--slate-light)">Pick a date above.</p>`; return; }
-
+      if (!date || !targetDoctorId) { list.innerHTML = `<p style="color:var(--slate-light)">Pick a date above to preview generated slots.</p>`; return; }
       list.innerHTML = `<p>Loading...</p>`;
       try {
         const qs = isManager ? `?doctor_id=${targetDoctorId}&date=${date}` : `?date=${date}`;
         const slots = await api("GET", `/doctor-slots/mine${qs}`);
-        if (!slots.length) { list.innerHTML = `<p style="color:var(--slate-light)">No slots added for this date yet.</p>`; return; }
-
+        if (!slots.length) { list.innerHTML = `<p style="color:var(--slate-light)">No slots for this date yet.</p>`; return; }
         list.innerHTML = slots.map(s => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
             <span>${s.slot_time} <span class="badge badge-grey" style="margin-left:8px">${s.period}</span></span>
             <span style="display:flex;align-items:center;gap:8px">
-              <span class="badge ${s.is_booked ? 'badge-green' : 'badge-teal'}">${s.is_booked ? 'Booked' : 'Available'}</span>
-              ${!s.is_booked ? `<button class="btn btn-outline btn-sm" onclick="deleteSlot(${s.id})">Remove</button>` : ''}
+              <span class="badge ${s.booked_count >= s.capacity ? 'badge-red' : 'badge-teal'}">${s.booked_count}/${s.capacity} booked</span>
+              ${s.booked_count === 0 ? `<button class="btn btn-outline btn-sm" onclick="deleteSlot(${s.id})">Remove</button>` : ''}
             </span>
           </div>`).join('');
-      } catch (e) {
-        list.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
-      }
+      } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
     }
 
     async function deleteSlot(id) {
-      try {
-        await api("DELETE", `/doctor-slots/${id}`);
-        toast("Slot removed", "success");
-        loadSlots();
-      } catch (e) { toast(e.message, "error"); }
+      try { await api("DELETE", `/doctor-slots/${id}`); toast("Slot removed", "success"); loadPreview(); }
+      catch (e) { toast(e.message, "error"); }
     }
 
-    document.getElementById("slot-date").addEventListener("change", loadSlots);
+    document.getElementById("preview-date").addEventListener("change", loadPreview);
+    document.getElementById("start-date").valueAsDate = new Date();
+    document.getElementById("preview-date").valueAsDate = new Date();
     initDoctorPicker();
   </script>
 </body>

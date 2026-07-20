@@ -13,24 +13,42 @@
       .mobile-section { display: block !important; }
     }
     .avatar-circle {
-      width: 42px; height: 42px; border-radius: 50%;
-      background: var(--teal-subtle); color: var(--teal);
+      width: 44px; height: 44px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--teal-subtle), #dff5f0);
+      color: var(--teal);
       display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 15px; flex-shrink: 0;
+      font-weight: 700; font-size: 16px; flex-shrink: 0;
     }
     .visit-card {
       display: flex; gap: 14px; align-items: flex-start;
-      padding: 16px; border: 1px solid var(--border); border-radius: var(--radius);
-      margin-bottom: 12px; cursor: pointer; transition: box-shadow .15s, border-color .15s;
+      padding: 16px 18px; border: 1px solid var(--border); border-left: 4px solid var(--teal);
+      border-radius: var(--radius);
+      margin-bottom: 12px; cursor: pointer; transition: box-shadow .15s, transform .1s;
       background: var(--white);
     }
-    .visit-card:hover { box-shadow: var(--shadow-sm); border-color: var(--border-mid); }
+    .visit-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+    .visit-card .vc-name { font-weight: 700; font-size: 15px; color: var(--navy); }
+    .visit-card .vc-meta { font-size: 13px; color: var(--slate); margin-top: 3px; }
+    .visit-card .vc-date { font-size: 12px; color: var(--slate-light); margin-top: 6px; display:flex; align-items:center; gap:5px; }
     .stat-card {
-      background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 22px 18px; text-align: center;
+      background: linear-gradient(160deg, var(--white), #fafcfc);
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 22px 18px; text-align: center; position: relative; overflow: hidden;
     }
-    .stat-card .num { font-size: 2rem; font-weight: 700; line-height: 1; }
-    .stat-card .label { font-size: 12.5px; color: var(--slate); margin-top: 8px; font-weight: 500; }
+    .stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .stat-card.c-teal::before { background: var(--teal); }
+    .stat-card.c-navy::before { background: var(--navy); }
+    .stat-card .num { font-size: 2.1rem; font-weight: 800; line-height: 1; }
+    .stat-card .label { font-size: 12.5px; color: var(--slate); margin-top: 10px; font-weight: 600; letter-spacing: .2px; }
+    .filter-bar {
+      display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;
+    }
+    @media (max-width: 700px) {
+      .filter-bar { grid-template-columns: 1fr; }
+      .filter-bar .form-group { width: 100%; }
+    }
   </style>
 </head>
 
@@ -119,19 +137,11 @@
           <p style="color:var(--slate)">Here's a quick look at your MedScribe Health Portal.</p>
         </div>
 
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px">
-          <div class="stat-card"><div class="num" style="color:var(--teal)" id="stat-profiles">—</div><div class="label">Linked Profiles</div></div>
-          <div class="stat-card"><div class="num" style="color:var(--navy)" id="stat-consultations">—</div><div class="label">Consultations</div></div>
-          <div class="stat-card"><div class="num" style="color:var(--teal)" id="stat-visits-total">—</div><div class="label">Total Hospital Visits</div></div>
-          <div class="stat-card"><div class="num" style="color:var(--navy)" id="stat-visits-30d">—</div><div class="label">Visits (Last 30 Days)</div></div>
-        </div>
-
-        <div class="card">
-          <div class="card-header"><h2>Quick Links</h2></div>
-          <div style="display:flex;flex-wrap:wrap;gap:12px">
-            <button class="btn btn-primary" onclick="location.href='my-appointments.html'">Book an Appointment</button>
-            <button class="btn btn-outline" onclick="showMobileSection('records')">View Health Records</button>
-          </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
+          <div class="stat-card c-teal"><div class="num" style="color:var(--teal)" id="stat-profiles">—</div><div class="label">Linked Profiles</div></div>
+          <div class="stat-card c-navy"><div class="num" style="color:var(--navy)" id="stat-consultations">—</div><div class="label">Consultations</div></div>
+          <div class="stat-card c-teal"><div class="num" style="color:var(--teal)" id="stat-visits-total">—</div><div class="label">Total Hospital Visits</div></div>
+          <div class="stat-card c-navy"><div class="num" style="color:var(--navy)" id="stat-visits-30d">—</div><div class="label">Visits (Last 30 Days)</div></div>
         </div>
       </div>
 
@@ -141,7 +151,7 @@
         </div>
 
         <div class="card" style="margin-bottom:16px">
-          <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px" id="filter-grid">
+          <div class="filter-bar">
             <div class="form-group" style="margin:0">
               <label class="form-label">Search</label>
               <input class="form-control" id="search-input" placeholder="Search by hospital, doctor, token..." oninput="applyFilters()" />
@@ -163,7 +173,6 @@
     </main>
   </div>
 
-  <!-- Visit detail modal -->
   <div class="modal-overlay" id="modal-visit-detail">
     <div class="modal" style="max-width:480px">
       <div class="modal-header">
@@ -214,12 +223,10 @@
       const list = document.getElementById("records-list");
       try {
         allVisits = await api("GET", "/portal/dashboard/visits");
-
         const hospitals = [...new Set(allVisits.map(v => v.hospital_name))].sort();
         const patients = [...new Set(allVisits.map(v => v.patient_name))].sort();
         document.getElementById("filter-hospital").innerHTML = `<option value="">All hospitals</option>` + hospitals.map(h => `<option value="${sanitize(h)}">${sanitize(h)}</option>`).join('');
         document.getElementById("filter-patient").innerHTML = `<option value="">All profiles</option>` + patients.map(p => `<option value="${sanitize(p)}">${sanitize(p)}</option>`).join('');
-
         renderVisits(allVisits);
       } catch (e) {
         list.innerHTML = `<div class="card"><p class="err-msg" style="display:block">${e.message}</p></div>`;
@@ -230,7 +237,6 @@
       const q = document.getElementById("search-input").value.trim().toLowerCase();
       const hospital = document.getElementById("filter-hospital").value;
       const patient = document.getElementById("filter-patient").value;
-
       let filtered = allVisits;
       if (hospital) filtered = filtered.filter(v => v.hospital_name === hospital);
       if (patient) filtered = filtered.filter(v => v.patient_name === patient);
@@ -255,9 +261,12 @@
           <div style="flex:1;min-width:0">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
               <div>
-                <div style="font-weight:600">${sanitize(v.patient_name)}</div>
-                <div style="font-size:13px;color:var(--slate);margin-top:2px">${sanitize(v.hospital_name)}${v.doctor_name ? ' · ' + sanitize(v.doctor_name) : ''}</div>
-                <div style="font-size:12px;color:var(--slate-light);margin-top:4px">${new Date(v.visit_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })} · Token ${v.token_number}</div>
+                <div class="vc-name">${sanitize(v.patient_name)}</div>
+                <div class="vc-meta">${sanitize(v.hospital_name)}${v.doctor_name ? ' · ' + sanitize(v.doctor_name) : ''}</div>
+                <div class="vc-date">
+                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                  ${new Date(v.visit_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })} · Token ${v.token_number}
+                </div>
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap">
                 ${v.has_prescription ? '<span class="badge badge-teal">Prescription</span>' : ''}
@@ -279,12 +288,11 @@
           <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
             <div class="avatar-circle">${initials(v.patient_name)}</div>
             <div>
-              <div style="font-weight:600;font-size:1.05rem">${sanitize(v.patient_name)}</div>
+              <div style="font-weight:700;font-size:1.05rem;color:var(--navy)">${sanitize(v.patient_name)}</div>
               <div style="font-size:13px;color:var(--slate)">${sanitize(v.hospital_name)}${v.doctor_name ? ' · ' + sanitize(v.doctor_name) : ''}</div>
               <div style="font-size:12px;color:var(--slate-light)">${new Date(v.visit_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })} · Token ${v.token_number}</div>
             </div>
           </div>`;
-
         if (v.consultation_id) {
           html += `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--border)">
