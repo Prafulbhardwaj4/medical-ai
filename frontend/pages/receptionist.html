@@ -194,11 +194,14 @@
       <div class="mobile-section active" id="section-home">
 
       <div class="card" id="expected-today-card" style="margin-bottom:20px">
-        <div class="card-header">
-          <h2>Expected Today (Health Portal)</h2>
+        <div class="card-header" style="flex-wrap:wrap;gap:10px">
+          <h2>Expected Today (Health Portal) <span class="badge badge-teal" id="expected-today-count" style="margin-left:8px">0</span></h2>
+          <select class="form-control" id="expected-today-doctor-filter" style="max-width:220px">
+            <option value="">All doctors</option>
+          </select>
         </div>
         <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
-          Patients who booked ahead or reserved a queue-from-home slot for today. This does not change how you check anyone in — it's just a heads-up.
+          Patients who paid for a booked appointment or a queue-from-home slot for today. This does not change how you check anyone in — it's just a heads-up.
         </p>
         <div id="expected-today-list">
           <p style="color:var(--slate-light);font-size:13px">Loading...</p>
@@ -1448,21 +1451,42 @@
 
     loadRecAttendance();
     loadExpectedToday();
+    document.getElementById("expected-today-doctor-filter").addEventListener("change", loadExpectedToday);
 
     async function loadExpectedToday() {
       const el = document.getElementById("expected-today-list");
+      const filterSel = document.getElementById("expected-today-doctor-filter");
+      const doctorId = filterSel.value;
+
       try {
-        const appts = await api("GET", "/portal-appointments-staff/today");
-        if (!appts.length) {
+        const path = doctorId ? `/portal-appointments-staff/today?doctor_id=${doctorId}` : `/portal-appointments-staff/today`;
+        const data = await api("GET", path);
+        document.getElementById("expected-today-count").textContent = data.count;
+
+        // Populate filter options once (from the unfiltered doctor set seen so far)
+        if (!doctorId) {
+          const seen = new Set(Array.from(filterSel.options).map(o => o.value));
+          data.appointments.forEach(a => {
+            if (a.doctor_id && !seen.has(String(a.doctor_id))) {
+              seen.add(String(a.doctor_id));
+              const opt = document.createElement("option");
+              opt.value = a.doctor_id;
+              opt.textContent = a.doctor_name;
+              filterSel.appendChild(opt);
+            }
+          });
+        }
+
+        if (!data.appointments.length) {
           el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No portal bookings for today.</p>`;
           return;
         }
-        el.innerHTML = appts.map(a => `
+        el.innerHTML = data.appointments.map(a => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
             <div>
               <div style="font-weight:500">${sanitize(a.patient_name || 'Name not linked yet')}</div>
               <div style="font-size:12px;color:var(--slate-light)">
-                ${a.type === 'queue_home' ? 'Queue from home' : 'Booked appointment'} · ${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
+                ${sanitize(a.doctor_name)} · ${a.type === 'queue_home' ? 'Queue from home' : 'Booked appointment'} · ${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
                 ${a.notes ? ' · ' + sanitize(a.notes) : ''}
               </div>
             </div>

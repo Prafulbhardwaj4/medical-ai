@@ -85,10 +85,12 @@ class Appointment(Base):
 
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    slot_id = Column(Integer, ForeignKey("doctor_slots.id"), nullable=True)
 
     type = Column(Enum(AppointmentType), nullable=False)
     requested_time = Column(DateTime, nullable=False)
     status = Column(Enum(AppointmentStatus), default=AppointmentStatus.booked)
+    payment_status = Column(String, default="unpaid", nullable=False)  # unpaid | paid
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=now_ist_naive)
 

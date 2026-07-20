@@ -25,6 +25,7 @@ from app.routers import portal_hospitals as portal_hospitals_router
 from app.routers import portal_appointments as portal_appointments_router
 from app.models.portal import PatientAccount, PatientProfileLink, InviteStatus, OTPCode, Appointment
 from app.routers import portal_appointments_staff as portal_appointments_staff_router
+from app.routers import doctor_slots as doctor_slots_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 from app.models.audit_log import AuditLog
@@ -90,6 +91,7 @@ app.include_router(portal_dashboard_router.router)
 app.include_router(portal_hospitals_router.router)
 app.include_router(portal_appointments_router.router)
 app.include_router(portal_appointments_staff_router.router)
+app.include_router(doctor_slots_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
 

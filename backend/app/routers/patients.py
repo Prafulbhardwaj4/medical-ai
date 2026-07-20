@@ -122,6 +122,7 @@ def _auto_complete_matching_appointment(db: Session, patient: Patient, hospital_
         Appointment.account_id == account.id,
         Appointment.hospital_id == hospital_id,
         Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed]),
+        Appointment.payment_status == "paid",
         Appointment.requested_time >= today_start,
         Appointment.requested_time < today_end,
     ).all():

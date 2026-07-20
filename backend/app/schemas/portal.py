@@ -75,8 +75,9 @@ class BookAppointmentIn(BaseModel):
     profile_link_id: Optional[int] = None
     hospital_id: int
     doctor_id: Optional[int] = None
-    requested_time: datetime
-    type: str = "scheduled"  # "scheduled" | "queue_home"
+    slot_id: Optional[int] = None          # required for type="scheduled"
+    requested_time: Optional[datetime] = None  # used only for type="queue_home"
+    type: str = "scheduled"
     notes: Optional[str] = None
 
 
@@ -85,10 +86,31 @@ class AppointmentOut(BaseModel):
     hospital_id: int
     hospital_name: Optional[str] = None
     doctor_id: Optional[int]
+    doctor_name: Optional[str] = None
     type: str
     requested_time: datetime
     status: str
+    payment_status: str = "unpaid"
     notes: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class GenerateSlotsIn(BaseModel):
+    doctor_id: Optional[int] = None  # required if caller is admin/sub_admin/super_admin
+    date: str  # "YYYY-MM-DD"
+    morning_times: List[str] = []
+    afternoon_times: List[str] = []
+    evening_times: List[str] = []
+
+
+class SlotOut(BaseModel):
+    id: int
+    slot_date: str
+    slot_time: str
+    period: str
+    is_booked: bool
 
     class Config:
         from_attributes = True
@@ -97,7 +119,8 @@ class AppointmentOut(BaseModel):
 class DashboardStatsOut(BaseModel):
     profile_count: int
     consultation_count: int
-    visit_count: int
+    visit_count_total: int
+    visit_count_last_30_days: int
 
 
 class ProfileSummaryOut(BaseModel):

@@ -13,6 +13,7 @@ from app.models.hospital import Hospital
 from app.models.doctor import Doctor
 from app.schemas.portal import DashboardStatsOut, ProfileSummaryOut, VisitOut, VisitDetailOut, VisitTestOut
 from app.utils.portal_auth import get_current_patient_account
+from app.utils.timezone import now_ist_naive
 from app.services.pdf_service import generate_prescription_pdf, generate_invoice_pdf
 
 router = APIRouter(prefix="/portal/dashboard", tags=["portal-dashboard"])
@@ -24,19 +25,27 @@ def _owned_patient_ids(account: PatientAccount) -> set:
 
 @router.get("/stats", response_model=DashboardStatsOut)
 def get_stats(account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
+    from datetime import timedelta
+
     patient_ids = _owned_patient_ids(account)
     if not patient_ids:
-        return DashboardStatsOut(profile_count=0, consultation_count=0, visit_count=0)
+        return DashboardStatsOut(profile_count=0, consultation_count=0, visit_count_total=0, visit_count_last_30_days=0)
 
     consultation_count = db.query(Consultation).filter(
         Consultation.patient_id.in_(patient_ids), Consultation.is_voided == False  # noqa: E712
     ).count()
-    visit_count = db.query(Checkin).filter(Checkin.patient_id.in_(patient_ids)).count()
+    visit_count_total = db.query(Checkin).filter(Checkin.patient_id.in_(patient_ids)).count()
+
+    thirty_days_ago = now_ist_naive().date() - timedelta(days=30)
+    visit_count_30d = db.query(Checkin).filter(
+        Checkin.patient_id.in_(patient_ids), Checkin.visit_date >= thirty_days_ago
+    ).count()
 
     return DashboardStatsOut(
         profile_count=len(account.profiles),
         consultation_count=consultation_count,
-        visit_count=visit_count,
+        visit_count_total=visit_count_total,
+        visit_count_last_30_days=visit_count_30d,
     )
 
 
