@@ -20,32 +20,29 @@
     .wizard-step-title { font-size: 1.05rem; font-weight: 700; color: var(--navy); }
     .wizard-step-sub { font-size: 12.5px; color: var(--slate-light); margin-top: 2px; }
 
-    .pill-search-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-    .pill-btn {
-      padding: 9px 16px; border-radius: 20px; border: 1px solid var(--border);
-      background: var(--white); color: var(--slate); font-size: 13.5px; font-weight: 500; cursor: pointer;
+    .select-row-card {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius);
+      margin-bottom: 10px; cursor: pointer; background: var(--white);
+      transition: box-shadow .15s, border-color .15s;
     }
-    .pill-btn:hover { border-color: var(--teal); color: var(--teal); }
+    .select-row-card:hover { box-shadow: var(--shadow-sm); border-color: var(--teal); }
+    .select-row-card .src-name { font-weight: 700; color: var(--navy); font-size: 15px; }
+    .select-row-card .src-sub { font-size: 12.5px; color: var(--slate); margin-top: 3px; }
 
-    .picker-card {
-      border: 1px solid var(--border); border-radius: 14px; padding: 16px;
-      cursor: pointer; transition: box-shadow .15s, border-color .15s; background: var(--white);
-    }
-    .picker-card:hover { box-shadow: var(--shadow-md); border-color: var(--teal); }
-    .picker-card h3 { margin: 0; font-size: 15px; color: var(--navy); }
-    .picker-card .pc-meta { font-size: 12.5px; color: var(--slate); margin-top: 5px; }
-    .picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+    .btn-teal { background: var(--teal); color: #fff; border: none; }
+    .btn-teal:hover { opacity: .9; }
 
     .date-scroll-wrap { margin-top: 4px; }
     .date-month-label { font-size: 13px; font-weight: 700; color: var(--slate); margin-bottom: 8px; }
-    .date-scroll { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; }
+    .date-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; }
     .date-pill {
-      flex: 0 0 auto; width: 62px; text-align: center; padding: 12px 0;
-      border: 1.5px solid var(--border); border-radius: 12px; cursor: pointer; scroll-snap-align: start;
+      flex: 0 0 auto; width: 54px; text-align: center; padding: 10px 0;
+      border: 1.5px solid var(--border); border-radius: 11px; cursor: pointer; scroll-snap-align: start;
       background: var(--white);
     }
-    .date-pill .dnum { font-size: 1.15rem; font-weight: 700; color: var(--navy); }
-    .date-pill .dabbr { font-size: 11px; color: var(--slate-light); margin-top: 2px; text-transform: uppercase; }
+    .date-pill .dnum { font-size: 1.05rem; font-weight: 700; color: var(--navy); }
+    .date-pill .dabbr { font-size: 10.5px; color: var(--slate-light); margin-top: 2px; text-transform: uppercase; }
     .date-pill.selected { background: var(--teal); border-color: var(--teal); }
     .date-pill.selected .dnum, .date-pill.selected .dabbr { color: #fff; }
 
@@ -63,14 +60,13 @@
     .slot-chip.red { background: #fdecec; color: #b91c1c; cursor: not-allowed; opacity: .75; }
     .slot-chip.red .dot { background: #dc2626; }
     .slot-chip:not(.red):hover { border-color: currentColor; }
+    .slot-chip.placeholder { background: #f2f4f6; color: var(--slate-light); cursor: pointer; }
+    .slot-chip.placeholder .dot { background: #cbd3da; }
 
     .pay-summary-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
     .pay-method-tabs { display: flex; gap: 8px; margin: 16px 0; }
     .pay-method-tab { flex: 1; text-align: center; padding: 10px; border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--slate); }
     .pay-method-tab.active { border-color: var(--teal); background: var(--teal-subtle); color: var(--teal); }
-
-    .btn-green { background: #16a34a; color: #fff; border: none; }
-    .btn-green:hover { background: #128a3e; }
   </style>
 </head>
 
@@ -157,7 +153,7 @@
           <h1>Book an Appointment</h1>
           <p style="color:var(--slate)">Find a hospital, pick a doctor, and choose a time that works for you.</p>
         </div>
-        <button class="btn btn-green" onclick="openMyAppointmentsModal()">My Appointments</button>
+        <button class="btn btn-teal" onclick="openMyAppointmentsModal()">My Appointments</button>
       </div>
 
       <div class="card" id="wizard-card">
@@ -167,7 +163,7 @@
             Back
           </button>
           <div>
-            <div class="wizard-step-title" id="wizard-title">Select State</div>
+            <div class="wizard-step-title" id="wizard-title">Select State &amp; City</div>
             <div class="wizard-step-sub" id="wizard-sub"></div>
           </div>
         </div>
@@ -176,7 +172,6 @@
     </main>
   </div>
 
-  <!-- Confirm modal -->
   <div class="modal-overlay" id="modal-confirm">
     <div class="modal" style="max-width:420px">
       <div class="modal-header">
@@ -192,7 +187,6 @@
     </div>
   </div>
 
-  <!-- My Appointments modal -->
   <div class="modal-overlay" id="modal-my-appointments">
     <div class="modal" style="max-width:560px">
       <div class="modal-header">
@@ -211,10 +205,10 @@
     document.getElementById("profile-menu-name").textContent = getDoctor()?.name || "Patient";
 
     const state = {
-      step: "state",
+      step: "location",
       history: [],
       stateName: null, city: null,
-      hospitalId: null, hospitalName: null, hospitalFee: null,
+      hospitalId: null, hospitalName: null,
       doctorId: null, doctorName: null, doctorFee: null,
       profileLinkId: null, profileName: null,
       date: null, dateLabel: null,
@@ -223,79 +217,86 @@
     };
 
     const STEP_META = {
-      state: { title: "Select State", sub: "" },
-      city: { title: "Select City", sub: () => state.stateName },
+      location: { title: "Select State & City", sub: "" },
       hospital: { title: "Select Hospital", sub: () => `${state.city}, ${state.stateName}` },
       doctor: { title: "Select Doctor", sub: () => state.hospitalName },
       profile: { title: "Who is this for?", sub: () => state.doctorName },
-      date: { title: "Select Date", sub: () => state.doctorName },
-      slot: { title: "Select a Time Slot", sub: () => state.dateLabel },
+      datetime: { title: "Select Date and Time", sub: () => state.doctorName },
       payment: { title: "Payment", sub: () => "Complete payment to confirm your booking" },
     };
 
     function setStep(step, pushHistory = true) {
       if (pushHistory) state.history.push(state.step);
       state.step = step;
-      const meta = STEP_META[step];
+      updateHeader();
+      renderStep();
+    }
+    function updateHeader() {
+      const meta = STEP_META[state.step];
       document.getElementById("wizard-title").textContent = meta.title;
       document.getElementById("wizard-sub").textContent = typeof meta.sub === 'function' ? meta.sub() : meta.sub;
       document.getElementById("wizard-back").style.display = state.history.length ? "flex" : "none";
-      renderStep();
     }
-
     function goBack() {
       if (!state.history.length) return;
-      const prev = state.history.pop();
-      state.step = prev;
-      const meta = STEP_META[prev];
-      document.getElementById("wizard-title").textContent = meta.title;
-      document.getElementById("wizard-sub").textContent = typeof meta.sub === 'function' ? meta.sub() : meta.sub;
-      document.getElementById("wizard-back").style.display = state.history.length ? "flex" : "none";
+      state.step = state.history.pop();
+      updateHeader();
       renderStep();
     }
 
-    function pillSearchList(containerId, items, onPick) {
-      const wrap = document.getElementById(containerId);
-      const render = (filtered) => {
-        const listEl = wrap.querySelector('.pill-search-list');
-        listEl.innerHTML = filtered.length
-          ? filtered.map(i => `<button class="pill-btn" data-val="${sanitize(i)}">${sanitize(i)}</button>`).join('')
-          : `<p style="color:var(--slate-light);font-size:13px">No matches.</p>`;
-        listEl.querySelectorAll('.pill-btn').forEach(btn => btn.addEventListener('click', () => onPick(btn.dataset.val)));
-      };
-      render(items);
-      wrap.querySelector('.search-box').addEventListener('input', (e) => {
-        const q = e.target.value.toLowerCase();
-        render(items.filter(i => i.toLowerCase().includes(q)));
+    function searchableFullWidthList(container, items, renderItem, filterFn, searchPlaceholder) {
+      container.innerHTML = `
+        <input class="form-control" placeholder="${searchPlaceholder}" style="margin-bottom:14px" id="local-search" />
+        <div id="local-list"></div>`;
+      const listEl = container.querySelector('#local-list');
+      const draw = (list) => { listEl.innerHTML = list.length ? list.map(renderItem).join('') : `<p style="color:var(--slate-light)">No results.</p>`; };
+      draw(items);
+      container.querySelector('#local-search').addEventListener('input', (e) => {
+        draw(items.filter(i => filterFn(i, e.target.value.toLowerCase())));
       });
+      return listEl;
     }
 
     async function renderStep() {
       const area = document.getElementById("wizard-area");
 
-      if (state.step === "state") {
+      if (state.step === "location") {
         area.innerHTML = `<p>Loading states...</p>`;
         try {
           const states = await api("GET", "/portal/hospitals/states");
-          area.innerHTML = !states.length ? `<p style="color:var(--slate-light)">No states available yet.</p>` : `
-            <input class="form-control search-box" placeholder="Search states..." style="max-width:320px" />
-            <div class="pill-search-list"></div>`;
-          if (states.length) pillSearchList("wizard-area", states, (val) => {
-            state.stateName = val; setStep("city");
-          });
-        } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
-        return;
-      }
+          area.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <div class="form-group" style="margin:0">
+                <label class="form-label">State</label>
+                <select class="form-control" id="pick-state">
+                  <option value="">Select state...</option>
+                  ${states.map(s => `<option value="${sanitize(s)}">${sanitize(s)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label class="form-label">City</label>
+                <select class="form-control" id="pick-city" disabled>
+                  <option value="">Select state first</option>
+                </select>
+              </div>
+            </div>`;
 
-      if (state.step === "city") {
-        area.innerHTML = `<p>Loading cities...</p>`;
-        try {
-          const cities = await api("GET", `/portal/hospitals/cities?state=${encodeURIComponent(state.stateName)}`);
-          area.innerHTML = !cities.length ? `<p style="color:var(--slate-light)">No cities found in ${sanitize(state.stateName)}.</p>` : `
-            <input class="form-control search-box" placeholder="Search cities..." style="max-width:320px" />
-            <div class="pill-search-list"></div>`;
-          if (cities.length) pillSearchList("wizard-area", cities, (val) => {
-            state.city = val; setStep("hospital");
+          document.getElementById("pick-state").addEventListener("change", async (e) => {
+            const citySel = document.getElementById("pick-city");
+            state.stateName = e.target.value;
+            state.city = null;
+            if (!e.target.value) { citySel.disabled = true; citySel.innerHTML = `<option value="">Select state first</option>`; return; }
+            citySel.disabled = true;
+            citySel.innerHTML = `<option value="">Loading...</option>`;
+            const cities = await api("GET", `/portal/hospitals/cities?state=${encodeURIComponent(e.target.value)}`);
+            citySel.disabled = false;
+            citySel.innerHTML = `<option value="">Select city...</option>` + cities.map(c => `<option value="${sanitize(c)}">${sanitize(c)}</option>`).join('');
+          });
+
+          document.getElementById("pick-city").addEventListener("change", (e) => {
+            if (!e.target.value) return;
+            state.city = e.target.value;
+            setStep("hospital");
           });
         } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
         return;
@@ -305,13 +306,15 @@
         area.innerHTML = `<p>Loading hospitals...</p>`;
         try {
           const hospitals = await api("GET", `/portal/hospitals?city=${encodeURIComponent(state.city)}&state=${encodeURIComponent(state.stateName)}`);
-          area.innerHTML = !hospitals.length ? `<p style="color:var(--slate-light)">No hospitals found in ${sanitize(state.city)}.</p>` : `
-            <div class="picker-grid">${hospitals.map(h => `
-              <div class="picker-card" onclick='pickHospital(${h.id}, ${JSON.stringify(h.name)})'>
-                <h3>${sanitize(h.name)}</h3>
-                <div class="pc-meta">${sanitize(h.address || '')}</div>
-                <div class="pc-meta">${sanitize(h.city || '')}${h.city && state.stateName ? ', ' : ''}${sanitize(state.stateName || '')}</div>
-              </div>`).join('')}</div>`;
+          if (!hospitals.length) { area.innerHTML = `<p style="color:var(--slate-light)">No hospitals found in ${sanitize(state.city)}.</p>`; return; }
+          searchableFullWidthList(
+            area, hospitals,
+            (h) => `<div class="select-row-card" onclick='pickHospital(${h.id}, ${JSON.stringify(h.name)})'>
+                      <div><div class="src-name">${sanitize(h.name)}</div>${h.address ? `<div class="src-sub">${sanitize(h.address)}</div>` : ''}</div>
+                    </div>`,
+            (h, q) => h.name.toLowerCase().includes(q),
+            "Search hospitals..."
+          );
         } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
         return;
       }
@@ -320,14 +323,38 @@
         area.innerHTML = `<p>Loading doctors...</p>`;
         try {
           const doctors = await api("GET", `/portal/hospitals/${state.hospitalId}/doctors`);
-          area.innerHTML = !doctors.length ? `<p style="color:var(--slate-light)">No doctors listed for this hospital yet.</p>` : `
-            <div class="picker-grid">${doctors.map(d => `
-              <div class="picker-card" onclick='pickDoctor(${d.id}, ${JSON.stringify(d.name)}, ${d.consultation_fee || 0})'>
-                <h3>${sanitize(d.name)}</h3>
-                <div class="pc-meta">${sanitize(d.specialization || 'General')}</div>
-                ${d.room_number ? `<div class="pc-meta">Room ${sanitize(d.room_number)}</div>` : ''}
-                <div style="margin-top:8px"><span class="badge badge-teal">₹${d.consultation_fee || 0} consultation</span></div>
-              </div>`).join('')}</div>`;
+          if (!doctors.length) { area.innerHTML = `<p style="color:var(--slate-light)">No doctors listed for this hospital yet.</p>`; return; }
+
+          const specs = [...new Set(doctors.map(d => d.specialization).filter(Boolean))].sort();
+          area.innerHTML = `
+            <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+              <input class="form-control" id="doc-search" placeholder="Search doctors..." style="flex:2;min-width:200px" />
+              <select class="form-control" id="doc-spec-filter" style="flex:1;min-width:160px">
+                <option value="">All specializations</option>
+                ${specs.map(s => `<option value="${sanitize(s)}">${sanitize(s)}</option>`).join('')}
+              </select>
+            </div>
+            <div id="doc-list"></div>`;
+
+          const draw = () => {
+            const q = document.getElementById("doc-search").value.toLowerCase();
+            const spec = document.getElementById("doc-spec-filter").value;
+            const filtered = doctors.filter(d =>
+              (!spec || d.specialization === spec) &&
+              (d.name.toLowerCase().includes(q) || (d.specialization || '').toLowerCase().includes(q))
+            );
+            document.getElementById("doc-list").innerHTML = filtered.length ? filtered.map(d => `
+              <div class="select-row-card" onclick='pickDoctor(${d.id}, ${JSON.stringify(d.name)}, ${d.consultation_fee || 0})'>
+                <div>
+                  <div class="src-name">${sanitize(d.name)}</div>
+                  <div class="src-sub">${sanitize(d.specialization || 'General')}${d.room_number ? ' · Room ' + sanitize(d.room_number) : ''}</div>
+                </div>
+                <span class="badge badge-teal">₹${d.consultation_fee || 0}</span>
+              </div>`).join('') : `<p style="color:var(--slate-light)">No matching doctors.</p>`;
+          };
+          document.getElementById("doc-search").addEventListener("input", draw);
+          document.getElementById("doc-spec-filter").addEventListener("change", draw);
+          draw();
         } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
         return;
       }
@@ -337,69 +364,34 @@
           const myProfiles = await api("GET", "/portal/dashboard/profiles");
           const linkedHere = myProfiles.filter(p => p.hospital_id === state.hospitalId);
           const list = linkedHere.length ? linkedHere : myProfiles;
-          area.innerHTML = `
-            ${!linkedHere.length && myProfiles.length ? `<p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">None of your linked profiles have visited this hospital before — booking will register a new visit under your account.</p>` : ''}
-            ${!list.length ? `<p style="color:var(--slate-light)">No linked profiles found.</p>` : `
-              <div class="pill-search-list">
-                ${list.map(p => `<button class="pill-btn" data-id="${p.id}" data-name="${sanitize(p.display_name)}">${sanitize(p.display_name)} (${p.relation})</button>`).join('')}
-              </div>`}`;
-          area.querySelectorAll('.pill-btn').forEach(btn => btn.addEventListener('click', () => {
-            state.profileLinkId = parseInt(btn.dataset.id);
-            state.profileName = btn.dataset.name;
-            setStep("date");
-          }));
+          if (!list.length) { area.innerHTML = `<p style="color:var(--slate-light)">No linked profiles found.</p>`; return; }
+
+          const note = !linkedHere.length && myProfiles.length
+            ? `<p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">None of your linked profiles have visited this hospital before — booking will register a new visit under your account.</p>` : '';
+
+          const listEl = searchableFullWidthList(
+            area, list,
+            (p) => `<div class="select-row-card" data-id="${p.id}" data-name="${sanitize(p.display_name)}">
+                      <div><div class="src-name">${sanitize(p.display_name)}</div><div class="src-sub">${p.relation}</div></div>
+                    </div>`,
+            (p, q) => p.display_name.toLowerCase().includes(q),
+            "Search profiles..."
+          );
+          area.insertAdjacentHTML('afterbegin', note);
+          area.addEventListener('click', function handler(e) {
+            const card = e.target.closest('.select-row-card');
+            if (!card) return;
+            state.profileLinkId = parseInt(card.dataset.id);
+            state.profileName = card.dataset.name;
+            area.removeEventListener('click', handler);
+            setStep("datetime");
+          });
         } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
         return;
       }
 
-      if (state.step === "date") {
-        const days = [];
-        const today = new Date();
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(today);
-          d.setDate(today.getDate() + i);
-          days.push(d);
-        }
-        const monthLabel = days[0].toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-        area.innerHTML = `
-          <div class="date-scroll-wrap">
-            <div class="date-month-label">${monthLabel}</div>
-            <div class="date-scroll">
-              ${days.map(d => {
-                const iso = d.toISOString().split('T')[0];
-                const dayNum = d.getDate();
-                const abbr = d.toLocaleDateString('en-IN', { weekday: 'short' });
-                return `<div class="date-pill" data-date="${iso}" data-label="${abbr}, ${dayNum} ${d.toLocaleDateString('en-IN',{month:'short'})}">
-                  <div class="dnum">${dayNum}</div><div class="dabbr">${abbr}</div></div>`;
-              }).join('')}
-            </div>
-          </div>`;
-        area.querySelectorAll('.date-pill').forEach(el => el.addEventListener('click', () => {
-          area.querySelectorAll('.date-pill').forEach(x => x.classList.remove('selected'));
-          el.classList.add('selected');
-          state.date = el.dataset.date;
-          state.dateLabel = el.dataset.label;
-          setStep("slot");
-        }));
-        return;
-      }
-
-      if (state.step === "slot") {
-        area.innerHTML = `<p>Loading available slots...</p>`;
-        try {
-          const grouped = await api("GET", `/portal/hospitals/${state.hospitalId}/doctors/${state.doctorId}/slots?date=${state.date}`);
-          const periods = [["morning", "Morning"], ["afternoon", "Afternoon"], ["evening", "Evening"]];
-          const anySlots = periods.some(([k]) => grouped[k]?.length);
-          area.innerHTML = !anySlots ? `<p style="color:var(--slate-light)">No slots available for this date. Go back and try another date.</p>` :
-            periods.map(([key, label]) => grouped[key]?.length ? `
-              <div class="slot-period-title">${label}</div>
-              <div class="slot-grid">
-                ${grouped[key].map(s => `
-                  <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick='pickSlot(${s.id}, ${JSON.stringify(s.time)})'`}>
-                    <span class="dot"></span>${s.time}
-                  </div>`).join('')}
-              </div>` : '').join('');
-        } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      if (state.step === "datetime") {
+        renderDateTimeStep(area);
         return;
       }
 
@@ -430,10 +422,81 @@
 
           <div style="display:flex;gap:10px">
             <button class="btn btn-outline" style="flex:1" onclick="cancelPaymentAndGoBack()">Cancel and Go Back</button>
-            <button class="btn btn-green" style="flex:1" onclick="markPaidAndFinish()">Mark Paid</button>
+            <button class="btn btn-teal" style="flex:1" onclick="markPaidAndFinish()">Mark Paid</button>
           </div>`;
         return;
       }
+    }
+
+    // ---------- Combined date + time step ----------
+    function renderDateTimeStep(area) {
+      const days = [];
+      const today = new Date();
+      for (let i = 0; i < 15; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        days.push(d);
+      }
+      const monthLabel = days[0].toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+      area.innerHTML = `
+        <div class="date-scroll-wrap">
+          <div class="date-month-label">${monthLabel}</div>
+          <div class="date-scroll" id="date-scroll">
+            ${days.map(d => {
+              const iso = d.toISOString().split('T')[0];
+              const dayNum = d.getDate();
+              const abbr = d.toLocaleDateString('en-IN', { weekday: 'short' });
+              return `<div class="date-pill" data-date="${iso}" data-label="${abbr}, ${dayNum} ${d.toLocaleDateString('en-IN',{month:'short'})}">
+                <div class="dnum">${dayNum}</div><div class="dabbr">${abbr}</div></div>`;
+            }).join('')}
+          </div>
+        </div>
+        <div id="slot-sections">${placeholderSlotSections()}</div>`;
+
+      document.querySelectorAll('.date-pill').forEach(el => el.addEventListener('click', () => {
+        document.querySelectorAll('.date-pill').forEach(x => x.classList.remove('selected'));
+        el.classList.add('selected');
+        state.date = el.dataset.date;
+        state.dateLabel = el.dataset.label;
+        loadRealSlots();
+      }));
+
+      attachPlaceholderClickWarning();
+    }
+
+    function placeholderSlotSections() {
+      const periods = [["Morning", 3], ["Afternoon", 3], ["Evening", 3]];
+      return periods.map(([label, count]) => `
+        <div class="slot-period-title">${label}</div>
+        <div class="slot-grid">
+          ${Array.from({ length: count }).map(() => `<div class="slot-chip placeholder"><span class="dot"></span>--:--</div>`).join('')}
+        </div>`).join('');
+    }
+
+    function attachPlaceholderClickWarning() {
+      document.querySelectorAll('.slot-chip.placeholder').forEach(chip => {
+        chip.addEventListener('click', () => toast("Select a date first", "error"));
+      });
+    }
+
+    async function loadRealSlots() {
+      const wrap = document.getElementById("slot-sections");
+      wrap.innerHTML = `<p>Loading available slots...</p>`;
+      try {
+        const grouped = await api("GET", `/portal/hospitals/${state.hospitalId}/doctors/${state.doctorId}/slots?date=${state.date}`);
+        const periods = [["morning", "Morning"], ["afternoon", "Afternoon"], ["evening", "Evening"]];
+        const anySlots = periods.some(([k]) => grouped[k]?.length);
+        wrap.innerHTML = !anySlots ? `<p style="color:var(--slate-light);margin-top:14px">No slots available for this date. Try another date above.</p>` :
+          periods.map(([key, label]) => grouped[key]?.length ? `
+            <div class="slot-period-title">${label}</div>
+            <div class="slot-grid">
+              ${grouped[key].map(s => `
+                <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick='pickSlot(${s.id}, ${JSON.stringify(s.time)})'`}>
+                  <span class="dot"></span>${s.time}
+                </div>`).join('')}
+            </div>` : '').join('');
+      } catch (e) { wrap.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
     }
 
     function setPayMethod(m) {
@@ -443,18 +506,9 @@
       document.getElementById("pay-fields-upi").style.display = m === "upi" ? "block" : "none";
     }
 
-    function pickHospital(id, name) {
-      state.hospitalId = id; state.hospitalName = name;
-      setStep("doctor");
-    }
-    function pickDoctor(id, name, fee) {
-      state.doctorId = id; state.doctorName = name; state.doctorFee = fee;
-      setStep("profile");
-    }
-    function pickSlot(id, time) {
-      state.slotId = id; state.slotTime = time;
-      openConfirmModal();
-    }
+    function pickHospital(id, name) { state.hospitalId = id; state.hospitalName = name; setStep("doctor"); }
+    function pickDoctor(id, name, fee) { state.doctorId = id; state.doctorName = name; state.doctorFee = fee; setStep("profile"); }
+    function pickSlot(id, time) { state.slotId = id; state.slotTime = time; openConfirmModal(); }
 
     function openConfirmModal() {
       document.getElementById("confirm-body").innerHTML = `
@@ -464,29 +518,21 @@
         <div class="pay-summary-row"><span>Date &amp; Time</span><strong>${sanitize(state.dateLabel)}, ${sanitize(state.slotTime)}</strong></div>`;
       document.getElementById("modal-confirm").classList.add("open");
     }
-    function closeConfirmModal() {
-      document.getElementById("modal-confirm").classList.remove("open");
-    }
+    function closeConfirmModal() { document.getElementById("modal-confirm").classList.remove("open"); }
 
     async function proceedToPayment() {
       const btn = document.getElementById("btn-pay-book");
       btn.disabled = true;
       try {
         const appt = await api("POST", "/portal/appointments", {
-          hospital_id: state.hospitalId,
-          doctor_id: state.doctorId,
-          profile_link_id: state.profileLinkId,
-          slot_id: state.slotId,
-          type: "scheduled",
+          hospital_id: state.hospitalId, doctor_id: state.doctorId,
+          profile_link_id: state.profileLinkId, slot_id: state.slotId, type: "scheduled",
         });
         state.pendingAppointmentId = appt.id;
         closeConfirmModal();
         setStep("payment");
-      } catch (e) {
-        toast(e.message, "error");
-      } finally {
-        btn.disabled = false;
-      }
+      } catch (e) { toast(e.message, "error"); }
+      finally { btn.disabled = false; }
     }
 
     async function cancelPaymentAndGoBack() {
@@ -503,20 +549,12 @@
         toast("Payment successful — you're on the hospital's queue", "success");
         state.pendingAppointmentId = null;
         state.history = [];
-        setStep("state", false);
-      } catch (e) {
-        toast(e.message, "error");
-      }
+        setStep("location", false);
+      } catch (e) { toast(e.message, "error"); }
     }
 
-    // ---------- My Appointments modal ----------
-    function openMyAppointmentsModal() {
-      document.getElementById("modal-my-appointments").classList.add("open");
-      loadAppointments();
-    }
-    function closeMyAppointmentsModal() {
-      document.getElementById("modal-my-appointments").classList.remove("open");
-    }
+    function openMyAppointmentsModal() { document.getElementById("modal-my-appointments").classList.add("open"); loadAppointments(); }
+    function closeMyAppointmentsModal() { document.getElementById("modal-my-appointments").classList.remove("open"); }
 
     async function loadAppointments() {
       const list = document.getElementById("appt-list");
@@ -545,7 +583,8 @@
       catch (e) { toast(e.message, "error"); }
     }
 
-    setStep("state", false);
+    updateHeader();
+    setStep("location", false);
   </script>
 </body>
 
