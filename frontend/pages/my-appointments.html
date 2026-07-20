@@ -6,6 +6,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Appointments</title>
   <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .step-hosp-card {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px; cursor: pointer; transition: box-shadow .15s, border-color .15s;
+      background: var(--white);
+    }
+    .step-hosp-card:hover { box-shadow: var(--shadow-sm); border-color: var(--teal); }
+    .wizard-crumbs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:18px; }
+    .wizard-crumb {
+      font-size: 12.5px; padding: 4px 10px; border-radius: 20px;
+      background: var(--teal-subtle); color: var(--teal); font-weight: 500;
+    }
+    .slot-btn { min-width: 74px; text-align: center; }
+  </style>
 </head>
 
 <body>
@@ -39,10 +53,6 @@
         <strong id="profile-menu-name"></strong>
         <span>Patient</span>
       </div>
-      <button class="profile-menu-item" onclick="location.href='my-records.html'">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        Health Records
-      </button>
       <button class="profile-menu-item" onclick="openChangePasswordModal()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
         Change Password
@@ -72,37 +82,27 @@
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Appointments
       </a>
-      <div class="nav-divider"></div>
-      <div class="sidebar-section-label">Quick Links</div>
-      <a class="nav-item" href="my-records.html">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        Health Records
-      </a>
     </nav>
 
     <nav class="bottom-nav">
-      <button class="bottom-nav-item" data-page="home" onclick="location.href='my-health.html'">
+      <button class="bottom-nav-item" onclick="location.href='my-health.html'">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3"/></svg>
         Home
       </button>
-      <button class="bottom-nav-item active" data-page="appointments" onclick="location.href='my-appointments.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-        Appointments
-      </button>
-      <button class="bottom-nav-item" data-page="records" onclick="location.href='my-records.html'">
+      <button class="bottom-nav-item" onclick="location.href='my-health.html?tab=records'">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         Records
       </button>
-      <button class="bottom-nav-item" data-page="profile" onclick="toggleProfileMenu()">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
-        Profile
+      <button class="bottom-nav-item active" onclick="location.href='my-appointments.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Appointments
       </button>
     </nav>
 
     <main class="main-content">
       <div style="margin-bottom:20px">
         <h1>Book an Appointment</h1>
-        <p id="breadcrumb" style="color:var(--slate);font-size:13px"></p>
+        <p style="color:var(--slate)">Find a hospital, pick a doctor, and choose a time that works for you.</p>
       </div>
 
       <div class="card" style="margin-bottom:20px">
@@ -110,6 +110,7 @@
           <div class="appt-type-btn active" id="type-scheduled" onclick="setType('scheduled')">Book for Later</div>
           <div class="appt-type-btn" id="type-queue_home" onclick="setType('queue_home')">Queue From Home (Today)</div>
         </div>
+        <div class="wizard-crumbs" id="crumbs"></div>
         <div id="wizard-area"></div>
       </div>
 
@@ -127,12 +128,15 @@
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = getDoctor()?.name || "Patient";
 
+    let myProfiles = [];
+
     const state = {
       type: "scheduled",
       step: "city",
       city: null,
       hospitalId: null, hospitalName: null,
-      doctorId: null, doctorName: null, doctorFee: null,
+      doctorId: null, doctorName: null,
+      profileLinkId: null, profileName: null,
       date: null,
       slotId: null, slotTime: null,
       notes: ""
@@ -146,60 +150,58 @@
     }
 
     function resetWizard() {
-      state.step = "city"; state.city = null; state.hospitalId = null; state.hospitalName = null;
-      state.doctorId = null; state.doctorName = null; state.doctorFee = null;
-      state.date = null; state.slotId = null; state.slotTime = null; state.notes = "";
-      renderBreadcrumb();
+      Object.assign(state, {
+        step: "city", city: null, hospitalId: null, hospitalName: null,
+        doctorId: null, doctorName: null, profileLinkId: null, profileName: null,
+        date: null, slotId: null, slotTime: null, notes: ""
+      });
       renderStep();
     }
 
-    function renderBreadcrumb() {
-      const parts = [];
-      if (state.city) parts.push(state.city);
-      if (state.hospitalName) parts.push(state.hospitalName);
-      if (state.doctorName) parts.push(state.doctorName);
-      if (state.date) parts.push(state.date);
-      if (state.slotTime) parts.push(state.slotTime);
-      document.getElementById("breadcrumb").textContent = parts.length ? parts.join(" › ") : "Select a city to begin.";
+    function renderCrumbs() {
+      const parts = [state.city, state.hospitalName, state.doctorName, state.profileName, state.date, state.slotTime].filter(Boolean);
+      document.getElementById("crumbs").innerHTML = parts.length
+        ? parts.map(p => `<span class="wizard-crumb">${sanitize(p)}</span>`).join('')
+        : '';
     }
+
+    function backBtn(toStep) {
+      return `<button class="btn btn-outline btn-sm" style="margin-bottom:14px" onclick="goToStep('${toStep}')">&larr; Back</button>`;
+    }
+    function goToStep(step) { state.step = step; renderStep(); }
 
     async function renderStep() {
       const area = document.getElementById("wizard-area");
-      renderBreadcrumb();
+      renderCrumbs();
 
-      // ---------- STEP: city ----------
       if (state.step === "city") {
         area.innerHTML = `<p>Loading cities...</p>`;
         try {
           const cities = await api("GET", "/portal/hospitals/cities");
-          if (!cities.length) { area.innerHTML = `<p style="color:var(--slate-light)">No cities available yet.</p>`; return; }
-          area.innerHTML = `
-            <div class="form-group" style="max-width:320px;margin-top:16px">
+          area.innerHTML = !cities.length ? `<p style="color:var(--slate-light)">No cities available yet.</p>` : `
+            <div class="form-group" style="max-width:320px">
               <label class="form-label">Select City</label>
               <select class="form-control" id="pick-city">
                 <option value="">Choose a city...</option>
                 ${cities.map(c => `<option value="${sanitize(c)}">${sanitize(c)}</option>`).join('')}
               </select>
             </div>`;
-          document.getElementById("pick-city").addEventListener("change", (e) => {
+          document.getElementById("pick-city")?.addEventListener("change", (e) => {
             if (!e.target.value) return;
-            state.city = e.target.value;
-            state.step = "hospital";
-            renderStep();
+            state.city = e.target.value; state.step = "hospital"; renderStep();
           });
         } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
         return;
       }
 
-      // ---------- STEP: hospital ----------
       if (state.step === "hospital") {
-        area.innerHTML = `<p>Loading hospitals in ${sanitize(state.city)}...</p>`;
+        area.innerHTML = `<p>Loading hospitals...</p>`;
         try {
           const hospitals = await api("GET", `/portal/hospitals?city=${encodeURIComponent(state.city)}`);
           area.innerHTML = backBtn("city") + (!hospitals.length
-            ? `<p style="color:var(--slate-light);margin-top:12px">No hospitals found in ${sanitize(state.city)}.</p>`
-            : `<div class="hosp-grid" style="margin-top:16px">${hospitals.map(h => `
-                <div class="hosp-card" style="cursor:pointer" onclick='pickHospital(${h.id}, ${JSON.stringify(h.name)})'>
+            ? `<p style="color:var(--slate-light)">No hospitals found in ${sanitize(state.city)}.</p>`
+            : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px">${hospitals.map(h => `
+                <div class="step-hosp-card" onclick='pickHospital(${h.id}, ${JSON.stringify(h.name)})'>
                   <h3>${sanitize(h.name)}</h3>
                   <p style="font-size:13px;color:var(--slate);margin-top:6px">${sanitize(h.address || '')}</p>
                 </div>`).join('')}</div>`);
@@ -207,15 +209,14 @@
         return;
       }
 
-      // ---------- STEP: doctor (scheduled only) ----------
       if (state.step === "doctor") {
         area.innerHTML = `<p>Loading doctors...</p>`;
         try {
           const doctors = await api("GET", `/portal/hospitals/${state.hospitalId}/doctors`);
           area.innerHTML = backBtn("hospital") + (!doctors.length
-            ? `<p style="color:var(--slate-light);margin-top:12px">No doctors listed for this hospital yet.</p>`
-            : `<div class="hosp-grid" style="margin-top:16px">${doctors.map(d => `
-                <div class="hosp-card" style="cursor:pointer" onclick='pickDoctor(${d.id}, ${JSON.stringify(d.name)}, ${d.consultation_fee || 0})'>
+            ? `<p style="color:var(--slate-light)">No doctors listed for this hospital yet.</p>`
+            : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px">${doctors.map(d => `
+                <div class="step-hosp-card" onclick='pickDoctor(${d.id}, ${JSON.stringify(d.name)})'>
                   <h3>${sanitize(d.name)}</h3>
                   <p style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(d.specialization || '')}</p>
                   ${d.room_number ? `<p style="font-size:12px;color:var(--slate-light)">Room ${sanitize(d.room_number)}</p>` : ''}
@@ -225,115 +226,112 @@
         return;
       }
 
-      // ---------- STEP: date (scheduled only) ----------
+      if (state.step === "profile") {
+        try {
+          if (!myProfiles.length) myProfiles = await api("GET", "/portal/dashboard/profiles");
+          const linkedHere = myProfiles.filter(p => p.hospital_id === state.hospitalId);
+          const list = linkedHere.length ? linkedHere : myProfiles;
+
+          area.innerHTML = backBtn("doctor") + `
+            ${!linkedHere.length && myProfiles.length ? `<p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">None of your linked profiles have visited this hospital before — booking will register a new visit under your account.</p>` : ''}
+            ${!list.length ? `<p style="color:var(--slate-light)">No linked profiles found.</p>` : `
+              <div class="form-group" style="max-width:320px">
+                <label class="form-label">Who is this appointment for?</label>
+                <select class="form-control" id="pick-profile">
+                  <option value="">Select a profile...</option>
+                  ${list.map(p => `<option value="${p.id}" data-name="${sanitize(p.display_name)}">${sanitize(p.display_name)} (${p.relation})</option>`).join('')}
+                </select>
+              </div>`}`;
+          document.getElementById("pick-profile")?.addEventListener("change", (e) => {
+            if (!e.target.value) return;
+            const opt = e.target.selectedOptions[0];
+            state.profileLinkId = parseInt(e.target.value);
+            state.profileName = opt.dataset.name;
+            state.step = "date"; renderStep();
+          });
+        } catch (e) { area.innerHTML = backBtn("doctor") + `<p class="err-msg" style="display:block">${e.message}</p>`; }
+        return;
+      }
+
       if (state.step === "date") {
+        const backStep = state.type === "scheduled" ? "profile" : "hospital";
         const today = new Date().toISOString().split('T')[0];
         const maxDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        area.innerHTML = backBtn("doctor") + `
-          <div class="form-group" style="max-width:320px;margin-top:16px">
+        area.innerHTML = backBtn(backStep) + `
+          <div class="form-group" style="max-width:280px">
             <label class="form-label">Select Date</label>
             <input class="form-control" type="date" id="pick-date" min="${today}" max="${maxDate}" />
           </div>`;
         document.getElementById("pick-date").addEventListener("change", (e) => {
           if (!e.target.value) return;
-          state.date = e.target.value;
-          state.step = "slot";
-          renderStep();
+          state.date = e.target.value; state.step = "slot"; renderStep();
         });
         return;
       }
 
-      // ---------- STEP: slot (scheduled only) ----------
       if (state.step === "slot") {
         area.innerHTML = `<p>Loading available slots...</p>`;
         try {
           const grouped = await api("GET", `/portal/hospitals/${state.hospitalId}/doctors/${state.doctorId}/slots?date=${state.date}`);
           const periods = [["morning", "Morning"], ["afternoon", "Afternoon"], ["evening", "Evening"]];
-          const anySlots = periods.some(([k]) => grouped[k] && grouped[k].length);
+          const anySlots = periods.some(([k]) => grouped[k]?.length);
 
           area.innerHTML = backBtn("date") + (!anySlots
-            ? `<p style="color:var(--slate-light);margin-top:12px">No slots available for this date. Try another date.</p>`
-            : periods.map(([key, label]) => grouped[key] && grouped[key].length ? `
-                <div style="margin-top:16px">
+            ? `<p style="color:var(--slate-light)">No slots available for this date. Try another date.</p>`
+            : periods.map(([key, label]) => grouped[key]?.length ? `
+                <div style="margin-bottom:16px">
                   <div style="font-size:0.85rem;font-weight:600;color:var(--slate);margin-bottom:8px">${label}</div>
                   <div style="display:flex;flex-wrap:wrap;gap:8px">
-                    ${grouped[key].map(s => `<button class="btn btn-outline btn-sm" onclick='pickSlot(${s.id}, ${JSON.stringify(s.time)})'>${s.time}</button>`).join('')}
+                    ${grouped[key].map(s => `<button class="btn btn-outline btn-sm slot-btn" onclick='pickSlot(${s.id}, ${JSON.stringify(s.time)})'>${s.time}</button>`).join('')}
                   </div>
                 </div>` : '').join(''));
         } catch (e) { area.innerHTML = backBtn("date") + `<p class="err-msg" style="display:block">${e.message}</p>`; }
         return;
       }
 
-      // ---------- STEP: confirm ----------
       if (state.step === "confirm") {
         const backStep = state.type === "scheduled" ? "slot" : "hospital";
         area.innerHTML = backBtn(backStep) + `
-          <div style="margin-top:16px">
-            <div class="form-group">
-              <label class="form-label">Notes (optional)</label>
-              <input class="form-control" id="confirm-notes" placeholder="Reason for visit, symptoms, etc." />
-            </div>
-            <div class="err-msg" id="confirm-err"></div>
-            <button class="btn btn-primary" onclick="submitBooking()">
-              ${state.type === "queue_home" ? "Reserve My Token" : "Confirm Appointment"}
-            </button>
-          </div>`;
+          <div class="form-group">
+            <label class="form-label">Notes (optional)</label>
+            <input class="form-control" id="confirm-notes" placeholder="Reason for visit, symptoms, etc." />
+          </div>
+          <div class="err-msg" id="confirm-err"></div>
+          <button class="btn btn-primary" onclick="submitBooking()">
+            ${state.type === "queue_home" ? "Reserve My Token" : "Confirm Appointment"}
+          </button>`;
         return;
       }
     }
 
-    function backBtn(toStep) {
-      return `<button class="btn btn-outline btn-sm" onclick="goToStep('${toStep}')">&larr; Back</button>`;
-    }
-
-    function goToStep(step) {
-      state.step = step;
-      renderStep();
-    }
-
     function pickHospital(id, name) {
       state.hospitalId = id; state.hospitalName = name;
-      state.step = state.type === "scheduled" ? "doctor" : "confirm";
+      state.step = state.type === "scheduled" ? "doctor" : "profile";
       renderStep();
     }
-
-    function pickDoctor(id, name, fee) {
-      state.doctorId = id; state.doctorName = name; state.doctorFee = fee;
-      state.step = "date";
-      renderStep();
+    function pickDoctor(id, name) {
+      state.doctorId = id; state.doctorName = name;
+      state.step = "profile"; renderStep();
     }
-
     function pickSlot(id, time) {
       state.slotId = id; state.slotTime = time;
-      state.step = "confirm";
-      renderStep();
+      state.step = "confirm"; renderStep();
     }
 
     async function submitBooking() {
       const err = document.getElementById("confirm-err");
       err.textContent = "";
       const notes = document.getElementById("confirm-notes").value.trim();
-
-      const payload = {
-        hospital_id: state.hospitalId,
-        type: state.type,
-        notes: notes || null
-      };
-      if (state.type === "scheduled") {
-        payload.slot_id = state.slotId;
-      } else {
-        payload.requested_time = new Date().toISOString();
-      }
+      const payload = { hospital_id: state.hospitalId, type: state.type, notes: notes || null, profile_link_id: state.profileLinkId };
+      if (state.type === "scheduled") payload.slot_id = state.slotId;
+      else payload.requested_time = new Date().toISOString();
 
       try {
-        const appt = await api("POST", "/portal/appointments", payload);
+        await api("POST", "/portal/appointments", payload);
         toast(state.type === "queue_home" ? "Token reserved — complete payment to join today's queue" : "Appointment booked — complete payment to confirm", "success");
-        setType("scheduled"); // resets wizard back to start
         document.getElementById("type-scheduled").click();
         loadAppointments();
-      } catch (e) {
-        err.textContent = e.message;
-      }
+      } catch (e) { err.textContent = e.message; }
     }
 
     async function loadAppointments() {
@@ -341,9 +339,7 @@
       try {
         const appts = await api("GET", "/portal/appointments");
         if (!appts.length) { list.innerHTML = `<p style="color:var(--slate-light)">No appointments yet.</p>`; return; }
-
         const statusBadge = { booked: "badge-grey", confirmed: "badge-teal", completed: "badge-green", cancelled: "badge-red", no_show: "badge-red" };
-
         list.innerHTML = appts.map(a => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px">
             <div>
@@ -357,25 +353,16 @@
               ${(a.status === 'booked' || a.status === 'confirmed') ? `<button class="btn btn-outline btn-sm" onclick="cancelAppt(${a.id})">Cancel</button>` : ''}
             </div>
           </div>`).join('');
-      } catch (e) {
-        list.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
-      }
+      } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
     }
 
     async function markPaid(id) {
-      try {
-        await api("POST", `/portal/appointments/${id}/mark-paid`);
-        toast("Payment marked — you're on the hospital's queue", "success");
-        loadAppointments();
-      } catch (e) { toast(e.message, "error"); }
+      try { await api("POST", `/portal/appointments/${id}/mark-paid`); toast("Payment marked — you're on the hospital's queue", "success"); loadAppointments(); }
+      catch (e) { toast(e.message, "error"); }
     }
-
     async function cancelAppt(id) {
-      try {
-        await api("POST", `/portal/appointments/${id}/cancel`);
-        toast("Appointment cancelled", "success");
-        loadAppointments();
-      } catch (e) { toast(e.message, "error"); }
+      try { await api("POST", `/portal/appointments/${id}/cancel`); toast("Appointment cancelled", "success"); loadAppointments(); }
+      catch (e) { toast(e.message, "error"); }
     }
 
     resetWizard();

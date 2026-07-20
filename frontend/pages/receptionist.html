@@ -10,10 +10,11 @@
     .mobile-section.active { display: block; }
     @media (min-width: 901px) {
       .mobile-section { display: block !important; }
-      /* On desktop, Home (+ its Pending Payments) / Patients act as real tabs; Attendance stays always visible above them. */
+      /* On desktop, Home (+ its Pending Payments) / Patients / Portal act as real tabs; Attendance stays always visible above them. */
       #section-home.mobile-section:not(.d-active) { display: none !important; }
       #section-pending.mobile-section:not(.d-active) { display: none !important; }
       #section-patients.mobile-section:not(.d-active) { display: none !important; }
+      #section-portal.mobile-section:not(.d-active) { display: none !important; }
       #rec-attendance-card {
         display: flex;
         align-items: center;
@@ -137,6 +138,10 @@
         </svg>
         Home
       </div>
+      <div class="nav-item" id="sidebar-nav-portal" onclick="showRecDesktopTab('portal')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Expected Today
+      </div>
       <div class="nav-item" id="sidebar-nav-patients" onclick="showRecDesktopTab('patients')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
@@ -166,6 +171,10 @@
         </svg>
         Patients
       </button>
+      <button class="bottom-nav-item" id="tab-btn-portal" onclick="showRecSection('portal')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Expected
+      </button>
       <button class="bottom-nav-item" id="tab-btn-attendance" onclick="showRecSection('attendance')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -192,21 +201,6 @@
       </div>
 
       <div class="mobile-section active" id="section-home">
-
-      <div class="card" id="expected-today-card" style="margin-bottom:20px">
-        <div class="card-header" style="flex-wrap:wrap;gap:10px">
-          <h2>Expected Today (Health Portal) <span class="badge badge-teal" id="expected-today-count" style="margin-left:8px">0</span></h2>
-          <select class="form-control" id="expected-today-doctor-filter" style="max-width:220px">
-            <option value="">All doctors</option>
-          </select>
-        </div>
-        <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
-          Patients who paid for a booked appointment or a queue-from-home slot for today. This does not change how you check anyone in — it's just a heads-up.
-        </p>
-        <div id="expected-today-list">
-          <p style="color:var(--slate-light);font-size:13px">Loading...</p>
-        </div>
-      </div>
 
       <div class="card">
 
@@ -325,6 +319,23 @@
       </div>
 
       </div>
+      <div class="mobile-section" id="section-portal">
+        <div class="card">
+          <div class="card-header" style="flex-wrap:wrap;gap:10px">
+            <h2>Expected Today (Health Portal) <span class="badge badge-teal" id="expected-today-count" style="margin-left:8px">0</span></h2>
+            <select class="form-control" id="expected-today-doctor-filter" style="max-width:220px">
+              <option value="">All doctors</option>
+            </select>
+          </div>
+          <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
+            Patients who paid for a booked appointment or a queue-from-home slot for today. This does not change how you check anyone in — it's just a heads-up.
+          </p>
+          <div id="expected-today-list">
+            <p style="color:var(--slate-light);font-size:13px">Loading...</p>
+          </div>
+        </div>
+      </div>
+
       <div class="mobile-section" id="section-patients">
       <div class="card" style="margin-top:24px">
         <div class="card-header">
@@ -529,21 +540,23 @@
     let selectedCategory = null;
 
     function showRecSection(id) {
-      ['home', 'pending', 'attendance', 'patients'].forEach(s => {
+      ['home', 'pending', 'attendance', 'patients', 'portal'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         const mobileBtn = document.getElementById('tab-btn-' + s);
         if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
       });
       if (id === 'pending') loadPendingPayments();
+      if (id === 'portal') loadExpectedToday();
     }
 
     function showRecDesktopTab(id) {
-      const groups = { home: ['section-home', 'section-pending'], patients: ['section-patients'] };
+      const groups = { home: ['section-home', 'section-pending'], patients: ['section-patients'], portal: ['section-portal'] };
       Object.values(groups).flat().forEach(elId => document.getElementById(elId).classList.remove('d-active'));
       groups[id].forEach(elId => document.getElementById(elId).classList.add('d-active'));
-      ['home', 'patients'].forEach(t => {
+      ['home', 'patients', 'portal'].forEach(t => {
         document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id);
       });
+      if (id === 'portal') loadExpectedToday();
     }
 
     if (window.innerWidth >= 901) showRecDesktopTab('home');
@@ -1450,7 +1463,6 @@
     }
 
     loadRecAttendance();
-    loadExpectedToday();
     document.getElementById("expected-today-doctor-filter").addEventListener("change", loadExpectedToday);
 
     async function loadExpectedToday() {
