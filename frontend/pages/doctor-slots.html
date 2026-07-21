@@ -20,11 +20,14 @@
     }
     .day-chip.selected { background: var(--teal); border-color: var(--teal); color: #fff; }
     .preset-chip {
+      display: inline-flex; align-items: center; white-space: nowrap;
       padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border);
       font-size: 13px; font-weight: 500; cursor: pointer; background: var(--white);
+      line-height: 1.2;
     }
     .preset-chip.selected { background: var(--navy); border-color: var(--navy); color: #fff; }
     .period-block { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    .period-block > div[id^="preset-"] { display: flex; flex-wrap: wrap; gap: 8px 10px; row-gap: 10px; }
     .period-block h4 { margin: 0 0 10px; font-size: 14px; color: var(--navy); }
     .save-status { font-size: 12.5px; color: var(--slate-light); margin-top: 8px; }
     .save-status.dirty { color: var(--danger); font-weight: 600; }

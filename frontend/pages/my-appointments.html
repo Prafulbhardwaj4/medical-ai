@@ -487,7 +487,7 @@
         const grouped = await api("GET", `/portal/hospitals/${state.hospitalId}/doctors/${state.doctorId}/slots?date=${state.date}`);
         const periods = [["morning", "Morning"], ["afternoon", "Afternoon"], ["evening", "Evening"]];
         const anySlots = periods.some(([k]) => grouped[k]?.length);
-        wrap.innerHTML = !anySlots ? `<p style="color:var(--slate-light);margin-top:14px">No slots available for this date. Try another date above.</p>` :
+        wrap.innerHTML = !anySlots ? `<p style="color:var(--slate-light);margin-top:14px">No slots are available for this date. Try another date above, or check back later.</p>` :
           periods.map(([key, label]) => grouped[key]?.length ? `
             <div class="slot-period-title">${label}</div>
             <div class="slot-grid">
@@ -496,7 +496,9 @@
                   <span class="dot"></span>${s.time}
                 </div>`).join('')}
             </div>` : '').join('');
-      } catch (e) { wrap.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      } catch (e) {
+        wrap.innerHTML = `<p class="err-msg" style="display:block">Could not load time slots right now (${e.message}). Please try again in a moment.</p>`;
+      }
     }
 
     function setPayMethod(m) {

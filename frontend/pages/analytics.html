@@ -242,6 +242,13 @@
                 </svg>
                 Billing
             </a>
+            <a class="nav-item" id="nav-appointments" href="#" onclick="showSection('appointments');return false;">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Appointments
+            </a>
             <a class="nav-item" href="doctors.html">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -579,6 +586,20 @@
             </div>
 
             <!-- BILLING -->
+            <div id="section-appointments" class="section" style="display:none">
+                <div class="card" style="margin-bottom:20px">
+                    <div class="card-header" style="flex-wrap:wrap;gap:10px">
+                        <h2>Paid Portal Appointments <span id="appt-analytics-total" style="color:var(--slate-light);font-weight:400">— last 45 days</span></h2>
+                        <select class="form-control" id="appt-analytics-doctor-filter" style="max-width:220px">
+                            <option value="">All doctors</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="appt-analytics-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+                    <p>Loading...</p>
+                </div>
+            </div>
+
             <div id="section-billing" class="section" style="display:none">
                 <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
                     <h1>Billing</h1>
@@ -805,7 +826,7 @@
 
         let dashData = null;
         let allPatients = [];
-        const SECTIONS = ['overview', 'patients', 'consultations', 'medicines', 'tests', 'demographics', 'billing', 'settings'];
+        const SECTIONS = ['overview', 'patients', 'consultations', 'medicines', 'tests', 'demographics', 'billing', 'appointments', 'settings'];
 
         function showSection(name) {
             SECTIONS.forEach(s => {
@@ -814,10 +835,49 @@
                 if (nav) nav.classList.toggle('active', s === name);
             });
             if (name === 'billing') { loadBilling(); return; }
+            if (name === 'appointments') { loadAppointmentAnalytics(); return; }
             if (name === 'settings') { loadHospitalDetails(); return; }
             if (name === 'consultations') { loadConsultationDoctors(); loadConsultations(1); return; }
             if (dashData) renderSection(name);
         }
+
+        async function loadAppointmentAnalytics() {
+            const grid = document.getElementById("appt-analytics-grid");
+            const doctorId = document.getElementById("appt-analytics-doctor-filter").value;
+            grid.innerHTML = `<p>Loading...</p>`;
+            try {
+                const path = doctorId ? `/portal-appointments-staff/analytics?doctor_id=${doctorId}` : `/portal-appointments-staff/analytics`;
+                const data = await api("GET", path);
+                document.getElementById("appt-analytics-total").textContent = `${data.total} total — last 45 days`;
+
+                const filterSel = document.getElementById("appt-analytics-doctor-filter");
+                if (!doctorId) {
+                    const seen = new Set(Array.from(filterSel.options).map(o => o.value));
+                    data.by_doctor.forEach(d => {
+                        if (!seen.has(String(d.doctor_id))) {
+                            seen.add(String(d.doctor_id));
+                            const opt = document.createElement("option");
+                            opt.value = d.doctor_id;
+                            opt.textContent = d.doctor_name;
+                            filterSel.appendChild(opt);
+                        }
+                    });
+                }
+
+                if (!data.by_doctor.length) { grid.innerHTML = `<p style="color:var(--slate-light)">No paid appointments in the last 45 days.</p>`; return; }
+                grid.innerHTML = data.by_doctor.map(d => `
+                    <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+                        <div>
+                            <div style="font-weight:600;color:var(--navy)">${d.doctor_name}</div>
+                            <div style="font-size:12px;color:var(--slate-light)">Last 45 days</div>
+                        </div>
+                        <div style="font-size:1.8rem;font-weight:800;color:var(--teal)">${d.appointment_count}</div>
+                    </div>`).join('');
+            } catch (e) {
+                grid.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+            }
+        }
+        document.getElementById("appt-analytics-doctor-filter")?.addEventListener("change", loadAppointmentAnalytics);
 
         async function loadConsultationDoctors() {
             const sel = document.getElementById('filter-doctor');
