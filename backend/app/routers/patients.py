@@ -835,8 +835,40 @@ def todays_queue(
             "token_number": c.token_number,
             "issue_category": c.issue_category,
             "created_at": c.created_at.isoformat(),
+            "estimated_time": None,
             "status": "done" if c.token_number in confirmed_tokens else "waiting"
         })
+
+    # Merge in paid portal appointments for today that haven't been checked
+    # in yet, so the doctor sees who's expected and roughly when.
+    from app.models.portal import Appointment, AppointmentStatus
+    today_start = datetime.combine(ist_today(), datetime.min.time())
+    today_end = today_start + timedelta(days=1)
+
+    expected = db.query(Appointment).filter(
+        Appointment.hospital_id == current_doctor.hospital_id,
+        Appointment.doctor_id == current_doctor.id,
+        Appointment.payment_status == "paid",
+        Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed]),
+        Appointment.requested_time >= today_start, Appointment.requested_time < today_end,
+    ).all()
+
+    for a in expected:
+        patient_name = a.profile_link.patient.name if a.profile_link and a.profile_link.patient else "Portal Patient"
+        result.append({
+            "checkin_id": None,
+            "patient_id": None,
+            "patient_name": patient_name,
+            "patient_uid": None,
+            "url_token": None,
+            "token_number": None,
+            "issue_category": a.notes or "Booked appointment",
+            "created_at": a.requested_time.isoformat(),
+            "estimated_time": a.requested_time.isoformat(),
+            "status": "expected"
+        })
+
+    result.sort(key=lambda r: r.get("estimated_time") or r["created_at"])
     return result
 
 

@@ -9,3 +9,4 @@ from app.models.invoice import Invoice
 from app.models.notification import Notification
 from app.models.portal import PatientAccount, PatientProfileLink, InviteStatus, OTPCode, Appointment
 from app.models.doctor_slot import DoctorSlot
+from app.models.doctor_availability import DoctorAvailabilityTemplate, DoctorUnavailability

@@ -213,7 +213,7 @@
                   <th>Token</th>
                   <th>Patient</th>
                   <th>Reason</th>
-                  <th>Checked In</th>
+                  <th>Checked In / Est. Time</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -695,16 +695,27 @@
         tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No patients checked in today.</p></div></td></tr>`;
         return;
       }
-      tbody.innerHTML = data.map(q => `
+      const statusMeta = {
+        waiting: { label: 'Waiting', badge: 'badge-amber' },
+        done: { label: 'Consulted', badge: 'badge-teal' },
+        expected: { label: 'Expected', badge: 'badge-grey' },
+      };
+      tbody.innerHTML = data.map(q => {
+        const meta = statusMeta[q.status] || statusMeta.waiting;
+        const timeVal = q.status === 'expected' ? q.estimated_time : q.created_at;
+        const timeLabel = timeVal
+          ? new Date(toIST(timeVal)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })
+          : '—';
+        return `
         <tr>
-          <td data-label="Token"><strong>${q.token_number}</strong></td>
+          <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
           <td data-label="Patient">${q.patient_name}</td>
           <td data-label="Reason">${q.issue_category}</td>
-          <td data-label="Checked In" style="color:var(--slate)">${new Date(toIST(q.created_at)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</td>
-          <td data-label="Status"><span class="badge ${q.status === 'waiting' ? 'badge-amber' : 'badge-teal'}">${q.status === 'waiting' ? 'Waiting' : 'Consulted'}</span></td>
-          <td data-label="" style="text-align:left"><button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button></td>
-        </tr>
-      `).join('');
+          <td data-label="Checked In / Est. Time" style="color:var(--slate)">${timeLabel}${q.status === 'expected' ? ' <span style="color:var(--slate-light);font-size:11px">(expected)</span>' : ''}</td>
+          <td data-label="Status"><span class="badge ${meta.badge}">${meta.label}</span></td>
+          <td data-label="" style="text-align:left">${q.status === 'expected' ? '' : `<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button>`}</td>
+        </tr>`;
+      }).join('');
     }
 
     loadQueue();

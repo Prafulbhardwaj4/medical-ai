@@ -20,17 +20,17 @@
     }
     .day-chip.selected { background: var(--teal); border-color: var(--teal); color: #fff; }
     .preset-chip {
-      display: inline-flex; align-items: center; white-space: nowrap;
+      display: inline-flex; align-items: center; white-space: nowrap; line-height: 1.2;
       padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border);
       font-size: 13px; font-weight: 500; cursor: pointer; background: var(--white);
-      line-height: 1.2;
     }
     .preset-chip.selected { background: var(--navy); border-color: var(--navy); color: #fff; }
     .period-block { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
-    .period-block > div[id^="preset-"] { display: flex; flex-wrap: wrap; gap: 8px 10px; row-gap: 10px; }
     .period-block h4 { margin: 0 0 10px; font-size: 14px; color: var(--navy); }
+    .period-block > div[id^="preset-"] { display: flex; flex-wrap: wrap; gap: 8px 10px; row-gap: 10px; }
     .save-status { font-size: 12.5px; color: var(--slate-light); margin-top: 8px; }
     .save-status.dirty { color: var(--danger); font-weight: 600; }
+    .unavail-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
   </style>
 </head>
 
@@ -92,7 +92,7 @@
       </a>
       <div class="nav-divider"></div>
       <div class="sidebar-section-label">Quick Actions</div>
-      <div class="nav-item" onclick="attemptLeave(() => location.href='dashboard.html')">
+      <div class="nav-item" onclick="attemptLeave(() => location.href='dashboard.html?openAddPatient=1')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
@@ -130,7 +130,7 @@
     <main class="main-content">
       <div style="margin-bottom:20px">
         <h1>My Availability</h1>
-        <p style="color:var(--slate)">Set the time slots patients can book through the Health Portal. This stays exactly as saved until you change it again.</p>
+        <p style="color:var(--slate)">Set your standing weekly pattern — it stays exactly as saved until you change it again.</p>
       </div>
 
       <div class="card" id="doctor-picker-card" style="display:none;margin-bottom:20px">
@@ -160,7 +160,7 @@
 
         <div class="period-block">
           <h4>Morning</h4>
-          <div style="display:flex;flex-wrap:wrap;gap:8px" id="preset-morning"></div>
+          <div id="preset-morning"></div>
           <div class="form-group" style="margin-top:12px">
             <label class="form-label">Add custom time (24h, e.g. 09:15)</label>
             <div style="display:flex;gap:8px">
@@ -172,7 +172,7 @@
 
         <div class="period-block">
           <h4>Afternoon</h4>
-          <div style="display:flex;flex-wrap:wrap;gap:8px" id="preset-afternoon"></div>
+          <div id="preset-afternoon"></div>
           <div class="form-group" style="margin-top:12px">
             <label class="form-label">Add custom time (24h, e.g. 14:15)</label>
             <div style="display:flex;gap:8px">
@@ -184,7 +184,7 @@
 
         <div class="period-block">
           <h4>Evening</h4>
-          <div style="display:flex;flex-wrap:wrap;gap:8px" id="preset-evening"></div>
+          <div id="preset-evening"></div>
           <div class="form-group" style="margin-top:12px">
             <label class="form-label">Add custom time (24h, e.g. 18:15)</label>
             <div style="display:flex;gap:8px">
@@ -214,17 +214,21 @@
           <div class="form-group"><label class="form-label">Afternoon</label><input class="form-control" type="number" min="1" id="cap-afternoon" value="1" oninput="markDirty()" /></div>
           <div class="form-group"><label class="form-label">Evening</label><input class="form-control" type="number" min="1" id="cap-evening" value="1" oninput="markDirty()" /></div>
         </div>
+        <div class="err-msg" id="gen-err"></div>
+        <button class="btn btn-primary" onclick="saveTemplate()">Save Availability</button>
+        <div class="save-status" id="save-status">All changes saved.</div>
       </div>
 
       <div class="card" style="margin-bottom:20px">
-        <div class="card-header"><h2>4. Apply To</h2></div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <div class="form-group"><label class="form-label">Starting from</label><input class="form-control" type="date" id="start-date" oninput="markDirty()" /></div>
-          <div class="form-group"><label class="form-label">For how many days</label><input class="form-control" type="number" min="1" max="90" id="days-count" value="30" oninput="markDirty()" /></div>
+        <div class="card-header"><h2>Mark a Day Unavailable</h2></div>
+        <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">Blocks new bookings for that date. Already-paid appointments on that date won't be auto-cancelled — you'll see them listed here so you can reschedule or reassign manually.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+          <div class="form-group" style="margin:0"><label class="form-label">Date</label><input class="form-control" type="date" id="unavail-date" /></div>
+          <div class="form-group" style="margin:0;flex:1;min-width:200px"><label class="form-label">Reason (optional)</label><input class="form-control" id="unavail-reason" placeholder="e.g. On leave" /></div>
+          <button class="btn btn-outline" onclick="markUnavailable()">Mark Unavailable</button>
         </div>
-        <div class="err-msg" id="gen-err"></div>
-        <button class="btn btn-primary" onclick="saveAvailability()">Save Availability</button>
-        <div class="save-status" id="save-status">All changes saved.</div>
+        <div id="unavail-list" style="margin-top:16px"></div>
+        <div id="unavail-affected" style="margin-top:12px"></div>
       </div>
 
       <div class="card">
@@ -265,12 +269,13 @@
     if (!requireAuth()) { }
     fillTopbar();
     const doc = getDoctor();
-    const isManager = ['admin', 'sub_admin', 'super_admin'].includes(doc?.role);
+    const isManager = ['admin', 'sub_admin', 'super_admin', 'receptionist'].includes(doc?.role);
     document.getElementById("profile-menu-name").textContent = `${doc?.title || ''} ${doc?.name || ''}`.trim();
 
     let targetDoctorId = doc?.role === 'doctor' ? doc.id : null;
     let isDirty = false;
     let pendingLeaveAction = null;
+    let suppressNativeWarning = false;
 
     function markDirty() {
       isDirty = true;
@@ -293,14 +298,22 @@
       document.getElementById("modal-unsaved").classList.remove("open");
       if (choice === 'stay') { pendingLeaveAction = null; return; }
       if (choice === 'save') {
-        const ok = await saveAvailability();
+        const ok = await saveTemplate();
         if (!ok) { pendingLeaveAction = null; return; }
+      } else {
+        // Discard: clear dirty state BEFORE navigating so the browser's own
+        // "leave site?" prompt doesn't also fire on top of this modal.
+        isDirty = false;
       }
+      suppressNativeWarning = true;
       if (pendingLeaveAction) pendingLeaveAction();
       pendingLeaveAction = null;
     }
+    // Native browser prompt only covers actual tab-close/refresh/typed-URL
+    // navigation — there's no way for any website to replace that specific
+    // dialog with custom UI; browsers intentionally block that.
     window.addEventListener('beforeunload', (e) => {
-      if (isDirty) { e.preventDefault(); e.returnValue = ''; }
+      if (isDirty && !suppressNativeWarning) { e.preventDefault(); e.returnValue = ''; }
     });
 
     const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -312,16 +325,17 @@
       if (pattern === "all-week") return [0, 1, 2, 3, 4, 5, 6];
       return customDays;
     }
-    function selectPattern(p) {
+    function selectPattern(p, silent) {
       pattern = p;
-      markDirty();
+      if (!silent) markDirty();
       ['mon-sat', 'all-week', 'custom'].forEach(k => document.getElementById(`opt-${k}`).classList.toggle('selected', k === p));
-      if (p === 'custom') openCustomDaysModal(); else updateCustomSummary();
+      if (p === 'custom' && !silent) openCustomDaysModal();
+      updateCustomSummary();
     }
     function updateCustomSummary() {
       if (pattern !== 'custom') { document.getElementById("custom-days-summary").textContent = "Choose specific days"; return; }
       document.getElementById("custom-days-summary").textContent = customDays.length
-        ? customDays.sort((a,b)=>a-b).map(d => WEEKDAY_LABELS[d]).join(', ') : "No days selected";
+        ? customDays.slice().sort((a,b)=>a-b).map(d => WEEKDAY_LABELS[d]).join(', ') : "No days selected";
     }
     function openCustomDaysModal() {
       const wrap = document.getElementById("custom-days-chips");
@@ -333,10 +347,10 @@
     function saveCustomDays() {
       customDays = Array.from(document.querySelectorAll('#custom-days-chips .day-chip.selected')).map(c => parseInt(c.dataset.day));
       updateCustomSummary();
+      markDirty();
       closeCustomDaysModal();
     }
 
-    // Preset times shown as 2-hour ranges; underlying booking slot is still the start time
     const PRESETS = {
       morning: ["07:00", "09:00", "11:00"],
       afternoon: ["12:00", "14:00", "16:00"],
@@ -363,7 +377,6 @@
         }));
       });
     }
-    renderPresets();
 
     function addCustomTime(period) {
       const input = document.getElementById(`custom-${period}`);
@@ -377,9 +390,9 @@
     }
 
     let capacityMode = "same";
-    function setCapacityMode(mode) {
+    function setCapacityMode(mode, silent) {
       capacityMode = mode;
-      markDirty();
+      if (!silent) markDirty();
       document.getElementById("cap-mode-same").classList.toggle("selected", mode === "same");
       document.getElementById("cap-mode-period").classList.toggle("selected", mode === "per_period");
       document.getElementById("capacity-same-input").style.display = mode === "same" ? "block" : "none";
@@ -387,7 +400,7 @@
     }
 
     async function initDoctorPicker() {
-      if (!isManager) return;
+      if (!isManager) { await loadTemplate(); await loadUnavailable(); return; }
       document.getElementById("doctor-picker-card").style.display = "block";
       try {
         const res = await fetch(`${BASE}/doctors`, { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -395,27 +408,54 @@
         const sel = document.getElementById("pick-doctor");
         sel.innerHTML = doctors.filter(d => d.role === 'doctor').map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
         targetDoctorId = sel.value ? parseInt(sel.value) : null;
-        sel.addEventListener("change", () => { targetDoctorId = parseInt(sel.value); loadPreview(); });
+        sel.addEventListener("change", () => { targetDoctorId = parseInt(sel.value); loadTemplate(); loadUnavailable(); loadPreview(); });
+        if (targetDoctorId) { await loadTemplate(); await loadUnavailable(); }
       } catch (e) {
         document.getElementById("doctor-picker-card").innerHTML = `<p class="err-msg" style="display:block">Could not load doctor list.</p>`;
       }
     }
 
-    async function saveAvailability() {
+    async function loadTemplate() {
+      if (!targetDoctorId) return;
+      try {
+        const qs = isManager ? `?doctor_id=${targetDoctorId}` : ``;
+        const t = await api("GET", `/doctor-slots/template${qs}`);
+
+        selectedTimes.morning = new Set(t.morning_times);
+        selectedTimes.afternoon = new Set(t.afternoon_times);
+        selectedTimes.evening = new Set(t.evening_times);
+        customTimes.morning = t.morning_times.filter(x => !PRESETS.morning.includes(x));
+        customTimes.afternoon = t.afternoon_times.filter(x => !PRESETS.afternoon.includes(x));
+        customTimes.evening = t.evening_times.filter(x => !PRESETS.evening.includes(x));
+        renderPresets();
+
+        const wd = t.weekdays.slice().sort((a,b)=>a-b);
+        if (JSON.stringify(wd) === JSON.stringify([0,1,2,3,4,5])) selectPattern('mon-sat', true);
+        else if (JSON.stringify(wd) === JSON.stringify([0,1,2,3,4,5,6])) selectPattern('all-week', true);
+        else { customDays = wd; selectPattern('custom', true); }
+
+        setCapacityMode(t.capacity_mode, true);
+        document.getElementById("cap-same").value = t.capacity_same;
+        document.getElementById("cap-morning").value = t.capacity_morning;
+        document.getElementById("cap-afternoon").value = t.capacity_afternoon;
+        document.getElementById("cap-evening").value = t.capacity_evening;
+
+        markClean();
+      } catch (e) { /* no template yet — keep defaults */ }
+    }
+
+    async function saveTemplate() {
       const err = document.getElementById("gen-err");
       err.textContent = "";
-      const startDate = document.getElementById("start-date").value;
-      const daysCount = parseInt(document.getElementById("days-count").value) || 30;
-      if (!startDate) { err.textContent = "Pick a starting date"; return false; }
-
       const morning = [...selectedTimes.morning];
       const afternoon = [...selectedTimes.afternoon];
       const evening = [...selectedTimes.evening];
       if (!morning.length && !afternoon.length && !evening.length) { err.textContent = "Select at least one time slot"; return false; }
 
       const payload = {
-        doctor_id: targetDoctorId, start_date: startDate, days_count: daysCount,
-        weekdays: patternWeekdays(), morning_times: morning, afternoon_times: afternoon, evening_times: evening,
+        doctor_id: targetDoctorId,
+        weekdays: patternWeekdays(),
+        morning_times: morning, afternoon_times: afternoon, evening_times: evening,
         capacity_mode: capacityMode,
         capacity_same: parseInt(document.getElementById("cap-same").value) || 1,
         capacity_morning: parseInt(document.getElementById("cap-morning").value) || 1,
@@ -424,12 +464,59 @@
       };
 
       try {
-        const created = await api("POST", "/doctor-slots/generate", payload);
-        toast(`Saved — ${created.length} new slots added`, "success");
+        await api("POST", "/doctor-slots/template", payload);
+        toast("Availability saved", "success");
         markClean();
         loadPreview();
         return true;
       } catch (e) { err.textContent = e.message; return false; }
+    }
+
+    async function markUnavailable() {
+      const date = document.getElementById("unavail-date").value;
+      if (!date) { toast("Pick a date", "error"); return; }
+      try {
+        await api("POST", "/doctor-slots/unavailable", { doctor_id: targetDoctorId, date, reason: document.getElementById("unavail-reason").value.trim() || null });
+        toast("Marked unavailable", "success");
+        document.getElementById("unavail-reason").value = "";
+        loadUnavailable();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function loadUnavailable() {
+      if (!targetDoctorId) return;
+      const listEl = document.getElementById("unavail-list");
+      try {
+        const qs = isManager ? `?doctor_id=${targetDoctorId}` : ``;
+        const rows = await api("GET", `/doctor-slots/unavailable${qs}`);
+        listEl.innerHTML = !rows.length ? `<p style="color:var(--slate-light);font-size:13px">No upcoming unavailable dates.</p>` : rows.map(r => `
+          <div class="unavail-row">
+            <span>${new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${r.reason ? ' — ' + r.reason : ''}</span>
+            <span style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-outline btn-sm" onclick="viewAffected('${r.date}')">View Affected</button>
+              <button class="btn btn-outline btn-sm" onclick="unmarkUnavailable(${r.id})">Undo</button>
+            </span>
+          </div>`).join('');
+      } catch (e) { listEl.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+    }
+
+    async function unmarkUnavailable(id) {
+      try { await api("DELETE", `/doctor-slots/unavailable/${id}`); toast("Removed", "success"); loadUnavailable(); document.getElementById("unavail-affected").innerHTML = ""; }
+      catch (e) { toast(e.message, "error"); }
+    }
+
+    async function viewAffected(date) {
+      const el = document.getElementById("unavail-affected");
+      el.innerHTML = `<p>Loading affected appointments...</p>`;
+      try {
+        const qs = isManager ? `&doctor_id=${targetDoctorId}` : ``;
+        const rows = await api("GET", `/doctor-slots/unavailable/${date}/affected-appointments?x=1${qs}`);
+        el.innerHTML = !rows.length ? `<p style="color:var(--slate-light);font-size:13px">No paid appointments on this date — safe to leave as is.</p>` : `
+          <div class="card" style="background:#fdecec;border-color:#f5b5b5">
+            <p style="font-weight:600;color:var(--danger);margin-bottom:8px">These paid appointments need manual rescheduling:</p>
+            ${rows.map(r => `<div class="unavail-row"><span>${r.patient_name}</span><span>${new Date(r.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span></div>`).join('')}
+          </div>`;
+      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
     }
 
     async function loadPreview() {
@@ -440,7 +527,7 @@
       try {
         const qs = isManager ? `?doctor_id=${targetDoctorId}&date=${date}` : `?date=${date}`;
         const slots = await api("GET", `/doctor-slots/mine${qs}`);
-        if (!slots.length) { list.innerHTML = `<p style="color:var(--slate-light)">No slots for this date yet.</p>`; return; }
+        if (!slots.length) { list.innerHTML = `<p style="color:var(--slate-light)">No slots for this date.</p>`; return; }
         list.innerHTML = slots.map(s => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
             <span>${s.slot_time} <span class="badge badge-grey" style="margin-left:8px">${s.period}</span></span>
@@ -458,8 +545,9 @@
     }
 
     document.getElementById("preview-date").addEventListener("change", loadPreview);
-    document.getElementById("start-date").valueAsDate = new Date();
     document.getElementById("preview-date").valueAsDate = new Date();
+    document.getElementById("unavail-date").valueAsDate = new Date();
+    renderPresets();
     markClean();
     initDoctorPicker();
   </script>

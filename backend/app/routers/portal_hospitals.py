@@ -57,11 +57,18 @@ def list_hospital_doctors(hospital_id: int, db: Session = Depends(get_db)):
 def list_doctor_slots(hospital_id: int, doctor_id: int, date: str, db: Session = Depends(get_db)):
     from datetime import datetime as dt
     from app.models.doctor_slot import DoctorSlot
+    from app.models.doctor_availability import DoctorUnavailability
 
     try:
         slot_date = dt.strptime(date, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format, expected YYYY-MM-DD")
+
+    is_unavailable = db.query(DoctorUnavailability).filter(
+        DoctorUnavailability.doctor_id == doctor_id, DoctorUnavailability.date == slot_date
+    ).first() is not None
+    if is_unavailable:
+        return {"morning": [], "afternoon": [], "evening": [], "doctor_unavailable": True}
 
     slots = db.query(DoctorSlot).filter(
         DoctorSlot.hospital_id == hospital_id, DoctorSlot.doctor_id == doctor_id,

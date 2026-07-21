@@ -60,13 +60,19 @@ def book_appointment(
         if slot.booked_count >= slot.capacity:
             raise HTTPException(status_code=400, detail="This slot just filled up. Please pick another.")
 
+        from app.models.doctor_availability import DoctorUnavailability
+        if db.query(DoctorUnavailability).filter(
+            DoctorUnavailability.doctor_id == slot.doctor_id, DoctorUnavailability.date == slot.slot_date
+        ).first():
+            raise HTTPException(status_code=400, detail="This doctor is unavailable on this date. Please pick another date or doctor.")
+
         slot.booked_count += 1
         doctor_id = slot.doctor_id
         requested_time = datetime.combine(slot.slot_date, datetime.strptime(slot.slot_time, "%H:%M").time())
         slot_id = slot.id
     else:
-        # queue_home — no slot required, reserved for right now
-        requested_time = requested_time or datetime.utcnow()
+        from app.utils.timezone import now_ist_naive
+        requested_time = now_ist_naive()
 
     appt = Appointment(
         account_id=account.id,

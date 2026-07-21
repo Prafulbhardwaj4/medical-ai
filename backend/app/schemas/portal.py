@@ -97,19 +97,36 @@ class AppointmentOut(BaseModel):
         from_attributes = True
 
 
-class GenerateSlotsIn(BaseModel):
-    doctor_id: Optional[int] = None  # required if caller is admin/sub_admin/super_admin
-    start_date: str        # "YYYY-MM-DD"
-    days_count: int = 30   # how many days forward to generate
-    weekdays: List[int]    # 0=Monday ... 6=Sunday — which days of week get slots
+class SaveTemplateIn(BaseModel):
+    doctor_id: Optional[int] = None  # required if caller is admin/sub_admin/super_admin/receptionist
+    weekdays: List[int]              # 0=Monday ... 6=Sunday
     morning_times: List[str] = []
     afternoon_times: List[str] = []
     evening_times: List[str] = []
-    capacity_mode: str = "same"  # "same" | "per_period"
+    capacity_mode: str = "same"      # "same" | "per_period"
     capacity_same: int = 1
     capacity_morning: int = 1
     capacity_afternoon: int = 1
     capacity_evening: int = 1
+
+
+class TemplateOut(BaseModel):
+    exists: bool
+    weekdays: List[int]
+    morning_times: List[str]
+    afternoon_times: List[str]
+    evening_times: List[str]
+    capacity_mode: str
+    capacity_same: int
+    capacity_morning: int
+    capacity_afternoon: int
+    capacity_evening: int
+
+
+class MarkUnavailableIn(BaseModel):
+    doctor_id: Optional[int] = None
+    date: str
+    reason: Optional[str] = None
 
 
 class SlotOut(BaseModel):
