@@ -15,6 +15,7 @@
       #section-pending.mobile-section:not(.d-active) { display: none !important; }
       #section-patients.mobile-section:not(.d-active) { display: none !important; }
       #section-portal.mobile-section:not(.d-active) { display: none !important; }
+      #section-availability.mobile-section:not(.d-active) { display: none !important; }
       #rec-attendance-card {
         display: flex;
         align-items: center;
@@ -105,6 +106,53 @@
       </button>
     </header>
 
+    <div class="modal-overlay" id="modal-avail-editor">
+      <div class="modal" style="max-width:640px;max-height:85vh;overflow-y:auto">
+        <div class="modal-header">
+          <h2 id="avail-modal-doctor-name">Availability</h2>
+          <button class="modal-close" onclick="closeAvailModal()">&times;</button>
+        </div>
+
+        <div style="border:1.5px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+          <h4 style="margin:0 0 10px;font-size:14px;color:var(--navy)">Which days?</h4>
+          <div style="display:flex;gap:8px;flex-wrap:wrap" id="am-day-chips"></div>
+        </div>
+
+        <div style="border:1.5px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+          <h4 style="margin:0 0 10px;font-size:14px;color:var(--navy)">Available Times</h4>
+          <div style="margin-bottom:12px">
+            <div style="font-size:13px;font-weight:600;color:var(--slate);margin-bottom:6px">Morning</div>
+            <div id="am-preset-morning" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          </div>
+          <div style="margin-bottom:12px">
+            <div style="font-size:13px;font-weight:600;color:var(--slate);margin-bottom:6px">Afternoon</div>
+            <div id="am-preset-afternoon" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--slate);margin-bottom:6px">Evening</div>
+            <div id="am-preset-evening" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          </div>
+        </div>
+
+        <div style="border:1.5px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+          <h4 style="margin:0 0 10px;font-size:14px;color:var(--navy)">Patients Per Slot</h4>
+          <input class="form-control" type="number" min="1" id="am-capacity" value="1" style="max-width:160px" />
+        </div>
+
+        <div class="err-msg" id="am-err"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="saveAvailModal()">Save Availability</button>
+
+        <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px">
+          <h4 style="margin:0 0 10px;font-size:14px;color:var(--navy)">Mark a Day Unavailable</h4>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div class="form-group" style="margin:0"><label class="form-label">Date</label><input class="form-control" type="date" id="am-unavail-date" /></div>
+            <button class="btn btn-outline" onclick="markUnavailModal()">Mark Unavailable</button>
+          </div>
+          <div id="am-unavail-list" style="margin-top:12px"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="sidebar-backdrop" id="profile-menu-backdrop" onclick="closeProfileMenu()" style="display:none"></div>
     <div class="profile-menu" id="profile-menu">
       <div class="profile-menu-header">
@@ -142,6 +190,14 @@
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Expected Today
       </div>
+      <a class="nav-item" href="admissions.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        Admissions
+      </a>
+      <div class="nav-item" id="sidebar-nav-availability" onclick="showRecDesktopTab('availability')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Manage Availability
+      </div>
       <div class="nav-item" id="sidebar-nav-patients" onclick="showRecDesktopTab('patients')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
@@ -174,6 +230,10 @@
       <button class="bottom-nav-item" id="tab-btn-portal" onclick="showRecSection('portal')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Expected
+      </button>
+      <button class="bottom-nav-item" id="tab-btn-availability" onclick="showRecSection('availability')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Availability
       </button>
       <button class="bottom-nav-item" id="tab-btn-attendance" onclick="showRecSection('attendance')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -319,6 +379,14 @@
       </div>
 
       </div>
+      <div class="mobile-section" id="section-availability">
+        <div class="card">
+          <div class="card-header"><h2>Manage Doctor Availability</h2></div>
+          <input class="form-control" id="avail-doctor-search" placeholder="Search doctors by name or specialization..." style="margin-bottom:16px" />
+          <div id="avail-doctor-list"><p>Loading doctors...</p></div>
+        </div>
+      </div>
+
       <div class="mobile-section" id="section-portal">
         <div class="card">
           <div class="card-header" style="flex-wrap:wrap;gap:10px">
@@ -540,23 +608,25 @@
     let selectedCategory = null;
 
     function showRecSection(id) {
-      ['home', 'pending', 'attendance', 'patients', 'portal'].forEach(s => {
+      ['home', 'pending', 'attendance', 'patients', 'portal', 'availability'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         const mobileBtn = document.getElementById('tab-btn-' + s);
         if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
       });
       if (id === 'pending') loadPendingPayments();
       if (id === 'portal') loadExpectedToday();
+      if (id === 'availability') loadAvailabilityDoctorList();
     }
 
     function showRecDesktopTab(id) {
-      const groups = { home: ['section-home', 'section-pending'], patients: ['section-patients'], portal: ['section-portal'] };
+      const groups = { home: ['section-home', 'section-pending'], patients: ['section-patients'], portal: ['section-portal'], availability: ['section-availability'] };
       Object.values(groups).flat().forEach(elId => document.getElementById(elId).classList.remove('d-active'));
       groups[id].forEach(elId => document.getElementById(elId).classList.add('d-active'));
-      ['home', 'patients', 'portal'].forEach(t => {
+      ['home', 'patients', 'portal', 'availability'].forEach(t => {
         document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id);
       });
       if (id === 'portal') loadExpectedToday();
+      if (id === 'availability') loadAvailabilityDoctorList();
     }
 
     if (window.innerWidth >= 901) showRecDesktopTab('home');
@@ -1464,6 +1534,145 @@
 
     loadRecAttendance();
     document.getElementById("expected-today-doctor-filter").addEventListener("change", loadExpectedToday);
+
+    // ---------- Manage Availability ----------
+    let availDoctors = [];
+    let currentAvailDoctorId = null;
+
+    async function loadAvailabilityDoctorList() {
+      const list = document.getElementById("avail-doctor-list");
+      list.innerHTML = `<p>Loading...</p>`;
+      try {
+        const res = await fetch(`${BASE}/doctors`, { headers: { Authorization: `Bearer ${getToken()}` } });
+        availDoctors = (await res.json()).filter(d => d.role === 'doctor');
+        renderAvailDoctorList(availDoctors);
+      } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+    }
+
+    function renderAvailDoctorList(doctors) {
+      const list = document.getElementById("avail-doctor-list");
+      if (!doctors.length) { list.innerHTML = `<p style="color:var(--slate-light)">No doctors found.</p>`; return; }
+      list.innerHTML = doctors.map(d => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick="openAvailModal(${d.id}, '${(d.title + ' ' + d.name).replace(/'/g, "\\'")}')">
+          <div>
+            <div style="font-weight:600;color:var(--navy)">${d.title} ${d.name}</div>
+            <div style="font-size:12.5px;color:var(--slate-light)">ID: ${d.id}${d.specialization ? ' · ' + d.specialization : ''}</div>
+          </div>
+          <span class="badge badge-teal">Manage</span>
+        </div>`).join('');
+    }
+
+    document.getElementById("avail-doctor-search").addEventListener("input", (e) => {
+      const q = e.target.value.toLowerCase();
+      renderAvailDoctorList(availDoctors.filter(d => d.name.toLowerCase().includes(q) || (d.specialization || '').toLowerCase().includes(q)));
+    });
+
+    const AM_WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const AM_PRESETS = { morning: ["07:00", "09:00", "11:00"], afternoon: ["12:00", "14:00", "16:00"], evening: ["17:00", "19:00", "21:00"] };
+    let amSelectedDays = new Set([0,1,2,3,4,5]);
+    let amSelectedTimes = { morning: new Set(), afternoon: new Set(), evening: new Set() };
+
+    function amRangeLabel(t) {
+      const [h, m] = t.split(':').map(Number);
+      const endH = (h + 2) % 24;
+      return `${t} - ${String(endH).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    }
+
+    function renderAmDayChips() {
+      document.getElementById("am-day-chips").innerHTML = AM_WEEKDAY_LABELS.map((l, i) => `
+        <button class="day-chip ${amSelectedDays.has(i) ? 'selected' : ''}" data-day="${i}" onclick="toggleAmDay(${i}, this)">${l}</button>`).join('');
+    }
+    function toggleAmDay(i, el) {
+      if (amSelectedDays.has(i)) amSelectedDays.delete(i); else amSelectedDays.add(i);
+      el.classList.toggle('selected');
+    }
+
+    function renderAmPresets() {
+      ['morning', 'afternoon', 'evening'].forEach(period => {
+        document.getElementById(`am-preset-${period}`).innerHTML = AM_PRESETS[period].map(t => `
+          <div class="preset-chip ${amSelectedTimes[period].has(t) ? 'selected' : ''}" onclick="toggleAmTime('${period}', '${t}', this)">${amRangeLabel(t)}</div>`).join('');
+      });
+    }
+    function toggleAmTime(period, t, el) {
+      if (amSelectedTimes[period].has(t)) amSelectedTimes[period].delete(t); else amSelectedTimes[period].add(t);
+      el.classList.toggle('selected');
+    }
+
+    async function openAvailModal(doctorId, doctorName) {
+      currentAvailDoctorId = doctorId;
+      document.getElementById("avail-modal-doctor-name").textContent = doctorName;
+      document.getElementById("am-err").textContent = "";
+      document.getElementById("am-unavail-date").valueAsDate = new Date();
+
+      amSelectedDays = new Set([0,1,2,3,4,5]);
+      amSelectedTimes = { morning: new Set(), afternoon: new Set(), evening: new Set() };
+
+      try {
+        const t = await api("GET", `/doctor-slots/template?doctor_id=${doctorId}`);
+        amSelectedDays = new Set(t.weekdays);
+        amSelectedTimes.morning = new Set(t.morning_times);
+        amSelectedTimes.afternoon = new Set(t.afternoon_times);
+        amSelectedTimes.evening = new Set(t.evening_times);
+        document.getElementById("am-capacity").value = t.capacity_same || 1;
+      } catch (e) { /* no template yet */ }
+
+      renderAmDayChips();
+      renderAmPresets();
+      loadAmUnavailable();
+      document.getElementById("modal-avail-editor").classList.add("open");
+    }
+
+    function closeAvailModal() {
+      document.getElementById("modal-avail-editor").classList.remove("open");
+    }
+
+    async function saveAvailModal() {
+      const err = document.getElementById("am-err");
+      err.textContent = "";
+      const morning = [...amSelectedTimes.morning], afternoon = [...amSelectedTimes.afternoon], evening = [...amSelectedTimes.evening];
+      if (!amSelectedDays.size) { err.textContent = "Select at least one day"; return; }
+      if (!morning.length && !afternoon.length && !evening.length) { err.textContent = "Select at least one time slot"; return; }
+
+      try {
+        await api("POST", "/doctor-slots/template", {
+          doctor_id: currentAvailDoctorId,
+          weekdays: [...amSelectedDays],
+          morning_times: morning, afternoon_times: afternoon, evening_times: evening,
+          capacity_mode: "same",
+          capacity_same: parseInt(document.getElementById("am-capacity").value) || 1,
+          capacity_morning: 1, capacity_afternoon: 1, capacity_evening: 1,
+        });
+        toast("Availability saved", "success");
+        closeAvailModal();
+      } catch (e) { err.textContent = e.message; }
+    }
+
+    async function markUnavailModal() {
+      const date = document.getElementById("am-unavail-date").value;
+      if (!date) { toast("Pick a date", "error"); return; }
+      try {
+        await api("POST", "/doctor-slots/unavailable", { doctor_id: currentAvailDoctorId, date });
+        toast("Marked unavailable", "success");
+        loadAmUnavailable();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function loadAmUnavailable() {
+      const listEl = document.getElementById("am-unavail-list");
+      try {
+        const rows = await api("GET", `/doctor-slots/unavailable?doctor_id=${currentAvailDoctorId}`);
+        listEl.innerHTML = !rows.length ? `<p style="color:var(--slate-light);font-size:13px">No upcoming unavailable dates.</p>` : rows.map(r => `
+          <div class="unavail-row" style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+            <span>${new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${r.reason ? ' — ' + r.reason : ''}</span>
+            <button class="btn btn-outline btn-sm" onclick="unmarkAmUnavailable(${r.id})">Undo</button>
+          </div>`).join('');
+      } catch (e) { listEl.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+    }
+
+    async function unmarkAmUnavailable(id) {
+      try { await api("DELETE", `/doctor-slots/unavailable/${id}`); toast("Removed", "success"); loadAmUnavailable(); }
+      catch (e) { toast(e.message, "error"); }
+    }
 
     async function loadExpectedToday() {
       const el = document.getElementById("expected-today-list");

@@ -6,7 +6,8 @@ class TestOrder(Base):
     __tablename__ = "test_orders"
 
     id = Column(Integer, primary_key=True, index=True)
-    consultation_id = Column(Integer, ForeignKey("consultations.id"), nullable=False)
+    consultation_id = Column(Integer, ForeignKey("consultations.id"), nullable=True)
+    admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=True)
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     test_id = Column(Integer, ForeignKey("test_catalog_items.id"), nullable=True)
