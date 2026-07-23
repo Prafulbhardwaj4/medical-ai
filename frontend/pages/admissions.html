@@ -61,31 +61,62 @@
     </div>
 
     <nav class="sidebar">
-      <div class="sidebar-section-label" style="display:flex;justify-content:space-between;align-items:center">
+      <div class="sidebar-section-label">
         <span id="sidebar-doctor-name"></span>
-        <button class="btn btn-outline btn-sm sidebar-signout-btn" onclick="logout()">Sign out</button>
       </div>
       <div class="sidebar-section-label">Navigation</div>
-      <a class="nav-item" href="dashboard.html">
+      <a class="nav-item" href="receptionist.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-        Dashboard
+        Home
+      </a>
+      <a class="nav-item" href="receptionist.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Expected Today
       </a>
       <a class="nav-item active" href="admissions.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
         Admissions
+      </a>
+      <a class="nav-item" href="receptionist.html">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Manage Availability
+      </a>
+      <a class="nav-item" href="receptionist.html">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
+        </svg>
+        Patients List
       </a>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
     <nav class="bottom-nav">
-      <button class="bottom-nav-item" onclick="location.href='dashboard.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3"/></svg>
-        Dashboard
+      <button class="bottom-nav-item" onclick="location.href='receptionist.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Home
       </button>
       <button class="bottom-nav-item active" onclick="location.href='admissions.html'">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
         Admissions
+      </button>
+      <button class="bottom-nav-item" onclick="location.href='receptionist.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
+        </svg>
+        Patients
+      </button>
+      <button class="bottom-nav-item" onclick="location.href='receptionist.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Expected
+      </button>
+      <button class="bottom-nav-item" onclick="location.href='receptionist.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        Attendance
       </button>
     </nav>
 
@@ -95,11 +126,49 @@
           <h1>Admissions</h1>
           <p style="color:var(--slate)">Currently admitted patients.</p>
         </div>
-        <button class="btn btn-primary" onclick="openAdmitModal()">+ Admit Patient</button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-outline" id="btn-manage-rooms" style="display:none" onclick="openRoomsModal()">Manage Rooms</button>
+          <button class="btn btn-primary" onclick="openAdmitModal()">+ Admit Patient</button>
+        </div>
+      </div>
+
+      <div class="form-group" style="max-width:360px;margin-bottom:16px">
+        <input class="form-control" id="admissions-search" placeholder="Search name, phone, ID, or diagnosis..." oninput="onAdmissionsSearch(this.value)" />
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><h2>Ward Vacancy</h2></div>
+        <div id="vacancy-overview" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
+          <p style="color:var(--slate-light)">Loading...</p>
+        </div>
       </div>
 
       <div id="admissions-list"><p>Loading...</p></div>
     </main>
+  </div>
+
+  <!-- Rooms / ward types management (admin only) -->
+  <div class="modal-overlay" id="modal-rooms">
+    <div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto">
+      <div class="modal-header">
+        <h2>Manage Rooms &amp; Ward Types</h2>
+        <button class="modal-close" onclick="closeRoomsModal()">&times;</button>
+      </div>
+      <div id="ward-types-list" style="margin-bottom:18px"></div>
+      <div class="card" style="background:var(--smoke)">
+        <p style="font-weight:600;margin-bottom:10px" id="ward-form-title">Add Ward Type</p>
+        <div class="form-group"><label class="form-label">Name</label><input class="form-control" id="wt-name" placeholder="e.g. General Ward, ICU, Private Room" /></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Total Beds</label><input class="form-control" type="number" min="0" id="wt-beds" /></div>
+          <div class="form-group"><label class="form-label">Daily Charge (₹)</label><input class="form-control" type="number" min="0" id="wt-charge" /></div>
+        </div>
+        <div class="err-msg" id="wt-err"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline" style="flex:1" id="wt-cancel-edit-btn" onclick="resetWardTypeForm()" style="display:none">Cancel Edit</button>
+          <button class="btn btn-primary" style="flex:1" onclick="submitWardType()" id="wt-submit-btn">Add Ward Type</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Admit patient modal -->
@@ -120,10 +189,20 @@
 
       <div id="admit-step-details" style="display:none">
         <p style="font-weight:600;color:var(--navy);margin-bottom:14px" id="admit-selected-name"></p>
-        <div class="form-group"><label class="form-label">Ward</label><input class="form-control" id="admit-ward" placeholder="e.g. General Ward, ICU" /></div>
+        <div class="form-group">
+          <label class="form-label">Admitting Doctor</label>
+          <select class="form-control" id="admit-doctor"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ward</label>
+          <select class="form-control" id="admit-ward-type" onchange="onAdmitWardTypeChange()"></select>
+        </div>
         <div class="form-group"><label class="form-label">Bed Number</label><input class="form-control" id="admit-bed" placeholder="e.g. B-12" /></div>
-        <div class="form-group"><label class="form-label">Diagnosis (optional)</label><input class="form-control" id="admit-diagnosis" /></div>
-        <div class="form-group"><label class="form-label">Daily Room Charge (₹)</label><input class="form-control" type="number" min="0" id="admit-daily-charge" value="0" /></div>
+        <div class="form-group">
+          <label class="form-label">Diagnosis *</label>
+          <input class="form-control" id="admit-diagnosis" placeholder="Auto-suggested from last visit — edit as needed" />
+        </div>
+        <div class="form-group"><label class="form-label">Daily Room Charge (₹)</label><input class="form-control" type="number" min="0" id="admit-daily-charge" value="0" readonly style="background:var(--smoke)" /></div>
         <div class="err-msg" id="admit-err"></div>
         <div style="display:flex;gap:10px">
           <button class="btn btn-outline" style="flex:1" onclick="backToSearch()">Back</button>
@@ -139,11 +218,150 @@
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
 
-    async function loadAdmissions() {
+    const isAdminTier = ["admin", "sub_admin"].includes(getDoctor()?.role);
+    if (isAdminTier) document.getElementById("btn-manage-rooms").style.display = "";
+
+    let wardTypesCache = [];
+
+    async function loadVacancyOverview() {
+      const el = document.getElementById("vacancy-overview");
+      try {
+        wardTypesCache = await api("GET", "/admissions/ward-types");
+        if (!wardTypesCache.length) {
+          el.innerHTML = `<p style="color:var(--slate-light)">No ward types configured yet.${isAdminTier ? ' Click "Manage Rooms" to add one.' : ''}</p>`;
+          return;
+        }
+        el.innerHTML = wardTypesCache.map(w => `
+          <div class="card" style="margin-bottom:0">
+            <div style="font-weight:600;color:var(--navy)">${sanitize(w.name)}</div>
+            <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin:4px 0">${w.occupied}/${w.total_beds}</div>
+            <div style="font-size:12px;color:var(--slate-light)">${w.vacant} bed${w.vacant === 1 ? '' : 's'} free · ₹${w.daily_charge}/day</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    function populateAdmitWardDropdown() {
+      const sel = document.getElementById("admit-ward-type");
+      if (!wardTypesCache.length) {
+        sel.innerHTML = `<option value="">No ward types configured — set up Rooms first</option>`;
+        return;
+      }
+      sel.innerHTML = wardTypesCache.map(w =>
+        `<option value="${w.id}" data-charge="${w.daily_charge}" data-vacant="${w.vacant}">${sanitize(w.name)} (${w.vacant} free)</option>`
+      ).join('');
+      onAdmitWardTypeChange();
+    }
+
+    function onAdmitWardTypeChange() {
+      const sel = document.getElementById("admit-ward-type");
+      const opt = sel.selectedOptions[0];
+      document.getElementById("admit-daily-charge").value = opt ? (opt.dataset.charge || 0) : 0;
+    }
+
+    // ---- Rooms / ward types management ----
+    let editingWardTypeId = null;
+
+    function openRoomsModal() {
+      resetWardTypeForm();
+      renderWardTypesList();
+      document.getElementById("modal-rooms").classList.add("open");
+    }
+    function closeRoomsModal() {
+      document.getElementById("modal-rooms").classList.remove("open");
+      loadVacancyOverview().then(populateAdmitWardDropdown);
+    }
+
+    function renderWardTypesList() {
+      const el = document.getElementById("ward-types-list");
+      if (!wardTypesCache.length) {
+        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No ward types yet — add one below.</p>`;
+        return;
+      }
+      el.innerHTML = wardTypesCache.map(w => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-weight:600">${sanitize(w.name)}</div>
+            <div style="font-size:12px;color:var(--slate-light)">${w.total_beds} beds · ₹${w.daily_charge}/day · ${w.occupied} occupied</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick='editWardType(${JSON.stringify(w)})'>Edit</button>
+            <button class="btn btn-outline btn-sm" onclick="deleteWardType(${w.id})">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function editWardType(w) {
+      editingWardTypeId = w.id;
+      document.getElementById("ward-form-title").textContent = `Edit ${w.name}`;
+      document.getElementById("wt-name").value = w.name;
+      document.getElementById("wt-beds").value = w.total_beds;
+      document.getElementById("wt-charge").value = w.daily_charge;
+      document.getElementById("wt-submit-btn").textContent = "Save Changes";
+      document.getElementById("wt-cancel-edit-btn").style.display = "block";
+      document.getElementById("wt-err").textContent = "";
+    }
+
+    function resetWardTypeForm() {
+      editingWardTypeId = null;
+      document.getElementById("ward-form-title").textContent = "Add Ward Type";
+      document.getElementById("wt-name").value = "";
+      document.getElementById("wt-beds").value = "";
+      document.getElementById("wt-charge").value = "";
+      document.getElementById("wt-submit-btn").textContent = "Add Ward Type";
+      document.getElementById("wt-cancel-edit-btn").style.display = "none";
+      document.getElementById("wt-err").textContent = "";
+    }
+
+    async function submitWardType() {
+      const err = document.getElementById("wt-err");
+      err.textContent = "";
+      const name = document.getElementById("wt-name").value.trim();
+      const beds = parseInt(document.getElementById("wt-beds").value, 10);
+      const charge = parseFloat(document.getElementById("wt-charge").value);
+      if (!name || isNaN(beds) || beds < 0 || isNaN(charge) || charge < 0) {
+        err.textContent = "Please fill in all fields with valid values";
+        return;
+      }
+      try {
+        if (editingWardTypeId) {
+          await api("PUT", `/admissions/ward-types/${editingWardTypeId}`, { name, total_beds: beds, daily_charge: charge });
+          toast("Ward type updated", "success");
+        } else {
+          await api("POST", "/admissions/ward-types", { name, total_beds: beds, daily_charge: charge });
+          toast("Ward type added", "success");
+        }
+        wardTypesCache = await api("GET", "/admissions/ward-types");
+        renderWardTypesList();
+        resetWardTypeForm();
+      } catch (e) { err.textContent = e.message; }
+    }
+
+    async function deleteWardType(id) {
+      if (!confirm("Delete this ward type?")) return;
+      try {
+        await api("DELETE", `/admissions/ward-types/${id}`);
+        wardTypesCache = await api("GET", "/admissions/ward-types");
+        renderWardTypesList();
+        toast("Ward type deleted", "success");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    let admissionsSearchDebounce;
+    function onAdmissionsSearch(q) {
+      clearTimeout(admissionsSearchDebounce);
+      admissionsSearchDebounce = setTimeout(() => loadAdmissions(q.trim()), 300);
+    }
+
+    async function loadAdmissions(search = "") {
       const list = document.getElementById("admissions-list");
       try {
-        const admissions = await api("GET", "/admissions/active");
-        if (!admissions.length) { list.innerHTML = `<div class="card"><p style="color:var(--slate-light)">No patients currently admitted.</p></div>`; return; }
+        const qs = search ? `?search=${encodeURIComponent(search)}` : "";
+        const admissions = await api("GET", `/admissions/active${qs}`);
+        if (!admissions.length) { list.innerHTML = `<div class="card"><p style="color:var(--slate-light)">${search ? 'No matching admissions.' : 'No patients currently admitted.'}</p></div>`; return; }
         list.innerHTML = admissions.map(a => `
           <div class="ward-card" onclick="location.href='admission-detail.html?id=${a.id}'">
             <div style="display:flex;gap:14px;align-items:center">
@@ -151,6 +369,7 @@
               <div>
                 <div style="font-weight:700;color:var(--navy)">${sanitize(a.patient_name)}</div>
                 <div style="font-size:13px;color:var(--slate)">${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)}${a.patient_uid ? ' · ' + sanitize(a.patient_uid) : ''}</div>
+                ${a.diagnosis ? `<div style="font-size:12.5px;color:var(--slate-light);margin-top:2px">${sanitize(a.diagnosis)}</div>` : ''}
               </div>
             </div>
             <div style="text-align:right">
@@ -170,7 +389,30 @@
       document.getElementById("admit-step-search").style.display = "block";
       document.getElementById("admit-step-details").style.display = "none";
       document.getElementById("admit-patient-search").value = "";
-      document.getElementById("admit-patient-results").innerHTML = "";
+      loadDefaultAdmitPatientList();
+    }
+
+    async function loadDefaultAdmitPatientList() {
+      const el = document.getElementById("admit-patient-results");
+      el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">Loading recent patients...</p>`;
+      try {
+        const results = await api("GET", "/patients/?limit=15");
+        renderAdmitPatientResults(results, "Recent Patients");
+      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+    }
+
+    function renderAdmitPatientResults(results, heading) {
+      const el = document.getElementById("admit-patient-results");
+      if (!results.length) {
+        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No patients found.</p>`;
+        return;
+      }
+      el.innerHTML = (heading ? `<p style="color:var(--slate-light);font-size:12px;margin-bottom:6px">${heading}</p>` : '') +
+        results.map(p => `
+          <div class="select-row-card" style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer" onclick='selectAdmitPatient(${p.id}, ${JSON.stringify(p.name)})'>
+            <div style="font-weight:600">${sanitize(p.name)}</div>
+            <div style="font-size:12px;color:var(--slate-light)">${sanitize(p.patient_uid || '')} · ${sanitize(p.phone || '')}</div>
+          </div>`).join('');
     }
     function closeAdmitModal() { document.getElementById("modal-admit").classList.remove("open"); }
     function backToSearch() {
@@ -182,40 +424,57 @@
     document.getElementById("admit-patient-search").addEventListener("input", (e) => {
       clearTimeout(searchDebounce);
       const q = e.target.value.trim();
-      if (q.length < 2) { document.getElementById("admit-patient-results").innerHTML = ""; return; }
+      if (q.length < 2) { loadDefaultAdmitPatientList(); return; }
       searchDebounce = setTimeout(async () => {
         try {
           const results = await api("GET", `/patients/?search=${encodeURIComponent(q)}&limit=10`);
-          document.getElementById("admit-patient-results").innerHTML = !results.length
-            ? `<p style="color:var(--slate-light);font-size:13px">No patients found.</p>`
-            : results.map(p => `
-                <div class="select-row-card" style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer" onclick='selectAdmitPatient(${p.id}, ${JSON.stringify(p.name)})'>
-                  <div style="font-weight:600">${sanitize(p.name)}</div>
-                  <div style="font-size:12px;color:var(--slate-light)">${sanitize(p.patient_uid || '')} · ${sanitize(p.phone || '')}</div>
-                </div>`).join('');
+          renderAdmitPatientResults(results, null);
         } catch (e) { document.getElementById("admit-patient-results").innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
       }, 300);
     });
 
-    function selectAdmitPatient(id, name) {
+    async function selectAdmitPatient(id, name) {
       selectedPatientId = id; selectedPatientName = name;
       document.getElementById("admit-selected-name").textContent = `Admitting: ${name}`;
       document.getElementById("admit-step-search").style.display = "none";
       document.getElementById("admit-step-details").style.display = "block";
+      document.getElementById("admit-diagnosis").value = "";
+      try {
+        const res = await api("GET", `/admissions/last-diagnosis/${id}`);
+        if (res.diagnosis) document.getElementById("admit-diagnosis").value = res.diagnosis;
+      } catch (e) { /* prefill is best-effort only */ }
+
+      const docSel = document.getElementById("admit-doctor");
+      docSel.innerHTML = `<option value="">Loading...</option>`;
+      try {
+        const [doctors, suggested] = await Promise.all([
+          api("GET", "/patients/hospital-doctors"),
+          api("GET", `/admissions/last-doctor/${id}`)
+        ]);
+        docSel.innerHTML = doctors.map(d => `<option value="${d.id}">${sanitize(d.title)} ${sanitize(d.name)}</option>`).join('');
+        if (suggested.doctor_id) docSel.value = suggested.doctor_id;
+        else if (!doctors.length) docSel.innerHTML = `<option value="">No doctors found — add one first</option>`;
+      } catch (e) {
+        docSel.innerHTML = `<option value="">Could not load doctors</option>`;
+      }
     }
 
     async function submitAdmit() {
       const err = document.getElementById("admit-err");
       err.textContent = "";
-      const ward = document.getElementById("admit-ward").value.trim();
+      const wardTypeId = document.getElementById("admit-ward-type").value;
       const bed = document.getElementById("admit-bed").value.trim();
-      if (!ward || !bed) { err.textContent = "Ward and bed number are required"; return; }
+      if (!wardTypeId) { err.textContent = "Please select a ward — set one up under Manage Rooms if none exist"; return; }
+      if (!bed) { err.textContent = "Bed number is required"; return; }
+      const diagnosis = document.getElementById("admit-diagnosis").value.trim();
+      if (!diagnosis) { err.textContent = "Diagnosis is required"; return; }
+      const doctorId = document.getElementById("admit-doctor").value;
+      if (!doctorId) { err.textContent = "Please select the admitting doctor"; return; }
 
       try {
         const res = await api("POST", "/admissions", {
-          patient_id: selectedPatientId, ward, bed_number: bed,
-          diagnosis: document.getElementById("admit-diagnosis").value.trim() || null,
-          daily_room_charge: parseFloat(document.getElementById("admit-daily-charge").value) || 0,
+          patient_id: selectedPatientId, ward_type_id: parseInt(wardTypeId, 10), bed_number: bed,
+          diagnosis: diagnosis, admitting_doctor_id: parseInt(doctorId, 10),
         });
         toast("Patient admitted", "success");
         closeAdmitModal();
@@ -224,6 +483,7 @@
     }
 
     loadAdmissions();
+    loadVacancyOverview().then(populateAdmitWardDropdown);
   </script>
 </body>
 

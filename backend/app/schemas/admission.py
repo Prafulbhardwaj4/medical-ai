@@ -5,10 +5,34 @@ from pydantic import BaseModel
 
 class AdmitPatientIn(BaseModel):
     patient_id: int
-    ward: str
+    ward_type_id: Optional[int] = None  # preferred: pick from admin-configured ward types
+    ward: Optional[str] = None          # fallback free-text, used only if ward_type_id is not given
     bed_number: str
-    diagnosis: Optional[str] = None
-    daily_room_charge: float = 0
+    diagnosis: str
+    daily_room_charge: float = 0        # fallback rate, used only if ward_type_id is not given
+    admitting_doctor_id: Optional[int] = None  # defaults to the patient's last consulting doctor if not given
+
+
+class UpdateDiagnosisIn(BaseModel):
+    diagnosis: str
+
+
+class WardTypeCreateIn(BaseModel):
+    name: str
+    total_beds: int
+    daily_charge: float
+
+
+class WardTypeOut(BaseModel):
+    id: int
+    name: str
+    total_beds: int
+    daily_charge: float
+    occupied: int = 0
+    vacant: int = 0
+
+    class Config:
+        from_attributes = True
 
 
 class AdmissionSummaryOut(BaseModel):

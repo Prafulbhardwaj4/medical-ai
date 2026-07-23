@@ -9,7 +9,7 @@
   <style>
     .test-row {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-start;
       align-items: center;
       padding: 12px 0;
       border-bottom: 1px solid var(--border);
@@ -28,7 +28,7 @@
     @media (min-width: 901px) {
       .test-row-main { flex: 0 0 55%; max-width: 55%; min-width: 0; overflow-wrap: anywhere; }
       .test-row-meta { flex: 0 0 200px; max-width: 200px; }
-      .test-row-actions { flex: 0 0 170px; max-width: 170px; justify-content: flex-end; }
+      .test-row-actions { flex: 0 0 170px; max-width: 170px; justify-content: flex-end; margin-left: auto; }
     }
     @media (max-width: 900px) {
       .test-row {

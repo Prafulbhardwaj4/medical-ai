@@ -21,7 +21,7 @@ def _to_out(a: Appointment, db: Session) -> AppointmentOut:
         id=a.id, hospital_id=a.hospital_id, hospital_name=hospital.name if hospital else None,
         doctor_id=a.doctor_id, doctor_name=f"{doctor.title} {doctor.name}" if doctor else None,
         type=a.type.value, requested_time=a.requested_time, status=a.status.value,
-        payment_status=a.payment_status, notes=a.notes,
+        payment_status=a.payment_status, notes=a.notes, address=a.address,
     )
 
 
@@ -35,6 +35,9 @@ def book_appointment(
         owned = any(p.id == body.profile_link_id for p in account.profiles)
         if not owned:
             raise HTTPException(status_code=403, detail="This profile does not belong to your account")
+    else:
+        if not (body.new_patient_name or "").strip():
+            raise HTTPException(status_code=400, detail="Please enter the patient's name — this hospital hasn't seen this account before")
 
     hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id, Hospital.is_active == True).first()  # noqa: E712
     if not hospital:
@@ -74,6 +77,11 @@ def book_appointment(
         from app.utils.timezone import now_ist_naive
         requested_time = now_ist_naive()
 
+    if body.use_saved_address:
+        resolved_address = account.address
+    else:
+        resolved_address = (body.custom_address or "").strip() or None
+
     appt = Appointment(
         account_id=account.id,
         profile_link_id=body.profile_link_id,
@@ -85,10 +93,38 @@ def book_appointment(
         notes=body.notes,
         status=AppointmentStatus.booked,
         payment_status="unpaid",
+        address=resolved_address,
+        new_patient_name=(body.new_patient_name or "").strip() or None if not body.profile_link_id else None,
+        new_patient_gender=body.new_patient_gender if not body.profile_link_id else None,
     )
     db.add(appt)
     db.commit()
     db.refresh(appt)
+
+    # If this booking is for an existing hospital record that has no address
+    # on file yet, backfill it — never overwrites an address reception already has.
+    if body.profile_link_id and resolved_address:
+        from app.models.portal import PatientProfileLink
+        link = db.query(PatientProfileLink).filter(PatientProfileLink.id == body.profile_link_id).first()
+        if link and link.patient and not link.patient.address:
+            link.patient.address = resolved_address
+            db.commit()
+
+    # Genuinely new patient at this hospital — alert reception with a link to a pre-filled Add Patient flow.
+    if not body.profile_link_id:
+        from app.models.notification import Notification
+        db.add(Notification(
+            hospital_id=body.hospital_id,
+            source_key=f"new_portal_patient:{appt.id}",
+            type="new_portal_patient",
+            severity="info",
+            title="New Patient Booked Online",
+            message=f"{appt.new_patient_name} booked an appointment via the portal and isn't in your patient list yet.",
+            link_type="portal_appointment",
+            link_id=appt.id,
+        ))
+        db.commit()
+
     return _to_out(appt, db)
 
 

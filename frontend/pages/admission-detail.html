@@ -89,7 +89,7 @@
           <div class="card" style="margin-bottom:20px">
             <div class="card-header">
               <h2>Medications (MAR)</h2>
-              <button class="btn btn-outline btn-sm" onclick="openAddMedModal()">+ Add Medication</button>
+              <button class="btn btn-outline btn-sm" id="btn-add-med" onclick="openAddMedModal()">+ Add Medication</button>
             </div>
             <div id="med-list"><p>Loading...</p></div>
           </div>
@@ -97,7 +97,7 @@
           <div class="card" style="margin-bottom:20px">
             <div class="card-header">
               <h2>Tests</h2>
-              <button class="btn btn-outline btn-sm" onclick="openAddTestModal()">+ Order Test</button>
+              <button class="btn btn-outline btn-sm" id="btn-add-test" onclick="openAddTestModal()">+ Order Test</button>
             </div>
             <div id="test-list"><p>Loading...</p></div>
           </div>
@@ -159,7 +159,7 @@
     <div class="modal" style="max-width:400px">
       <div class="modal-header"><h2>Add Charge</h2><button class="modal-close" onclick="closeModal('modal-add-charge')">&times;</button></div>
       <div class="form-group"><label class="form-label">Type</label>
-        <select class="form-control" id="charge-type"><option value="procedure">Procedure</option><option value="other">Other</option></select>
+        <select class="form-control" id="charge-type"><option value="consumable">Consumable (drip, glucose bottle, needles, etc.)</option><option value="procedure">Procedure</option><option value="other">Other</option></select>
       </div>
       <div class="form-group"><label class="form-label">Description</label><input class="form-control" id="charge-desc" /></div>
       <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" id="charge-amount" /></div>
@@ -183,6 +183,11 @@
   <script src="../js/api.js"></script>
   <script>
     if (!requireAuth()) { }
+    function canManageClinicalOrders() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    if (!canManageClinicalOrders()) {
+      document.getElementById("btn-add-med").style.display = "none";
+      document.getElementById("btn-add-test").style.display = "none";
+    }
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
 
@@ -217,10 +222,37 @@
             <h2 style="margin:0">${sanitize(p.name)} <span class="badge ${a.status === 'admitted' ? 'badge-teal' : 'badge-grey'}" style="margin-left:8px">${a.status}</span></h2>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">${p.age} yrs, ${p.gender} · ${sanitize(p.phone)} ${p.patient_uid ? '· ' + sanitize(p.patient_uid) : ''}</p>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)} · Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} (${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'})</p>
-            ${a.diagnosis ? `<p style="color:var(--slate);font-size:13.5px;margin-top:4px"><strong>Diagnosis:</strong> ${sanitize(a.diagnosis)}</p>` : ''}
+            <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
+              <strong>Diagnosis:</strong> <span id="diagnosis-display">${sanitize(a.diagnosis || '—')}</span>
+              <a href="#" onclick="openEditDiagnosis();return false;" style="font-size:12px;margin-left:8px;color:var(--teal)">Edit</a>
+            </p>
+            <div id="diagnosis-edit-row" style="display:none;margin-top:6px;display:flex;gap:8px;max-width:420px">
+              <input class="form-control" id="diagnosis-edit-input" />
+              <button class="btn btn-primary btn-sm" onclick="saveDiagnosis()">Save</button>
+              <button class="btn btn-outline btn-sm" onclick="closeEditDiagnosis()">Cancel</button>
+            </div>
             <p style="color:var(--slate-light);font-size:12.5px;margin-top:4px">Admitting doctor: ${sanitize(a.admitting_doctor_name || '—')}</p>
           </div>
         </div>`;
+    }
+
+    function openEditDiagnosis() {
+      document.getElementById("diagnosis-edit-input").value = admissionData.diagnosis || "";
+      document.getElementById("diagnosis-edit-row").style.display = "flex";
+    }
+    function closeEditDiagnosis() {
+      document.getElementById("diagnosis-edit-row").style.display = "none";
+    }
+    async function saveDiagnosis() {
+      const value = document.getElementById("diagnosis-edit-input").value.trim();
+      if (!value) { toast("Diagnosis cannot be empty", "error"); return; }
+      try {
+        await api("PATCH", `/admissions/${admissionData.id}/diagnosis`, { diagnosis: value });
+        admissionData.diagnosis = value;
+        document.getElementById("diagnosis-display").textContent = value;
+        closeEditDiagnosis();
+        toast("Diagnosis updated", "success");
+      } catch (e) { toast(e.message, "error"); }
     }
 
     function renderMeds() {
@@ -230,12 +262,12 @@
         <div class="med-card ${m.is_active ? '' : 'stopped'}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
             <div>
-              <div style="font-weight:600">${sanitize(m.medicine_name)} — ${sanitize(m.dosage)}</div>
+              <div style="font-weight:600">${sanitize(m.medicine_name)} — ${sanitize(m.dosage)} ${m.sourced_outside ? '<span class="badge badge-slate" style="font-weight:400">Family-sourced</span>' : ''}</div>
               <div style="font-size:12.5px;color:var(--slate-light)">${sanitize(m.route)}${m.frequency_note ? ' · ' + sanitize(m.frequency_note) : ''}</div>
             </div>
             <div style="display:flex;gap:8px">
-              ${admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-primary btn-sm" onclick="giveDose(${m.id})">Give Dose Now</button>` : ''}
-              ${admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-outline btn-sm" onclick="stopMed(${m.id})">Stop</button>` : m.is_active ? '' : '<span class="badge badge-grey">Stopped</span>'}
+              ${canManageClinicalOrders() && admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-primary btn-sm" onclick="giveDose(${m.id})">Give Dose Now</button>` : ''}
+              ${canManageClinicalOrders() && admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-outline btn-sm" onclick="stopMed(${m.id})">Stop</button>` : m.is_active ? '' : '<span class="badge badge-grey">Stopped</span>'}
             </div>
           </div>
           <div style="margin-top:8px">
@@ -254,7 +286,7 @@
 
     function renderCharges() {
       const list = document.getElementById("charge-list");
-      const manual = admissionData.charges.filter(c => c.charge_type === 'procedure' || c.charge_type === 'other');
+      const manual = admissionData.charges.filter(c => c.charge_type === 'procedure' || c.charge_type === 'other' || c.charge_type === 'consumable');
       if (!manual.length) { list.innerHTML = `<p style="color:var(--slate-light)">No additional charges yet.</p>`; return; }
       list.innerHTML = manual.map(c => `
         <div class="bill-row"><span>${sanitize(c.description)} ${c.quantity > 1 ? `× ${c.quantity}` : ''}</span><span>₹${(c.amount * c.quantity).toFixed(2)}</span></div>`).join('');
@@ -264,6 +296,7 @@
       const b = admissionData.bill;
       const meds = admissionData.charges.filter(c => c.charge_type === 'medicine');
       const tests = admissionData.charges.filter(c => c.charge_type === 'test');
+      const consumables = admissionData.charges.filter(c => c.charge_type === 'consumable');
       const other = admissionData.charges.filter(c => c.charge_type === 'procedure' || c.charge_type === 'other');
       const sum = (arr) => arr.reduce((s, c) => s + c.amount * c.quantity, 0);
 
@@ -271,6 +304,7 @@
         <div class="bill-row"><span>Room (${admissionData.days_admitted} day${admissionData.days_admitted === 1 ? '' : 's'} × ₹${admissionData.daily_room_charge})</span><span>₹${b.room_total.toFixed(2)}</span></div>
         <div class="bill-row"><span>Medicines</span><span>₹${sum(meds).toFixed(2)}</span></div>
         <div class="bill-row"><span>Tests</span><span>₹${sum(tests).toFixed(2)}</span></div>
+        <div class="bill-row"><span>Consumables</span><span>₹${sum(consumables).toFixed(2)}</span></div>
         <div class="bill-row"><span>Other Charges</span><span>₹${sum(other).toFixed(2)}</span></div>
         <div class="bill-total-row"><span>Total</span><span>₹${b.grand_total.toFixed(2)}</span></div>`;
     }

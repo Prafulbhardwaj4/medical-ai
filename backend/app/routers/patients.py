@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import json
 import random
 from app.database import get_db
@@ -81,6 +81,7 @@ def create_patient(
         blood_group=payload.blood_group,
         gender=payload.gender,
         abha_number=payload.abha_number,
+        address=payload.address,
         hospital_id=current_doctor.hospital_id,
         created_by=current_doctor.id
     )
@@ -581,6 +582,7 @@ def update_patient(
     patient.blood_group = payload.blood_group
     patient.gender = payload.gender
     patient.abha_number = payload.abha_number
+    patient.address = payload.address
     db.commit()
     db.refresh(patient)
 

@@ -348,6 +348,10 @@
                     <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>
                     Patients
                 </a>
+                <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();showSection('appointments');return false;">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    Appointments
+                </a>
                 <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();showSection('consultations');return false;">
                     <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
                     Consultations
@@ -481,7 +485,7 @@
                 </div>
                 <div class="card" style="margin-bottom:20px">
                     <div class="filter-grid"
-                        style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end">
+                        style="display:grid;grid-template-columns:1fr 1fr 1.4fr 1fr auto;gap:12px;align-items:end">
                         <div>
                             <label style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">From
                                 Date</label>
@@ -585,15 +589,23 @@
                 </div>
             </div>
 
-            <!-- BILLING -->
+            <!-- APPOINTMENTS -->
             <div id="section-appointments" class="section" style="display:none">
-                <div class="card" style="margin-bottom:20px">
-                    <div class="card-header" style="flex-wrap:wrap;gap:10px">
-                        <h2>Paid Portal Appointments <span id="appt-analytics-total" style="color:var(--slate-light);font-weight:400">— last 45 days</span></h2>
-                        <select class="form-control" id="appt-analytics-doctor-filter" style="max-width:220px">
-                            <option value="">All doctors</option>
-                        </select>
+                <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+                    <h1>Appointments</h1>
+                    <select class="form-control" id="appt-analytics-doctor-filter" style="max-width:220px">
+                        <option value="">All doctors</option>
+                    </select>
+                </div>
+                <div class="stats-row" style="margin-bottom:20px">
+                    <div class="stat-card">
+                        <div class="stat-label">Online Appointments</div>
+                        <div class="stat-value" id="appt-analytics-total">—</div>
+                        <div class="stat-sub">last 45 days</div>
                     </div>
+                </div>
+                <div class="card-header" style="padding:0 0 12px">
+                    <h2>By Doctor</h2>
                 </div>
                 <div id="appt-analytics-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
                     <p>Loading...</p>
@@ -709,7 +721,7 @@
                                 style="color:var(--slate-light);font-weight:400">(optional, shows on all printed PDFs)</span></label>
                         <div style="display:flex;align-items:center;gap:14px">
                             <img id="hd-logo-preview" style="display:none;max-height:48px;max-width:120px;border:1px solid var(--smoke-mid);border-radius:4px" />
-                            <input type="file" accept="image/*" id="hd-logo-file" onchange="onLogoFileChosen(this)" />
+                            <input type="file" accept="image/*" id="hd-logo-file" class="file-input-styled" onchange="onLogoFileChosen(this)" />
                             <button class="btn btn-outline btn-sm" id="hd-logo-remove-btn" style="display:none" onclick="removeLogo()">Remove</button>
                         </div>
                         <div class="err-msg" id="hd-logo-err" style="margin-top:6px"></div>
@@ -723,6 +735,7 @@
 
     <div id="toast"></div>
     <script src="../js/api.js?v=4"></script>
+  <script src="../js/chat-widget.js?v=1"></script>
     <script>
         const doc = getDoctor();
         if (doc && doc.role === 'doctor') window.location.href = 'dashboard.html';
@@ -841,30 +854,33 @@
             if (dashData) renderSection(name);
         }
 
+        let apptDoctorFilterLoaded = false;
+        async function loadAppointmentDoctorFilterOptions() {
+            if (apptDoctorFilterLoaded) return;
+            const filterSel = document.getElementById("appt-analytics-doctor-filter");
+            try {
+                const doctors = await api("GET", "/patients/hospital-doctors");
+                doctors.forEach(d => {
+                    const opt = document.createElement("option");
+                    opt.value = d.id;
+                    opt.textContent = `${d.title} ${d.name}`;
+                    filterSel.appendChild(opt);
+                });
+                apptDoctorFilterLoaded = true;
+            } catch (e) { /* filter just stays at "All doctors" if this fails */ }
+        }
+
         async function loadAppointmentAnalytics() {
             const grid = document.getElementById("appt-analytics-grid");
             const doctorId = document.getElementById("appt-analytics-doctor-filter").value;
             grid.innerHTML = `<p>Loading...</p>`;
+            await loadAppointmentDoctorFilterOptions();
             try {
                 const path = doctorId ? `/portal-appointments-staff/analytics?doctor_id=${doctorId}` : `/portal-appointments-staff/analytics`;
                 const data = await api("GET", path);
-                document.getElementById("appt-analytics-total").textContent = `${data.total} total — last 45 days`;
+                document.getElementById("appt-analytics-total").textContent = data.total;
 
-                const filterSel = document.getElementById("appt-analytics-doctor-filter");
-                if (!doctorId) {
-                    const seen = new Set(Array.from(filterSel.options).map(o => o.value));
-                    data.by_doctor.forEach(d => {
-                        if (!seen.has(String(d.doctor_id))) {
-                            seen.add(String(d.doctor_id));
-                            const opt = document.createElement("option");
-                            opt.value = d.doctor_id;
-                            opt.textContent = d.doctor_name;
-                            filterSel.appendChild(opt);
-                        }
-                    });
-                }
-
-                if (!data.by_doctor.length) { grid.innerHTML = `<p style="color:var(--slate-light)">No paid appointments in the last 45 days.</p>`; return; }
+                if (!data.by_doctor.length) { grid.innerHTML = `<p style="color:var(--slate-light)">No online appointments in the last 45 days.</p>`; return; }
                 grid.innerHTML = data.by_doctor.map(d => `
                     <div class="card" style="display:flex;justify-content:space-between;align-items:center">
                         <div>
@@ -1317,6 +1333,13 @@
 
         // ── Revenue History (admin) ─────────────────────────────
         let revenueHistoryMode = 'daily';
+        let rhCalMinDate = null, rhCalMaxDate = null;
+        let rhCalViewYear = null, rhCalViewMonth = null; // month is 0-indexed
+        let rhCalSelectedDate = null;
+        let rhCalMonthData = {};
+        let rhMonthPickerYear = null;
+        let rhSelectedMonthStr = null; // 'YYYY-MM' or null for "all 18"
+        const RH_MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
         const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
         function formatMonthLabel(ym) {
@@ -1332,16 +1355,26 @@
         function openRevenueHistoryModal() {
             document.getElementById('modal-revenue-history').classList.add('open');
             const today = new Date();
+            rhCalMaxDate = today;
+            rhCalMinDate = new Date(today);
+            rhCalMinDate.setDate(rhCalMinDate.getDate() - 92);
+
+            rhCalViewYear = today.getFullYear();
+            rhCalViewMonth = today.getMonth();
+            rhCalSelectedDate = today.toISOString().slice(0, 10);
+
+            rhMonthPickerYear = today.getFullYear();
+            rhSelectedMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+            const eighteenMoAgo = new Date(today);
+            eighteenMoAgo.setDate(eighteenMoAgo.getDate() - 548);
             const todayStr = today.toISOString().slice(0, 10);
-            const threeMoAgo = new Date(today);
-            threeMoAgo.setDate(threeMoAgo.getDate() - 92);
-
-            const dayInput = document.getElementById('rh-day');
-            dayInput.min = threeMoAgo.toISOString().slice(0, 10);
-            dayInput.max = todayStr;
-            dayInput.value = todayStr;
-
-            document.getElementById('rh-month').value = '';
+            const rangeFrom = document.getElementById('rh-range-from');
+            const rangeTo = document.getElementById('rh-range-to');
+            rangeFrom.min = rangeTo.min = eighteenMoAgo.toISOString().slice(0, 10);
+            rangeFrom.max = rangeTo.max = todayStr;
+            rangeFrom.value = eighteenMoAgo.toISOString().slice(0, 10);
+            rangeTo.value = todayStr;
 
             setRevenueHistoryMode('daily');
         }
@@ -1358,12 +1391,42 @@
             document.getElementById('rh-daily-filters').style.display = mode === 'daily' ? 'block' : 'none';
             document.getElementById('rh-monthly-filters').style.display = mode === 'monthly' ? 'block' : 'none';
             document.getElementById('rh-range-filters').style.display = mode === 'range' ? 'block' : 'none';
+            if (mode === 'monthly') renderMonthPicker();
             loadRevenueHistory();
         }
 
         function clearMonthFilter() {
-            document.getElementById('rh-month').value = '';
+            rhSelectedMonthStr = null;
+            renderMonthPicker();
             loadRevenueHistory();
+        }
+
+        function rhMonthShiftYear(delta) {
+            rhMonthPickerYear += delta;
+            renderMonthPicker();
+        }
+
+        function rhSelectMonth(monthStr) {
+            rhSelectedMonthStr = monthStr;
+            renderMonthPicker();
+            loadRevenueHistory();
+        }
+
+        function renderMonthPicker() {
+            const today = new Date();
+            const earliest = new Date(today.getFullYear(), today.getMonth() - 17, 1);
+            document.getElementById('rh-month-year-label').textContent = rhMonthPickerYear;
+            document.getElementById('rh-month-prev-year').disabled = new Date(rhMonthPickerYear - 1, 11, 1) < earliest;
+            document.getElementById('rh-month-next-year').disabled = rhMonthPickerYear >= today.getFullYear();
+
+            const grid = document.getElementById('rh-month-grid');
+            grid.innerHTML = RH_MONTH_ABBR.map((label, idx) => {
+                const monthDate = new Date(rhMonthPickerYear, idx, 1);
+                const monthStr = `${rhMonthPickerYear}-${String(idx + 1).padStart(2, '0')}`;
+                const disabled = monthDate < earliest || monthDate > new Date(today.getFullYear(), today.getMonth(), 1);
+                const selected = monthStr === rhSelectedMonthStr;
+                return `<button class="rh-month-btn${selected ? ' selected' : ''}" ${disabled ? 'disabled' : ''} onclick="rhSelectMonth('${monthStr}')">${label}</button>`;
+            }).join('');
         }
 
         async function loadRevenueHistory() {
@@ -1371,16 +1434,10 @@
             listEl.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
             try {
                 if (revenueHistoryMode === 'daily') {
-                    const day = document.getElementById('rh-day').value;
-                    if (!day) { listEl.innerHTML = '<p style="color:var(--slate-light)">Pick a day.</p>'; return; }
-                    const data = await api("GET", `/billing/revenue-history/daily?from_date=${day}&to_date=${day}`);
-                    const d = data.days[0];
-                    renderRevenueHistory(
-                        d ? [{ label: formatDayLabel(data.from_date), total: d.total, count: d.invoice_count }] : [],
-                        "Any single day in the last 3 months"
-                    );
+                    listEl.innerHTML = '';
+                    await rhCalRenderMonth();
                 } else if (revenueHistoryMode === 'monthly') {
-                    const month = document.getElementById('rh-month').value;
+                    const month = rhSelectedMonthStr;
                     if (month) {
                         const data = await api("GET", `/billing/revenue-history/monthly?from_month=${month}&to_month=${month}`);
                         const m = data.months[0];
@@ -1396,21 +1453,89 @@
                         );
                     }
                 } else {
-                    const to = new Date();
-                    const from = new Date(to);
-                    from.setDate(from.getDate() - 89);
-                    const params = new URLSearchParams({ from_date: from.toISOString().slice(0, 10), to_date: to.toISOString().slice(0, 10) });
+                    const fromInput = document.getElementById('rh-range-from');
+                    const toInput = document.getElementById('rh-range-to');
+                    if (!fromInput.value || !toInput.value) {
+                        listEl.innerHTML = '<p style="color:var(--slate-light)">Pick a start and end date.</p>';
+                        return;
+                    }
+                    const params = new URLSearchParams({ from_date: fromInput.value, to_date: toInput.value });
                     const data = await api("GET", `/billing/revenue-history/daily?${params.toString()}`);
                     const total = data.days.reduce((s, d) => s + d.total, 0);
                     const count = data.days.reduce((s, d) => s + d.invoice_count, 0);
                     renderRevenueHistory(
                         [{ label: `${formatDayLabel(data.from_date)} – ${formatDayLabel(data.to_date)}`, total, count }],
-                        "Past 3 months, totaled"
+                        "Selected range, totaled"
                     );
                 }
             } catch (e) {
                 listEl.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
             }
+        }
+
+        function ymd(y, m, d) {
+            return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+
+        async function rhCalRenderMonth() {
+            const monthStart = new Date(rhCalViewYear, rhCalViewMonth, 1);
+            const monthEnd = new Date(rhCalViewYear, rhCalViewMonth + 1, 0);
+            const fromStr = ymd(rhCalViewYear, rhCalViewMonth, 1);
+            const toStr = ymd(rhCalViewYear, rhCalViewMonth, monthEnd.getDate());
+
+            document.getElementById('rh-cal-month-label').textContent = monthStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+            document.getElementById('rh-cal-prev').disabled = monthStart <= new Date(rhCalMinDate.getFullYear(), rhCalMinDate.getMonth(), 1);
+            document.getElementById('rh-cal-next').disabled = monthStart >= new Date(rhCalMaxDate.getFullYear(), rhCalMaxDate.getMonth(), 1);
+
+            rhCalMonthData = {};
+            try {
+                const data = await api("GET", `/billing/revenue-history/daily?from_date=${fromStr}&to_date=${toStr}`);
+                data.days.forEach(d => { rhCalMonthData[d.date] = d; });
+            } catch (e) { /* grid still renders, just without data markers */ }
+
+            rhCalRenderGrid();
+            rhCalRenderSide();
+        }
+
+        function rhCalRenderGrid() {
+            const grid = document.getElementById('rh-cal-grid');
+            const monthEnd = new Date(rhCalViewYear, rhCalViewMonth + 1, 0);
+            const firstWeekday = new Date(rhCalViewYear, rhCalViewMonth, 1).getDay();
+            let html = '';
+            for (let i = 0; i < firstWeekday; i++) html += `<div class="rh-cal-day empty"></div>`;
+            for (let day = 1; day <= monthEnd.getDate(); day++) {
+                const dateStr = ymd(rhCalViewYear, rhCalViewMonth, day);
+                const cellDate = new Date(rhCalViewYear, rhCalViewMonth, day);
+                const disabled = cellDate < new Date(rhCalMinDate.toDateString()) || cellDate > new Date(rhCalMaxDate.toDateString());
+                const hasData = !!rhCalMonthData[dateStr];
+                const selected = dateStr === rhCalSelectedDate;
+                html += `<button class="rh-cal-day${hasData ? ' has-data' : ''}${selected ? ' selected' : ''}" ${disabled ? 'disabled' : ''} onclick="rhCalSelectDay('${dateStr}')">${day}</button>`;
+            }
+            grid.innerHTML = html;
+        }
+
+        function rhCalSelectDay(dateStr) {
+            rhCalSelectedDate = dateStr;
+            rhCalRenderGrid();
+            rhCalRenderSide();
+        }
+
+        function rhCalRenderSide() {
+            const side = document.getElementById('rh-cal-side');
+            const d = rhCalMonthData[rhCalSelectedDate];
+            const label = new Date(rhCalSelectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+            side.innerHTML = `
+                <p style="font-size:12px;color:var(--slate-light);margin-bottom:6px">${label}</p>
+                <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin-bottom:4px">Rs.${(d ? d.total : 0).toFixed(2)}</div>
+                <p style="font-size:12.5px;color:var(--slate)">${d ? d.invoice_count : 0} invoice${d && d.invoice_count === 1 ? '' : 's'}</p>
+            `;
+        }
+
+        function rhCalShiftMonth(delta) {
+            rhCalViewMonth += delta;
+            if (rhCalViewMonth < 0) { rhCalViewMonth = 11; rhCalViewYear--; }
+            if (rhCalViewMonth > 11) { rhCalViewMonth = 0; rhCalViewYear++; }
+            rhCalRenderMonth();
         }
 
         function renderRevenueHistory(rows, boundNote) {
@@ -1444,18 +1569,44 @@
                 <button class="btn btn-outline btn-sm" id="rh-tab-range" onclick="setRevenueHistoryMode('range')">Range</button>
             </div>
             <div id="rh-daily-filters" style="margin-bottom:16px">
-                <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">Select a Day (last 3 months)</label>
-                <input class="form-control" id="rh-day" type="date" onchange="loadRevenueHistory()" />
-            </div>
-            <div id="rh-monthly-filters" style="display:none;margin-bottom:16px">
-                <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">Filter to One Month (optional — leave blank to see all 18)</label>
-                <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    <input class="form-control" id="rh-month" type="month" onchange="loadRevenueHistory()" style="flex:1;min-width:160px" />
-                    <button class="btn btn-outline btn-sm" onclick="clearMonthFilter()">Show All 18</button>
+                <div class="rh-cal-wrap">
+                    <div class="rh-cal-main">
+                        <div class="rh-cal-header">
+                            <button class="rh-cal-nav-btn" id="rh-cal-prev" onclick="rhCalShiftMonth(-1)">&lsaquo;</button>
+                            <strong id="rh-cal-month-label"></strong>
+                            <button class="rh-cal-nav-btn" id="rh-cal-next" onclick="rhCalShiftMonth(1)">&rsaquo;</button>
+                        </div>
+                        <div class="rh-cal-weekdays">
+                            <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+                        </div>
+                        <div class="rh-cal-grid" id="rh-cal-grid"></div>
+                    </div>
+                    <div class="rh-cal-side" id="rh-cal-side">
+                        <p style="color:var(--slate-light);font-size:13px">Pick a day to see its collections.</p>
+                    </div>
                 </div>
             </div>
+            <div id="rh-monthly-filters" style="display:none;margin-bottom:16px">
+                <div class="rh-cal-header">
+                    <button class="rh-cal-nav-btn" id="rh-month-prev-year" onclick="rhMonthShiftYear(-1)">&lsaquo;</button>
+                    <strong id="rh-month-year-label"></strong>
+                    <button class="rh-cal-nav-btn" id="rh-month-next-year" onclick="rhMonthShiftYear(1)">&rsaquo;</button>
+                </div>
+                <div class="rh-month-grid" id="rh-month-grid"></div>
+                <button class="btn btn-outline btn-sm" style="margin-top:12px;width:100%" onclick="clearMonthFilter()">Show All 18 Months</button>
+            </div>
             <div id="rh-range-filters" style="display:none;margin-bottom:16px">
-                <p style="color:var(--slate);font-size:13px;margin:0">Total revenue across the past 3 months, added up into one figure.</p>
+                <p style="color:var(--slate);font-size:13px;margin-bottom:10px">Pick any range within the past 18 months.</p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                    <div style="flex:1;min-width:140px">
+                        <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">From</label>
+                        <input class="form-control" id="rh-range-from" type="date" onchange="loadRevenueHistory()" />
+                    </div>
+                    <div style="flex:1;min-width:140px">
+                        <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">To</label>
+                        <input class="form-control" id="rh-range-to" type="date" onchange="loadRevenueHistory()" />
+                    </div>
+                </div>
             </div>
             <div id="revenue-history-list" style="max-height:50vh;overflow-y:auto"></div>
         </div>

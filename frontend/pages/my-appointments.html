@@ -105,6 +105,10 @@
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
         Change Password
       </button>
+      <button class="profile-menu-item" onclick="openAddressModal()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Saved Address
+      </button>
       <button class="profile-menu-item danger" onclick="confirmDeactivateAccount()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
         Deactivate Account
@@ -197,6 +201,24 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="modal-address">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h2>Saved Address</h2>
+        <button class="modal-close" onclick="closeAddressModal()">&times;</button>
+      </div>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">Used by default when booking appointments — you can still enter a different one for any single visit.</p>
+      <div class="form-group">
+        <label class="form-label">Address</label>
+        <textarea class="form-control" id="acc-address" rows="3" placeholder="House no., street, city"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-outline" onclick="closeAddressModal()">Cancel</button>
+        <button class="btn btn-primary" id="btn-save-address" onclick="saveAddress()">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../js/api.js"></script>
   <script>
     if (!requireAuth()) { }
@@ -224,6 +246,16 @@
       datetime: { title: "Select Date and Time", sub: () => state.doctorName },
       payment: { title: "Payment", sub: () => "Complete payment to confirm your booking" },
     };
+
+    function confirmNewPatientProfile() {
+      const name = document.getElementById("np-name").value.trim();
+      if (!name) { toast("Please enter the patient's name", "error"); return; }
+      state.profileLinkId = null;
+      state.profileName = name;
+      state.newPatientName = name;
+      state.newPatientGender = document.getElementById("np-gender").value;
+      setStep("datetime");
+    }
 
     function setStep(step, pushHistory = true) {
       if (pushHistory) state.history.push(state.step);
@@ -327,6 +359,10 @@
 
           const specs = [...new Set(doctors.map(d => d.specialization).filter(Boolean))].sort();
           area.innerHTML = `
+            <div style="margin-bottom:12px">
+              <a href="#" id="bed-availability-toggle" style="font-size:12.5px;color:var(--teal)" onclick="checkBedAvailability();return false;">Check bed availability at this hospital</a>
+              <div id="bed-availability-result" style="display:none;font-size:13px;margin-top:6px"></div>
+            </div>
             <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
               <input class="form-control" id="doc-search" placeholder="Search doctors..." style="flex:2;min-width:200px" />
               <select class="form-control" id="doc-spec-filter" style="flex:1;min-width:160px">
@@ -363,24 +399,45 @@
         try {
           const myProfiles = await api("GET", "/portal/dashboard/profiles");
           const linkedHere = myProfiles.filter(p => p.hospital_id === state.hospitalId);
-          const list = linkedHere.length ? linkedHere : myProfiles;
-          if (!list.length) { area.innerHTML = `<p style="color:var(--slate-light)">No linked profiles found.</p>`; return; }
 
-          const note = !linkedHere.length && myProfiles.length
-            ? `<p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">None of your linked profiles have visited this hospital before — booking will register a new visit under your account.</p>` : '';
+          const newPatientCard = `
+            <div class="select-row-card" id="new-patient-card" style="border:1px dashed var(--teal)">
+              <div><div class="src-name">+ First time at this hospital</div><div class="src-sub">Book as a new patient here</div></div>
+            </div>
+            <div id="new-patient-form" style="display:none;margin-top:10px">
+              <div class="form-group"><label class="form-label">Patient Name</label><input class="form-control" id="np-name" /></div>
+              <div class="form-group">
+                <label class="form-label">Gender</label>
+                <select class="form-control" id="np-gender"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
+              </div>
+              <button class="btn btn-primary" style="width:100%" onclick="confirmNewPatientProfile()">Continue</button>
+            </div>`;
+
+          if (!linkedHere.length) {
+            area.innerHTML = (myProfiles.length
+              ? `<p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">You have linked profiles at other hospitals, but none here yet.</p>`
+              : '') + newPatientCard;
+            document.getElementById("new-patient-card").addEventListener("click", () => {
+              document.getElementById("new-patient-form").style.display = "block";
+            });
+            return;
+          }
 
           const listEl = searchableFullWidthList(
-            area, list,
+            area, linkedHere,
             (p) => `<div class="select-row-card" data-id="${p.id}" data-name="${sanitize(p.display_name)}">
                       <div><div class="src-name">${sanitize(p.display_name)}</div><div class="src-sub">${p.relation}</div></div>
                     </div>`,
             (p, q) => p.display_name.toLowerCase().includes(q),
             "Search profiles..."
           );
-          area.insertAdjacentHTML('afterbegin', note);
+          area.insertAdjacentHTML('beforeend', newPatientCard);
+          document.getElementById("new-patient-card").addEventListener("click", () => {
+            document.getElementById("new-patient-form").style.display = "block";
+          });
           area.addEventListener('click', function handler(e) {
             const card = e.target.closest('.select-row-card');
-            if (!card) return;
+            if (!card || card.id === "new-patient-card") return;
             state.profileLinkId = parseInt(card.dataset.id);
             state.profileName = card.dataset.name;
             area.removeEventListener('click', handler);
@@ -509,26 +566,68 @@
     }
 
     function pickHospital(id, name) { state.hospitalId = id; state.hospitalName = name; setStep("doctor"); }
+
+    async function checkBedAvailability() {
+      const el = document.getElementById("bed-availability-result");
+      const link = document.getElementById("bed-availability-toggle");
+      link.style.display = "none";
+      el.style.display = "block";
+      el.innerHTML = `<span style="color:var(--slate-light)">Checking…</span>`;
+      const LABELS = {
+        available: ["🟢", "Beds available", "var(--teal)"],
+        few_left: ["🟡", "Only a few beds left", "#b45309"],
+        full: ["🔴", "No beds available right now", "var(--danger)"],
+        unknown: ["", "Bed availability isn't set up for this hospital yet", "var(--slate-light)"],
+      };
+      try {
+        const data = await api("GET", `/portal/hospitals/${state.hospitalId}/bed-availability`);
+        const [icon, label, color] = LABELS[data.status] || LABELS.unknown;
+        el.innerHTML = `<span style="color:${color};font-weight:600">${icon} ${label}</span>`;
+      } catch (e) {
+        el.innerHTML = `<span style="color:var(--danger)">Could not check right now.</span>`;
+      }
+    }
     function pickDoctor(id, name, fee) { state.doctorId = id; state.doctorName = name; state.doctorFee = fee; setStep("profile"); }
     function pickSlot(id, time) { state.slotId = id; state.slotTime = time; openConfirmModal(); }
 
-    function openConfirmModal() {
+    async function openConfirmModal() {
       document.getElementById("confirm-body").innerHTML = `
         <div class="pay-summary-row"><span>Patient</span><strong>${sanitize(state.profileName)}</strong></div>
         <div class="pay-summary-row"><span>Doctor</span><strong>${sanitize(state.doctorName)}</strong></div>
         <div class="pay-summary-row"><span>Hospital</span><strong>${sanitize(state.hospitalName)}</strong></div>
-        <div class="pay-summary-row"><span>Date &amp; Time</span><strong>${sanitize(state.dateLabel)}, ${sanitize(state.slotTime)}</strong></div>`;
+        <div class="pay-summary-row"><span>Date &amp; Time</span><strong>${sanitize(state.dateLabel)}, ${sanitize(state.slotTime)}</strong></div>
+        <div class="form-group" style="margin-top:14px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+            <input type="checkbox" id="chk-diff-address" onchange="toggleDiffAddress()"> Use a different address for this visit
+          </label>
+          <textarea class="form-control" id="confirm-address" rows="2" style="display:none;margin-top:8px" placeholder="House no., street, city"></textarea>
+        </div>`;
+      state.savedAddress = null;
+      try {
+        const res = await api("GET", "/portal/auth/address", null, false, true);
+        state.savedAddress = res?.address || null;
+      } catch (e) { /* not fatal — booking still works without a saved address */ }
       document.getElementById("modal-confirm").classList.add("open");
     }
     function closeConfirmModal() { document.getElementById("modal-confirm").classList.remove("open"); }
+
+    function toggleDiffAddress() {
+      const checked = document.getElementById("chk-diff-address").checked;
+      document.getElementById("confirm-address").style.display = checked ? "block" : "none";
+    }
 
     async function proceedToPayment() {
       const btn = document.getElementById("btn-pay-book");
       btn.disabled = true;
       try {
+        const useDifferent = document.getElementById("chk-diff-address").checked;
         const appt = await api("POST", "/portal/appointments", {
           hospital_id: state.hospitalId, doctor_id: state.doctorId,
           profile_link_id: state.profileLinkId, slot_id: state.slotId, type: "scheduled",
+          use_saved_address: !useDifferent,
+          custom_address: useDifferent ? document.getElementById("confirm-address").value.trim() : null,
+          new_patient_name: state.profileLinkId ? null : state.newPatientName,
+          new_patient_gender: state.profileLinkId ? null : state.newPatientGender,
         });
         state.pendingAppointmentId = appt.id;
         closeConfirmModal();
@@ -583,6 +682,34 @@
     async function cancelAppt(id) {
       try { await api("POST", `/portal/appointments/${id}/cancel`); toast("Appointment cancelled", "success"); loadAppointments(); }
       catch (e) { toast(e.message, "error"); }
+    }
+
+    async function openAddressModal() {
+      closeProfileMenu();
+      document.getElementById("acc-address").value = "";
+      document.getElementById("modal-address").classList.add("open");
+      try {
+        const res = await api("GET", "/portal/auth/address");
+        document.getElementById("acc-address").value = res?.address || "";
+      } catch (e) { /* leave blank if not set yet */ }
+    }
+    function closeAddressModal() {
+      document.getElementById("modal-address").classList.remove("open");
+    }
+    async function saveAddress() {
+      const btn = document.getElementById("btn-save-address");
+      const address = document.getElementById("acc-address").value.trim();
+      if (address.length < 5) { toast("Please enter a fuller address", "error"); return; }
+      btn.disabled = true;
+      try {
+        await api("PATCH", "/portal/auth/address", { address });
+        toast("Address saved", "success");
+        closeAddressModal();
+      } catch (e) {
+        toast(e.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     updateHeader();

@@ -5,7 +5,7 @@ from app.database import get_db
 from app.config import settings
 from app.models.patient import Patient
 from app.models.portal import PatientAccount, PatientProfileLink
-from app.schemas.portal import LoginIn, CompleteRegisterIn, TokenOut, PatientSessionOut, LoginResultOut, ChangePasswordIn
+from app.schemas.portal import LoginIn, CompleteRegisterIn, TokenOut, PatientSessionOut, LoginResultOut, ChangePasswordIn, AddressUpdateIn
 from app.utils.portal_auth import create_portal_access_token, hash_password, verify_password, get_current_patient_account
 from app.utils.timezone import now_ist_naive
 from app.utils.phone import normalize_phone
@@ -111,3 +111,24 @@ def change_password(
     account.password_hash = hash_password(body.new_password)
     db.commit()
     return {"message": "Password changed successfully"}
+
+
+@router.get("/address")
+def get_saved_address(
+    account: PatientAccount = Depends(get_current_patient_account),
+):
+    return {"address": account.address}
+
+
+@router.patch("/address")
+def update_saved_address(
+    body: AddressUpdateIn,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    address = body.address.strip()
+    if len(address) < 5:
+        raise HTTPException(status_code=400, detail="Please enter a fuller address")
+    account.address = address
+    db.commit()
+    return {"address": account.address}

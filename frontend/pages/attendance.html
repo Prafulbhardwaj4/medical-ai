@@ -382,7 +382,7 @@
         <main class="main-content">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
                 <h2 style="margin:0">Current Attendance</h2>
-                <button class="btn btn-outline btn-sm" onclick="toast('Attendance History — Coming Soon', 'info')">View
+                <button class="btn btn-outline btn-sm" onclick="openHistoryModal()">View
                     History</button>
             </div>
             <div class="chip-scroll staff-filter-tabs" id="staff-filters" style="margin-bottom:16px">
@@ -416,6 +416,42 @@
             </div>
         </main>
     </div>
+
+    <div class="modal-overlay" id="modal-att-history">
+        <div class="modal" style="max-width:720px;max-height:85vh;overflow-y:auto">
+            <div class="modal-header">
+                <h2>Attendance History</h2>
+                <button class="modal-close" onclick="closeHistoryModal()">&times;</button>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">From</label>
+                    <input type="date" class="form-control" id="hist-from">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">To</label>
+                    <input type="date" class="form-control" id="hist-to">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Staff</label>
+                    <select class="form-control" id="hist-role">
+                        <option value="all">All Staff</option>
+                        <option value="doctor">Doctors</option>
+                        <option value="sub_admin">Sub Admins</option>
+                        <option value="receptionist">Receptionists</option>
+                        <option value="nurse">Nurses</option>
+                        <option value="lab">Lab Staff</option>
+                        <option value="pharmacy">Pharmacists</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-teal btn-sm" onclick="loadHistory()" style="margin-bottom:14px">Apply</button>
+            <div id="history-list">
+                <p style="color:var(--slate)">Pick a range and click Apply.</p>
+            </div>
+        </div>
+    </div>
+
     <div id="toast"></div>
     <script src="../js/api.js?v=4"></script>
     <script>
@@ -560,6 +596,53 @@
 
         loadAttendance();
         setInterval(loadAttendance, 30000);
+
+        function openHistoryModal() {
+            const today = new Date();
+            const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+            document.getElementById('hist-to').value = today.toISOString().slice(0, 10);
+            document.getElementById('hist-from').value = monthAgo.toISOString().slice(0, 10);
+            document.getElementById('hist-role').value = staffFilter;
+            document.getElementById('modal-att-history').classList.add('open');
+            loadHistory();
+        }
+        function closeHistoryModal() {
+            document.getElementById('modal-att-history').classList.remove('open');
+        }
+
+        async function loadHistory() {
+            const from = document.getElementById('hist-from').value;
+            const to = document.getElementById('hist-to').value;
+            const role = document.getElementById('hist-role').value;
+            const el = document.getElementById('history-list');
+            el.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+            try {
+                const qs = new URLSearchParams({ from_date: from, to_date: to, role }).toString();
+                const rows = await api("GET", `/doctors/attendance/history?${qs}`);
+                if (!rows.length) {
+                    el.innerHTML = '<p style="color:var(--slate-light)">No attendance records in this range.</p>';
+                    return;
+                }
+                el.innerHTML = `
+          <table class="data-table" style="width:100%">
+            <thead><tr><th>Date</th><th>Name</th><th>Role</th><th>Status</th><th>Shift Started</th></tr></thead>
+            <tbody>
+              ${rows.map(r => `
+                <tr>
+                  <td>${new Date(r.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                  <td>${sanitize(r.name)}</td>
+                  <td>${sanitize(r.role || '')}</td>
+                  <td>${badgeFor(r.status)}</td>
+                  <td>${r.shift_started_at ? new Date(r.shift_started_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+            } catch (e) {
+                el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+            }
+        }
     </script>
 </body>
 

@@ -9,11 +9,13 @@ class Admission(Base):
     __tablename__ = "admissions"
 
     id = Column(Integer, primary_key=True, index=True)
+    public_token = Column(String, unique=True, nullable=False, index=True)  # opaque ID used in URLs — never expose the raw sequential id
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     admitting_doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
 
     ward = Column(String, nullable=False)
+    ward_type_id = Column(Integer, ForeignKey("admission_ward_types.id"), nullable=True)  # snapshot link for accurate current-rate lookups
     bed_number = Column(String, nullable=False)
     diagnosis = Column(Text, nullable=True)
 
@@ -47,6 +49,7 @@ class AdmissionMedicationOrder(Base):
 
     prescribed_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     is_active = Column(Boolean, default=True)
+    sourced_outside = Column(Boolean, default=False, nullable=False)  # patient/relatives are sourcing this themselves — no stock deduction, no bill line
     created_at = Column(DateTime, default=now_ist_naive)
 
     admission = relationship("Admission", back_populates="medication_orders")

@@ -11,3 +11,5 @@ from app.models.portal import PatientAccount, PatientProfileLink, InviteStatus, 
 from app.models.doctor_slot import DoctorSlot
 from app.models.doctor_availability import DoctorAvailabilityTemplate, DoctorUnavailability
 from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionMedicationAdministration, AdmissionCharge
+from app.models.chat_message import ChatMessage
+from app.models.admission_ward_type import AdmissionWardType

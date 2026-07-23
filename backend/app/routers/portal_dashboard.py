@@ -11,7 +11,8 @@ from app.models.invoice import Invoice
 from app.models.checkin import Checkin
 from app.models.hospital import Hospital
 from app.models.doctor import Doctor
-from app.schemas.portal import DashboardStatsOut, ProfileSummaryOut, VisitOut, VisitDetailOut, VisitTestOut
+from app.models.admission import Admission, AdmissionMedicationOrder
+from app.schemas.portal import DashboardStatsOut, ProfileSummaryOut, VisitOut, VisitDetailOut, VisitTestOut, AdmissionSummaryOut
 from app.utils.portal_auth import get_current_patient_account
 from app.utils.timezone import now_ist_naive
 from app.services.pdf_service import generate_prescription_pdf, generate_invoice_pdf
@@ -64,6 +65,61 @@ def list_profiles(account: PatientAccount = Depends(get_current_patient_account)
             display_name=patient.name, relation=link.relation, visit_count=visit_count,
         ))
     return out
+
+
+@router.get("/admissions", response_model=list[AdmissionSummaryOut])
+def list_admissions(account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
+    """Every hospital stay (current + past) across all linked profiles."""
+    patient_ids = _owned_patient_ids(account)
+    if not patient_ids:
+        return []
+
+    admissions = db.query(Admission).filter(
+        Admission.patient_id.in_(patient_ids)
+    ).order_by(Admission.admission_date.desc()).all()
+
+    out = []
+    for a in admissions:
+        hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
+        patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+        doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
+        out.append(AdmissionSummaryOut(
+            id=a.id,
+            hospital_name=hospital.name if hospital else "Unknown hospital",
+            patient_name=patient.name if patient else "Unknown",
+            ward=a.ward,
+            bed_number=a.bed_number,
+            diagnosis=a.diagnosis,
+            status=a.status,
+            admitting_doctor_name=f"{doctor.title} {doctor.name}" if doctor else None,
+            admission_date=a.admission_date.isoformat(),
+            discharge_date=a.discharge_date.isoformat() if a.discharge_date else None,
+        ))
+    return out
+
+
+@router.get("/admissions/{admission_id}/medications")
+def admission_medications(admission_id: int, account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
+    patient_ids = _owned_patient_ids(account)
+    admission = db.query(Admission).filter(Admission.id == admission_id, Admission.patient_id.in_(patient_ids)).first()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission not found")
+    orders = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.admission_id == admission.id).all()
+    return [{"id": o.id, "medicine_name": o.medicine_name, "dosage": o.dosage, "is_active": o.is_active, "sourced_outside": o.sourced_outside} for o in orders]
+
+
+@router.patch("/admissions/{admission_id}/medications/{order_id}/sourced-outside")
+def set_sourced_outside(admission_id: int, order_id: int, body: dict, account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
+    patient_ids = _owned_patient_ids(account)
+    admission = db.query(Admission).filter(Admission.id == admission_id, Admission.patient_id.in_(patient_ids)).first()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission not found")
+    order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == admission.id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Medication order not found")
+    order.sourced_outside = bool(body.get("sourced_outside", False))
+    db.commit()
+    return {"sourced_outside": order.sourced_outside}
 
 
 @router.get("/visits", response_model=list[VisitOut])

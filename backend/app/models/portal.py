@@ -29,6 +29,7 @@ class PatientAccount(Base):
     phone = Column(String, unique=True, nullable=False, index=True)
     email = Column(String, unique=True, nullable=True, index=True)
     password_hash = Column(String, nullable=False)
+    address = Column(String, nullable=True)  # saved default address, used unless a booking opts for a different one
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=now_ist_naive)
 
@@ -92,6 +93,9 @@ class Appointment(Base):
     status = Column(Enum(AppointmentStatus), default=AppointmentStatus.booked)
     payment_status = Column(String, default="unpaid", nullable=False)  # unpaid | paid
     notes = Column(Text, nullable=True)
+    address = Column(String, nullable=True)  # snapshot of the address used for this booking
+    new_patient_name = Column(String, nullable=True)    # captured only when booking with no existing hospital record
+    new_patient_gender = Column(String, nullable=True)
     created_at = Column(DateTime, default=now_ist_naive)
 
     account = relationship("PatientAccount", back_populates="appointments")

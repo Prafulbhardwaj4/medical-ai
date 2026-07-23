@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,13 +12,38 @@ from app.utils.timezone import now_ist_naive
 router = APIRouter(prefix="/portal-appointments-staff", tags=["portal-appointments-staff"])
 
 
+@router.get("/{appointment_id}/new-patient-prefill")
+def new_patient_prefill(
+    appointment_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin", "receptionist"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    appt = db.query(Appointment).filter(
+        Appointment.id == appointment_id, Appointment.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if appt.profile_link_id:
+        raise HTTPException(status_code=400, detail="This booking is already linked to an existing patient record")
+
+    return {
+        "name": appt.new_patient_name,
+        "gender": appt.new_patient_gender,
+        "phone": appt.account.phone if appt.account else None,
+        "address": appt.address,
+    }
+
+
 @router.get("/analytics")
 def appointment_analytics(
     doctor_id: int = Query(None),
     current_doctor=Depends(get_current_doctor),
     db: Session = Depends(get_db),
 ):
-    """Paid appointments in the last 45 days, grouped by doctor."""
+    """Online (portal-booked) appointments, paid, in the last 45 days, grouped by doctor."""
     cutoff = now_ist_naive() - timedelta(days=45)
 
     q = db.query(Appointment).filter(

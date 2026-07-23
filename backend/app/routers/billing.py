@@ -250,7 +250,7 @@ def list_invoices(
 # invoice volumes, and each hospital's query only ever touches its own bounded window, so this
 # doesn't get slower as more hospitals use the platform. Revisit only if one specific hospital's
 # window genuinely gets big enough to matter, not preemptively.
-MAX_DAILY_RANGE_DAYS = 92          # ~3 months
+MAX_DAILY_RANGE_DAYS = 548         # ~18 months, matches MAX_MONTHLY_RANGE_MONTHS
 MAX_MONTHLY_RANGE_MONTHS = 18
 
 def _clamp_daily_range(from_date: str, to_date: str):

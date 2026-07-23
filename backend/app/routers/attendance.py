@@ -133,6 +133,56 @@ def attendance_today(
         for d in staff
     ]
 
+@router.get("/attendance/history")
+def attendance_history(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    role: Optional[str] = None,
+    doctor_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    try:
+        start = datetime.strptime(from_date, "%Y-%m-%d").date() if from_date else (ist_today() - __import__("datetime").timedelta(days=30))
+        end = datetime.strptime(to_date, "%Y-%m-%d").date() if to_date else ist_today()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be in YYYY-MM-DD format")
+
+    if start > end:
+        raise HTTPException(status_code=400, detail="from_date must be before to_date")
+
+    query = db.query(AttendanceRecord).filter(
+        AttendanceRecord.hospital_id == current_doctor.hospital_id,
+        AttendanceRecord.date >= start,
+        AttendanceRecord.date <= end
+    )
+    if doctor_id:
+        query = query.filter(AttendanceRecord.doctor_id == doctor_id)
+
+    records = query.order_by(AttendanceRecord.date.desc()).all()
+
+    staff_ids = {r.doctor_id for r in records}
+    staff = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_(staff_ids)).all()} if staff_ids else {}
+
+    if role and role != "all":
+        records = [r for r in records if staff.get(r.doctor_id) and staff[r.doctor_id].role.value == role]
+
+    return [
+        {
+            "doctor_id": r.doctor_id,
+            "name": f"{staff[r.doctor_id].title} {staff[r.doctor_id].name}" if r.doctor_id in staff else "Unknown",
+            "role": staff[r.doctor_id].role.value if r.doctor_id in staff else None,
+            "date": r.date.isoformat(),
+            "status": r.status,
+            "shift_started_at": r.shift_started_at.isoformat() if r.shift_started_at else None,
+            "last_updated_at": r.created_at.isoformat() if r.created_at else None
+        }
+        for r in records
+    ]
+
 @router.get("/attendance/my-status")
 def my_attendance_status(
     db: Session = Depends(get_db),

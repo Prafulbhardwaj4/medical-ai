@@ -69,29 +69,64 @@ def upgrade():
         )
 
     # Link existing test_orders to admissions (OPD keeps using consultation_id; IPD uses this)
+    is_sqlite = bind.dialect.name == 'sqlite'
     test_order_cols = {c['name'] for c in insp.get_columns('test_orders')}
     if 'admission_id' not in test_order_cols:
-        op.add_column('test_orders', sa.Column('admission_id', sa.Integer(), sa.ForeignKey('admissions.id'), nullable=True))
+        if is_sqlite:
+            with op.batch_alter_table('test_orders') as batch_op:
+                batch_op.add_column(sa.Column('admission_id', sa.Integer(), nullable=True))
+                batch_op.create_foreign_key('fk_test_orders_admission_id', 'admissions', ['admission_id'], ['id'])
+        else:
+            op.add_column('test_orders', sa.Column('admission_id', sa.Integer(), sa.ForeignKey('admissions.id'), nullable=True))
     if 'consultation_id' in test_order_cols:
-        op.alter_column('test_orders', 'consultation_id', nullable=True)
+        if is_sqlite:
+            with op.batch_alter_table('test_orders') as batch_op:
+                batch_op.alter_column('consultation_id', nullable=True)
+        else:
+            op.alter_column('test_orders', 'consultation_id', nullable=True)
 
     # Discharge bills have no Checkin — invoices needs to support that
     invoice_cols = {c['name'] for c in insp.get_columns('invoices')}
     if 'admission_id' not in invoice_cols:
-        op.add_column('invoices', sa.Column('admission_id', sa.Integer(), sa.ForeignKey('admissions.id'), nullable=True))
+        if is_sqlite:
+            with op.batch_alter_table('invoices') as batch_op:
+                batch_op.add_column(sa.Column('admission_id', sa.Integer(), nullable=True))
+                batch_op.create_foreign_key('fk_invoices_admission_id', 'admissions', ['admission_id'], ['id'])
+        else:
+            op.add_column('invoices', sa.Column('admission_id', sa.Integer(), sa.ForeignKey('admissions.id'), nullable=True))
     if 'checkin_id' in invoice_cols:
-        op.alter_column('invoices', 'checkin_id', nullable=True)
+        if is_sqlite:
+            with op.batch_alter_table('invoices') as batch_op:
+                batch_op.alter_column('checkin_id', nullable=True)
+        else:
+            op.alter_column('invoices', 'checkin_id', nullable=True)
 
     # FK for admissions.discharge_invoice_id -> invoices.id (added after invoices exists/is stable)
-    op.create_foreign_key('fk_admission_discharge_invoice', 'admissions', 'invoices', ['discharge_invoice_id'], ['id'])
+    if is_sqlite:
+        with op.batch_alter_table('admissions') as batch_op:
+            batch_op.create_foreign_key('fk_admission_discharge_invoice', 'invoices', ['discharge_invoice_id'], ['id'])
+    else:
+        op.create_foreign_key('fk_admission_discharge_invoice', 'admissions', 'invoices', ['discharge_invoice_id'], ['id'])
 
 
 def downgrade():
-    op.drop_constraint('fk_admission_discharge_invoice', 'admissions', type_='foreignkey')
-    op.alter_column('invoices', 'checkin_id', nullable=False)
-    op.drop_column('invoices', 'admission_id')
-    op.alter_column('test_orders', 'consultation_id', nullable=False)
-    op.drop_column('test_orders', 'admission_id')
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == 'sqlite'
+    if is_sqlite:
+        with op.batch_alter_table('admissions') as batch_op:
+            batch_op.drop_constraint('fk_admission_discharge_invoice', type_='foreignkey')
+        with op.batch_alter_table('invoices') as batch_op:
+            batch_op.alter_column('checkin_id', nullable=False)
+            batch_op.drop_column('admission_id')
+        with op.batch_alter_table('test_orders') as batch_op:
+            batch_op.alter_column('consultation_id', nullable=False)
+            batch_op.drop_column('admission_id')
+    else:
+        op.drop_constraint('fk_admission_discharge_invoice', 'admissions', type_='foreignkey')
+        op.alter_column('invoices', 'checkin_id', nullable=False)
+        op.drop_column('invoices', 'admission_id')
+        op.alter_column('test_orders', 'consultation_id', nullable=False)
+        op.drop_column('test_orders', 'admission_id')
     op.drop_table('admission_charges')
     op.drop_table('admission_medication_administrations')
     op.drop_table('admission_medication_orders')

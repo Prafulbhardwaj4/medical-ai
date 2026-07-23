@@ -12,6 +12,7 @@ class PatientCreate(BaseModel):
     blood_group: Optional[str] = None
     gender: str
     abha_number: Optional[str] = None
+    address: Optional[str] = None
 
     @validator("name")
     def validate_name(cls, v):
@@ -72,6 +73,7 @@ class PatientOut(BaseModel):
     blood_group: Optional[str] = None
     gender: str
     abha_number: Optional[str] = None
+    address: Optional[str] = None
     hospital_id: Optional[int] = None
     created_by: int
     created_at: datetime

@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.hospital import Hospital
 from app.models.doctor import Doctor, UserRole
+from app.models.admission import Admission
+from app.models.admission_ward_type import AdmissionWardType
 from app.schemas.portal import HospitalOut
 
 router = APIRouter(prefix="/portal/hospitals", tags=["portal-hospitals"])
@@ -89,6 +91,31 @@ def list_doctor_slots(hospital_id: int, doctor_id: int, date: str, db: Session =
             "level": _level(s), "full": s.booked_count >= s.capacity,
         })
     return grouped
+
+
+@router.get("/{hospital_id}/bed-availability")
+def bed_availability(hospital_id: int, db: Session = Depends(get_db)):
+    """Coarse, opt-in-only bed status for one hospital — deliberately never exposes
+    raw bed counts or a ward-level breakdown, to avoid handing a competitor exact
+    occupancy figures. Returns one bucket: available / few_left / full / unknown."""
+    ward_types = db.query(AdmissionWardType).filter(AdmissionWardType.hospital_id == hospital_id).all()
+    total_beds = sum(w.total_beds for w in ward_types)
+    if total_beds == 0:
+        return {"status": "unknown"}
+
+    occupied = db.query(Admission).filter(
+        Admission.hospital_id == hospital_id, Admission.status == "admitted"
+    ).count()
+    vacant = max(total_beds - occupied, 0)
+    ratio = vacant / total_beds
+
+    if vacant == 0:
+        status = "full"
+    elif ratio <= 0.2:
+        status = "few_left"
+    else:
+        status = "available"
+    return {"status": status}
 
 
 @router.get("/{hospital_id}", response_model=HospitalOut)

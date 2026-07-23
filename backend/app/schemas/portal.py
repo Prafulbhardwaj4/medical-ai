@@ -79,6 +79,14 @@ class BookAppointmentIn(BaseModel):
     requested_time: Optional[datetime] = None  # used only for type="queue_home"
     type: str = "scheduled"
     notes: Optional[str] = None
+    use_saved_address: bool = True         # if True, use the account's saved address
+    custom_address: Optional[str] = None   # used only when use_saved_address is False
+    new_patient_name: Optional[str] = None   # required when profile_link_id is None (first visit at this hospital)
+    new_patient_gender: Optional[str] = None
+
+
+class AddressUpdateIn(BaseModel):
+    address: str
 
 
 class AppointmentOut(BaseModel):
@@ -92,6 +100,7 @@ class AppointmentOut(BaseModel):
     status: str
     payment_status: str = "unpaid"
     notes: Optional[str]
+    address: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -162,6 +171,19 @@ class ProfileSummaryOut(BaseModel):
     display_name: str
     relation: str
     visit_count: int
+
+
+class AdmissionSummaryOut(BaseModel):
+    id: int
+    hospital_name: str
+    patient_name: str
+    ward: str
+    bed_number: str
+    diagnosis: Optional[str] = None
+    status: str
+    admitting_doctor_name: Optional[str] = None
+    admission_date: str
+    discharge_date: Optional[str] = None
 
 
 class VisitOut(BaseModel):

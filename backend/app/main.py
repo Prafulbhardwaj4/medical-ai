@@ -27,6 +27,7 @@ from app.models.portal import PatientAccount, PatientProfileLink, InviteStatus, 
 from app.routers import portal_appointments_staff as portal_appointments_staff_router
 from app.routers import admissions as admissions_router
 from app.routers import doctor_slots as doctor_slots_router
+from app.routers import chat as chat_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 from app.models.audit_log import AuditLog
@@ -40,6 +41,7 @@ from app.models.medicine_batch import MedicineBatch
 from app.models.medicine_order import MedicineOrder
 from app.models.invoice import Invoice
 from app.models.notification import Notification
+from app.models.chat_message import ChatMessage
 from app.config import settings
 import warnings
 import os
@@ -94,6 +96,7 @@ app.include_router(portal_appointments_router.router)
 app.include_router(portal_appointments_staff_router.router)
 app.include_router(admissions_router.router)
 app.include_router(doctor_slots_router.router)
+app.include_router(chat_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
 
