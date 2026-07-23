@@ -15,4 +15,5 @@ class Invoice(Base):
     generated_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     generated_from = Column(String, nullable=True)  # "reception" or "pharmacy"
     pdf_path = Column(String, nullable=True)
+    payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi"
     generated_at = Column(DateTime, default=now_ist_naive)

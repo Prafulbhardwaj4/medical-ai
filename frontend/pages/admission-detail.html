@@ -173,10 +173,36 @@
   <div class="modal-overlay" id="modal-discharge">
     <div class="modal" style="max-width:440px">
       <div class="modal-header"><h2>Discharge Patient</h2><button class="modal-close" onclick="closeModal('modal-discharge')">&times;</button></div>
-      <p style="color:var(--slate);font-size:13.5px;margin-bottom:14px">This finalizes the bill and generates the discharge invoice. This can't be undone.</p>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:10px">This finalizes the bill and generates the discharge invoice. This can't be undone.</p>
+
+      <div id="discharge-amount-box" style="background:var(--smoke);border-radius:var(--radius);padding:14px;margin-bottom:14px">
+        <div style="font-size:12px;color:var(--slate-light)">Amount Due (excludes pharmacy — settled separately)</div>
+        <div id="discharge-amount-due" style="font-size:1.6rem;font-weight:800;color:var(--navy)">Loading…</div>
+      </div>
+
+      <div class="form-group" id="discharge-payment-row" style="display:none">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;margin-bottom:8px">
+          <input type="checkbox" id="discharge-payment-collected" onchange="togglePaymentMethodField()"> Payment collected
+        </label>
+        <select class="form-control" id="discharge-payment-method" style="display:none">
+          <option value="">Select method...</option>
+          <option value="cash">Cash</option>
+          <option value="card">Card</option>
+          <option value="upi">UPI</option>
+        </select>
+      </div>
+
       <div class="form-group"><label class="form-label">Discharge Summary (optional)</label><textarea class="form-control" id="discharge-summary" rows="4"></textarea></div>
       <div class="err-msg" id="discharge-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitDischarge()">Confirm Discharge</button>
+
+      <div id="discharge-output-options" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
+        <p style="font-size:13px;color:var(--slate);margin-bottom:8px">Patient discharged. Share the invoice:</p>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline" style="flex:1" onclick="printDischargeInvoice()">Print</button>
+          <button class="btn btn-outline" style="flex:1" onclick="toast('WhatsApp delivery is coming soon — use Print for now.', 'info')">Send via WhatsApp</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -317,7 +343,7 @@
           ${admissionData.discharge_summary ? `<p style="font-size:13px;color:var(--slate-light);margin-top:6px">${sanitize(admissionData.discharge_summary)}</p>` : ''}
           <button class="btn btn-outline" style="width:100%;margin-top:12px" onclick="downloadFile('/admissions/${admissionId}/invoice/pdf', 'discharge_invoice_${admissionId}.pdf')">Download Invoice</button>`;
       } else {
-        el.innerHTML = `<button class="btn btn-primary" style="width:100%" onclick="openModal('modal-discharge')">Discharge Patient</button>`;
+        el.innerHTML = `<button class="btn btn-primary" style="width:100%" onclick="openDischargeModal()">Discharge Patient</button>`;
       }
     }
 
@@ -386,14 +412,74 @@
     }
 
     // ---------- Discharge ----------
+    let dischargeAmountDue = 0;
+
+    async function openDischargeModal() {
+      document.getElementById("discharge-err").textContent = "";
+      document.getElementById("discharge-output-options").style.display = "none";
+      document.getElementById("discharge-summary").disabled = false;
+      document.getElementById("discharge-amount-due").textContent = "Loading…";
+      openModal("modal-discharge");
+      try {
+        const preview = await api("GET", `/admissions/${admissionId}/discharge-preview`);
+        dischargeAmountDue = preview.amount_due;
+        document.getElementById("discharge-amount-due").textContent = `₹${preview.amount_due.toFixed(2)}`;
+        document.getElementById("discharge-payment-row").style.display = preview.amount_due > 0 ? "block" : "none";
+        document.getElementById("discharge-payment-collected").checked = false;
+        document.getElementById("discharge-payment-method").style.display = "none";
+        document.getElementById("discharge-payment-method").value = "";
+      } catch (e) {
+        document.getElementById("discharge-amount-due").textContent = "—";
+        document.getElementById("discharge-err").textContent = e.message;
+      }
+    }
+
+    function togglePaymentMethodField() {
+      const checked = document.getElementById("discharge-payment-collected").checked;
+      document.getElementById("discharge-payment-method").style.display = checked ? "block" : "none";
+    }
+
     async function submitDischarge() {
       const err = document.getElementById("discharge-err");
+      err.textContent = "";
+      const paymentCollected = document.getElementById("discharge-payment-collected").checked;
+      const paymentMethod = document.getElementById("discharge-payment-method").value;
+
+      if (dischargeAmountDue > 0 && !paymentCollected) {
+        alert(`Payment of ₹${dischargeAmountDue.toFixed(2)} is still pending. Collect payment before discharge can proceed.`);
+        return;
+      }
+      if (paymentCollected && !paymentMethod) {
+        err.textContent = "Please select how payment was collected";
+        return;
+      }
+
       try {
-        await api("POST", `/admissions/${admissionId}/discharge`, { discharge_summary: document.getElementById("discharge-summary").value.trim() || null });
-        closeModal("modal-discharge");
+        await api("POST", `/admissions/${admissionId}/discharge`, {
+          discharge_summary: document.getElementById("discharge-summary").value.trim() || null,
+          payment_collected: paymentCollected,
+          payment_method: paymentCollected ? paymentMethod : null,
+        });
         toast("Patient discharged", "success");
+        document.getElementById("discharge-output-options").style.display = "block";
+        document.getElementById("discharge-summary").disabled = true;
         loadAdmission();
-      } catch (e) { err.textContent = e.message; }
+      } catch (e) {
+        if (e.message && e.message.toLowerCase().includes("pending")) {
+          alert(e.message); // blocking popup, per requirement
+        }
+        err.textContent = e.message;
+      }
+    }
+
+    async function printDischargeInvoice() {
+      try {
+        const response = await fetch(`${BASE}/admissions/${admissionId}/invoice/pdf`, {
+          headers: { "Authorization": `Bearer ${getToken()}` }
+        });
+        const blob = await response.blob();
+        window.open(URL.createObjectURL(blob), "_blank");
+      } catch (e) { toast("Could not open invoice", "error"); }
     }
 
     loadAdmission();

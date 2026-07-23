@@ -399,21 +399,8 @@ def order_admission_test(admission_id: str, body: AddAdmissionTestIn, current_do
 
 # ---------- Discharge ----------
 
-@router.post("/{admission_id}/discharge")
-def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    if a.status != "admitted":
-        raise HTTPException(status_code=400, detail="Already discharged")
-
-    a.status = "discharged"
-    a.discharge_date = now_ist_naive()
-    a.discharge_summary = body.discharge_summary
-    db.commit()
-
-    patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
-    hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
+def _build_discharge_bill(db: Session, a: Admission):
     charges = db.query(AdmissionCharge).filter(AdmissionCharge.admission_id == a.id).all()
-
     current_rate = _current_daily_rate(db, a)
     items = [{"type": "room", "name": f"Room charges — {a.ward}, Bed {a.bed_number} ({_days_admitted(a)} day(s))",
               "qty": _days_admitted(a), "unit_price": current_rate, "line_total": _days_admitted(a) * current_rate, "payable_here": True}]
@@ -423,13 +410,44 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
         payable_here = c.charge_type != "medicine"
         name = c.description if payable_here else f"{c.description} (Settled at Pharmacy Counter — not included in this total)"
         items.append({"type": c.charge_type, "name": name, "qty": c.quantity, "unit_price": c.amount, "line_total": c.amount * c.quantity, "payable_here": payable_here})
-
     grand_total = sum(i["line_total"] for i in items if i["payable_here"])
+    return items, grand_total
+
+
+@router.get("/{admission_id}/discharge-preview")
+def discharge_preview(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Shows what's owed BEFORE committing discharge — reception collects this first."""
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    items, grand_total = _build_discharge_bill(db, a)
+    return {"items": items, "amount_due": grand_total}
+
+
+@router.post("/{admission_id}/discharge")
+def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="Already discharged")
+
+    items, grand_total = _build_discharge_bill(db, a)
+
+    if grand_total > 0 and not body.payment_collected:
+        raise HTTPException(status_code=402, detail=f"Payment of Rs.{grand_total:.2f} is still pending — collect payment before discharge can proceed")
+    if body.payment_collected and not body.payment_method:
+        raise HTTPException(status_code=400, detail="Please select how payment was collected")
+
+    a.status = "discharged"
+    a.discharge_date = now_ist_naive()
+    a.discharge_summary = body.discharge_summary
+    db.commit()
+
+    patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
 
     invoice = Invoice(
         checkin_id=None, admission_id=a.id, patient_id=a.patient_id, hospital_id=a.hospital_id,
         items_json=json.dumps(items), grand_total=grand_total,
         generated_by=current_doctor.id, generated_from="admission_discharge",
+        payment_method=body.payment_method,
     )
     db.add(invoice)
     db.commit()
