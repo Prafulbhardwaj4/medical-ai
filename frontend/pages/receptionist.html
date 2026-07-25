@@ -1696,7 +1696,7 @@
       const list = document.getElementById("avail-doctor-list");
       if (!doctors.length) { list.innerHTML = `<p style="color:var(--slate-light)">No doctors found.</p>`; return; }
       list.innerHTML = doctors.map(d => `
-        <div class="avail-doctor-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick="openAvailModal(${d.id}, '${(d.title + ' ' + d.name).replace(/'/g, "\\'")}')">
+        <div class="avail-doctor-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick="location.href='doctor-slots.html?doctor_id=${d.id}'">
           <div>
             <div style="font-weight:600;color:var(--navy)">${d.title} ${d.name}</div>
             <div style="font-size:12.5px;color:var(--slate-light)">ID: ${d.doctor_uid || d.id}${d.specialization ? ' · ' + d.specialization : ''}</div>

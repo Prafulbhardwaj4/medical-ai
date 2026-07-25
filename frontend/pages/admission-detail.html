@@ -584,7 +584,7 @@
         <div class="bill-row"><span>Other Charges</span><span>₹${sum(other).toFixed(2)}</span></div>
         ${paidSoFar > 0 ? `<div class="bill-row" style="font-weight:600;color:var(--teal)"><span>Payments Received</span><span>−₹${paidSoFar.toFixed(2)}</span></div><div style="padding-left:10px;border-left:2px solid var(--border);margin:2px 0 8px">${paymentRows}</div>` : ''}
         <div class="bill-total-row"><span>${paidSoFar > 0 ? 'Balance Due' : 'Total'}</span><span>₹${b.grand_total.toFixed(2)}</span></div>
-        ${admissionData.status === 'admitted' && !isAdminViewer ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openCollectPaymentModal()">+ Collect Payment</button>` : ''}`;
+        ${admissionData.status === 'admitted' && !isAdminViewer ? `<button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="openCollectPaymentModal()">+ Collect Payment</button>` : ''}`;
     }
 
     function openCollectPaymentModal() {

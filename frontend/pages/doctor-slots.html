@@ -408,6 +408,11 @@
         const doctors = await res.json();
         const sel = document.getElementById("pick-doctor");
         sel.innerHTML = doctors.filter(d => d.role === 'doctor').map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
+
+        const requestedId = new URLSearchParams(window.location.search).get("doctor_id");
+        if (requestedId && [...sel.options].some(o => o.value === requestedId)) {
+          sel.value = requestedId;
+        }
         targetDoctorId = sel.value ? parseInt(sel.value) : null;
         sel.addEventListener("change", () => { targetDoctorId = parseInt(sel.value); loadTemplate(); loadUnavailable(); loadPreview(); });
         if (targetDoctorId) { await loadTemplate(); await loadUnavailable(); }

@@ -20,7 +20,8 @@
     .test-row-meta {
       display: flex;
       gap: 16px;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      white-space: nowrap;
     }
     .test-row-actions {
       display: flex;
@@ -464,7 +465,7 @@
       el.innerHTML = items.map(t => `
         <div class="test-row">
           <div class="test-row-main">
-            <div style="flex:1;min-width:220px">
+            <div style="flex:1;min-width:0">
               <strong>${sanitize(t.test_name)}</strong>
               ${t.is_panel ? `<span class="badge badge-navy" style="margin-left:8px">Panel · ${t.parameters.length} params</span>` : ''}
               ${(!t.is_panel && (t.reference_range_male || t.reference_range_female)) ? `<div style="font-size:12px;color:var(--slate)">M: ${sanitize(t.reference_range_male || '—')} · F: ${sanitize(t.reference_range_female || '—')}${t.unit ? ' ' + sanitize(t.unit) : ''}</div>` : ''}
