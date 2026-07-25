@@ -188,7 +188,7 @@
         </div>
 
         <div>
-          <div class="card" style="margin-bottom:20px">
+          <div class="card" style="margin-bottom:20px" id="running-bill-card">
             <div class="card-header"><h2>Running Bill</h2></div>
             <div id="bill-body"><p>Loading...</p></div>
           </div>
@@ -317,7 +317,7 @@
   <div class="modal-overlay" id="modal-request-ward-change">
     <div class="modal" style="max-width:420px">
       <div class="modal-header">
-        <h2>Request Ward Change</h2>
+        <h2>Request Ward/Bed Change</h2>
         <button class="modal-close" onclick="closeModal('modal-request-ward-change')">&times;</button>
       </div>
       <p style="color:var(--slate);font-size:13px;margin-bottom:14px">This notifies reception — it doesn't move the patient. Reception will make the actual change.</p>
@@ -371,7 +371,8 @@
       renderAdminNav("admissions");
     }
     function canManageClinicalOrders() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
-    function canAdministerDoses() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    function canAdministerDoses() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    function isNurseViewer() { return getDoctor()?.role === "nurse"; }
     if (!canManageClinicalOrders()) {
       document.getElementById("btn-add-med").style.display = "none";
       document.getElementById("btn-add-test").style.display = "none";
@@ -381,6 +382,10 @@
     const canChangeWard = ["receptionist", "admin", "sub_admin"].includes(getDoctor()?.role);
     let wardTypesForMove = [];
     if (isAdminViewer) document.getElementById("discharge-card").style.display = "none";
+    if (isNurseViewer()) {
+      document.getElementById("discharge-card").style.display = "none";
+      document.getElementById("running-bill-card").style.display = "none";
+    }
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
 
@@ -417,7 +422,7 @@
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
               ${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)} · Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} (${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'})
               ${a.status === 'admitted' && canChangeWard ? `<button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="openChangeWardModal()">Change Ward/Bed</button>` : ''}
-              ${a.status === 'admitted' && canRequestWardChange && !canChangeWard ? `<a href="#" onclick="openRequestWardChangeModal();return false;" style="font-size:12px;margin-left:8px;color:var(--teal)">Request Ward Change</a>` : ''}
+              ${a.status === 'admitted' && canRequestWardChange && !canChangeWard ? `<button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="openRequestWardChangeModal()">Request Ward/Bed Change</button>` : ''}
             </p>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
               <strong>Diagnosis:</strong> <span id="diagnosis-display">${sanitize(a.diagnosis || '—')}</span>
@@ -535,8 +540,17 @@
     function renderTests() {
       const list = document.getElementById("test-list");
       if (!admissionData.tests.length) { list.innerHTML = `<p style="color:var(--slate-light)">No tests ordered yet.</p>`; return; }
+      const fmt = (iso) => iso ? new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
       list.innerHTML = admissionData.tests.map(t => `
-        <div class="bill-row"><span>${sanitize(t.test_name)}</span><span class="badge badge-grey">${t.status}</span></div>`).join('');
+        <div class="bill-row">
+          <span>${sanitize(t.test_name)}</span>
+          <span style="text-align:right">
+            <span class="badge badge-grey">${t.status}</span>
+            <div style="font-size:11px;color:var(--slate-light);margin-top:2px">
+              ${t.completed_at ? 'Completed ' + fmt(t.completed_at) : (t.queued_at ? 'Ordered ' + fmt(t.queued_at) : '')}
+            </div>
+          </span>
+        </div>`).join('');
     }
 
     function renderCharges() {

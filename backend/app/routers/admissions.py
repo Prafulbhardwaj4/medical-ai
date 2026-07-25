@@ -462,7 +462,11 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
     charges_out = [{"id": c.id, "charge_type": c.charge_type, "description": c.description, "amount": c.amount, "quantity": c.quantity, "charged_at": c.charged_at.isoformat()} for c in charges]
 
     tests = db.query(TestOrder).filter(TestOrder.admission_id == a.id).order_by(TestOrder.created_at.desc()).all()
-    tests_out = [{"id": t.id, "test_name": t.test_name, "status": t.status, "price": t.price} for t in tests]
+    tests_out = [{
+        "id": t.id, "test_name": t.test_name, "status": t.status, "price": t.price,
+        "queued_at": t.queued_at.isoformat() if t.queued_at else None,
+        "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+    } for t in tests]
 
     charge_total = sum(c.amount * c.quantity for c in charges)
     room_breakdown, room_total = _room_charge_breakdown(db, a)
@@ -603,8 +607,8 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
 
 @router.post("/{admission_id}/medications/{order_id}/administer")
 def administer_dose(admission_id: str, order_id: int, body: AdministerDoseIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only a doctor or nurse can log a dose")
+    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor can log a dose")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id).first()
     if not order:
@@ -639,8 +643,8 @@ def administer_dose(admission_id: str, order_id: int, body: AdministerDoseIn, cu
 
 @router.patch("/{admission_id}/medications/{order_id}/stop")
 def stop_medication(admission_id: str, order_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only a doctor or nurse can stop a medication")
+    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor can stop a medication")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id).first()
     if not order:
@@ -652,8 +656,8 @@ def stop_medication(admission_id: str, order_id: int, current_doctor: Doctor = D
 
 @router.patch("/{admission_id}/medications/{order_id}/resume")
 def resume_medication(admission_id: str, order_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only a doctor or nurse can resume a medication")
+    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor can resume a medication")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Cannot resume medications on a discharged admission")
@@ -669,6 +673,8 @@ def resume_medication(admission_id: str, order_id: int, current_doctor: Doctor =
 
 @router.post("/{admission_id}/charges")
 def add_charge(admission_id: str, body: AddChargeIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only reception can add charges to the bill")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Cannot add charges to a discharged admission")
@@ -772,6 +778,8 @@ def discharge_preview(admission_id: str, current_doctor: Doctor = Depends(get_cu
 
 @router.post("/{admission_id}/discharge")
 def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only reception can discharge a patient")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Already discharged")
