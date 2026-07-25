@@ -104,7 +104,17 @@
       </a>
     </nav>
 
+    <nav class="sidebar" id="app-sidebar" style="display:none"></nav>
+
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+    <div class="mobile-menu-sheet" id="mobile-menu-sheet">
+      <div class="mobile-menu-header">
+        <h2>More</h2>
+        <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
+      </div>
+      <div class="mobile-menu-body" id="app-mobile-menu-body"></div>
+    </div>
 
     <nav class="bottom-nav" id="bottom-nav-doctor">
       <button class="bottom-nav-item" onclick="location.href='dashboard.html'">
@@ -139,6 +149,8 @@
         Menu
       </button>
     </nav>
+
+    <nav class="bottom-nav" id="app-bottom-nav" style="display:none"></nav>
 
     <main class="main-content">
       <button class="btn btn-outline btn-sm" style="margin-bottom:16px" onclick="location.href='admissions.html'">&larr; Back to Admissions</button>
@@ -318,6 +330,8 @@
   </div>
 
   <script src="../js/api.js"></script>
+  <script src="../js/nav-admin.js"></script>
+  <script src="../js/chat-widget.js?v=1"></script>
   <script>
     if (!requireAuth()) { }
     if (getDoctor()?.role === "receptionist") {
@@ -326,6 +340,14 @@
       document.getElementById("bottom-nav-doctor").style.display = "none";
       document.getElementById("bottom-nav-receptionist").style.display = "";
       document.getElementById("sidebar-doctor-name-rec").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
+    } else if (["admin", "sub_admin"].includes(getDoctor()?.role)) {
+      document.getElementById("sidebar-doctor").style.display = "none";
+      document.getElementById("sidebar-receptionist").style.display = "none";
+      document.getElementById("bottom-nav-doctor").style.display = "none";
+      document.getElementById("bottom-nav-receptionist").style.display = "none";
+      document.getElementById("app-sidebar").style.display = "";
+      document.getElementById("app-bottom-nav").style.display = "";
+      renderAdminNav("admissions");
     }
     function canManageClinicalOrders() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
     function canAdministerDoses() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
@@ -373,12 +395,12 @@
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">${p.age} yrs, ${p.gender} · ${sanitize(p.phone)} ${p.patient_uid ? '· ' + sanitize(p.patient_uid) : ''}</p>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
               ${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)} · Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} (${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'})
-              ${a.status === 'admitted' && canChangeWard ? `<a href="#" onclick="openChangeWardModal();return false;" style="font-size:12px;margin-left:8px;color:var(--teal)">Change Ward/Bed</a>` : ''}
+              ${a.status === 'admitted' && canChangeWard ? `<button class="btn btn-outline btn-sm" style="margin-left:8px" onclick="openChangeWardModal()">Change Ward/Bed</button>` : ''}
               ${a.status === 'admitted' && canRequestWardChange && !canChangeWard ? `<a href="#" onclick="openRequestWardChangeModal();return false;" style="font-size:12px;margin-left:8px;color:var(--teal)">Request Ward Change</a>` : ''}
             </p>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
               <strong>Diagnosis:</strong> <span id="diagnosis-display">${sanitize(a.diagnosis || '—')}</span>
-              <a href="#" onclick="openEditDiagnosis();return false;" style="font-size:12px;margin-left:8px;color:var(--teal)">Edit</a>
+              <button class="btn btn-outline btn-sm" style="margin-left:8px" onclick="openEditDiagnosis()">Edit</button>
             </p>
             <div id="diagnosis-edit-row" style="display:none;margin-top:6px;gap:8px;max-width:420px">
               <input class="form-control" id="diagnosis-edit-input" />

@@ -702,7 +702,7 @@
 
     function stockDisplay(m) {
       const total = m.stock_quantity != null ? m.stock_quantity : 0;
-      if (total === 0) return `<span style="color:#991b1b;font-weight:600">Out of Stock</span>`;
+      if (total === 0) return `0 <span style="color:#991b1b;font-weight:600">(Out of Stock)</span>`;
       if (m.pack_size > 1) {
         const strips = Math.floor(total / m.pack_size);
         const loose = total % m.pack_size;

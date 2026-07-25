@@ -72,7 +72,7 @@
 
     .filter-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr auto;
+      grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
       gap: 12px;
       align-items: end;
       margin-bottom: 20px;
@@ -291,7 +291,7 @@
               <input class="form-control" type="date" id="f-to" onchange="applyFilters()" />
             </div>
             <div>
-              <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
+              <button class="btn btn-outline" style="width:100%" onclick="clearFilters()">Clear</button>
             </div>
           </div>
         </div>

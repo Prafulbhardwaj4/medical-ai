@@ -6,6 +6,10 @@
 // (e.g. wizard steps that rebuild innerHTML) via a MutationObserver.
 
 (function () {
+  function syncVisibility(select, wrapper) {
+    wrapper.style.display = window.getComputedStyle(select).display === "none" ? "none" : "";
+  }
+
   function enhanceSelect(select) {
     if (!select || select.dataset.csEnhanced || select.multiple) return;
     select.dataset.csEnhanced = "1";
@@ -17,6 +21,8 @@
     select.classList.add("cs-native");
     select.setAttribute("tabindex", "-1");
     select.setAttribute("aria-hidden", "true");
+    syncVisibility(select, wrapper);
+    window.addEventListener("resize", () => syncVisibility(select, wrapper));
 
     const trigger = document.createElement("button");
     trigger.type = "button";
@@ -132,9 +138,10 @@
     // citySel.innerHTML = "..."; citySel.disabled = false;
     const mo = new MutationObserver(() => {
       syncTrigger();
+      syncVisibility(select, wrapper);
       if (wrapper.classList.contains("cs-open")) renderOptions();
     });
-    mo.observe(select, { childList: true, attributes: true, attributeFilter: ["disabled"] });
+    mo.observe(select, { childList: true, attributes: true, attributeFilter: ["disabled", "style", "class"] });
 
     syncTrigger();
   }
