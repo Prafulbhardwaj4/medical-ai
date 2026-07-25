@@ -395,12 +395,12 @@
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">${p.age} yrs, ${p.gender} · ${sanitize(p.phone)} ${p.patient_uid ? '· ' + sanitize(p.patient_uid) : ''}</p>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
               ${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)} · Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} (${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'})
-              ${a.status === 'admitted' && canChangeWard ? `<button class="btn btn-outline btn-sm" style="margin-left:8px" onclick="openChangeWardModal()">Change Ward/Bed</button>` : ''}
+              ${a.status === 'admitted' && canChangeWard ? `<button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="openChangeWardModal()">Change Ward/Bed</button>` : ''}
               ${a.status === 'admitted' && canRequestWardChange && !canChangeWard ? `<a href="#" onclick="openRequestWardChangeModal();return false;" style="font-size:12px;margin-left:8px;color:var(--teal)">Request Ward Change</a>` : ''}
             </p>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
               <strong>Diagnosis:</strong> <span id="diagnosis-display">${sanitize(a.diagnosis || '—')}</span>
-              <button class="btn btn-outline btn-sm" style="margin-left:8px" onclick="openEditDiagnosis()">Edit</button>
+              <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="openEditDiagnosis()">Edit</button>
             </p>
             <div id="diagnosis-edit-row" style="display:none;margin-top:6px;gap:8px;max-width:420px">
               <input class="form-control" id="diagnosis-edit-input" />

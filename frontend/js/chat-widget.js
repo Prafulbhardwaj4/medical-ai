@@ -110,6 +110,16 @@
     return new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" });
   }
 
+  function fmtThreadTime(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const now = new Date();
+    const sameDay = d.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) === now.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
+    return sameDay
+      ? d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" })
+      : d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short" });
+  }
+
   function iconAttach() {
     return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path></svg>`;
   }
@@ -250,11 +260,13 @@
       <div class="chat-thread-item ${t.unread_count > 0 ? 'unread' : ''}" onclick="window.__chatWidgetOpenThread(${t.staff_id})">
         <div class="chat-thread-avatar">${threadInitials(t.name)}</div>
         <div class="chat-thread-info">
-          <div class="chat-thread-name">${sanitize(t.name)}</div>
-          <div class="chat-thread-role">${sanitize(t.role)}</div>
+          <div class="chat-thread-name">${sanitize(t.name)} <span class="chat-thread-role">${sanitize(t.role)}</span></div>
           ${t.last_message ? `<div class="chat-thread-preview">${sanitize(t.last_message)}</div>` : ''}
         </div>
-        ${t.unread_count > 0 ? `<span class="chat-thread-unread-dot">${t.unread_count}</span>` : ''}
+        <div class="chat-thread-side">
+          ${t.last_message_at ? `<span class="chat-thread-time">${fmtThreadTime(t.last_message_at)}</span>` : ''}
+          ${t.unread_count > 0 ? `<span class="chat-thread-unread-dot">${t.unread_count}</span>` : ''}
+        </div>
       </div>
     `).join("");
   }

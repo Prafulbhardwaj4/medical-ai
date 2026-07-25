@@ -27,9 +27,9 @@
       gap: 8px;
     }
     @media (min-width: 901px) {
-      .test-row-main { flex: 0 0 55%; max-width: 55%; min-width: 0; overflow-wrap: anywhere; }
-      .test-row-meta { flex: 0 0 200px; max-width: 200px; }
-      .test-row-actions { flex: 0 0 170px; max-width: 170px; justify-content: flex-end; margin-left: auto; }
+      .test-row-main { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+      .test-row-meta { flex: 0 0 auto; flex-wrap: nowrap; white-space: nowrap; }
+      .test-row-actions { flex: 0 0 170px; max-width: 170px; justify-content: flex-end; margin-left: 16px; }
     }
     @media (max-width: 900px) {
       .test-row {

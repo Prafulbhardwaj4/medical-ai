@@ -2012,8 +2012,17 @@ tbody tr:hover { background: var(--smoke); }
 
 .chat-thread-info { flex: 1; min-width: 0; }
 .chat-thread-name { font-size: 13.5px; font-weight: 700; }
-.chat-thread-role { font-size: 11px; color: var(--slate); text-transform: capitalize; }
+.chat-thread-role { font-size: 11px; color: var(--slate); font-weight: 500; text-transform: capitalize; margin-left: 4px; }
 .chat-thread-preview { font-size: 12.5px; color: var(--slate); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.chat-thread-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.chat-thread-time { font-size: 10.5px; color: var(--slate-light); white-space: nowrap; }
 
 .chat-thread-unread-dot {
   background: #dc2626;

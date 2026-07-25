@@ -16,6 +16,9 @@
 
     const wrapper = document.createElement("div");
     wrapper.className = "cs-wrapper";
+    if (select.style.width) wrapper.style.width = select.style.width;
+    if (select.style.maxWidth) wrapper.style.maxWidth = select.style.maxWidth;
+    if (select.style.minWidth) wrapper.style.minWidth = select.style.minWidth;
     select.parentNode.insertBefore(wrapper, select);
     wrapper.appendChild(select);
     select.classList.add("cs-native");
