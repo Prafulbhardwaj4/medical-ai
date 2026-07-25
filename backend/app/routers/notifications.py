@@ -9,7 +9,7 @@ from app.utils.notify import sync_stock_notifications, sync_room_classification_
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
-PHARMACY_VISIBLE_TYPES = ["low_stock", "expiring_stock"]
+PHARMACY_VISIBLE_TYPES = ["low_stock", "expiring_stock", "admission_medicine_order"]
 RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request"]
 LAB_VISIBLE_TYPES = ["admission_test_sample"]
 

@@ -345,8 +345,12 @@
       const data = {};
       document.querySelectorAll(`#${containerId} [data-row]`).forEach(row => {
         const label = row.querySelector('[data-label]').value.trim();
-        const value = row.querySelector('[data-value]').value.trim();
-        if (label && value) data[label] = value;
+        let value = row.querySelector('[data-value]').value.trim();
+        if (label && value) {
+          const unit = VITALS_RULES[label]?.unit;
+          if (unit && !value.includes(unit)) value = `${value} ${unit}`;
+          data[label] = value;
+        }
       });
       return data;
     }

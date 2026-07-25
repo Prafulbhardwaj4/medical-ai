@@ -874,6 +874,9 @@
             patient_name: o.patient_name,
             patient_uid: o.patient_uid,
             token_number: o.token_number,
+            is_admission: o.is_admission,
+            ward: o.ward,
+            bed_number: o.bed_number,
             tests: []
           });
         }
@@ -894,12 +897,16 @@
         const summaryBadge = pendingCount === 0
           ? '<span class="badge badge-green">All completed</span>'
           : `<span class="badge badge-amber">${pendingCount} pending</span>`;
+        const locationLine = g.is_admission
+          ? `<div class="lq-sub" style="color:var(--danger);font-weight:600">In-Patient — collect at ${sanitize(g.ward || 'Ward')}, Bed ${sanitize(g.bed_number || '-')}</div>`
+          : `<div class="lq-sub">Token #${sanitize(g.token_number)} · ${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>`;
         return `
         <div class="lq-card" onclick="openPatientTestsModal('${g.key}')">
           <div class="lq-card-head">
             <div class="lq-top">
               <strong class="lq-name">${sanitize(g.patient_name)}</strong>
-              <div class="lq-sub">Token #${sanitize(g.token_number)} · ${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>
+              ${g.is_admission ? `<div class="lq-sub">${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>` : ''}
+              ${locationLine}
             </div>
           </div>
           ${summaryBadge}
@@ -916,8 +923,9 @@
       if (!group) return;
       currentPatientKey = key;
       document.getElementById('patient-tests-modal-title').textContent = group.patient_name;
-      document.getElementById('patient-tests-modal-sub').textContent =
-        `Token #${group.token_number}${group.patient_uid ? ' · UID ' + group.patient_uid : ''}`;
+      document.getElementById('patient-tests-modal-sub').textContent = group.is_admission
+        ? `In-Patient — ${group.ward || 'Ward'}, Bed ${group.bed_number || '-'}${group.patient_uid ? ' · UID ' + group.patient_uid : ''}`
+        : `Token #${group.token_number}${group.patient_uid ? ' · UID ' + group.patient_uid : ''}`;
       document.getElementById('patient-tests-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
       document.getElementById('modal-patient-tests').classList.add('open');
 

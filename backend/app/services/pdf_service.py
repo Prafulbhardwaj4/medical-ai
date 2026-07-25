@@ -232,7 +232,7 @@ def generate_prescription_pdf(
             row.extend([
                 Paragraph(m.get("dosage", ""), med_cell_style),
                 Paragraph(cap_sentence(m.get("frequency", "")), med_cell_style),
-                Paragraph(m.get("duration", "-"), med_cell_style),
+                Paragraph(m.get("duration") or "As advised", med_cell_style),
                 type_label
             ])
             med_data.append(row)

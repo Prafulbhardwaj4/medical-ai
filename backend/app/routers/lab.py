@@ -55,10 +55,20 @@ def get_lab_queue(
         TestOrder.queued_at <= today_end
     ).order_by(TestOrder.queued_at).all()
 
+    from app.models.admission import Admission
+
     result = []
     for o in orders:
         patient = db.query(Patient).filter(Patient.id == o.patient_id).first()
         consultation = db.query(Consultation).filter(Consultation.id == o.consultation_id).first()
+
+        admission_ward = None
+        admission_bed = None
+        if o.admission_id:
+            admission = db.query(Admission).filter(Admission.id == o.admission_id).first()
+            if admission:
+                admission_ward = admission.ward
+                admission_bed = admission.bed_number
 
         waiting_minutes = None
         if o.paid_at:
@@ -71,6 +81,9 @@ def get_lab_queue(
             "patient_uid": patient.patient_uid if patient else "",
             "patient_gender": patient.gender if patient else None,
             "token_number": consultation.token_number if consultation else "",
+            "is_admission": o.admission_id is not None,
+            "ward": admission_ward,
+            "bed_number": admission_bed,
             "test_id": o.test_id,
             "test_name": o.test_name,
             "price": o.price,

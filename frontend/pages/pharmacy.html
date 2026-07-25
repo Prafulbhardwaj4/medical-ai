@@ -258,6 +258,15 @@
             <p style="color:var(--slate)">Loading…</p>
           </div>
         </div>
+
+        <div class="card" style="margin-top:16px">
+          <div class="card-header">
+            <h2 style="margin:0">Admitted Patients — Medicines to Send</h2>
+          </div>
+          <div id="admission-pharm-queue" style="margin-top:12px">
+            <p style="color:var(--slate)">Loading…</p>
+          </div>
+        </div>
       </div>
 
       <div id="pharmacy-pending-view" class="mobile-section">
@@ -729,6 +738,38 @@
       try {
         queueData = await api("GET", "/pharmacy/queue");
         renderQueue();
+      } catch (e) { toast(e.message, "error"); }
+      loadAdmissionPharmQueue();
+    }
+
+    async function loadAdmissionPharmQueue() {
+      const el = document.getElementById('admission-pharm-queue');
+      try {
+        const items = await api("GET", "/pharmacy/admission-queue");
+        const pending = items.filter(i => !i.dispensed_at);
+        if (!pending.length) {
+          el.innerHTML = `<p style="color:var(--slate-light)">Nothing waiting to be sent to a ward.</p>`;
+          return;
+        }
+        el.innerHTML = pending.map(i => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px">
+            <div>
+              <strong>${sanitize(i.medicine_name)}</strong> <span style="color:var(--slate-light)">(${sanitize(i.dosage)}, ${sanitize(i.route)})</span>
+              <div style="font-size:12.5px;color:var(--slate)">${sanitize(i.patient_name)} — ${sanitize(i.ward)}, Bed ${sanitize(i.bed_number)}</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="dispenseAdmissionMed(${i.id})">Mark Sent</button>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    async function dispenseAdmissionMed(orderId) {
+      try {
+        await api("POST", `/pharmacy/admission-orders/${orderId}/dispense`, {});
+        toast("Marked as sent to ward", "success");
+        loadAdmissionPharmQueue();
       } catch (e) { toast(e.message, "error"); }
     }
 

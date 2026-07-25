@@ -1,9 +1,11 @@
 // custom-select.js
 // Progressive enhancement: turns every <select class="form-control"> into a
-// themed dropdown (styled trigger + styled options list). The native <select>
-// stays in the DOM (hidden) so existing code that reads/sets .value or listens
-// for "change" keeps working unmodified. Works on selects added dynamically
-// (e.g. wizard steps that rebuild innerHTML) via a MutationObserver.
+// themed dropdown (styled trigger + styled options list), with a live
+// type-to-filter search box for any select with more than 7 options. The
+// native <select> stays in the DOM (hidden) so existing code that reads/sets
+// .value or listens for "change" keeps working unmodified. Works on selects
+// added dynamically (e.g. wizard steps that rebuild innerHTML) via a
+// MutationObserver.
 
 (function () {
   function syncVisibility(select, wrapper) {
@@ -32,6 +34,9 @@
     trigger.className = "cs-trigger";
     trigger.setAttribute("aria-haspopup", "listbox");
     trigger.setAttribute("aria-expanded", "false");
+    const triggerLabel = document.createElement("span");
+    triggerLabel.className = "cs-trigger-label";
+    trigger.appendChild(triggerLabel);
     wrapper.appendChild(trigger);
 
     const menu = document.createElement("div");
@@ -39,11 +44,36 @@
     menu.setAttribute("role", "listbox");
     wrapper.appendChild(menu);
 
+    // Every enhanced select gets a type-to-filter box now — not just long
+    // lists — so typing "i" always jumps the list to matching items,
+    // regardless of how many options a given dropdown happens to have.
+    const searchable = true;
+    let searchInput = null;
+    if (searchable) {
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "cs-search-wrap";
+      searchInput = document.createElement("input");
+      searchInput.type = "text";
+      searchInput.className = "cs-search-input";
+      searchInput.placeholder = "Type to search...";
+      searchInput.addEventListener("click", (e) => e.stopPropagation());
+      searchInput.addEventListener("input", () => renderOptions(searchInput.value));
+      searchWrap.appendChild(searchInput);
+      menu.appendChild(searchWrap);
+    }
+
+    const optionsList = document.createElement("div");
+    optionsList.className = "cs-options-list";
+    menu.appendChild(optionsList);
+
     let optionEls = [];
 
-    function renderOptions() {
-      menu.innerHTML = "";
-      optionEls = Array.from(select.options).map((opt, i) => {
+    function renderOptions(filterText) {
+      const q = (filterText || "").trim().toLowerCase();
+      optionsList.innerHTML = "";
+      optionEls = [];
+      Array.from(select.options).forEach((opt, i) => {
+        if (q && !opt.textContent.toLowerCase().includes(q)) return;
         const item = document.createElement("div");
         item.className = "cs-option";
         item.setAttribute("role", "option");
@@ -61,14 +91,20 @@
             trigger.focus();
           });
         }
-        menu.appendChild(item);
-        return item;
+        optionsList.appendChild(item);
+        optionEls.push(item);
       });
+      if (!optionEls.length) {
+        const none = document.createElement("div");
+        none.className = "cs-no-results";
+        none.textContent = "No matches";
+        optionsList.appendChild(none);
+      }
     }
 
     function syncTrigger() {
       const opt = select.options[select.selectedIndex];
-      trigger.textContent = opt ? opt.textContent : "";
+      triggerLabel.textContent = opt ? opt.textContent : "";
       trigger.classList.toggle("cs-placeholder", !opt || !opt.value);
       trigger.disabled = select.disabled;
       wrapper.classList.toggle("cs-disabled", select.disabled);
@@ -94,12 +130,14 @@
     function openMenu() {
       if (select.disabled || !select.options.length) return;
       closeOthers();
-      renderOptions();
+      if (searchInput) searchInput.value = "";
+      renderOptions(searchInput ? searchInput.value : "");
       wrapper.classList.add("cs-open");
       trigger.setAttribute("aria-expanded", "true");
       positionMenu();
       document.addEventListener("click", onOutsideClick, true);
       document.addEventListener("keydown", onKeydown, true);
+      if (searchInput) setTimeout(() => searchInput.focus(), 0);
     }
 
     function closeMenu() {
@@ -121,11 +159,13 @@
         let idx = enabled.findIndex((o) => o.classList.contains("cs-option-selected"));
         idx = e.key === "ArrowDown" ? Math.min(idx + 1, enabled.length - 1) : Math.max(idx - 1, 0);
         enabled.forEach((o) => o.classList.remove("cs-option-selected"));
-        enabled[idx].classList.add("cs-option-selected");
-        enabled[idx].scrollIntoView({ block: "nearest" });
+        if (enabled[idx]) {
+          enabled[idx].classList.add("cs-option-selected");
+          enabled[idx].scrollIntoView({ block: "nearest" });
+        }
       }
       if (e.key === "Enter") {
-        const sel = menu.querySelector(".cs-option-selected");
+        const sel = optionsList.querySelector(".cs-option-selected");
         if (sel) sel.click();
       }
     }
@@ -142,7 +182,7 @@
     const mo = new MutationObserver(() => {
       syncTrigger();
       syncVisibility(select, wrapper);
-      if (wrapper.classList.contains("cs-open")) renderOptions();
+      if (wrapper.classList.contains("cs-open")) renderOptions(searchInput ? searchInput.value : "");
     });
     mo.observe(select, { childList: true, attributes: true, attributeFilter: ["disabled", "style", "class"] });
 

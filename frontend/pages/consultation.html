@@ -614,8 +614,10 @@
         document.getElementById("f-followup").value = s.followup || "";
         document.getElementById("f-nurse-instructions").value = s.nurse_instructions || "";
 
-        currentVitals = {};
-        Object.entries(s.vitals || {}).forEach(([k, val]) => setVital(k, val, true));
+        // Merge, don't overwrite — the nurse's structured numeric vitals (loaded via
+        // loadNurseVitals with overwrite=false) are the source of truth. The AI transcript
+        // pass only fills in vitals the nurse never recorded.
+        Object.entries(s.vitals || {}).forEach(([k, val]) => setVital(k, val, false));
 
         renderMedRows(s.medicines || []);
         tests = s.tests || [];

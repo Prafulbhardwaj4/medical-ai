@@ -600,6 +600,18 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
         prescribed_by=current_doctor.id,
     )
     db.add(order)
+
+    if not order.sourced_outside:
+        patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+        db.add(Notification(
+            hospital_id=a.hospital_id,
+            source_key=f"admission_medicine_order:{a.id}:{now_ist_naive().isoformat()}",
+            type="admission_medicine_order", severity="info",
+            title=f"Medicine ordered — {patient.name if patient else 'patient'}",
+            message=f"{body.medicine_name} ({body.dosage}) ordered for {a.ward}, Bed {a.bed_number}.",
+            link_type="admission_medicine_order", link_id=a.id, is_read=False,
+        ))
+
     db.commit()
     db.refresh(order)
     return {"id": order.id, "message": "Medication order added"}

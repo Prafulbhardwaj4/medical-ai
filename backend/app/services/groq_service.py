@@ -43,6 +43,7 @@ Rules for medicines:
 - If two medicines have a timing relationship (take one 30 min after another), capture that in the frequency field of the second medicine.
 - times_per_day / duration_days exist purely so the pharmacy system can pre-calculate a tablet count — never guess these. Only fill them when the frequency/duration genuinely states a fixed daily count and length. Leave both null for SOS/PRN/as-needed medicines, or anything without a clear fixed schedule — a wrong number here silently affects what pharmacy dispenses, so null is always safer than a guess.
 - Only assume a second medicine shares the first medicine's duration if the doctor actually links them ('both for 5 days', 'take together for the same period'). If duration for the second medicine is never stated or implied, leave duration/duration_days empty/null rather than copying the first medicine's.
+- frequency must independently reflect what was actually said for THAT specific medicine. In a single consultation the doctor may state timing for some medicines and say nothing at all for others — this is normal and expected. If no timing/dosing instruction was given for a medicine, leave frequency as an empty string. Never default to "once daily," "as needed," or any other assumed pattern, and never copy frequency from a different medicine in the same consultation unless the doctor explicitly links them (e.g. "take both together", "same timing as the first one").
 - brand_name: common Indian brand names are often spoken as a contraction of brand+strength — e.g. 'Pan 40' means brand 'Pan-40', generic Pantoprazole, dosage 40mg; 'Dolo 650' means brand 'Dolo-650', generic Paracetamol, dosage 650mg; 'Augmentin 625' means brand 'Augmentin-625', generic Amoxicillin+Clavulanic Acid, dosage 625mg. When the doctor says a name like this, split it: put the generic in name, the strength in dosage, and the spoken brand word (with its number, e.g. 'Pan-40') in brand_name — do not drop the brand just because it looks like a dosage.
 - If only a plain generic name was said with no brand word at all, leave brand_name as empty string.
 - name: always use the generic/chemical name. If only a brand name was said, convert to generic (e.g. Crocin → Paracetamol) and put the brand in brand_name.
@@ -55,6 +56,7 @@ Rules for schedule field:
 Other rules:
 - medicines and tests must always be arrays (empty array [] if none mentioned)
 - vitals fields must be empty strings if not mentioned — never invent values
+- vitals must be an actual measurement restated with a number in the transcript (e.g. "BP is 145 over 99", "temperature 102"). If the doctor only describes a vital qualitatively without restating the number — "your BP is high", "temperature is very high", "fever hai" — leave that field empty. Never write a qualitative word (high, low, normal, elevated, very high, etc.) as a vitals value.
 - nurse_instructions: capture if doctor mentions nurse tasks — 'dressing karna hai', 'injection dena', 'IV lagana', 'wound dress karo', etc. Translate to English.
 - Do not add any fields not listed above
 - Do not include any explanation or markdown — only the raw JSON object

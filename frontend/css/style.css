@@ -384,6 +384,12 @@ select.form-control::-ms-expand { display: none; }
   line-height: 1.5;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+.cs-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 .cs-trigger::after {
   content: "";
   flex-shrink: 0;
@@ -427,6 +433,19 @@ select.form-control::-ms-expand { display: none; }
 .cs-option:hover { background: var(--smoke-mid); }
 .cs-option-selected { background: var(--teal-subtle); color: var(--teal); font-weight: 600; }
 .cs-option-disabled { color: var(--slate-light); cursor: not-allowed; }
+.cs-search-wrap { position: sticky; top: 0; background: var(--white); padding: 2px 4px 6px; z-index: 1; }
+.cs-search-input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: 'DM Sans', sans-serif;
+  outline: none;
+  box-sizing: border-box;
+}
+.cs-search-input:focus { border-color: var(--teal); }
+.cs-no-results { padding: 12px; text-align: center; color: var(--slate-light); font-size: 0.85rem; }
 @media (max-width: 900px) {
   .cs-trigger { font-size: 16px; min-height: 42px; }
   .cs-option { font-size: 15px; padding: 12px; }

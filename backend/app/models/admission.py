@@ -50,6 +50,8 @@ class AdmissionMedicationOrder(Base):
     prescribed_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     is_active = Column(Boolean, default=True)
     sourced_outside = Column(Boolean, default=False, nullable=False)  # patient/relatives are sourcing this themselves — no stock deduction, no bill line
+    dispensed_at = Column(DateTime, nullable=True)   # pharmacy has physically sent this to the ward — visibility only, no stock/billing here (that already happens per-dose in administer_dose)
+    dispensed_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     created_at = Column(DateTime, default=now_ist_naive)
 
     admission = relationship("Admission", back_populates="medication_orders")

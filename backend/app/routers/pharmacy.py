@@ -27,6 +27,73 @@ def require_pharmacy(current_doctor: Doctor):
         raise HTTPException(status_code=403, detail="Not authorized")
 
 
+@router.get("/admission-queue")
+def get_pharmacy_admission_queue(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Medicines doctors have ordered for currently-admitted patients — visibility
+    only, no payment collected here (billed at discharge, per-dose, in admissions.py).
+    Pharmacy just needs to see what to send to the ward and mark it sent."""
+    require_pharmacy(current_doctor)
+    from app.models.admission import Admission, AdmissionMedicationOrder
+
+    orders = (
+        db.query(AdmissionMedicationOrder, Admission)
+        .join(Admission, AdmissionMedicationOrder.admission_id == Admission.id)
+        .filter(
+            Admission.hospital_id == current_doctor.hospital_id,
+            Admission.status == "admitted",
+            AdmissionMedicationOrder.is_active == True,  # noqa: E712
+            AdmissionMedicationOrder.sourced_outside == False,  # noqa: E712
+        )
+        .order_by(AdmissionMedicationOrder.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for o, a in orders:
+        patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+        result.append({
+            "id": o.id,
+            "admission_id": a.id,
+            "admission_token": a.public_token,
+            "patient_name": patient.name if patient else "Unknown",
+            "ward": a.ward,
+            "bed_number": a.bed_number,
+            "medicine_name": o.medicine_name,
+            "dosage": o.dosage,
+            "route": o.route,
+            "frequency_note": o.frequency_note,
+            "ordered_at": o.created_at.isoformat() if o.created_at else None,
+            "dispensed_at": o.dispensed_at.isoformat() if o.dispensed_at else None,
+        })
+    return result
+
+
+@router.post("/admission-orders/{order_id}/dispense")
+def dispense_admission_medicine(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_pharmacy(current_doctor)
+    from app.models.admission import Admission, AdmissionMedicationOrder
+
+    order = (
+        db.query(AdmissionMedicationOrder)
+        .join(Admission, AdmissionMedicationOrder.admission_id == Admission.id)
+        .filter(AdmissionMedicationOrder.id == order_id, Admission.hospital_id == current_doctor.hospital_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order.dispensed_at = now_ist_naive()
+    order.dispensed_by = current_doctor.id
+    db.commit()
+    return {"message": "Marked as dispensed to ward"}
+
+
 @router.get("/queue")
 def get_pharmacy_queue(
     db: Session = Depends(get_db),

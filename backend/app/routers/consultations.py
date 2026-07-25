@@ -704,7 +704,10 @@ def confirm_prescription(
             for k, v in nurse_vitals.items():
                 normalized_nurse_vitals[label_to_key.get(k, k)] = v
             existing_vitals = json.loads(consultation.vitals or "{}")
-            consultation.vitals = json.dumps({**normalized_nurse_vitals, **existing_vitals})
+            # Nurse-recorded readings are the authoritative source — the doctor
+            # verbally referencing a vital during consultation ("your BP is
+            # high") must never overwrite the actual measured value.
+            consultation.vitals = json.dumps({**existing_vitals, **normalized_nurse_vitals})
         except Exception:
             pass
 
