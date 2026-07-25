@@ -15,4 +15,6 @@ class AttendanceRecord(Base):
     room_number = Column(String, nullable=True)
     room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
     shift_started_at = Column(DateTime, nullable=True)  # set once, the first time they mark Present each day — never overwritten by later status changes that same day
+    expected_off_duty_at = Column(DateTime, nullable=True)  # set when they mark Present, if they gave an expected time
+    auto_marked = Column(Integer, nullable=False, default=0)  # 1 if off_duty was set automatically (missed expected time), not by the staff member
     created_at = Column(DateTime, default=now_ist_naive)

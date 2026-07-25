@@ -427,3 +427,44 @@ async function submitEditDetails() {
     toast('Details updated.', 'success');
   } catch (e) { errEl.textContent = e.message; }
 }
+
+function promptOffDutyTime() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay open";
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:360px">
+        <div class="modal-header"><h2>Expected Off-Duty Time</h2></div>
+        <p style="font-size:13px;color:var(--slate);margin-bottom:14px">
+          What time do you expect to go off duty today? If you forget to mark yourself off duty, you'll be marked off duty automatically at this time.
+        </p>
+        <input type="time" class="form-control" id="od-time-input" style="margin-bottom:8px" />
+        <div class="err-msg" id="od-time-err"></div>
+        <div style="display:flex;gap:10px;margin-top:10px">
+          <button class="btn btn-outline" style="flex:1" id="od-time-skip">Skip</button>
+          <button class="btn btn-primary" style="flex:1" id="od-time-confirm">Confirm</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const cleanup = (value) => { overlay.remove(); resolve(value); };
+    overlay.querySelector("#od-time-skip").addEventListener("click", () => cleanup(null));
+    overlay.querySelector("#od-time-confirm").addEventListener("click", () => {
+      const val = overlay.querySelector("#od-time-input").value;
+      if (!val) { overlay.querySelector("#od-time-err").textContent = "Pick a time, or tap Skip."; return; }
+      const [h, m] = val.split(":").map(Number);
+      const d = new Date();
+      d.setHours(h, m, 0, 0);
+      if (d < new Date()) d.setDate(d.getDate() + 1);
+      cleanup(d.toISOString());
+    });
+  });
+}
+
+async function markAttendanceCommon(status, room_id) {
+  let expected_off_duty_at = null;
+  if (status === "present") {
+    expected_off_duty_at = await promptOffDutyTime();
+  }
+  return api("POST", "/doctors/attendance", { status, room_id, expected_off_duty_at });
+}

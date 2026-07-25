@@ -716,7 +716,7 @@
     async function markPharmAttendance(status) {
       try {
         const wasAlreadyPresent = pharmCurrentStatus === status;
-        await api("POST", "/doctors/attendance", { status, room_id: null });
+        await markAttendanceCommon(status, null);
         renderPharmBadge(status);
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };

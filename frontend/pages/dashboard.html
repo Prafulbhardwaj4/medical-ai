@@ -533,7 +533,7 @@
         const roomVal = document.getElementById('room-select').value;
         const room_id = roomVal ? parseInt(roomVal) : null;
         const wasAlreadyPresent = currentAttendanceStatus === status;
-        await api("POST", "/doctors/attendance", { status, room_id });
+        await markAttendanceCommon(status, room_id);
         renderAttendanceBadge(status);
         document.getElementById('room-display').textContent = '';
         if (!wasAlreadyPresent) {
