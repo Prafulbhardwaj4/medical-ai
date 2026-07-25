@@ -91,3 +91,8 @@ class DischargeIn(BaseModel):
     discharge_summary: Optional[str] = None
     payment_collected: bool = False
     payment_method: Optional[str] = None  # "cash" | "card" | "upi", required when payment_collected is True
+
+
+class CollectPaymentIn(BaseModel):
+    amount: float
+    payment_method: str  # "cash" | "card" | "upi"

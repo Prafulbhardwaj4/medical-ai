@@ -279,27 +279,27 @@
                         <div>
                             <label style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">From
                                 Date</label>
-                            <input type="date" id="filter-from" class="form-control" />
+                            <input type="date" id="filter-from" class="form-control" onchange="loadConsultations(1)" />
                         </div>
                         <div>
                             <label style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">To
                                 Date</label>
-                            <input type="date" id="filter-to" class="form-control" />
+                            <input type="date" id="filter-to" class="form-control" onchange="loadConsultations(1)" />
                         </div>
                         <div>
                             <label style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">Search
                                 Patient / Token</label>
                             <input type="text" id="filter-search" class="form-control"
-                                placeholder="Name, UID or token..." />
+                                placeholder="Name, UID or token..." oninput="onConsultationSearchInput()" />
                         </div>
                         <div>
                             <label
                                 style="font-size:13px;color:var(--slate);display:block;margin-bottom:6px">Doctor</label>
-                            <select id="filter-doctor" class="form-control">
+                            <select id="filter-doctor" class="form-control" onchange="loadConsultations(1)">
                                 <option value="">All Doctors</option>
                             </select>
                         </div>
-                        <button class="btn btn-primary" style="width:100%;height:42px" onclick="loadConsultations(1)">Search</button>
+                        <button class="btn btn-outline" style="width:100%;height:42px" onclick="clearConsultationFilters()">Clear</button>
                     </div>
                 </div>
                 <div class="card">
@@ -383,7 +383,7 @@
             <div id="section-appointments" class="section" style="display:none">
                 <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
                     <h1>Appointments</h1>
-                    <select class="form-control" id="appt-analytics-doctor-filter" style="max-width:440px">
+                    <select class="form-control" id="appt-analytics-doctor-filter" style="width:320px;max-width:none;flex-shrink:0">
                         <option value="">All doctors</option>
                     </select>
                 </div>
@@ -1057,6 +1057,20 @@
                     );
                 }
             }
+        }
+
+        let consultationSearchTimer;
+        function onConsultationSearchInput() {
+            clearTimeout(consultationSearchTimer);
+            consultationSearchTimer = setTimeout(() => loadConsultations(1), 400);
+        }
+
+        function clearConsultationFilters() {
+            document.getElementById('filter-from').value = '';
+            document.getElementById('filter-to').value = '';
+            document.getElementById('filter-search').value = '';
+            document.getElementById('filter-doctor').value = '';
+            loadConsultations(1);
         }
 
         async function loadConsultations(page) {

@@ -242,11 +242,13 @@ def list_patients(
             name=p.name,
             phone=p.phone,
             age=p.age,
+            blood_group=p.blood_group,
             gender=p.gender,
             last_visit=last_visit,
             last_token=last_token,
             checked_in_today=checked_in_today,
             currently_admitted=p.id in admitted_ids,
+            address=p.address,
         ))
     return result
 

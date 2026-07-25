@@ -94,6 +94,7 @@ class PatientSummary(BaseModel):
     last_token: Optional[str] = None
     checked_in_today: bool = False
     currently_admitted: bool = False
+    address: Optional[str] = None
 
     class Config:
         from_attributes = True

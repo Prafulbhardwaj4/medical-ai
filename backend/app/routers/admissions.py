@@ -18,7 +18,8 @@ from app.models.test_order import TestOrder
 from app.models.invoice import Invoice
 from app.schemas.admission import (
     AdmitPatientIn, AddMedicationOrderIn, AdministerDoseIn, AddChargeIn, AddAdmissionTestIn, DischargeIn,
-    WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn
+    WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn,
+    CollectPaymentIn,
 )
 from app.models.consultation import Consultation
 from app.utils.auth import get_current_doctor, ist_today
@@ -732,6 +733,33 @@ def _build_discharge_bill(db: Session, a: Admission):
         items.append({"type": c.charge_type, "name": name, "qty": c.quantity, "unit_price": c.amount, "line_total": c.amount * c.quantity, "payable_here": payable_here})
     grand_total = sum(i["line_total"] for i in items if i["payable_here"])
     return items, grand_total
+
+
+@router.post("/{admission_id}/collect-payment")
+def collect_admission_payment(admission_id: str, body: CollectPaymentIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Mid-stay advance payment — recorded as a negative charge line so it automatically
+    nets out of the running bill and the discharge amount due, with no schema changes."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to collect payment")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="Cannot collect payment for a discharged admission")
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+    if not body.payment_method:
+        raise HTTPException(status_code=400, detail="Please select how payment was collected")
+
+    items, grand_total = _build_discharge_bill(db, a)
+    if body.amount > grand_total + 0.01:
+        raise HTTPException(status_code=400, detail=f"Amount exceeds outstanding balance of Rs.{grand_total:.2f}")
+
+    db.add(AdmissionCharge(
+        admission_id=a.id, charge_type="payment",
+        description=f"Payment collected ({body.payment_method})",
+        amount=-body.amount, quantity=1, added_by=current_doctor.id, charged_at=now_ist_naive(),
+    ))
+    db.commit()
+    return {"message": "Payment collected", "amount_collected": body.amount}
 
 
 @router.get("/{admission_id}/discharge-preview")

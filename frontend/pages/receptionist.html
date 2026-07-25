@@ -113,48 +113,50 @@
     </header>
 
     <div class="modal-overlay" id="modal-avail-editor">
-      <div class="modal" style="max-width:640px;max-height:85vh;overflow-y:auto">
+      <div class="modal avail-modal">
         <div class="modal-header">
           <h2 id="avail-modal-doctor-name">Availability</h2>
           <button class="modal-close" onclick="closeAvailModal()">&times;</button>
         </div>
 
-        <div style="border:1.5px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
-          <h4 style="margin:0 0 10px;font-size:14px;color:var(--navy)">Which days?</h4>
-          <div style="display:flex;gap:8px;flex-wrap:wrap" id="am-day-chips"></div>
+        <div class="avail-section">
+          <h4 class="avail-section-title">Which days?</h4>
+          <p class="avail-section-hint">Tap a day to turn it on or off.</p>
+          <div class="avail-chip-row" id="am-day-chips"></div>
         </div>
 
-        <div style="border:1.5px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
-          <h4 style="margin:0 0 10px;font-size:14px;color:var(--navy)">Available Times</h4>
-          <div style="margin-bottom:12px">
-            <div style="font-size:13px;font-weight:600;color:var(--slate);margin-bottom:6px">Morning</div>
-            <div id="am-preset-morning" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+        <div class="avail-section">
+          <h4 class="avail-section-title">Available Times</h4>
+          <p class="avail-section-hint">Tap a slot to turn it on or off.</p>
+          <div class="avail-time-group">
+            <div class="avail-time-label">Morning</div>
+            <div class="avail-chip-row" id="am-preset-morning"></div>
           </div>
-          <div style="margin-bottom:12px">
-            <div style="font-size:13px;font-weight:600;color:var(--slate);margin-bottom:6px">Afternoon</div>
-            <div id="am-preset-afternoon" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          <div class="avail-time-group">
+            <div class="avail-time-label">Afternoon</div>
+            <div class="avail-chip-row" id="am-preset-afternoon"></div>
           </div>
-          <div>
-            <div style="font-size:13px;font-weight:600;color:var(--slate);margin-bottom:6px">Evening</div>
-            <div id="am-preset-evening" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          <div class="avail-time-group avail-time-group-last">
+            <div class="avail-time-label">Evening</div>
+            <div class="avail-chip-row" id="am-preset-evening"></div>
           </div>
         </div>
 
-        <div style="border:1.5px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
-          <h4 style="margin:0 0 10px;font-size:14px;color:var(--navy)">Patients Per Slot</h4>
+        <div class="avail-section">
+          <h4 class="avail-section-title">Patients Per Slot</h4>
           <input class="form-control" type="number" min="1" id="am-capacity" value="1" style="max-width:160px" />
         </div>
 
         <div class="err-msg" id="am-err"></div>
         <button class="btn btn-primary" style="width:100%" onclick="saveAvailModal()">Save Availability</button>
 
-        <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px">
-          <h4 style="margin:0 0 10px;font-size:14px;color:var(--navy)">Mark a Day Unavailable</h4>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="avail-section avail-unavail-section">
+          <h4 class="avail-section-title">Mark a Day Unavailable</h4>
+          <div class="avail-unavail-form">
             <div class="form-group" style="margin:0"><label class="form-label">Date</label><input class="form-control" type="date" id="am-unavail-date" /></div>
             <button class="btn btn-outline" onclick="markUnavailModal()">Mark Unavailable</button>
           </div>
-          <div id="am-unavail-list" style="margin-top:12px"></div>
+          <div id="am-unavail-list" class="avail-unavail-list"></div>
         </div>
       </div>
     </div>
@@ -222,7 +224,7 @@
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
         </svg>
-        Patients List
+        Patients
       </div>
       <div class="nav-divider"></div>
       <div class="sidebar-section-label">Quick Actions</div>
@@ -275,7 +277,7 @@
         </a>
         <a class="mobile-menu-item" href="#" id="tab-btn-patients" onclick="closeMobileMenu();showRecSection('patients');return false;">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>
-          Patients List
+          Patients
         </a>
       </div>
     </div>
@@ -327,10 +329,10 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Or jump to Seq #</label>
-            <input class="form-control" id="room-seq-jump" type="number" min="1" placeholder="Type the room's seq # and press Enter"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();jumpToRoomBySeq(this.value);}" />
-          </div>
+              <label class="form-label">Or jump to Seq #</label>
+              <input class="form-control" id="room-seq-jump" type="number" min="1" placeholder="Loading rooms…" disabled
+                onkeydown="if(event.key==='Enter'){event.preventDefault();jumpToRoomBySeq(this.value);}" />
+            </div>
           <button class="btn btn-primary" id="btn-room-continue" style="width:100%" onclick="confirmRoomAndLoadDoctors()" disabled>Continue</button>
         </div>
 
@@ -854,11 +856,15 @@
       document.getElementById('step-room').style.display = '';
       document.getElementById('room-select').value = '';
       document.getElementById('room-seq-jump').value = '';
+      document.getElementById('room-seq-jump').disabled = true;
+      document.getElementById('room-seq-jump').placeholder = 'Loading rooms…';
       document.getElementById('btn-room-continue').disabled = true;
+      allRoomsForCheckin = [];
       loadRoomsForCheckin();
     }
 
     async function loadRoomsForCheckin() {
+      const jumpInput = document.getElementById('room-seq-jump');
       try {
         const rooms = await api("GET", "/admin/rooms?for_picker=doctor");
         allRoomsForCheckin = rooms;
@@ -872,7 +878,12 @@
         sel.innerHTML = '<option value="">— Select a room —</option>' + sorted.map(r =>
           `<option value="${r.id}">${r.display || r.name || ('Room ' + r.room_number)} · ${r.room_type}${r.sequence_number != null ? ` (#${r.sequence_number})` : ''}</option>`
         ).join('');
-      } catch (e) { toast(e.message, "error"); }
+        jumpInput.disabled = false;
+        jumpInput.placeholder = "Type the room's seq # and press Enter";
+      } catch (e) {
+        toast(e.message, "error");
+        jumpInput.placeholder = "Failed to load rooms";
+      }
     }
 
     function onRoomPicked() {
@@ -885,7 +896,9 @@
       if (!seq) return;
       const room = allRoomsForCheckin.find(r => r.sequence_number === seq);
       if (!room) { toast(`No room with seq #${seq}.`, 'error'); return; }
-      document.getElementById('room-select').value = room.id;
+      const sel = document.getElementById('room-select');
+      sel.value = room.id;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
       onRoomPicked();
     }
 
@@ -1683,7 +1696,7 @@
       const list = document.getElementById("avail-doctor-list");
       if (!doctors.length) { list.innerHTML = `<p style="color:var(--slate-light)">No doctors found.</p>`; return; }
       list.innerHTML = doctors.map(d => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick="openAvailModal(${d.id}, '${(d.title + ' ' + d.name).replace(/'/g, "\\'")}')">
+        <div class="avail-doctor-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick="openAvailModal(${d.id}, '${(d.title + ' ' + d.name).replace(/'/g, "\\'")}')">
           <div>
             <div style="font-weight:600;color:var(--navy)">${d.title} ${d.name}</div>
             <div style="font-size:12.5px;color:var(--slate-light)">ID: ${d.doctor_uid || d.id}${d.specialization ? ' · ' + d.specialization : ''}</div>
@@ -1710,22 +1723,22 @@
 
     function renderAmDayChips() {
       document.getElementById("am-day-chips").innerHTML = AM_WEEKDAY_LABELS.map((l, i) => `
-        <button class="day-chip ${amSelectedDays.has(i) ? 'selected' : ''}" data-day="${i}" onclick="toggleAmDay(${i}, this)">${l}</button>`).join('');
+        <button type="button" class="day-chip ${amSelectedDays.has(i) ? 'selected' : ''}" data-day="${i}" onclick="toggleAmDay(${i}, this)">${amSelectedDays.has(i) ? '✓ ' : ''}${l}</button>`).join('');
     }
     function toggleAmDay(i, el) {
       if (amSelectedDays.has(i)) amSelectedDays.delete(i); else amSelectedDays.add(i);
-      el.classList.toggle('selected');
+      renderAmDayChips();
     }
 
     function renderAmPresets() {
       ['morning', 'afternoon', 'evening'].forEach(period => {
         document.getElementById(`am-preset-${period}`).innerHTML = AM_PRESETS[period].map(t => `
-          <div class="preset-chip ${amSelectedTimes[period].has(t) ? 'selected' : ''}" onclick="toggleAmTime('${period}', '${t}', this)">${amRangeLabel(t)}</div>`).join('');
+          <button type="button" class="preset-chip ${amSelectedTimes[period].has(t) ? 'selected' : ''}" onclick="toggleAmTime('${period}', '${t}', this)">${amSelectedTimes[period].has(t) ? '✓ ' : ''}${amRangeLabel(t)}</button>`).join('');
       });
     }
     function toggleAmTime(period, t, el) {
       if (amSelectedTimes[period].has(t)) amSelectedTimes[period].delete(t); else amSelectedTimes[period].add(t);
-      el.classList.toggle('selected');
+      renderAmPresets();
     }
 
     async function openAvailModal(doctorId, doctorName) {
@@ -1791,8 +1804,8 @@
       const listEl = document.getElementById("am-unavail-list");
       try {
         const rows = await api("GET", `/doctor-slots/unavailable?doctor_id=${currentAvailDoctorId}`);
-        listEl.innerHTML = !rows.length ? `<p style="color:var(--slate-light);font-size:13px">No upcoming unavailable dates.</p>` : rows.map(r => `
-          <div class="unavail-row" style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+        listEl.innerHTML = !rows.length ? `<p class="avail-unavail-empty">No upcoming unavailable dates.</p>` : rows.map(r => `
+          <div class="unavail-item">
             <span>${new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${r.reason ? ' — ' + r.reason : ''}</span>
             <button class="btn btn-outline btn-sm" onclick="unmarkAmUnavailable(${r.id})">Undo</button>
           </div>`).join('');
