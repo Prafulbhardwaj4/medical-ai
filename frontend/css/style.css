@@ -1477,7 +1477,6 @@ tbody tr:hover { background: var(--smoke); }
 .test-row-main { flex: 1; min-width: 220px; }
 .test-row-meta {
   display: flex;
-  flex-direction: column;
   align-items: flex-end;
   gap: 4px;
   min-width: 90px;

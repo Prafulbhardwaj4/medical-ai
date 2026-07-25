@@ -7,6 +7,12 @@
   <script src="../js/custom-select.js" defer></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
+    .option-card {
+      border: 1.5px solid var(--border); border-radius: 12px; padding: 16px;
+      cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    .option-card.selected { border-color: var(--teal); background: var(--teal-subtle); }
+    .option-card h4 { margin: 0 0 4px; font-size: 14.5px; color: var(--navy); }
     .mobile-section { display: none; }
     .mobile-section.active { display: block; }
     @media (min-width: 901px) {
@@ -144,7 +150,22 @@
 
         <div class="avail-section">
           <h4 class="avail-section-title">Patients Per Slot</h4>
-          <input class="form-control" type="number" min="1" id="am-capacity" value="1" style="max-width:160px" />
+          <div style="display:flex;gap:10px;margin-bottom:14px">
+            <div class="option-card selected" id="am-cap-mode-same" style="flex:1" onclick="setAmCapacityMode('same')">
+              <h4>Same for every slot</h4>
+            </div>
+            <div class="option-card" id="am-cap-mode-period" style="flex:1" onclick="setAmCapacityMode('per_period')">
+              <h4>Different per period</h4>
+            </div>
+          </div>
+          <div id="am-capacity-same-input" class="form-group" style="max-width:200px">
+            <input class="form-control" type="number" min="1" id="am-capacity" value="1" />
+          </div>
+          <div id="am-capacity-period-inputs" style="display:none;grid-template-columns:repeat(3,1fr);gap:12px;max-width:480px">
+            <div class="form-group"><label class="form-label">Morning</label><input class="form-control" type="number" min="1" id="am-cap-morning" value="1" /></div>
+            <div class="form-group"><label class="form-label">Afternoon</label><input class="form-control" type="number" min="1" id="am-cap-afternoon" value="1" /></div>
+            <div class="form-group"><label class="form-label">Evening</label><input class="form-control" type="number" min="1" id="am-cap-evening" value="1" /></div>
+          </div>
         </div>
 
         <div class="err-msg" id="am-err"></div>
@@ -1696,7 +1717,7 @@
       const list = document.getElementById("avail-doctor-list");
       if (!doctors.length) { list.innerHTML = `<p style="color:var(--slate-light)">No doctors found.</p>`; return; }
       list.innerHTML = doctors.map(d => `
-        <div class="avail-doctor-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick="location.href='doctor-slots.html?doctor_id=${d.id}'">
+        <div class="avail-doctor-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick="openAvailModal(${d.id}, '${(d.title + ' ' + d.name).replace(/'/g, "\\'")}')">
           <div>
             <div style="font-weight:600;color:var(--navy)">${d.title} ${d.name}</div>
             <div style="font-size:12.5px;color:var(--slate-light)">ID: ${d.doctor_uid || d.id}${d.specialization ? ' · ' + d.specialization : ''}</div>
@@ -1714,6 +1735,14 @@
     const AM_PRESETS = { morning: ["07:00", "09:00", "11:00"], afternoon: ["12:00", "14:00", "16:00"], evening: ["17:00", "19:00", "21:00"] };
     let amSelectedDays = new Set([0,1,2,3,4,5]);
     let amSelectedTimes = { morning: new Set(), afternoon: new Set(), evening: new Set() };
+    let amCapacityMode = "same";
+    function setAmCapacityMode(mode) {
+      amCapacityMode = mode;
+      document.getElementById("am-cap-mode-same").classList.toggle("selected", mode === "same");
+      document.getElementById("am-cap-mode-period").classList.toggle("selected", mode === "per_period");
+      document.getElementById("am-capacity-same-input").style.display = mode === "same" ? "block" : "none";
+      document.getElementById("am-capacity-period-inputs").style.display = mode === "per_period" ? "grid" : "none";
+    }
 
     function amRangeLabel(t) {
       const [h, m] = t.split(':').map(Number);
@@ -1749,6 +1778,11 @@
 
       amSelectedDays = new Set([0,1,2,3,4,5]);
       amSelectedTimes = { morning: new Set(), afternoon: new Set(), evening: new Set() };
+      setAmCapacityMode("same");
+      document.getElementById("am-capacity").value = 1;
+      document.getElementById("am-cap-morning").value = 1;
+      document.getElementById("am-cap-afternoon").value = 1;
+      document.getElementById("am-cap-evening").value = 1;
 
       try {
         const t = await api("GET", `/doctor-slots/template?doctor_id=${doctorId}`);
@@ -1756,7 +1790,11 @@
         amSelectedTimes.morning = new Set(t.morning_times);
         amSelectedTimes.afternoon = new Set(t.afternoon_times);
         amSelectedTimes.evening = new Set(t.evening_times);
+        setAmCapacityMode(t.capacity_mode || "same");
         document.getElementById("am-capacity").value = t.capacity_same || 1;
+        document.getElementById("am-cap-morning").value = t.capacity_morning || 1;
+        document.getElementById("am-cap-afternoon").value = t.capacity_afternoon || 1;
+        document.getElementById("am-cap-evening").value = t.capacity_evening || 1;
       } catch (e) { /* no template yet */ }
 
       renderAmDayChips();
@@ -1781,9 +1819,11 @@
           doctor_id: currentAvailDoctorId,
           weekdays: [...amSelectedDays],
           morning_times: morning, afternoon_times: afternoon, evening_times: evening,
-          capacity_mode: "same",
+          capacity_mode: amCapacityMode,
           capacity_same: parseInt(document.getElementById("am-capacity").value) || 1,
-          capacity_morning: 1, capacity_afternoon: 1, capacity_evening: 1,
+          capacity_morning: parseInt(document.getElementById("am-cap-morning").value) || 1,
+          capacity_afternoon: parseInt(document.getElementById("am-cap-afternoon").value) || 1,
+          capacity_evening: parseInt(document.getElementById("am-cap-evening").value) || 1,
         });
         toast("Availability saved", "success");
         closeAvailModal();
