@@ -12,10 +12,13 @@ from app.models.checkin import Checkin
 from app.models.hospital import Hospital
 from app.models.doctor import Doctor
 from app.models.admission import Admission, AdmissionMedicationOrder
+from app.models.test_catalog import TestCatalogItem
+from app.models.test_catalog_parameter import TestCatalogParameter
 from app.schemas.portal import DashboardStatsOut, ProfileSummaryOut, VisitOut, VisitDetailOut, VisitTestOut, AdmissionSummaryOut
 from app.utils.portal_auth import get_current_patient_account
 from app.utils.timezone import now_ist_naive
-from app.services.pdf_service import generate_prescription_pdf, generate_invoice_pdf
+from app.services.pdf_service import generate_prescription_pdf, generate_invoice_pdf, generate_combined_test_report_pdf
+import json
 
 router = APIRouter(prefix="/portal/dashboard", tags=["portal-dashboard"])
 
@@ -83,6 +86,10 @@ def list_admissions(account: PatientAccount = Depends(get_current_patient_accoun
         hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
         patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
         doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
+        invoice_total = None
+        if a.status == "discharged" and a.discharge_invoice_id:
+            invoice = db.query(Invoice).filter(Invoice.id == a.discharge_invoice_id).first()
+            invoice_total = invoice.grand_total if invoice else None
         out.append(AdmissionSummaryOut(
             id=a.id,
             hospital_name=hospital.name if hospital else "Unknown hospital",
@@ -94,8 +101,22 @@ def list_admissions(account: PatientAccount = Depends(get_current_patient_accoun
             admitting_doctor_name=f"{doctor.title} {doctor.name}" if doctor else None,
             admission_date=a.admission_date.isoformat(),
             discharge_date=a.discharge_date.isoformat() if a.discharge_date else None,
+            discharge_invoice_id=a.discharge_invoice_id if a.status == "discharged" else None,
+            discharge_invoice_total=invoice_total,
         ))
     return out
+
+
+@router.get("/admissions/{admission_id}/tests")
+def admission_tests(admission_id: int, account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
+    """Names + status only — no price, whether admitted or discharged. Money only
+    ever surfaces via the discharge invoice, once the stay is closed out."""
+    patient_ids = _owned_patient_ids(account)
+    admission = db.query(Admission).filter(Admission.id == admission_id, Admission.patient_id.in_(patient_ids)).first()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission not found")
+    orders = db.query(TestOrder).filter(TestOrder.admission_id == admission.id).all()
+    return [{"id": t.id, "test_name": t.test_name, "status": t.status} for t in orders]
 
 
 @router.get("/admissions/{admission_id}/medications")
@@ -232,6 +253,66 @@ def get_visit_detail(
         invoice_total=invoice.grand_total if invoice else None,
         tests=tests,
     )
+
+
+@router.get("/consultations/{consultation_id}/tests/report")
+def download_consultation_test_report(
+    consultation_id: int,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    """One bundled PDF covering every completed test ordered on this visit —
+    there is deliberately no per-test download anywhere on the site (site rule:
+    bundle-only). Incomplete tests are left out; if none are complete yet, 404."""
+    consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Visit not found")
+    patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
+    if not patient or patient.id not in _owned_patient_ids(account):
+        raise HTTPException(status_code=404, detail="Visit not found")
+
+    orders = db.query(TestOrder).filter(
+        TestOrder.consultation_id == consultation_id, TestOrder.status == "completed"
+    ).all()
+    if not orders:
+        raise HTTPException(status_code=404, detail="No completed test results for this visit yet")
+
+    hospital = db.query(Hospital).filter(Hospital.id == consultation.hospital_id).first()
+    ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first()
+    lab_staff_id = next((o.completed_by for o in orders if o.completed_by), None)
+    lab_staff = db.query(Doctor).filter(Doctor.id == lab_staff_id).first() if lab_staff_id else None
+    is_male = (patient.gender or "").lower() == "male"
+
+    tests_payload = []
+    for order in orders:
+        catalog_item = db.query(TestCatalogItem).filter(TestCatalogItem.id == order.test_id).first() if order.test_id else None
+        try:
+            result_data = json.loads(order.result_data or "{}")
+        except Exception:
+            result_data = {}
+
+        if catalog_item and catalog_item.is_panel:
+            params = db.query(TestCatalogParameter).filter(
+                TestCatalogParameter.test_catalog_item_id == catalog_item.id,
+                TestCatalogParameter.is_active == True  # noqa: E712
+            ).order_by(TestCatalogParameter.display_order).all()
+            rows = [{
+                "name": p.name, "unit": p.unit or "",
+                "range": (p.reference_range_male if is_male else p.reference_range_female) or "",
+                "value": result_data.get(p.name, "")
+            } for p in params if result_data.get(p.name)]  # untested subtests excluded, not just blanked
+        else:
+            range_str = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) if catalog_item else ""
+            unit = catalog_item.unit if catalog_item else ""
+            rows = [{"name": order.test_name, "unit": unit or "", "range": range_str or "", "value": result_data.get("value", "")}]
+
+        tests_payload.append({"test_name": order.test_name, "rows": rows, "notes": result_data.get("notes", "")})
+
+    filepath = generate_combined_test_report_pdf(
+        order_id_key=f"portal_{consultation_id}", tests_payload=tests_payload,
+        patient=patient, ordering_doctor=ordering_doctor, lab_staff=lab_staff, hospital=hospital
+    )
+    return FileResponse(filepath, media_type="application/pdf", filename=f"test_report_{consultation.token_number}.pdf")
 
 
 @router.get("/prescriptions/{consultation_id}/pdf")

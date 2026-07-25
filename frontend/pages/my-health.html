@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Home</title>
   <link rel="stylesheet" href="../css/style.css" />
+  <script src="../js/custom-select.js" defer></script>
   <style>
     .mobile-section { display: none; }
     .mobile-section.active { display: block; }
@@ -42,6 +43,12 @@
     .stat-card.c-navy::before { background: var(--navy); }
     .stat-card .num { font-size: 2.1rem; font-weight: 800; line-height: 1; }
     .stat-card .label { font-size: 12.5px; color: var(--slate); margin-top: 10px; font-weight: 600; letter-spacing: .2px; }
+    @media (max-width: 900px) {
+      #portal-stats-grid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+      #portal-stats-grid .stat-card { padding: 16px 10px; aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      #portal-stats-grid .stat-card .num { font-size: 1.7rem; }
+      #portal-stats-grid .stat-card .label { font-size: 11px; margin-top: 6px; }
+    }
     .filter-bar {
       display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;
     }
@@ -164,7 +171,7 @@
           <div id="active-admission-details" style="font-size:13.5px;color:var(--slate)"></div>
         </div>
 
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
+        <div id="portal-stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
           <div class="stat-card c-teal"><div class="num" style="color:var(--teal)" id="stat-profiles">—</div><div class="label">Linked Profiles</div></div>
           <div class="stat-card c-navy"><div class="num" style="color:var(--navy)" id="stat-consultations">—</div><div class="label">Consultations</div></div>
           <div class="stat-card c-teal"><div class="num" style="color:var(--teal)" id="stat-visits-total">—</div><div class="label">Total Hospital Visits</div></div>
@@ -342,7 +349,12 @@
             </div>`;
         }
         if (v.tests && v.tests.length) {
-          html += `<div style="padding-top:12px;border-top:1px solid var(--border)"><div style="font-weight:500;margin-bottom:8px">Test Reports</div>`;
+          const anyCompleted = v.tests.some(t => t.status === 'completed');
+          html += `<div style="padding-top:12px;border-top:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-weight:500">Tests</div>
+              ${anyCompleted ? `<button class="btn btn-outline btn-sm" onclick="downloadFile('/portal/dashboard/consultations/${v.consultation_id}/tests/report', 'test_report_${v.token_number}.pdf')">Download Report</button>` : ''}
+            </div>`;
           html += v.tests.map(t => `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><span>${sanitize(t.test_name)}</span><span class="badge badge-grey">${t.status}</span></div>`).join('');
           html += `</div>`;
         }
@@ -422,7 +434,13 @@
               Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
               ${a.discharge_date ? ' · Discharged ' + new Date(a.discharge_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : ''}
             </div>
-            <a href="#" style="font-size:12px;color:var(--teal);display:inline-block;margin-top:8px" onclick="toggleAdmissionMeds(${a.id}, this);return false;">Medicines &amp; sourcing options ▾</a>
+            ${a.status === 'discharged' && a.discharge_invoice_id ? `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;margin-top:8px;border-top:1px solid var(--border)">
+                <div style="font-weight:500;font-size:13px">Invoice — ₹${a.discharge_invoice_total}</div>
+                <button class="btn btn-outline btn-sm" onclick="downloadFile('/portal/dashboard/invoices/${a.discharge_invoice_id}/pdf', 'invoice_${a.id}.pdf')">Download</button>
+              </div>
+            ` : ''}
+            <a href="#" style="font-size:12px;color:var(--teal);display:inline-block;margin-top:8px" onclick="toggleAdmissionMeds(${a.id}, this);return false;">Medicines &amp; tests ▾</a>
             <div id="admission-meds-${a.id}" style="display:none;margin-top:10px"></div>
           </div>
         `).join('');
@@ -437,27 +455,35 @@
       el.style.display = "block";
       el.innerHTML = `<p style="color:var(--slate-light);font-size:12.5px">Loading…</p>`;
       try {
-        const meds = await api("GET", `/portal/dashboard/admissions/${admissionId}/medications`);
-        if (!meds.length) {
-          el.innerHTML = `<p style="color:var(--slate-light);font-size:12.5px">No medications ordered yet.</p>`;
-          return;
+        const [meds, tests] = await Promise.all([
+          api("GET", `/portal/dashboard/admissions/${admissionId}/medications`),
+          api("GET", `/portal/dashboard/admissions/${admissionId}/tests`),
+        ]);
+        let html = "";
+        if (meds.length) {
+          html += meds.map(m => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border)">
+              <div style="font-size:13px">${sanitize(m.medicine_name)} <span style="color:var(--slate-light)">(${sanitize(m.dosage)})</span></div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--slate);cursor:pointer">
+                <input type="checkbox" ${m.sourced_outside ? 'checked' : ''} onchange="setSourcedOutside(${admissionId}, ${m.id}, this.checked)">
+                We'll source this ourselves
+              </label>
+            </div>
+          `).join('');
+        } else {
+          html += `<p style="color:var(--slate-light);font-size:12.5px;padding-top:8px">No medications ordered yet.</p>`;
         }
-        el.innerHTML = meds.map(m => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border)">
-            <div style="font-size:13px">${sanitize(m.medicine_name)} <span style="color:var(--slate-light)">(${sanitize(m.dosage)})</span></div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--slate);cursor:pointer">
-              <input type="checkbox" ${m.sourced_outside ? 'checked' : ''} onchange="setSourcedOutside(${admissionId}, ${m.id}, this.checked)">
-              We'll source this ourselves
-            </label>
-          </div>
-        `).join('') + `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border);opacity:0.6">
-            <div style="font-size:13px">Lab tests</div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--slate-light)" title="Tests can't be sourced outside the hospital — shown for consistency only">
-              <input type="checkbox" disabled> We'll source this ourselves
-            </label>
-          </div>
-        `;
+        if (tests.length) {
+          const statusLabel = { payment_pending: 'Ordered', paid: 'Ordered', sample_collected: 'Sample Collected', processing: 'Processing', completed: 'Completed' };
+          html += `<div style="font-weight:500;font-size:13px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">Tests</div>`;
+          html += tests.map(t => `
+            <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+              <span>${sanitize(t.test_name)}</span>
+              <span class="badge badge-grey">${statusLabel[t.status] || sanitize(t.status)}</span>
+            </div>
+          `).join('');
+        }
+        el.innerHTML = html;
       } catch (e) {
         el.innerHTML = `<p style="color:var(--danger);font-size:12.5px">${e.message}</p>`;
       }

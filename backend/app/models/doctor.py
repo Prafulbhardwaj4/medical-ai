@@ -18,6 +18,7 @@ class Doctor(Base):
     __tablename__ = "doctors"
 
     id = Column(Integer, primary_key=True, index=True)
+    doctor_uid = Column(String, unique=True, nullable=True, index=True)  # hospital-initials + hash, e.g. MEDS-A1B2C3
     title = Column(String, nullable=False, default="Dr.")
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)

@@ -60,6 +60,7 @@ def list_doctor_slots(hospital_id: int, doctor_id: int, date: str, db: Session =
     from datetime import datetime as dt
     from app.models.doctor_slot import DoctorSlot
     from app.models.doctor_availability import DoctorUnavailability
+    from app.utils.timezone import now_ist_naive
 
     try:
         slot_date = dt.strptime(date, "%Y-%m-%d").date()
@@ -76,6 +77,26 @@ def list_doctor_slots(hospital_id: int, doctor_id: int, date: str, db: Session =
         DoctorSlot.hospital_id == hospital_id, DoctorSlot.doctor_id == doctor_id,
         DoctorSlot.slot_date == slot_date
     ).order_by(DoctorSlot.slot_time).all()
+
+    now = now_ist_naive()
+    is_today = slot_date == now.date()
+
+    def _parse_slot_time(time_str):
+        for fmt in ("%H:%M", "%I:%M %p"):
+            try:
+                return dt.strptime(time_str.strip(), fmt).time()
+            except ValueError:
+                continue
+        return None  # unrecognised format — skip the past-time check rather than wrongly hide it
+
+    if is_today:
+        filtered = []
+        for s in slots:
+            parsed = _parse_slot_time(s.slot_time)
+            if parsed is not None and parsed <= now.time():
+                continue  # already passed today — never bookable
+            filtered.append(s)
+        slots = filtered
 
     def _level(s):
         if s.booked_count >= s.capacity:
@@ -95,27 +116,20 @@ def list_doctor_slots(hospital_id: int, doctor_id: int, date: str, db: Session =
 
 @router.get("/{hospital_id}/bed-availability")
 def bed_availability(hospital_id: int, db: Session = Depends(get_db)):
-    """Coarse, opt-in-only bed status for one hospital — deliberately never exposes
-    raw bed counts or a ward-level breakdown, to avoid handing a competitor exact
-    occupancy figures. Returns one bucket: available / few_left / full / unknown."""
+    """Returns the actual vacant bed count, shown by default on the booking flow
+    (item 49) — no longer coarsened to available/full/unknown only."""
     ward_types = db.query(AdmissionWardType).filter(AdmissionWardType.hospital_id == hospital_id).all()
     total_beds = sum(w.total_beds for w in ward_types)
     if total_beds == 0:
-        return {"status": "unknown"}
+        return {"status": "unknown", "vacant_beds": None, "total_beds": 0}
 
     occupied = db.query(Admission).filter(
         Admission.hospital_id == hospital_id, Admission.status == "admitted"
     ).count()
     vacant = max(total_beds - occupied, 0)
-    ratio = vacant / total_beds
 
-    if vacant == 0:
-        status = "full"
-    elif ratio <= 0.2:
-        status = "few_left"
-    else:
-        status = "available"
-    return {"status": status}
+    status = "full" if vacant == 0 else "available"
+    return {"status": status, "vacant_beds": vacant, "total_beds": total_beds}
 
 
 @router.get("/{hospital_id}", response_model=HospitalOut)

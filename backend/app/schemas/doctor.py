@@ -20,6 +20,7 @@ class EditMeIn(BaseModel):
     name: str
     phone: str
     registration_number: Optional[str] = ""
+    title: Optional[str] = None
 
 class DoctorOut(BaseModel):
     hospital_id: Optional[int] = None

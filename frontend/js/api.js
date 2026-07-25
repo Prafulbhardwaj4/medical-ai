@@ -295,7 +295,14 @@ function ensureEditDetailsModal() {
         <div style="font-size:13px;font-weight:600;color:var(--slate);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.3px">Edit My Details</div>
         <div style="margin-bottom:12px">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Name</label>
-          <input class="form-control" id="ed-name" />
+          <div style="display:flex;gap:10px">
+            <select class="form-control" id="ed-title" style="width:100px;display:none">
+              <option>Mr.</option>
+              <option>Ms.</option>
+            </select>
+            <span id="ed-title-fixed" style="display:none;align-items:center;padding:0 12px;border:1.5px solid var(--border);border-radius:var(--radius);color:var(--slate);font-size:0.9rem;background:var(--smoke)">Dr.</span>
+            <input class="form-control" id="ed-name" style="flex:1" />
+          </div>
         </div>
         <div style="margin-bottom:12px">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Contact Number</label>
@@ -323,6 +330,10 @@ function openEditDetailsModal() {
   document.getElementById('ed-phone').value = doc.phone || '';
   document.getElementById('ed-reg').value = doc.registration_number || '';
   document.getElementById('ed-err').textContent = '';
+  const isDoctorRole = doc.role === 'doctor';
+  document.getElementById('ed-title').style.display = isDoctorRole ? 'none' : '';
+  document.getElementById('ed-title-fixed').style.display = isDoctorRole ? 'flex' : 'none';
+  if (!isDoctorRole) document.getElementById('ed-title').value = (doc.title === 'Ms.') ? 'Ms.' : 'Mr.';
   document.getElementById('modal-edit-details').classList.add('open');
 }
 
@@ -406,8 +417,10 @@ async function submitEditDetails() {
   const registration_number = document.getElementById('ed-reg').value.trim();
   if (!name) { errEl.textContent = 'Name is required.'; return; }
   if (!phone) { errEl.textContent = 'Contact number is required.'; return; }
+  const isDoctorRole = getDoctor()?.role === 'doctor';
+  const title = isDoctorRole ? 'Dr.' : document.getElementById('ed-title').value;
   try {
-    const updated = await api("PATCH", "/auth/me", { name, phone, registration_number });
+    const updated = await api("PATCH", "/auth/me", { name, phone, registration_number, title });
     saveSession(getToken(), { ...getDoctor(), ...updated });
     fillTopbar();
     closeEditDetailsModal();

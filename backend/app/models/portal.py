@@ -77,6 +77,20 @@ class OTPCode(Base):
     created_at = Column(DateTime, default=now_ist_naive)
 
 
+class PatientAddress(Base):
+    """One of possibly several saved addresses for an account (item 53) —
+    PatientAccount.address stays in sync with whichever row is is_default,
+    so existing single-address consumers keep working unchanged."""
+    __tablename__ = "patient_addresses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("patient_accounts.id"), nullable=False)
+    label = Column(String, nullable=False, default="Address")
+    address = Column(String, nullable=False)
+    is_default = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=now_ist_naive)
+
+
 class Appointment(Base):
     __tablename__ = "portal_appointments"
 
@@ -96,6 +110,8 @@ class Appointment(Base):
     address = Column(String, nullable=True)  # snapshot of the address used for this booking
     new_patient_name = Column(String, nullable=True)    # captured only when booking with no existing hospital record
     new_patient_gender = Column(String, nullable=True)
+    new_patient_age = Column(Integer, nullable=True)
+    new_patient_blood_group = Column(String, nullable=True)  # optional
     created_at = Column(DateTime, default=now_ist_naive)
 
     account = relationship("PatientAccount", back_populates="appointments")

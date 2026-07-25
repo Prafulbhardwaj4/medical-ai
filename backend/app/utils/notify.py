@@ -23,6 +23,23 @@ def _upsert(db: Session, hospital_id: int, source_key: str, type_: str, severity
         ))
 
 
+def notify_ward_change_request(db: Session, hospital_id: int, admission_id: int, patient_name: str,
+                                requested_ward_name: str, requested_by_name: str, note: str = None):
+    """Raised when a doctor/nurse asks reception to move a patient to a
+    different ward/bed. source_key includes a timestamp so repeated requests
+    for the same admission each surface as their own notification rather than
+    silently overwriting one another."""
+    key = f"ward_change_request:{admission_id}:{now_ist_naive().isoformat()}"
+    message = f"{requested_by_name} requested moving {patient_name} to {requested_ward_name}."
+    if note:
+        message += f" Note: {note}"
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="ward_change_request", severity="warning",
+        title=f"Ward change requested — {patient_name}", message=message,
+        link_type="ward_change_request", link_id=admission_id, is_read=False
+    ))
+
+
 MIN_SHIFT_HOURS_BEFORE_IDLE_CHECK = 4
 
 

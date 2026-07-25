@@ -46,7 +46,7 @@ def calculate_prescribed_quantity(matched_medicine, times_per_day, duration_days
 
     return pack_size if is_per_pack else 1
 
-def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int) -> dict:
+def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int, round_to_pack: bool = True) -> dict:
     """
     Deducts `quantity_needed` units from a medicine's stock, consuming the
     soonest-expiring batches first (FEFO — First-Expiry-First-Out).
@@ -56,6 +56,13 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int) -> di
     e.g. dispensing 9 tablets from a 10-per-strip per_pack medicine removes a
     full strip of 10, not 9, since that strip physically can't go back once opened.
     per_unit-billed medicines deduct the exact quantity, unchanged.
+
+    round_to_pack=False skips that rounding and deducts the exact quantity
+    requested — used for per-dose administration ("Give Dose Now" on an
+    admission), where each call only asks for 1 unit; rounding that up to a
+    full strip on every single dose was draining stock far faster than doses
+    actually given. Pack-rounding is only correct for a one-time dispense of
+    a full prescribed quantity (pharmacy fulfillment).
 
     The aggregate stock_quantity always drops by the full (possibly rounded)
     quantity, floored at 0. Batch rows are decremented for as much as they can
@@ -67,7 +74,7 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int) -> di
     if not medicine:
         return {"medicine_id": medicine_id, "medicine_name": None, "deducted_from_batches": 0, "shortfall": quantity_needed}
 
-    if medicine.billing_mode == "per_pack" and medicine.pack_size and medicine.pack_size > 1:
+    if round_to_pack and medicine.billing_mode == "per_pack" and medicine.pack_size and medicine.pack_size > 1:
         pack_size = medicine.pack_size
         quantity_needed = ((quantity_needed + pack_size - 1) // pack_size) * pack_size  # round up to next full strip
 

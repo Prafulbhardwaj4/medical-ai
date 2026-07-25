@@ -12,4 +12,7 @@ class ChatMessage(Base):
     body = Column(Text, nullable=False)
     is_read_by_staff = Column(Boolean, default=False, nullable=False)
     is_read_by_admin = Column(Boolean, default=False, nullable=False)
+    attachment_filename = Column(String, nullable=True)  # name on disk (uuid-based, unguessable)
+    attachment_name = Column(String, nullable=True)       # original filename, for display/download
+    attachment_type = Column(String, nullable=True)       # "image" | "file"
     created_at = Column(DateTime, default=now_ist_naive, nullable=False)

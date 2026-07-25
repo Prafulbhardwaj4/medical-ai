@@ -93,6 +93,7 @@ class PatientSummary(BaseModel):
     last_visit: Optional[datetime] = None
     last_token: Optional[str] = None
     checked_in_today: bool = False
+    currently_admitted: bool = False
 
     class Config:
         from_attributes = True
@@ -131,6 +132,7 @@ class NurseTaskComplete(BaseModel):
 
 class DoctorLite(BaseModel):
     id: int
+    doctor_uid: Optional[str] = None
     title: str
     name: str
     specialization: str

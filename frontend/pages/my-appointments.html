@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Appointments</title>
   <link rel="stylesheet" href="../css/style.css" />
+  <script src="../js/custom-select.js" defer></script>
   <style>
     .wizard-topbar {
       display: flex; align-items: center; gap: 12px;
@@ -67,6 +68,14 @@
     .pay-method-tabs { display: flex; gap: 8px; margin: 16px 0; }
     .pay-method-tab { flex: 1; text-align: center; padding: 10px; border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--slate); }
     .pay-method-tab.active { border-color: var(--teal); background: var(--teal-subtle); color: var(--teal); }
+
+    @media (max-width: 900px) {
+      .quick-header-block { margin-bottom: 12px !important; gap: 8px !important; }
+      .quick-header-block h1 { font-size: 1.2rem; margin-bottom: 2px; }
+      .quick-header-block p { font-size: 12px; margin: 0; }
+      .quick-header-block .btn-teal { padding: 7px 14px; font-size: 12.5px; }
+      .state-city-row { grid-template-columns: 1fr !important; }
+    }
   </style>
 </head>
 
@@ -152,7 +161,7 @@
     </nav>
 
     <main class="main-content">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+      <div class="quick-header-block" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px">
         <div>
           <h1>Book an Appointment</h1>
           <p style="color:var(--slate)">Find a hospital, pick a doctor, and choose a time that works for you.</p>
@@ -204,17 +213,18 @@
   <div class="modal-overlay" id="modal-address">
     <div class="modal" style="max-width:420px">
       <div class="modal-header">
-        <h2>Saved Address</h2>
+        <h2>Saved Addresses</h2>
         <button class="modal-close" onclick="closeAddressModal()">&times;</button>
       </div>
-      <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">Used by default when booking appointments — you can still enter a different one for any single visit.</p>
-      <div class="form-group">
-        <label class="form-label">Address</label>
-        <textarea class="form-control" id="acc-address" rows="3" placeholder="House no., street, city"></textarea>
-      </div>
-      <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
-        <button class="btn btn-outline" onclick="closeAddressModal()">Cancel</button>
-        <button class="btn btn-primary" id="btn-save-address" onclick="saveAddress()">Save</button>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">Pick one at booking time, or enter a one-off address just for that visit.</p>
+      <div id="saved-address-list" style="margin-bottom:14px"><p style="color:var(--slate-light);font-size:13px">Loading…</p></div>
+      <div class="card" style="background:var(--smoke)">
+        <p style="font-weight:600;margin-bottom:10px;font-size:13.5px">Add Address</p>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Label</label><input class="form-control" id="new-addr-label" placeholder="Home, Office..." /></div>
+        </div>
+        <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="new-addr-text" rows="2" placeholder="House no., street, city"></textarea></div>
+        <button class="btn btn-primary" style="width:100%" onclick="addNewAddress()">Add Address</button>
       </div>
     </div>
   </div>
@@ -247,13 +257,39 @@
       payment: { title: "Payment", sub: () => "Complete payment to confirm your booking" },
     };
 
+    function attachAddressToggle() {
+      document.querySelectorAll('input[name="addr-choice"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+          document.getElementById('addr-custom-text').style.display = radio.value === 'custom' && radio.checked ? 'block' : (document.querySelector('input[name="addr-choice"][value="custom"]').checked ? 'block' : 'none');
+        });
+      });
+    }
+
+    function captureAddressChoice() {
+      const checked = document.querySelector('input[name="addr-choice"]:checked');
+      if (!checked || checked.value === 'custom') {
+        state.addressId = null;
+        state.customAddress = document.getElementById('addr-custom-text')?.value.trim() || '';
+      } else {
+        state.addressId = parseInt(checked.value, 10);
+        state.customAddress = null;
+      }
+    }
+
     function confirmNewPatientProfile() {
+      const err = document.getElementById("np-err");
       const name = document.getElementById("np-name").value.trim();
-      if (!name) { toast("Please enter the patient's name", "error"); return; }
+      const age = document.getElementById("np-age").value;
+      if (!name) { err.textContent = "Please enter the patient's name"; return; }
+      if (!age || age < 0 || age > 120) { err.textContent = "Please enter a valid age"; return; }
+      captureAddressChoice();
+      if (state.addressId === null && !state.customAddress) { err.textContent = "Please enter an address"; return; }
       state.profileLinkId = null;
       state.profileName = name;
       state.newPatientName = name;
+      state.newPatientAge = parseInt(age, 10);
       state.newPatientGender = document.getElementById("np-gender").value;
+      state.newPatientBloodGroup = document.getElementById("np-blood-group").value || null;
       setStep("datetime");
     }
 
@@ -297,7 +333,7 @@
         try {
           const states = await api("GET", "/portal/hospitals/states");
           area.innerHTML = `
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div class="state-city-row" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
               <div class="form-group" style="margin:0">
                 <label class="form-label">State</label>
                 <select class="form-control" id="pick-state">
@@ -360,8 +396,7 @@
           const specs = [...new Set(doctors.map(d => d.specialization).filter(Boolean))].sort();
           area.innerHTML = `
             <div style="margin-bottom:12px">
-              <a href="#" id="bed-availability-toggle" style="font-size:12.5px;color:var(--teal)" onclick="checkBedAvailability();return false;">Check bed availability at this hospital</a>
-              <div id="bed-availability-result" style="display:none;font-size:13px;margin-top:6px"></div>
+              <div id="bed-availability-result" style="font-size:13px">Checking bed availability…</div>
             </div>
             <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
               <input class="form-control" id="doc-search" placeholder="Search doctors..." style="flex:2;min-width:200px" />
@@ -371,6 +406,7 @@
               </select>
             </div>
             <div id="doc-list"></div>`;
+          checkBedAvailability();
 
           const draw = () => {
             const q = document.getElementById("doc-search").value.toLowerCase();
@@ -397,8 +433,30 @@
 
       if (state.step === "profile") {
         try {
-          const myProfiles = await api("GET", "/portal/dashboard/profiles");
+          const [myProfiles, addresses] = await Promise.all([
+            api("GET", "/portal/dashboard/profiles"),
+            api("GET", "/portal/auth/addresses").catch(() => []),
+          ]);
+          state.bookingAddresses = addresses;
           const linkedHere = myProfiles.filter(p => p.hospital_id === state.hospitalId);
+
+          const addressBlockHtml = `
+            <div class="card" style="margin-top:16px" id="address-block">
+              <p style="font-weight:600;font-size:13.5px;margin-bottom:10px">Address for this visit</p>
+              ${addresses.length ? addresses.map((a, i) => `
+                <label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;font-size:13px;cursor:pointer">
+                  <input type="radio" name="addr-choice" value="${a.id}" ${a.is_default || i === 0 ? 'checked' : ''} style="margin-top:3px">
+                  <span><strong>${sanitize(a.label)}</strong><br><span style="color:var(--slate)">${sanitize(a.address)}</span></span>
+                </label>
+              `).join('') : ''}
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:6px">
+                <input type="radio" name="addr-choice" value="custom" ${addresses.length ? '' : 'checked'} onclick="document.getElementById('addr-custom-text').style.display='block'">
+                Use a different address for this visit
+              </label>
+              <textarea class="form-control" id="addr-custom-text" rows="2" style="margin-top:8px;${addresses.length ? 'display:none' : ''}" placeholder="House no., street, city"></textarea>
+            </div>`;
+
+          document.querySelectorAll('input[name="addr-choice"]').forEach || null; // no-op guard
 
           const newPatientCard = `
             <div class="select-row-card" id="new-patient-card" style="border:1px dashed var(--teal)">
@@ -406,24 +464,36 @@
             </div>
             <div id="new-patient-form" style="display:none;margin-top:10px">
               <div class="form-group"><label class="form-label">Patient Name</label><input class="form-control" id="np-name" /></div>
-              <div class="form-group">
-                <label class="form-label">Gender</label>
-                <select class="form-control" id="np-gender"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Age</label><input class="form-control" type="number" min="0" max="120" id="np-age" /></div>
+                <div class="form-group">
+                  <label class="form-label">Gender</label>
+                  <select class="form-control" id="np-gender"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
+                </div>
               </div>
+              <div class="form-group">
+                <label class="form-label">Blood Group (optional)</label>
+                <select class="form-control" id="np-blood-group">
+                  <option value="">Not sure / skip</option>
+                  ${['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => `<option value="${bg}">${bg}</option>`).join('')}
+                </select>
+              </div>
+              <div class="err-msg" id="np-err"></div>
               <button class="btn btn-primary" style="width:100%" onclick="confirmNewPatientProfile()">Continue</button>
             </div>`;
 
           if (!linkedHere.length) {
             area.innerHTML = (myProfiles.length
               ? `<p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">You have linked profiles at other hospitals, but none here yet.</p>`
-              : '') + newPatientCard;
+              : '') + newPatientCard + addressBlockHtml;
             document.getElementById("new-patient-card").addEventListener("click", () => {
               document.getElementById("new-patient-form").style.display = "block";
             });
+            attachAddressToggle();
             return;
           }
 
-          const listEl = searchableFullWidthList(
+          searchableFullWidthList(
             area, linkedHere,
             (p) => `<div class="select-row-card" data-id="${p.id}" data-name="${sanitize(p.display_name)}">
                       <div><div class="src-name">${sanitize(p.display_name)}</div><div class="src-sub">${p.relation}</div></div>
@@ -431,7 +501,8 @@
             (p, q) => p.display_name.toLowerCase().includes(q),
             "Search profiles..."
           );
-          area.insertAdjacentHTML('beforeend', newPatientCard);
+          area.insertAdjacentHTML('beforeend', newPatientCard + addressBlockHtml);
+          attachAddressToggle();
           document.getElementById("new-patient-card").addEventListener("click", () => {
             document.getElementById("new-patient-form").style.display = "block";
           });
@@ -440,6 +511,7 @@
             if (!card || card.id === "new-patient-card") return;
             state.profileLinkId = parseInt(card.dataset.id);
             state.profileName = card.dataset.name;
+            captureAddressChoice();
             area.removeEventListener('click', handler);
             setStep("datetime");
           });
@@ -569,22 +641,18 @@
 
     async function checkBedAvailability() {
       const el = document.getElementById("bed-availability-result");
-      const link = document.getElementById("bed-availability-toggle");
-      link.style.display = "none";
-      el.style.display = "block";
-      el.innerHTML = `<span style="color:var(--slate-light)">Checking…</span>`;
-      const LABELS = {
-        available: ["🟢", "Beds available", "var(--teal)"],
-        few_left: ["🟡", "Only a few beds left", "#b45309"],
-        full: ["🔴", "No beds available right now", "var(--danger)"],
-        unknown: ["", "Bed availability isn't set up for this hospital yet", "var(--slate-light)"],
-      };
+      if (!el) return;
       try {
         const data = await api("GET", `/portal/hospitals/${state.hospitalId}/bed-availability`);
-        const [icon, label, color] = LABELS[data.status] || LABELS.unknown;
-        el.innerHTML = `<span style="color:${color};font-weight:600">${icon} ${label}</span>`;
+        if (data.status === "unknown") {
+          el.innerHTML = `<span style="color:var(--slate-light)">Bed availability isn't set up for this hospital yet</span>`;
+        } else if (data.status === "full") {
+          el.innerHTML = `<span style="color:var(--danger);font-weight:600">🔴 No beds available right now (0/${data.total_beds})</span>`;
+        } else {
+          el.innerHTML = `<span style="color:var(--teal);font-weight:600">🟢 ${data.vacant_beds} of ${data.total_beds} beds available</span>`;
+        }
       } catch (e) {
-        el.innerHTML = `<span style="color:var(--danger)">Could not check right now.</span>`;
+        el.innerHTML = `<span style="color:var(--danger)">Could not check bed availability right now.</span>`;
       }
     }
     function pickDoctor(id, name, fee) { state.doctorId = id; state.doctorName = name; state.doctorFee = fee; setStep("profile"); }
@@ -595,39 +663,25 @@
         <div class="pay-summary-row"><span>Patient</span><strong>${sanitize(state.profileName)}</strong></div>
         <div class="pay-summary-row"><span>Doctor</span><strong>${sanitize(state.doctorName)}</strong></div>
         <div class="pay-summary-row"><span>Hospital</span><strong>${sanitize(state.hospitalName)}</strong></div>
-        <div class="pay-summary-row"><span>Date &amp; Time</span><strong>${sanitize(state.dateLabel)}, ${sanitize(state.slotTime)}</strong></div>
-        <div class="form-group" style="margin-top:14px">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
-            <input type="checkbox" id="chk-diff-address" onchange="toggleDiffAddress()"> Use a different address for this visit
-          </label>
-          <textarea class="form-control" id="confirm-address" rows="2" style="display:none;margin-top:8px" placeholder="House no., street, city"></textarea>
-        </div>`;
-      state.savedAddress = null;
-      try {
-        const res = await api("GET", "/portal/auth/address", null, false, true);
-        state.savedAddress = res?.address || null;
-      } catch (e) { /* not fatal — booking still works without a saved address */ }
+        <div class="pay-summary-row"><span>Date &amp; Time</span><strong>${sanitize(state.dateLabel)}, ${sanitize(state.slotTime)}</strong></div>`;
       document.getElementById("modal-confirm").classList.add("open");
     }
     function closeConfirmModal() { document.getElementById("modal-confirm").classList.remove("open"); }
-
-    function toggleDiffAddress() {
-      const checked = document.getElementById("chk-diff-address").checked;
-      document.getElementById("confirm-address").style.display = checked ? "block" : "none";
-    }
 
     async function proceedToPayment() {
       const btn = document.getElementById("btn-pay-book");
       btn.disabled = true;
       try {
-        const useDifferent = document.getElementById("chk-diff-address").checked;
         const appt = await api("POST", "/portal/appointments", {
           hospital_id: state.hospitalId, doctor_id: state.doctorId,
           profile_link_id: state.profileLinkId, slot_id: state.slotId, type: "scheduled",
-          use_saved_address: !useDifferent,
-          custom_address: useDifferent ? document.getElementById("confirm-address").value.trim() : null,
+          address_id: state.addressId || null,
+          use_saved_address: !state.customAddress,
+          custom_address: state.customAddress || null,
           new_patient_name: state.profileLinkId ? null : state.newPatientName,
           new_patient_gender: state.profileLinkId ? null : state.newPatientGender,
+          new_patient_age: state.profileLinkId ? null : state.newPatientAge,
+          new_patient_blood_group: state.profileLinkId ? null : state.newPatientBloodGroup,
         });
         state.pendingAppointmentId = appt.id;
         closeConfirmModal();
@@ -667,7 +721,8 @@
         list.innerHTML = appts.map(a => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px">
             <div>
-              <div style="font-weight:500">${sanitize(a.hospital_name || 'Hospital')}${a.doctor_name ? ' · ' + sanitize(a.doctor_name) : ''}</div>
+              <div style="font-weight:500">${sanitize(a.patient_name || 'Patient')}</div>
+              <div style="font-size:12.5px;color:var(--slate);margin-top:2px">${sanitize(a.hospital_name || 'Hospital')}${a.doctor_name ? ' · ' + sanitize(a.doctor_name) : ''}</div>
               <div style="font-size:12px;color:var(--slate-light);margin-top:2px">${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -684,32 +739,69 @@
       catch (e) { toast(e.message, "error"); }
     }
 
+    let savedAddresses = [];
+
     async function openAddressModal() {
       closeProfileMenu();
-      document.getElementById("acc-address").value = "";
       document.getElementById("modal-address").classList.add("open");
-      try {
-        const res = await api("GET", "/portal/auth/address");
-        document.getElementById("acc-address").value = res?.address || "";
-      } catch (e) { /* leave blank if not set yet */ }
+      await loadSavedAddresses();
     }
     function closeAddressModal() {
       document.getElementById("modal-address").classList.remove("open");
     }
-    async function saveAddress() {
-      const btn = document.getElementById("btn-save-address");
-      const address = document.getElementById("acc-address").value.trim();
-      if (address.length < 5) { toast("Please enter a fuller address", "error"); return; }
-      btn.disabled = true;
+
+    async function loadSavedAddresses() {
+      const el = document.getElementById("saved-address-list");
+      el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">Loading…</p>`;
       try {
-        await api("PATCH", "/portal/auth/address", { address });
-        toast("Address saved", "success");
-        closeAddressModal();
+        savedAddresses = await api("GET", "/portal/auth/addresses");
+        renderSavedAddressList();
       } catch (e) {
-        toast(e.message, "error");
-      } finally {
-        btn.disabled = false;
+        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
       }
+    }
+
+    function renderSavedAddressList() {
+      const el = document.getElementById("saved-address-list");
+      if (!savedAddresses.length) {
+        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No saved addresses yet — add one below.</p>`;
+        return;
+      }
+      el.innerHTML = savedAddresses.map(a => `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border);gap:8px">
+          <div>
+            <div style="font-weight:600;font-size:13px">${sanitize(a.label)} ${a.is_default ? '<span class="badge badge-teal" style="margin-left:4px">Default</span>' : ''}</div>
+            <div style="font-size:12.5px;color:var(--slate);margin-top:2px">${sanitize(a.address)}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            ${!a.is_default ? `<button class="btn btn-outline btn-sm" onclick="makeAddressDefault(${a.id})">Set Default</button>` : ''}
+            <button class="btn btn-outline btn-sm" onclick="deleteSavedAddress(${a.id})">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function addNewAddress() {
+      const label = document.getElementById("new-addr-label").value.trim() || "Address";
+      const address = document.getElementById("new-addr-text").value.trim();
+      if (address.length < 5) { toast("Please enter a fuller address", "error"); return; }
+      try {
+        await api("POST", "/portal/auth/addresses", { label, address });
+        document.getElementById("new-addr-label").value = "";
+        document.getElementById("new-addr-text").value = "";
+        toast("Address added", "success");
+        loadSavedAddresses();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function makeAddressDefault(id) {
+      try { await api("PATCH", `/portal/auth/addresses/${id}/default`); loadSavedAddresses(); }
+      catch (e) { toast(e.message, "error"); }
+    }
+
+    async function deleteSavedAddress(id) {
+      try { await api("DELETE", `/portal/auth/addresses/${id}`); toast("Address deleted", "success"); loadSavedAddresses(); }
+      catch (e) { toast(e.message, "error"); }
     }
 
     updateHeader();

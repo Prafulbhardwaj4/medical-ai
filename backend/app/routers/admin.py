@@ -130,6 +130,17 @@ def list_hospitals(
     return [{"id": h.id, "name": h.name, "hospital_code": h.hospital_code, "hospital_type": h.hospital_type, "city": h.city, "is_active": h.is_active} for h in hospitals]
 
 @router.post("/doctors", status_code=201)
+def generate_doctor_uid(db: Session, hospital_code: str) -> str:
+    import secrets, string
+    prefix = (hospital_code or "STAF").replace("-", "")[:4].upper()
+    alphabet = string.ascii_uppercase + string.digits
+    while True:
+        suffix = "".join(secrets.choice(alphabet) for _ in range(6))
+        uid = f"{prefix}-{suffix}"
+        if not db.query(Doctor).filter(Doctor.doctor_uid == uid).first():
+            return uid
+
+
 def create_doctor(
     hospital_id: int,
     name: str,
@@ -184,7 +195,8 @@ def create_doctor(
         hospital_id=hospital_id,
         is_active=True,
         created_by=current_doctor.id,
-        consultation_fee=consultation_fee if role in ["doctor", "sub_admin"] else None
+        consultation_fee=consultation_fee if role in ["doctor", "sub_admin"] else None,
+        doctor_uid=generate_doctor_uid(db, hospital.hospital_code),
     )
     db.add(doctor)
     db.commit()

@@ -476,7 +476,7 @@ def get_combined_test_report(
                 "unit": p.unit or "",
                 "range": (p.reference_range_male if is_male else p.reference_range_female) or "",
                 "value": result_data.get(p.name, "")
-            } for p in params]
+            } for p in params if result_data.get(p.name)]  # untested subtests are excluded from the final report entirely
         else:
             range_str = ""
             unit = ""

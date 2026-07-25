@@ -17,9 +17,16 @@ router = APIRouter(prefix="/portal/appointments", tags=["portal-appointments"])
 def _to_out(a: Appointment, db: Session) -> AppointmentOut:
     hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
     doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
+    patient_name = a.new_patient_name
+    if a.profile_link_id:
+        from app.models.portal import PatientProfileLink
+        link = db.query(PatientProfileLink).filter(PatientProfileLink.id == a.profile_link_id).first()
+        if link and link.patient:
+            patient_name = link.patient.name
     return AppointmentOut(
         id=a.id, hospital_id=a.hospital_id, hospital_name=hospital.name if hospital else None,
         doctor_id=a.doctor_id, doctor_name=f"{doctor.title} {doctor.name}" if doctor else None,
+        patient_name=patient_name,
         type=a.type.value, requested_time=a.requested_time, status=a.status.value,
         payment_status=a.payment_status, notes=a.notes, address=a.address,
     )
@@ -77,7 +84,13 @@ def book_appointment(
         from app.utils.timezone import now_ist_naive
         requested_time = now_ist_naive()
 
-    if body.use_saved_address:
+    if body.address_id:
+        from app.models.portal import PatientAddress
+        saved = db.query(PatientAddress).filter(PatientAddress.id == body.address_id, PatientAddress.account_id == account.id).first()
+        if not saved:
+            raise HTTPException(status_code=404, detail="Saved address not found")
+        resolved_address = saved.address
+    elif body.use_saved_address:
         resolved_address = account.address
     else:
         resolved_address = (body.custom_address or "").strip() or None
@@ -96,6 +109,8 @@ def book_appointment(
         address=resolved_address,
         new_patient_name=(body.new_patient_name or "").strip() or None if not body.profile_link_id else None,
         new_patient_gender=body.new_patient_gender if not body.profile_link_id else None,
+        new_patient_age=body.new_patient_age if not body.profile_link_id else None,
+        new_patient_blood_group=body.new_patient_blood_group if not body.profile_link_id else None,
     )
     db.add(appt)
     db.commit()

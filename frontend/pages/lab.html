@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lab — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
+  <script src="../js/custom-select.js" defer></script>
   <style>
     /* Tab sections (Home / Pending) - only the active one shows, on both
        mobile and desktop. Attendance is a 3rd tab on mobile only; on
@@ -1108,13 +1109,16 @@
       for (const test of bulkResultOrders) {
         if (test.mode === 'panel') {
           const results = {};
+          let anyFilled = false;
           for (const p of test.params) {
             const val = document.getElementById(`bulk-val-${test.orderId}-${p.id}`).value.trim();
-            if (!val) { errEl.textContent = `Enter a value for ${test.testName} — ${p.name}.`; return null; }
+            if (!val) { review.push({ test: test.testName, param: p.name, value: null, unit: p.unit }); continue; } // not tested — skipped, not blocked
             if (p.unit && !NUM_RE.test(val)) { errEl.textContent = `${test.testName} — ${p.name} must be a number.`; return null; }
             results[p.name] = val;
+            anyFilled = true;
             review.push({ test: test.testName, param: p.name, value: val, unit: p.unit });
           }
+          if (!anyFilled) { errEl.textContent = `Enter at least one result for ${test.testName}.`; return null; }
           payloads.push({ orderId: test.orderId, results });
         } else {
           const val = document.getElementById(`bulk-val-${test.orderId}-single`).value.trim();
@@ -1134,7 +1138,7 @@
       document.getElementById('results-confirm-body').innerHTML = bulkResultsDraft.review.map(r => `
         <div class="bulk-param-row">
           <div class="bulk-param-meta"><strong>${sanitize(r.test)}${r.param ? ' — ' + sanitize(r.param) : ''}</strong></div>
-          <div>${sanitize(r.value)}${r.unit ? ' ' + sanitize(r.unit) : ''}</div>
+          <div>${r.value !== null ? sanitize(r.value) + (r.unit ? ' ' + sanitize(r.unit) : '') : '<span style="color:var(--slate-light)">- (not tested)</span>'}</div>
         </div>
       `).join('');
       document.getElementById('modal-bulk-results').classList.remove('open');

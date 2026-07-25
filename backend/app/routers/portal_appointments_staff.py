@@ -32,6 +32,8 @@ def new_patient_prefill(
     return {
         "name": appt.new_patient_name,
         "gender": appt.new_patient_gender,
+        "age": appt.new_patient_age,
+        "blood_group": appt.new_patient_blood_group,
         "phone": appt.account.phone if appt.account else None,
         "address": appt.address,
     }

@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionMedicationAdministration, AdmissionCharge
 from app.models.admission_ward_type import AdmissionWardType
+from app.models.admission_ward_stay import AdmissionWardStay
+from app.models.admission_referral import AdmissionReferral
 from app.models.patient import Patient
 from app.models.doctor import Doctor
 from app.models.hospital import Hospital
@@ -16,12 +18,13 @@ from app.models.test_order import TestOrder
 from app.models.invoice import Invoice
 from app.schemas.admission import (
     AdmitPatientIn, AddMedicationOrderIn, AdministerDoseIn, AddChargeIn, AddAdmissionTestIn, DischargeIn,
-    WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn
+    WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn
 )
 from app.models.consultation import Consultation
-from app.utils.auth import get_current_doctor
+from app.utils.auth import get_current_doctor, ist_today
 from app.utils.timezone import now_ist_naive
 from app.utils.inventory import deduct_stock_fefo
+from app.utils.notify import notify_ward_change_request
 from app.services.pdf_service import generate_invoice_pdf
 import json
 
@@ -45,8 +48,58 @@ def _current_daily_rate(db: Session, admission: Admission) -> float:
     return admission.daily_room_charge
 
 
+def _room_charge_breakdown(db: Session, admission: Admission):
+    """Returns (breakdown_list, total). Sums each ward-stay segment's own
+    (days * daily_charge) rather than applying the current ward's rate to the
+    whole admission — so a mid-stay move to/from ICU only re-rates the days
+    actually spent there."""
+    stays = db.query(AdmissionWardStay).filter(
+        AdmissionWardStay.admission_id == admission.id
+    ).order_by(AdmissionWardStay.start_date.asc()).all()
+
+    if not stays:
+        # Admissions created before this feature existed have no segments — fall back
+        # to the old single-rate calculation so their bills don't break.
+        days = _days_admitted(admission)
+        rate = _current_daily_rate(db, admission)
+        return [{"ward": admission.ward, "bed_number": admission.bed_number, "days": days,
+                 "daily_charge": rate, "amount": days * rate, "start_date": admission.admission_date.isoformat(),
+                 "end_date": admission.discharge_date.isoformat() if admission.discharge_date else None}], days * rate
+
+    breakdown = []
+    total = 0.0
+    last_index = len(stays) - 1
+    for i, s in enumerate(stays):
+        seg_end = s.end_date or admission.discharge_date or now_ist_naive()
+        days = (seg_end.date() - s.start_date.date()).days
+        if i == last_index:
+            days += 1  # the current/last segment's start day counts as a full day, same convention as before
+        days = max(days, 0)
+        amount = days * s.daily_charge
+        breakdown.append({
+            "ward": s.ward_name, "bed_number": s.bed_number, "days": days, "daily_charge": s.daily_charge,
+            "amount": amount, "start_date": s.start_date.isoformat(), "end_date": s.end_date.isoformat() if s.end_date else None,
+        })
+        total += amount
+    return breakdown, total
+
+
 def _room_total(db: Session, admission: Admission) -> float:
-    return _days_admitted(admission) * _current_daily_rate(db, admission)
+    _, total = _room_charge_breakdown(db, admission)
+    return total
+
+
+def _ward_type_initials(name: str) -> str:
+    import re
+    words = [w for w in re.split(r"\s+", name.strip()) if w]
+    if len(words) > 1:
+        return "".join(w[0] for w in words).upper()[:4]
+    return re.sub(r"[^A-Za-z]", "", name)[:3].upper() or "WD"
+
+
+def _bed_labels_for_ward_type(wt: AdmissionWardType) -> list[str]:
+    initials = _ward_type_initials(wt.name)
+    return [f"{initials}-{i}" for i in range(1, wt.total_beds + 1)]
 
 
 def _get_admission_or_404(db: Session, admission_token: str, hospital_id: int) -> Admission:
@@ -99,6 +152,19 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
     if already_admitted:
         raise HTTPException(status_code=400, detail="This patient is already admitted")
 
+    from app.models.checkin import Checkin
+    checked_in_today = db.query(Checkin).filter(
+        Checkin.patient_id == patient.id, Checkin.visit_date == ist_today()
+    ).first()
+    if not checked_in_today:
+        raise HTTPException(status_code=400, detail="This patient must be physically checked in today (an active token) before they can be admitted")
+
+    referral = db.query(AdmissionReferral).filter(
+        AdmissionReferral.patient_id == patient.id, AdmissionReferral.status == "pending"
+    ).first()
+    if not referral:
+        raise HTTPException(status_code=400, detail="A doctor must send this patient for admission before reception can process it")
+
     ward_name = body.ward
     daily_charge = body.daily_room_charge
     ward_type_id = None
@@ -127,11 +193,18 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
         ).first()
         if not ward_type:
             raise HTTPException(status_code=404, detail="Ward type not found")
-        occupied = db.query(Admission).filter(
-            Admission.ward_type_id == ward_type.id, Admission.status == "admitted"
-        ).count()
-        if occupied >= ward_type.total_beds:
+        occupied_labels = {
+            a.bed_number for a in db.query(Admission).filter(
+                Admission.ward_type_id == ward_type.id, Admission.status == "admitted"
+            ).all()
+        }
+        if len(occupied_labels) >= ward_type.total_beds:
             raise HTTPException(status_code=400, detail=f"No beds available in {ward_type.name}")
+        valid_labels = set(_bed_labels_for_ward_type(ward_type))
+        if not body.bed_number or body.bed_number not in valid_labels:
+            raise HTTPException(status_code=400, detail="Please select a valid bed")
+        if body.bed_number in occupied_labels:
+            raise HTTPException(status_code=400, detail=f"Bed {body.bed_number} is already occupied — pick another")
         ward_name = ward_type.name
         daily_charge = ward_type.daily_charge
         ward_type_id = ward_type.id
@@ -146,9 +219,143 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
         public_token=secrets.token_urlsafe(16),
     )
     db.add(admission)
+    referral.status = "admitted"
     db.commit()
     db.refresh(admission)
+
+    db.add(AdmissionWardStay(
+        admission_id=admission.id, ward_type_id=ward_type_id, ward_name=ward_name,
+        bed_number=body.bed_number, daily_charge=daily_charge, start_date=admission.admission_date,
+    ))
+    db.commit()
     return {"id": admission.public_token, "message": "Patient admitted"}
+
+
+@router.post("/referrals")
+def send_to_admission(body: SendToAdmissionIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor can send a patient for admission")
+
+    patient = db.query(Patient).filter(Patient.id == body.patient_id, Patient.hospital_id == current_doctor.hospital_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    already_admitted = db.query(Admission).filter(Admission.patient_id == patient.id, Admission.status == "admitted").first()
+    if already_admitted:
+        raise HTTPException(status_code=400, detail="This patient is already admitted")
+
+    existing = db.query(AdmissionReferral).filter(
+        AdmissionReferral.patient_id == patient.id, AdmissionReferral.status == "pending"
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="This patient has already been sent for admission")
+
+    referral = AdmissionReferral(
+        hospital_id=current_doctor.hospital_id, patient_id=patient.id,
+        referred_by=current_doctor.id, reason=body.reason,
+    )
+    db.add(referral)
+    db.commit()
+    return {"message": f"{patient.name} sent to reception for admission"}
+
+
+@router.get("/referrals")
+def list_referrals(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Reception's '+ Admit' list — ONLY patients a doctor has actually sent."""
+    referrals = db.query(AdmissionReferral).filter(
+        AdmissionReferral.hospital_id == current_doctor.hospital_id, AdmissionReferral.status == "pending"
+    ).order_by(AdmissionReferral.created_at.desc()).all()
+
+    out = []
+    for r in referrals:
+        patient = db.query(Patient).filter(Patient.id == r.patient_id).first()
+        doctor = db.query(Doctor).filter(Doctor.id == r.referred_by).first()
+        if not patient:
+            continue
+        out.append({
+            "referral_id": r.id, "patient_id": patient.id, "patient_name": patient.name,
+            "patient_uid": patient.patient_uid, "phone": patient.phone,
+            "referred_by_name": f"{doctor.title} {doctor.name}" if doctor else "Unknown",
+            "reason": r.reason, "created_at": r.created_at.isoformat(),
+        })
+    return out
+
+
+@router.delete("/referrals/{referral_id}")
+def cancel_referral(referral_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    r = db.query(AdmissionReferral).filter(
+        AdmissionReferral.id == referral_id, AdmissionReferral.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    r.status = "cancelled"
+    db.commit()
+    return {"message": "Referral cancelled"}
+
+
+@router.get("/test-catalog")
+def test_catalog_for_ward(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    from app.models.test_catalog import TestCatalogItem
+    items = db.query(TestCatalogItem).filter(
+        TestCatalogItem.hospital_id == current_doctor.hospital_id, TestCatalogItem.is_active == True
+    ).order_by(TestCatalogItem.name).all()
+    return [{"id": t.id, "name": t.name, "fee": t.fee, "category": t.category} for t in items]
+
+
+@router.get("/medicine-forms")
+def list_medicine_forms(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    rows = db.query(HospitalMedicine.dosage_forms).filter(
+        HospitalMedicine.hospital_id == current_doctor.hospital_id,
+        HospitalMedicine.is_active == True,
+        HospitalMedicine.dosage_forms.isnot(None),
+    ).distinct().all()
+    return sorted({r[0] for r in rows if r[0]})
+
+
+@router.get("/medicine-catalog")
+def medicine_catalog_for_ward(dosage_form: str = "", current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    query = db.query(HospitalMedicine).filter(
+        HospitalMedicine.hospital_id == current_doctor.hospital_id,
+        HospitalMedicine.is_active == True,
+    )
+    if dosage_form:
+        query = query.filter(HospitalMedicine.dosage_forms == dosage_form)
+    items = query.order_by(HospitalMedicine.generic_name).all()
+    return [
+        {
+            "id": m.id,
+            "display_name": f"{m.brand_name or m.generic_name}" + (f" {m.strength}" if m.strength else ""),
+            "generic_name": m.generic_name,
+            "strength": m.strength,
+            "price": (m.price_per_pack or 0) / m.pack_size if m.billing_mode == "per_pack" and m.pack_size else (m.price or m.price_per_pack or 0),
+        }
+        for m in items
+    ]
+
+
+@router.get("/ward-types/{ward_type_id}/beds")
+def list_ward_type_beds(ward_type_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Auto-generated bed labels (e.g. GEN-1, GEN-2...) — admin only sets the bed COUNT,
+    labels/numbering are computed, never manually entered."""
+    wt = db.query(AdmissionWardType).filter(
+        AdmissionWardType.id == ward_type_id, AdmissionWardType.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not wt:
+        raise HTTPException(status_code=404, detail="Ward type not found")
+
+    occupied_labels = {
+        a.bed_number for a in db.query(Admission).filter(
+            Admission.ward_type_id == wt.id, Admission.status == "admitted"
+        ).all()
+    }
+    labels = _bed_labels_for_ward_type(wt)
+    return [{"label": l, "occupied": l in occupied_labels} for l in labels]
 
 
 @router.get("/ward-types", response_model=list[WardTypeOut])
@@ -209,10 +416,13 @@ def delete_ward_type(ward_type_id: int, current_doctor: Doctor = Depends(get_cur
 
 
 @router.get("/active")
-def list_active_admissions(search: str = "", current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    admissions = db.query(Admission).filter(
+def list_active_admissions(search: str = "", ward_type_id: int = None, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    query = db.query(Admission).filter(
         Admission.hospital_id == current_doctor.hospital_id, Admission.status == "admitted"
-    ).order_by(Admission.admission_date.desc()).all()
+    )
+    if ward_type_id:
+        query = query.filter(Admission.ward_type_id == ward_type_id)
+    admissions = query.order_by(Admission.admission_date.desc()).all()
 
     out = []
     for a in admissions:
@@ -254,7 +464,7 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
     tests_out = [{"id": t.id, "test_name": t.test_name, "status": t.status, "price": t.price} for t in tests]
 
     charge_total = sum(c.amount * c.quantity for c in charges)
-    room_total = _room_total(db, a)
+    room_breakdown, room_total = _room_charge_breakdown(db, a)
 
     return {
         "id": a.public_token, "status": a.status, "ward": a.ward, "bed_number": a.bed_number,
@@ -268,10 +478,105 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         "charges": charges_out,
         "tests": tests_out,
         "bill": {
-            "room_total": room_total, "charges_total": charge_total,
+            "room_total": room_total, "room_breakdown": room_breakdown, "charges_total": charge_total,
             "grand_total": room_total + charge_total,
         }
     }
+
+
+@router.get("/token-for/{admission_id}")
+def token_for_admission(admission_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Used by the notification bell to deep-link a ward_change_request into admission-detail.html,
+    which is addressed by public_token rather than the internal id carried on the notification."""
+    a = db.query(Admission).filter(Admission.id == admission_id, Admission.hospital_id == current_doctor.hospital_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Admission not found")
+    return {"token": a.public_token}
+
+
+@router.post("/{admission_id}/request-ward-change")
+def request_ward_change(admission_id: str, body: RequestWardChangeIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Doctor or nurse flags that a patient should be moved to a different ward — this only
+    notifies reception, it does not move anyone. Reception makes the actual change via /change-ward."""
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="Patient is not currently admitted")
+    ward_type = db.query(AdmissionWardType).filter(
+        AdmissionWardType.id == body.requested_ward_type_id, AdmissionWardType.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not ward_type:
+        raise HTTPException(status_code=404, detail="Ward type not found")
+    patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+    notify_ward_change_request(
+        db, hospital_id=current_doctor.hospital_id, admission_id=a.id,
+        patient_name=patient.name if patient else "Unknown patient",
+        requested_ward_name=ward_type.name,
+        requested_by_name=f"{current_doctor.title} {current_doctor.name}",
+        note=body.note,
+    )
+    db.commit()
+    return {"message": "Reception has been notified"}
+
+
+@router.post("/{admission_id}/change-ward")
+def change_ward(admission_id: str, body: ChangeWardIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Reception/admin actually moves the patient: closes the current ward-stay segment and
+    opens a new one at the new ward's rate. Vacancy counts update automatically since they're
+    computed live from Admission.ward_type_id, which this also updates."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="Patient is not currently admitted")
+
+    new_ward_type = db.query(AdmissionWardType).filter(
+        AdmissionWardType.id == body.ward_type_id, AdmissionWardType.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not new_ward_type:
+        raise HTTPException(status_code=404, detail="Ward type not found")
+    if new_ward_type.id == a.ward_type_id:
+        raise HTTPException(status_code=400, detail="Patient is already in this ward")
+
+    occupied_labels = {
+        a.bed_number for a in db.query(Admission).filter(
+            Admission.ward_type_id == new_ward_type.id, Admission.status == "admitted"
+        ).all()
+    }
+    if len(occupied_labels) >= new_ward_type.total_beds:
+        raise HTTPException(status_code=400, detail=f"No beds available in {new_ward_type.name}")
+    valid_labels = set(_bed_labels_for_ward_type(new_ward_type))
+    if not body.bed_number or body.bed_number not in valid_labels:
+        raise HTTPException(status_code=400, detail="Please select a valid bed")
+    if body.bed_number in occupied_labels:
+        raise HTTPException(status_code=400, detail=f"Bed {body.bed_number} is already occupied — pick another")
+
+    now = now_ist_naive()
+    current_stay = db.query(AdmissionWardStay).filter(
+        AdmissionWardStay.admission_id == a.id, AdmissionWardStay.end_date.is_(None)
+    ).order_by(AdmissionWardStay.start_date.desc()).first()
+    if current_stay:
+        current_stay.end_date = now
+    else:
+        # Legacy admission with no segments yet — close out its implied first segment now.
+        db.add(AdmissionWardStay(
+            admission_id=a.id, ward_type_id=a.ward_type_id, ward_name=a.ward, bed_number=a.bed_number,
+            daily_charge=_current_daily_rate(db, a), start_date=a.admission_date, end_date=now,
+        ))
+
+    db.add(AdmissionWardStay(
+        admission_id=a.id, ward_type_id=new_ward_type.id, ward_name=new_ward_type.name,
+        bed_number=body.bed_number, daily_charge=new_ward_type.daily_charge, start_date=now,
+        changed_by=current_doctor.id,
+    ))
+
+    a.ward_type_id = new_ward_type.id
+    a.ward = new_ward_type.name
+    a.bed_number = body.bed_number
+    a.daily_room_charge = new_ward_type.daily_charge
+    db.commit()
+    return {"message": f"Moved to {new_ward_type.name}"}
 
 
 # ---------- Medications (MAR) ----------
@@ -316,7 +621,7 @@ def administer_dose(admission_id: str, order_id: int, body: AdministerDoseIn, cu
         if order.medicine_id:
             medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.medicine_id).first()
             if medicine:
-                deduct_stock_fefo(db, order.medicine_id, 1)
+                deduct_stock_fefo(db, order.medicine_id, 1, round_to_pack=False)
                 if medicine.billing_mode == "per_pack" and medicine.pack_size:
                     unit_price = (medicine.price_per_pack or 0) / medicine.pack_size
                 else:
@@ -342,6 +647,21 @@ def stop_medication(admission_id: str, order_id: int, current_doctor: Doctor = D
     order.is_active = False
     db.commit()
     return {"message": "Medication stopped"}
+
+
+@router.patch("/{admission_id}/medications/{order_id}/resume")
+def resume_medication(admission_id: str, order_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor or nurse can resume a medication")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="Cannot resume medications on a discharged admission")
+    order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Medication order not found")
+    order.is_active = True
+    db.commit()
+    return {"message": "Medication resumed"}
 
 
 # ---------- Charges (manual: procedures, misc) ----------

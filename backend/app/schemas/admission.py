@@ -17,6 +17,11 @@ class UpdateDiagnosisIn(BaseModel):
     diagnosis: str
 
 
+class SendToAdmissionIn(BaseModel):
+    patient_id: int
+    reason: Optional[str] = None
+
+
 class WardTypeCreateIn(BaseModel):
     name: str
     total_beds: int
@@ -70,6 +75,16 @@ class AddAdmissionTestIn(BaseModel):
     test_id: Optional[int] = None
     test_name: str
     price: float = 0
+
+
+class RequestWardChangeIn(BaseModel):
+    requested_ward_type_id: int
+    note: Optional[str] = None
+
+
+class ChangeWardIn(BaseModel):
+    ward_type_id: int
+    bed_number: str
 
 
 class DischargeIn(BaseModel):

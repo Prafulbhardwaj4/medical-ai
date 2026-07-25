@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Dashboard</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
+  <script src="../js/custom-select.js" defer></script>
   <style>
     /* Desktop-only tab layout (Home / Patients), scoped to this page only */
     @media (min-width: 901px) {
@@ -314,6 +315,25 @@
   </div>
 
   <!-- Add Patient Modal -->
+  <div class="modal-overlay" id="modal-send-admission">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h2>Send to Admission</h2>
+        <button class="modal-close" onclick="closeSendToAdmissionModal()">×</button>
+      </div>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:14px">This alerts reception that <strong id="sta-patient-name"></strong> needs to be admitted. They'll process it from there.</p>
+      <div class="form-group">
+        <label class="form-label">Reason (optional)</label>
+        <textarea class="form-control" id="sta-reason" rows="3"></textarea>
+      </div>
+      <div class="err-msg" id="sta-err"></div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="btn btn-outline" style="flex:1" onclick="closeSendToAdmissionModal()">Cancel</button>
+        <button class="btn btn-primary" style="flex:1" onclick="confirmSendToAdmission()">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="modal-add">
     <div class="modal">
       <div class="modal-header">
@@ -583,7 +603,10 @@
           <td data-label="Age / Gender">${p.age}y / ${capitalize(p.gender)}</td>
           <td data-label="Last Visit">${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
           <td data-label="Last Token">${p.last_token ? `<span class="badge badge-teal">${p.last_token}</span>` : '<span style="color:var(--slate-light)">—</span>'}</td>
-          <td data-label="" style="text-align:left"><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();goToPatient(${p.id}, '${p.url_token}')">Open →</button></td>
+          <td data-label="" style="text-align:left;display:flex;gap:6px">
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();goToPatient(${p.id}, '${p.url_token}')">Open →</button>
+            ${p.currently_admitted ? '' : `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openSendToAdmissionModal(${p.id}, ${JSON.stringify(p.name)})">Send to Admission</button>`}
+          </td>
         </tr>
       `).join("");
     }
@@ -592,6 +615,30 @@
     function searchPatients(val) {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => loadPatients(val), 400);
+    }
+
+    let sendToAdmissionPatientId = null;
+    function openSendToAdmissionModal(patientId, patientName) {
+      sendToAdmissionPatientId = patientId;
+      document.getElementById("sta-patient-name").textContent = patientName;
+      document.getElementById("sta-reason").value = "";
+      document.getElementById("sta-err").textContent = "";
+      document.getElementById("modal-send-admission").classList.add("open");
+    }
+    function closeSendToAdmissionModal() {
+      document.getElementById("modal-send-admission").classList.remove("open");
+    }
+    async function confirmSendToAdmission() {
+      try {
+        await api("POST", "/admissions/referrals", {
+          patient_id: sendToAdmissionPatientId,
+          reason: document.getElementById("sta-reason").value.trim() || null,
+        });
+        toast("Sent to reception", "success");
+        closeSendToAdmissionModal();
+      } catch (e) {
+        document.getElementById("sta-err").textContent = e.message;
+      }
     }
 
     let pendingPatientId = null;

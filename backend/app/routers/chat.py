@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+import os
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,6 +16,12 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 ADMIN_ROLES = ["admin", "sub_admin"]
 STAFF_ROLES = ["doctor", "receptionist", "nurse", "lab", "pharmacy"]
 
+CHAT_UPLOAD_DIR = "chat_uploads"
+os.makedirs(CHAT_UPLOAD_DIR, exist_ok=True)
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10MB
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+ALLOWED_EXTENSIONS = IMAGE_EXTENSIONS | {".pdf", ".doc", ".docx"}
+
 
 def _serialize(m: ChatMessage, current_doctor: Doctor):
     return {
@@ -21,11 +31,58 @@ def _serialize(m: ChatMessage, current_doctor: Doctor):
         "is_mine": m.sender_id == current_doctor.id,
         "is_from_admin": m.sender_id != m.staff_id,
         "created_at": m.created_at.isoformat() if m.created_at else None,
+        "attachment_url": f"/chat/files/{m.attachment_filename}" if m.attachment_filename else None,
+        "attachment_name": m.attachment_name,
+        "attachment_type": m.attachment_type,
     }
 
 
 def _hospital_scope(current_doctor: Doctor, hospital_id: int | None):
     return current_doctor.hospital_id
+
+
+@router.post("/upload")
+def upload_chat_attachment(
+    file: UploadFile = File(...),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ADMIN_ROLES + STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    original_name = file.filename or "attachment"
+    ext = os.path.splitext(original_name)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported file type — images, PDF, or Word documents only")
+
+    content = file.file.read()
+    if len(content) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(status_code=400, detail="File is too large (10MB max)")
+
+    stored_filename = f"{uuid.uuid4().hex}{ext}"
+    with open(os.path.join(CHAT_UPLOAD_DIR, stored_filename), "wb") as f:
+        f.write(content)
+
+    return {
+        "attachment_filename": stored_filename,
+        "attachment_name": original_name,
+        "attachment_type": "image" if ext in IMAGE_EXTENSIONS else "file",
+    }
+
+
+@router.get("/files/{filename}")
+def get_chat_attachment(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    # Only someone in the same hospital as the message this file belongs to can fetch it.
+    msg = db.query(ChatMessage).filter(ChatMessage.attachment_filename == filename).first()
+    if not msg or msg.hospital_id != current_doctor.hospital_id:
+        raise HTTPException(status_code=404, detail="File not found")
+    path = os.path.join(CHAT_UPLOAD_DIR, filename)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(path, filename=msg.attachment_name or filename)
 
 
 @router.get("/threads")
@@ -98,7 +155,8 @@ def send_as_admin(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     body = (payload.get("message") or "").strip()
-    if not body:
+    attachment_filename = payload.get("attachment_filename")
+    if not body and not attachment_filename:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     staff = db.query(Doctor).filter(Doctor.id == staff_id).first()
@@ -112,6 +170,9 @@ def send_as_admin(
         staff_id=staff.id,
         sender_id=current_doctor.id,
         body=body,
+        attachment_filename=attachment_filename,
+        attachment_name=payload.get("attachment_name"),
+        attachment_type=payload.get("attachment_type"),
         is_read_by_admin=True,
         is_read_by_staff=False,
         created_at=now_ist_naive()
@@ -149,7 +210,8 @@ def send_as_staff(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     body = (payload.get("message") or "").strip()
-    if not body:
+    attachment_filename = payload.get("attachment_filename")
+    if not body and not attachment_filename:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     m = ChatMessage(
@@ -157,6 +219,9 @@ def send_as_staff(
         staff_id=current_doctor.id,
         sender_id=current_doctor.id,
         body=body,
+        attachment_filename=attachment_filename,
+        attachment_name=payload.get("attachment_name"),
+        attachment_type=payload.get("attachment_type"),
         is_read_by_admin=False,
         is_read_by_staff=True,
         created_at=now_ist_naive()

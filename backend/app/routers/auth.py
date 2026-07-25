@@ -94,6 +94,10 @@ def update_me(
     current_doctor.name = name
     current_doctor.phone = phone
     current_doctor.registration_number = (payload.registration_number or "").strip()
+    if current_doctor.role.value == "doctor":
+        current_doctor.title = "Dr."
+    elif payload.title in ("Mr.", "Ms."):
+        current_doctor.title = payload.title
     db.commit()
     db.refresh(current_doctor)
 

@@ -171,6 +171,11 @@ def list_patients(
 
     patient_ids = [p.id for p in patients]
 
+    from app.models.admission import Admission
+    admitted_ids = {row[0] for row in db.query(Admission.patient_id).filter(
+        Admission.patient_id.in_(patient_ids), Admission.status == "admitted"
+    ).all()}
+
     latest_consult_subq = (
         db.query(
             Consultation.patient_id,
@@ -241,6 +246,7 @@ def list_patients(
             last_visit=last_visit,
             last_token=last_token,
             checked_in_today=checked_in_today,
+            currently_admitted=p.id in admitted_ids,
         ))
     return result
 

@@ -30,7 +30,11 @@
     `;
 
     if (profileBtn && profileBtn.parentNode) {
-      profileBtn.parentNode.insertBefore(trigger, profileBtn);
+      const rightGroup = document.createElement("div");
+      rightGroup.className = "topbar-right-group";
+      profileBtn.parentNode.insertBefore(rightGroup, profileBtn);
+      rightGroup.appendChild(trigger);
+      rightGroup.appendChild(profileBtn);
     } else {
       document.body.appendChild(trigger); // fallback if a page's topbar markup differs
     }
@@ -106,6 +110,42 @@
     return new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" });
   }
 
+  function iconAttach() {
+    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path></svg>`;
+  }
+
+  async function pickAndSendAttachment(sendFn) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,.pdf,.doc,.docx";
+    input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", async () => {
+      const file = input.files[0];
+      document.body.removeChild(input);
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { toast("File is too large (10MB max)", "error"); return; }
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const uploaded = await api("POST", "/chat/upload", fd, true);
+        await sendFn(uploaded);
+      } catch (e) {
+        toast(e.message || "Could not upload file.", "error");
+      }
+    });
+    input.click();
+  }
+
+  async function loadAuthImage(url, imgEl) {
+    try {
+      const res = await fetch(BASE + url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      imgEl.src = window.URL.createObjectURL(blob);
+    } catch (e) { /* silent */ }
+  }
+
   // ---------- Staff side: single thread with Admin ----------
   async function renderStaffThread() {
     document.getElementById("chat-back-btn").style.display = "none";
@@ -113,12 +153,14 @@
     body.innerHTML = `
       <div class="chat-messages-wrap" id="chat-messages-wrap"><p style="padding:20px;text-align:center;color:var(--slate);font-size:13px">Loading…</p></div>
       <div class="chat-compose">
+        <button class="chat-compose-file-btn" id="chat-file-btn" type="button" title="Attach file">${iconAttach()}</button>
         <input type="text" id="chat-input" placeholder="Message admin..." maxlength="2000" />
         <button id="chat-send-btn">Send</button>
       </div>
     `;
     document.getElementById("chat-send-btn").addEventListener("click", sendStaffMessage);
     document.getElementById("chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendStaffMessage(); });
+    document.getElementById("chat-file-btn").addEventListener("click", () => pickAndSendAttachment(sendStaffAttachment));
 
     try {
       const data = await api("GET", "/chat/messages");
@@ -143,32 +185,78 @@
     }
   }
 
+  async function sendStaffAttachment(uploaded) {
+    try {
+      await api("POST", "/chat/messages", { message: "", attachment_filename: uploaded.attachment_filename, attachment_name: uploaded.attachment_name, attachment_type: uploaded.attachment_type });
+      const data = await api("GET", "/chat/messages");
+      renderMessages(data.messages);
+    } catch (e) {
+      toast(e.message || "Could not send file.", "error");
+    }
+  }
+
   // ---------- Admin side: thread list + individual thread ----------
+  let threadsCache = [];
+  let threadFilter = "all";
+  let threadSearchTerm = "";
+
+  function threadInitials(name) {
+    return (name || "").trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || "").join("");
+  }
+
   async function renderAdminThreadList() {
     document.getElementById("chat-panel-title").textContent = "Staff Chats";
     document.getElementById("chat-back-btn").style.display = "none";
     const body = document.getElementById("chat-panel-body");
-    body.innerHTML = `<p style="padding:20px;text-align:center;color:var(--slate);font-size:13px">Loading…</p>`;
+    body.innerHTML = `
+      <div class="chat-search-bar"><input type="text" id="chat-thread-search" placeholder="Search staff..." /></div>
+      <div class="chat-filter-tabs">
+        <button class="chat-filter-tab active" data-filter="all">All</button>
+        <button class="chat-filter-tab" data-filter="unread">Unread</button>
+      </div>
+      <div class="chat-thread-list" id="chat-thread-list"><p style="padding:20px;text-align:center;color:var(--slate);font-size:13px">Loading…</p></div>
+    `;
+    document.getElementById("chat-thread-search").addEventListener("input", (e) => {
+      threadSearchTerm = e.target.value.trim().toLowerCase();
+      renderThreadListFiltered();
+    });
+    body.querySelectorAll(".chat-filter-tab").forEach(btn => {
+      btn.addEventListener("click", () => {
+        threadFilter = btn.dataset.filter;
+        body.querySelectorAll(".chat-filter-tab").forEach(b => b.classList.toggle("active", b === btn));
+        renderThreadListFiltered();
+      });
+    });
     try {
-      const threads = await api("GET", "/chat/threads");
-      if (!threads.length) {
-        body.innerHTML = `<p style="padding:20px;text-align:center;color:var(--slate);font-size:13px">No staff to chat with yet.</p>`;
-        return;
-      }
-      body.innerHTML = threads.map(t => `
-        <div class="chat-thread-item ${t.unread_count > 0 ? 'unread' : ''}" onclick="window.__chatWidgetOpenThread(${t.staff_id})">
-          <div>
-            <div class="chat-thread-name">${sanitize(t.name)}</div>
-            <div class="chat-thread-role">${sanitize(t.role)}</div>
-            ${t.last_message ? `<div class="chat-thread-preview">${sanitize(t.last_message)}</div>` : ''}
-          </div>
-          ${t.unread_count > 0 ? `<span class="chat-thread-unread-dot">${t.unread_count}</span>` : ''}
-        </div>
-      `).join("");
+      threadsCache = await api("GET", "/chat/threads");
+      renderThreadListFiltered();
       refreshUnreadBadge();
     } catch (e) {
-      body.innerHTML = `<p style="color:var(--danger);text-align:center;font-size:13px;padding:20px">Could not load chats.</p>`;
+      document.getElementById("chat-thread-list").innerHTML = `<p style="color:var(--danger);text-align:center;font-size:13px;padding:20px">Could not load chats.</p>`;
     }
+  }
+
+  function renderThreadListFiltered() {
+    const list = document.getElementById("chat-thread-list");
+    if (!list) return;
+    let threads = threadsCache;
+    if (threadFilter === "unread") threads = threads.filter(t => t.unread_count > 0);
+    if (threadSearchTerm) threads = threads.filter(t => t.name.toLowerCase().includes(threadSearchTerm) || t.role.toLowerCase().includes(threadSearchTerm));
+    if (!threads.length) {
+      list.innerHTML = `<p style="padding:20px;text-align:center;color:var(--slate);font-size:13px">${threadsCache.length ? 'No matching staff.' : 'No staff to chat with yet.'}</p>`;
+      return;
+    }
+    list.innerHTML = threads.map(t => `
+      <div class="chat-thread-item ${t.unread_count > 0 ? 'unread' : ''}" onclick="window.__chatWidgetOpenThread(${t.staff_id})">
+        <div class="chat-thread-avatar">${threadInitials(t.name)}</div>
+        <div class="chat-thread-info">
+          <div class="chat-thread-name">${sanitize(t.name)}</div>
+          <div class="chat-thread-role">${sanitize(t.role)}</div>
+          ${t.last_message ? `<div class="chat-thread-preview">${sanitize(t.last_message)}</div>` : ''}
+        </div>
+        ${t.unread_count > 0 ? `<span class="chat-thread-unread-dot">${t.unread_count}</span>` : ''}
+      </div>
+    `).join("");
   }
 
   window.__chatWidgetOpenThread = async function (staffId) {
@@ -178,12 +266,14 @@
     body.innerHTML = `
       <div class="chat-messages-wrap" id="chat-messages-wrap"><p style="padding:20px;text-align:center;color:var(--slate);font-size:13px">Loading…</p></div>
       <div class="chat-compose">
+        <button class="chat-compose-file-btn" id="chat-file-btn" type="button" title="Attach file">${iconAttach()}</button>
         <input type="text" id="chat-input" placeholder="Type a message..." maxlength="2000" />
         <button id="chat-send-btn">Send</button>
       </div>
     `;
     document.getElementById("chat-send-btn").addEventListener("click", sendAdminMessage);
     document.getElementById("chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendAdminMessage(); });
+    document.getElementById("chat-file-btn").addEventListener("click", () => pickAndSendAttachment(sendAdminAttachment));
     try {
       const data = await api("GET", `/chat/threads/${staffId}/messages`);
       document.getElementById("chat-panel-title").textContent = data.staff_name;
@@ -208,6 +298,25 @@
     }
   }
 
+  async function sendAdminAttachment(uploaded) {
+    if (currentThreadStaffId === null) return;
+    try {
+      await api("POST", `/chat/threads/${currentThreadStaffId}/messages`, { message: "", attachment_filename: uploaded.attachment_filename, attachment_name: uploaded.attachment_name, attachment_type: uploaded.attachment_type });
+      const data = await api("GET", `/chat/threads/${currentThreadStaffId}/messages`);
+      renderMessages(data.messages);
+    } catch (e) {
+      toast(e.message || "Could not send file.", "error");
+    }
+  }
+
+  function renderAttachment(m) {
+    if (!m.attachment_url) return "";
+    if (m.attachment_type === "image") {
+      return `<img class="chat-attachment-img" data-attach-url="${m.attachment_url}" alt="${sanitize(m.attachment_name || 'attachment')}" />`;
+    }
+    return `<a class="chat-attachment" href="#" onclick="downloadFile('${m.attachment_url}', '${(m.attachment_name || 'file').replace(/'/g, "\\'")}');return false;">📎 ${sanitize(m.attachment_name || 'file')}</a>`;
+  }
+
   function renderMessages(messages) {
     const wrap = document.getElementById("chat-messages-wrap");
     if (!wrap) return;
@@ -217,11 +326,13 @@
     }
     wrap.innerHTML = messages.map(m => `
       <div class="chat-bubble ${m.is_mine ? 'mine' : 'theirs'}">
-        ${sanitize(m.body)}
+        ${renderAttachment(m)}
+        ${m.body ? sanitize(m.body) : ""}
         <span class="chat-bubble-time">${fmtTime(m.created_at)}</span>
       </div>
     `).join("");
     wrap.scrollTop = wrap.scrollHeight;
+    wrap.querySelectorAll("img[data-attach-url]").forEach(img => loadAuthImage(img.dataset.attachUrl, img));
   }
 
   if (document.readyState === "loading") {
