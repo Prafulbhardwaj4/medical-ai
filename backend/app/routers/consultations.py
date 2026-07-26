@@ -136,15 +136,30 @@ def get_analytics(
                 rx_count += 1
     top_medicines = sorted(medicine_counts.items(), key=lambda x: x[1], reverse=True)[:8]
 
-    # Tests ordered
+    # Tests ordered — normalize away a trailing " test"/" tests" suffix and casing
+    # differences so "CBC" and "CBC Test" (or "cbc test") count as the same test
+    # instead of splitting into separate rows.
     test_counts = {}
     for c in all_consultations:
         tests = json.loads(c.tests or "[]")
         for t in tests:
-            t = t.strip().capitalize()
-            if t:
-                test_counts[t] = test_counts.get(t, 0) + 1
-    top_tests = sorted(test_counts.items(), key=lambda x: x[1], reverse=True)[:6]
+            t = t.strip()
+            if not t:
+                continue
+            lowered = t.lower()
+            for suffix in (" tests", " test"):
+                if lowered.endswith(suffix):
+                    t = t[:-len(suffix)].strip()
+                    break
+            if not t:
+                continue
+            key = t.lower()
+            display = t if t.isupper() else t.capitalize()
+            if key not in test_counts:
+                test_counts[key] = {"display": display, "count": 0}
+            test_counts[key]["count"] += 1
+    top_tests = sorted(test_counts.values(), key=lambda x: x["count"], reverse=True)[:6]
+    top_tests = [(v["display"], v["count"]) for v in top_tests]
 
     return {
         "summary": {

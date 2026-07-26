@@ -210,6 +210,9 @@ def attendance_history(
     if role and role != "all":
         records = [r for r in records if staff.get(r.doctor_id) and staff[r.doctor_id].role.value == role]
 
+    records.sort(key=lambda r: (r.date, staff[r.doctor_id].name if r.doctor_id in staff else ""), reverse=False)
+    records.sort(key=lambda r: r.date, reverse=True)  # date desc is primary; name asc (just set) is the stable secondary key
+
     return [
         {
             "doctor_id": r.doctor_id,

@@ -1040,7 +1040,7 @@ def collect_test_payment_anyday(
         action="test_fees_collected_anyday",
         target_type="patient",
         target_id=patient_id,
-        target_label=f"Rs.{total} for {len(payable)} tests (late collection)",
+        target_label=f"Rs.{total:.2f} for {len(payable)} tests (late collection)",
         hospital_id=current_doctor.hospital_id
     )
     return {"charged": total, "count": len(payable)}
@@ -1137,7 +1137,7 @@ def collect_test_payment(
         action="test_fees_collected",
         target_type="patient",
         target_id=patient_id,
-        target_label=f"Rs.{total} for {len(orders)} tests",
+        target_label=f"Rs.{total:.2f} for {len(orders)} tests",
         hospital_id=current_doctor.hospital_id
     )
     return {"charged": total, "count": len(orders)}

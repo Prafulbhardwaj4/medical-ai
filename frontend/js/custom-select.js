@@ -21,6 +21,10 @@
     if (select.style.width) wrapper.style.width = select.style.width;
     if (select.style.maxWidth) wrapper.style.maxWidth = select.style.maxWidth;
     if (select.style.minWidth) wrapper.style.minWidth = select.style.minWidth;
+    if (select.style.margin) wrapper.style.margin = select.style.margin;
+    if (select.style.marginBottom) wrapper.style.marginBottom = select.style.marginBottom;
+    if (select.style.marginTop) wrapper.style.marginTop = select.style.marginTop;
+    if (select.style.flexShrink) wrapper.style.flexShrink = select.style.flexShrink;
     select.parentNode.insertBefore(wrapper, select);
     wrapper.appendChild(select);
     select.classList.add("cs-native");

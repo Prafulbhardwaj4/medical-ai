@@ -647,9 +647,9 @@
         if (data.status === "unknown") {
           el.innerHTML = `<span style="color:var(--slate-light)">Bed availability isn't set up for this hospital yet</span>`;
         } else if (data.status === "full") {
-          el.innerHTML = `<span style="color:var(--danger);font-weight:600">🔴 No beds available right now (0/${data.total_beds})</span>`;
+          el.innerHTML = `<span style="color:var(--danger);font-weight:600">🔴 Beds Not Available</span>`;
         } else {
-          el.innerHTML = `<span style="color:var(--teal);font-weight:600">🟢 ${data.vacant_beds} of ${data.total_beds} beds available</span>`;
+          el.innerHTML = `<span style="color:var(--teal);font-weight:600">🟢 Beds Available</span>`;
         }
       } catch (e) {
         el.innerHTML = `<span style="color:var(--danger)">Could not check bed availability right now.</span>`;

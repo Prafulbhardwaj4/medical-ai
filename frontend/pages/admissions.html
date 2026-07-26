@@ -389,6 +389,10 @@
 
     const isAdminTier = ["admin", "sub_admin"].includes(getDoctor()?.role);
     if (isAdminTier) {
+      document.getElementById("sidebar-doctor").style.display = "none";
+      document.getElementById("bottom-nav-doctor").style.display = "none";
+      document.getElementById("app-sidebar").style.display = "";
+      document.getElementById("app-bottom-nav").style.display = "";
       document.getElementById("btn-manage-rooms").style.display = "";
       document.getElementById("btn-admit-patient").style.display = "none";
       renderAdminNav("admissions");

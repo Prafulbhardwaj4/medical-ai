@@ -299,14 +299,18 @@
 
       <div id="pharmacy-stock-view" class="mobile-section">
         <div id="stock-low-stock-panel"
-          style="display:none;margin-bottom:14px;border:1px solid #fde68a;background:#fffbeb;border-radius:var(--radius);padding:14px 16px">
-          <div style="font-weight:700;color:#92400e;font-size:14px;margin-bottom:8px">📉 Low Stock</div>
-          <div id="stock-low-stock-list"></div>
+          style="display:none;margin-bottom:14px;border:1px solid #fde68a;background:#fffbeb;border-radius:var(--radius);padding:14px 16px;cursor:pointer" onclick="openPharmStockIssuesModal('low-stock')">
+          <div style="font-weight:700;color:#92400e;font-size:14px;display:flex;align-items:center;justify-content:space-between;gap:6px">
+            <span id="stock-low-stock-summary">📉 Low Stock</span>
+            <span style="font-size:12px;font-weight:600;text-decoration:underline">View</span>
+          </div>
         </div>
         <div id="stock-expiring-panel"
-          style="display:none;margin-bottom:20px;border:1px solid #fecaca;background:#fef2f2;border-radius:var(--radius);padding:14px 16px">
-          <div style="font-weight:700;color:#991b1b;font-size:14px;margin-bottom:8px">⚠ Expiring Soon / Expired</div>
-          <div id="stock-expiring-list"></div>
+          style="display:none;margin-bottom:20px;border:1px solid #fecaca;background:#fef2f2;border-radius:var(--radius);padding:14px 16px;cursor:pointer" onclick="openPharmStockIssuesModal('expiring')">
+          <div style="font-weight:700;color:#991b1b;font-size:14px;display:flex;align-items:center;justify-content:space-between;gap:6px">
+            <span id="stock-expiring-summary">⚠ Expiring Soon / Expired</span>
+            <span style="font-size:12px;font-weight:600;text-decoration:underline">View</span>
+          </div>
         </div>
 
         <div class="card">
@@ -327,6 +331,16 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <div class="modal-overlay" id="modal-pharm-stock-issues">
+    <div class="modal" style="max-width:480px;max-height:80vh;overflow-y:auto">
+      <div class="modal-header">
+        <h2 id="pharm-issue-modal-title">Low Stock</h2>
+        <button class="modal-close" onclick="document.getElementById('modal-pharm-stock-issues').classList.remove('open')">&times;</button>
+      </div>
+      <div id="pharm-issue-modal-body"></div>
+    </div>
   </div>
 
   <!-- Add Stock Modal -->
@@ -950,7 +964,11 @@
         el.innerHTML = '<p style="color:var(--slate-light)">No medicines match that filter.</p>';
         return;
       }
-      el.innerHTML = visibleOrders.map(m => {
+     el.innerHTML = visibleOrders.filter(m => {
+        // A substituted-out original is fully replaced by its substitute, not shown dimmed alongside it.
+        const wasSubstituted = !m.included && currentMedicineOrders.some(o => o.substitute_for_id === m.id);
+        return !wasSubstituted;
+      }).map(m => {
         const locked = m.status === 'paid' || m.status === 'dispensed';
         const checkboxLocked = locked;
         const notInCatalog = m.included && m.status === 'advised' && !m.catalog_medicine_id;
@@ -1123,6 +1141,12 @@
           quantity: qty,
           substitute_for_id: addMedicineSubstituteFor
         });
+        if (addMedicineSubstituteFor) {
+          // Backend already excluded the original from billing — mirror that in the
+          // local cache immediately instead of waiting for a full refetch on reopen.
+          const origIdx = currentMedicineOrders.findIndex(m => m.id === addMedicineSubstituteFor);
+          if (origIdx > -1) currentMedicineOrders[origIdx] = { ...currentMedicineOrders[origIdx], included: false };
+        }
         currentMedicineOrders.push(newOrder);
         renderMedicineOrders();
         updateRxActionButtons(false);
@@ -1367,30 +1391,57 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
+    let pharmLowStockCache = [];
+    let pharmExpiringCache = [];
+
     function renderStockAlerts(expiring, lowStock) {
+      pharmLowStockCache = lowStock;
+      pharmExpiringCache = expiring;
+
       const lowPanel = document.getElementById('stock-low-stock-panel');
-      const lowList = document.getElementById('stock-low-stock-list');
       if (lowStock.length) {
         lowPanel.style.display = 'block';
-        lowList.innerHTML = lowStock.map(i => `
-          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
-            <span>${sanitize(i.medicine_name)}</span>
-            <span style="font-weight:600;color:${i.is_out_of_stock ? '#991b1b' : '#92400e'}">${i.is_out_of_stock ? 'Out of stock' : i.stock_quantity + ' left'}</span>
-          </div>
-        `).join('');
+        const outOfStockCount = lowStock.filter(i => i.is_out_of_stock).length;
+        const lowStockCount = lowStock.length - outOfStockCount;
+        const parts = [];
+        if (outOfStockCount) parts.push(`${outOfStockCount} Out of Stock`);
+        if (lowStockCount) parts.push(`${lowStockCount} Low Stock`);
+        document.getElementById('stock-low-stock-summary').textContent = `📉 ${parts.join(', ')}`;
       } else { lowPanel.style.display = 'none'; }
 
       const expPanel = document.getElementById('stock-expiring-panel');
-      const expList = document.getElementById('stock-expiring-list');
       if (expiring.length) {
         expPanel.style.display = 'block';
-        expList.innerHTML = expiring.map(i => `
-          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+        const expiredCount = expiring.filter(i => i.is_expired).length;
+        const expiringCount = expiring.length - expiredCount;
+        const parts = [];
+        if (expiredCount) parts.push(`${expiredCount} Expired`);
+        if (expiringCount) parts.push(`${expiringCount} Expiring Soon`);
+        document.getElementById('stock-expiring-summary').textContent = `⚠ ${parts.join(', ')}`;
+      } else { expPanel.style.display = 'none'; }
+    }
+
+    function openPharmStockIssuesModal(kind) {
+      const title = document.getElementById('pharm-issue-modal-title');
+      const body = document.getElementById('pharm-issue-modal-body');
+      if (kind === 'low-stock') {
+        title.textContent = 'Low Stock';
+        body.innerHTML = pharmLowStockCache.map(i => `
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px">
+            <span>${sanitize(i.medicine_name)}</span>
+            <span style="font-weight:600;color:${i.is_out_of_stock ? '#991b1b' : '#92400e'}">${i.is_out_of_stock ? 'Out of stock' : i.stock_quantity + ' left'}</span>
+          </div>
+        `).join('') || '<p style="color:var(--slate-light)">Nothing here.</p>';
+      } else {
+        title.textContent = 'Expiring Soon / Expired';
+        body.innerHTML = pharmExpiringCache.map(i => `
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px">
             <span>${sanitize(i.medicine_name)}${i.batch_number ? ' · Lot ' + sanitize(i.batch_number) : ''} — ${i.quantity} units</span>
             <span style="font-weight:600;color:${i.is_expired ? '#991b1b' : '#b45309'}">${i.is_expired ? 'Expired' : i.days_left + 'd left'}</span>
           </div>
-        `).join('');
-      } else { expPanel.style.display = 'none'; }
+        `).join('') || '<p style="color:var(--slate-light)">Nothing here.</p>';
+      }
+      document.getElementById('modal-pharm-stock-issues').classList.add('open');
     }
 
     function renderStockMedicines() {

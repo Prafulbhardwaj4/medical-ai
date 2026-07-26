@@ -421,7 +421,7 @@
                   <td>${new Date(r.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</td>
                   <td>${sanitize(r.name)}</td>
                   <td>${sanitize(r.role || '')}</td>
-                  <td>${badgeFor(r.status)}${r.auto_marked ? '<span style="font-size:11px;color:var(--slate-light);margin-left:4px">(auto)</span>' : ''}</td>
+                  <td>${badgeFor(r.status)}</td>
                   <td>${r.shift_started_at ? new Date(r.shift_started_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                 </tr>
               `).join('')}

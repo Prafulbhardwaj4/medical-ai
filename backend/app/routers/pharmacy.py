@@ -412,7 +412,7 @@ def collect_medicine_payment(
         action="medicine_fees_collected",
         target_type="consultation",
         target_id=consultation.id,
-        target_label=f"Rs.{total} for {charged_count} medicines" + (f" ({len(skipped)} skipped — out of stock)" if skipped else ""),
+        target_label=f"Rs.{total:.2f} for {charged_count} medicines" + (f" ({len(skipped)} skipped — out of stock)" if skipped else ""),
         hospital_id=current_doctor.hospital_id
     )
     return {"charged": total, "count": charged_count, "skipped": skipped}

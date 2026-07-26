@@ -1079,8 +1079,13 @@
       const panel = document.getElementById('low-stock-panel');
       if (!items.length) { panel.style.display = 'none'; return; }
       panel.style.display = 'block';
-      document.getElementById('low-stock-count').textContent = items.length;
-      document.getElementById('low-stock-plural').textContent = items.length === 1 ? '' : 's';
+      const outOfStockCount = items.filter(i => i.is_out_of_stock).length;
+      const lowStockCount = items.length - outOfStockCount;
+      const parts = [];
+      if (outOfStockCount) parts.push(`${outOfStockCount} Out of Stock`);
+      if (lowStockCount) parts.push(`${lowStockCount} Low Stock`);
+      document.getElementById('low-stock-panel').querySelector('span').innerHTML =
+        `📉 ${parts.join(', ')}`;
     }
 
     function renderExpiringSoon(items) {
@@ -1088,8 +1093,13 @@
       const panel = document.getElementById('expiring-soon-panel');
       if (!items.length) { panel.style.display = 'none'; return; }
       panel.style.display = 'block';
-      document.getElementById('expiring-soon-count').textContent = items.length;
-      document.getElementById('expiring-soon-plural').textContent = items.length === 1 ? '' : 's';
+      const expiredCount = items.filter(i => i.is_expired).length;
+      const expiringCount = items.length - expiredCount;
+      const parts = [];
+      if (expiredCount) parts.push(`${expiredCount} Expired`);
+      if (expiringCount) parts.push(`${expiringCount} Expiring Soon`);
+      document.getElementById('expiring-soon-panel').querySelector('span').innerHTML =
+        `⚠ ${parts.join(', ')}`;
     }
 
     function openIssueListModal(kind) {

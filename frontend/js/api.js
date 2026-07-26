@@ -79,7 +79,16 @@ async function api(method, path, body = null, isFormData = false, silent = false
   }
 
   try {
-    const res = await fetch(BASE + path, opts);
+    let res;
+    try {
+      res = await fetch(BASE + path, opts);
+    } catch (networkErr) {
+      // Likely a Render cold-start: the instance was asleep and the first request
+      // timed out before the app (and CORS headers) were even up. Wait a moment
+      // for it to finish waking up and retry once, silently, before giving up.
+      await new Promise(r => setTimeout(r, 3000));
+      res = await fetch(BASE + path, opts);
+    }
 
     if (res.status === 401) {
       clearSession();
