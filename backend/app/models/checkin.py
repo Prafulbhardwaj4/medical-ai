@@ -16,10 +16,11 @@ class Checkin(Base):
     created_at = Column(DateTime, default=now_ist_naive)
 
     nurse_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
-    vitals_status = Column(String, default="none", nullable=False)
+    vitals_status = Column(String, default="none", nullable=False)  # none / pending / sent_back / done
     vitals_data = Column(Text, nullable=True)
     vitals_recorded_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     vitals_recorded_at = Column(DateTime, nullable=True)
+    vitals_recheck_request = Column(Text, nullable=True)  # what the doctor asked to be rechecked, while vitals_status == "sent_back"
 
     post_consult_status = Column(String, default="none", nullable=False)
     post_consult_note = Column(Text, nullable=True)
@@ -36,3 +37,6 @@ class Checkin(Base):
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
     payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi" — how the consultation fee was collected
     is_emergency = Column(Boolean, default=False, nullable=False)  # Emergency Intake — skipped payment/registration gate
+
+    is_returned = Column(Boolean, default=False, nullable=False)  # Same-Day Return Queue — sent back to doctor without new token/payment
+    returned_at = Column(DateTime, nullable=True)

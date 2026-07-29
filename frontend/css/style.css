@@ -802,6 +802,8 @@ tbody tr:hover { background: var(--smoke); }
   box-shadow: 0 0 0 4px rgba(239,68,68,0.06);
 }
 
+.recorder-wrap.paused .record-btn { opacity: 0.5; }
+
 .record-btn {
   width: 76px;
   height: 76px;

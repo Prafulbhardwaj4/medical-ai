@@ -427,6 +427,8 @@
           </div>
         </div>
 
+        <button id="btn-requeue" class="btn btn-outline" style="display:none;margin-top:8px" onclick="">Send back to doctor's queue (same-day return)</button>
+
       </div>
 
       <div class="card" id="pending-payments-card" style="margin-top:20px">
@@ -967,7 +969,32 @@
       renderBillingRow(getDoctor()?.billing_enabled, t.total_fee, t.is_paid);
       ['search', 'room', 'doctor'].forEach(s => document.getElementById(`step-${s}`).style.display = 'none');
       document.getElementById('step-token').style.display = '';
-      toast('Already checked in today — showing existing token.', 'info');
+
+      const returnBtn = document.getElementById('btn-requeue');
+      if (returnBtn) {
+        if (t.is_consulted && !t.is_returned) {
+          returnBtn.style.display = '';
+          returnBtn.onclick = () => requeueCheckin(t.checkin_id);
+        } else {
+          returnBtn.style.display = 'none';
+        }
+      }
+
+      if (t.is_returned) {
+        toast('Already checked in today — patient is back in the doctor\'s Return Queue.', 'info');
+      } else if (t.is_consulted) {
+        toast('Already checked in today — this patient has already been consulted.', 'info');
+      } else {
+        toast('Already checked in today — showing existing token.', 'info');
+      }
+    }
+
+    async function requeueCheckin(checkinId) {
+      try {
+        await api('POST', `/patients/requeue/${checkinId}`);
+        toast('Patient sent back to the doctor\'s Return Queue — no new token needed.', 'success');
+        document.getElementById('btn-requeue').style.display = 'none';
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     function isRecPresent() {
@@ -1056,7 +1083,7 @@
         const sel = document.getElementById('doc-select');
         const defaultId = ordered[0].id;
         sel.innerHTML = ordered.map(d =>
-          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}${d.status === 'on_break' ? ' (On Break)' : ''}</option>`
+          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}${d.status === 'on_break' ? ' (On Break)' : ''}${d.location === 'on_rounds' ? ' (On Rounds)' : ''}</option>`
         ).join('');
         document.getElementById('doc-step-room-name').textContent = selectedRoom.display || selectedRoom.name || `Room ${selectedRoom.room_number}`;
         document.getElementById('fee-group').style.display = getDoctor()?.billing_enabled ? '' : 'none';

@@ -10,7 +10,8 @@ class AttendanceRecord(Base):
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     date = Column(Date, nullable=False, index=True)
-    status = Column(String, nullable=False, default="present")  # present / on_break / absent
+    status = Column(String, nullable=False, default="present")  # present / on_break / off_duty / away_emergency (system-set only, never via manual toggle)
+    doctor_location = Column(String, nullable=True)  # in_cabin / on_rounds — only meaningful while status == "present"; cleared for other statuses
     marked_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     room_number = Column(String, nullable=True)
     room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)

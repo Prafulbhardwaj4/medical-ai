@@ -28,6 +28,7 @@ from app.models.admission import Admission
 from app.models.admission_deposit import AdmissionDepositTopupRequest
 from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
+from app.models.opd_referral import OpdReferral
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -479,21 +480,24 @@ def hospital_doctors(
         Doctor.is_active == True
     ).all()
 
-    present_ids = set(
-        r[0] for r in db.query(AttendanceRecord.doctor_id).filter(
+    today_attendance = {
+        r.doctor_id: r for r in db.query(AttendanceRecord).filter(
             AttendanceRecord.hospital_id == current_doctor.hospital_id,
-            AttendanceRecord.date == ist_today(),
-            AttendanceRecord.status == "present"
+            AttendanceRecord.date == ist_today()
         ).all()
-    )
+    }
+    present_ids = {doc_id for doc_id, r in today_attendance.items() if r.status == "present"}
 
     result = []
     for d in doctors:
+        rec = today_attendance.get(d.id)
         result.append(DoctorLite(
             id=d.id, title=d.title, name=d.name, specialization=d.specialization,
             consultation_fee=d.consultation_fee,
             on_duty_today=d.id in present_ids,
-            room_number=d.room_number
+            room_number=d.room_number,
+            attendance_status=rec.status if rec else "not_marked",
+            doctor_location=rec.doctor_location if rec else None
         ))
     return result
 
@@ -519,6 +523,7 @@ def doctors_in_room(
         AttendanceRecord.status.in_(["present", "on_break"])
     ).all()
     status_by_doctor = {r.doctor_id: r.status for r in records}
+    location_by_doctor = {r.doctor_id: r.doctor_location for r in records}
     if not status_by_doctor:
         return []
 
@@ -535,7 +540,8 @@ def doctors_in_room(
         "name": d.name,
         "specialization": d.specialization,
         "consultation_fee": d.consultation_fee,
-        "status": status_by_doctor.get(d.id, "present")
+        "status": status_by_doctor.get(d.id, "present"),
+        "location": location_by_doctor.get(d.id)
     } for d in doctors]
     random.shuffle(result)
     return result
@@ -639,8 +645,48 @@ def checkin_today(
         "consultation_fee": checkin.consultation_fee,
         "test_fee": checkin.test_fee,
         "total_fee": (checkin.consultation_fee or 0) + (checkin.test_fee or 0),
-        "is_paid": checkin.is_paid
+        "is_paid": checkin.is_paid,
+        "is_consulted": db.query(Consultation).filter(
+            Consultation.token_number == checkin.token_number
+        ).first() is not None,
+        "is_returned": checkin.is_returned
     }
+
+@router.post("/requeue/{checkin_id}")
+def requeue_checkin(
+    checkin_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    checkin = db.query(Checkin).filter(
+        Checkin.id == checkin_id,
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == ist_today()
+    ).first()
+    if not checkin:
+        raise HTTPException(status_code=404, detail="Check-in not found")
+
+    already_consulted = db.query(Consultation).filter(
+        Consultation.token_number == checkin.token_number
+    ).first() is not None
+    if not already_consulted:
+        raise HTTPException(status_code=400, detail="This patient hasn't been consulted yet today")
+
+    checkin.is_returned = True
+    checkin.returned_at = now_ist_naive()
+    db.commit()
+
+    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
+    log_action(
+        db, current_doctor,
+        action="checkin_requeued",
+        target_type="checkin",
+        target_id=checkin.id,
+        target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),
+        details=f"Token {checkin.token_number} sent back to Dr. {(db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first() or Doctor()).name or ''} without new payment"
+    )
+    return {"status": "returned", "token_number": checkin.token_number}
+
 
 @router.get("/checkins/{checkin_id}/slip")
 def get_checkin_slip(
@@ -754,6 +800,139 @@ def send_to_nurse_postconsult(
     )
 
     return {"nurse_name": f"{nurse.title} {nurse.name}"}
+
+@router.post("/{patient_id}/refer")
+def refer_to_doctor(
+    patient_id: int,
+    payload: NurseNoteCreate,  # reused: .note carries the referral reason
+    to_doctor_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """OPD-level referral to another doctor, same visit — separate from the
+    IPD-only AdmissionReferral. Creates its own Checkin for the receiving
+    doctor (its own token, its own queue slot) so it flows through the exact
+    same queue mechanism everything else does, tagged as a referral.
+
+    ASSUMPTION FLAGGED, not silently decided: this referral checkin carries
+    consultation_fee=0 / is_paid=True — no new fee, since it's a continuation
+    of the same paid OPD visit, not a fresh registration. If your hospitals
+    actually want to charge a second consultation fee for a referral, tell me
+    and I'll flip this to require payment like a normal checkin does.
+    """
+    if current_doctor.role.value != "doctor":
+        raise HTTPException(status_code=403, detail="Only a doctor can refer a patient")
+
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    to_doctor = db.query(Doctor).filter(
+        Doctor.id == to_doctor_id,
+        Doctor.hospital_id == current_doctor.hospital_id,
+        Doctor.role == UserRole.doctor
+    ).first()
+    if not to_doctor:
+        raise HTTPException(status_code=404, detail="Receiving doctor not found")
+    if to_doctor.id == current_doctor.id:
+        raise HTTPException(status_code=400, detail="Can't refer a patient to yourself")
+
+    origin_checkin = db.query(Checkin).filter(
+        Checkin.patient_id == patient_id,
+        Checkin.doctor_id == current_doctor.id,
+        Checkin.visit_date == ist_today()
+    ).order_by(desc(Checkin.created_at)).first()
+    if not origin_checkin:
+        raise HTTPException(status_code=400, detail="No check-in found for today under you for this patient.")
+
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+
+    referral_checkin = Checkin(
+        hospital_id=current_doctor.hospital_id,
+        patient_id=patient.id,
+        token_number=token,
+        issue_category=origin_checkin.issue_category,
+        doctor_id=to_doctor.id,
+        created_by=current_doctor.id,
+        visit_date=ist_today(),
+        consultation_fee=0,
+        test_fee=0,
+        is_paid=True
+    )
+    db.add(referral_checkin)
+    db.flush()
+
+    referral = OpdReferral(
+        hospital_id=current_doctor.hospital_id,
+        patient_id=patient.id,
+        referring_doctor_id=current_doctor.id,
+        referred_to_doctor_id=to_doctor.id,
+        checkin_id=referral_checkin.id,
+        note=payload.note.strip() or None
+    )
+    db.add(referral)
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="opd_referral_sent",
+        target_type="patient",
+        target_id=patient.id,
+        target_label=f"{patient.name} ({patient.patient_uid})",
+        details=f"Referred to {to_doctor.title} {to_doctor.name}" + (f": {payload.note}" if payload.note else "")
+    )
+
+    return {"message": f"Referred to {to_doctor.title} {to_doctor.name}", "token_number": token}
+
+@router.post("/{patient_id}/send-back-vitals")
+def send_back_for_vitals(
+    patient_id: int,
+    payload: NurseNoteCreate,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Mid-consultation recheck request — patient re-enters the SAME nurse
+    (checkin.nurse_id is untouched) with priority over fresh vitals-pending
+    patients, and the consultation stays open (nothing here confirms it)."""
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    checkin = db.query(Checkin).filter(
+        Checkin.patient_id == patient_id,
+        Checkin.visit_date == ist_today()
+    ).order_by(desc(Checkin.created_at)).first()
+    if not checkin:
+        raise HTTPException(status_code=400, detail="No check-in found for today.")
+
+    note = payload.note.strip()
+    if not note:
+        raise HTTPException(status_code=400, detail="Say what needs to be rechecked.")
+
+    if not checkin.nurse_id:
+        checkin.nurse_id = pick_random_nurse(db, current_doctor.hospital_id, current_doctor.id)
+
+    checkin.vitals_status = "sent_back"
+    checkin.vitals_recheck_request = note
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="sent_back_for_vitals",
+        target_type="patient",
+        target_id=patient.id,
+        target_label=f"{patient.name} ({patient.patient_uid})",
+        details=note
+    )
+
+    return {"status": "sent_back"}
 
 # Must stay registered before /{patient_id} below — that route is a 1-segment int path param
 # and, being registered first, was silently swallowing every request to this literal path
@@ -1050,11 +1229,24 @@ def todays_queue(
         .filter(Consultation.token_number.in_(token_numbers)).all()
     )
 
+    referrals_by_checkin = {
+        r.checkin_id: r for r in db.query(OpdReferral).filter(
+            OpdReferral.checkin_id.in_([c.id for c in checkins])
+        ).all()
+    }
+    referring_doctors = {
+        d.id: d for d in db.query(Doctor).filter(
+            Doctor.id.in_([r.referring_doctor_id for r in referrals_by_checkin.values()])
+        ).all()
+    }
+
     result = []
     for c in checkins:
         p = patients.get(c.patient_id)
         if not p:
             continue
+        ref = referrals_by_checkin.get(c.id)
+        ref_doctor = referring_doctors.get(ref.referring_doctor_id) if ref else None
         result.append({
             "checkin_id": c.id,
             "patient_id": p.id,
@@ -1065,8 +1257,11 @@ def todays_queue(
             "issue_category": c.issue_category,
             "created_at": c.created_at.isoformat(),
             "estimated_time": None,
-            "status": "done" if c.token_number in confirmed_tokens else "waiting",
-            "is_emergency": c.is_emergency
+            "status": "returned" if c.is_returned else ("done" if c.token_number in confirmed_tokens else "waiting"),
+            "is_emergency": c.is_emergency,
+            "is_referral": ref is not None,
+            "referral_note": ref.note if ref else None,
+            "referred_by_name": f"{ref_doctor.title} {ref_doctor.name}" if ref_doctor else None
         })
 
     # Merge in paid portal appointments for today that haven't been checked

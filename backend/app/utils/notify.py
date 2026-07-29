@@ -65,21 +65,30 @@ def notify_ward_change_request(db: Session, hospital_id: int, admission_id: int,
     ))
 
 
-MIN_SHIFT_HOURS_BEFORE_IDLE_CHECK = 4
+MIN_SHIFT_HOURS_BEFORE_IDLE_CHECK = 3
 
 
 def sync_idle_staff_notification(db: Session, doctor):
     """
-    Called exactly once, at the moment a doctor/nurse marks themselves off_duty.
-    Flags them only if they were assigned real work today and completed
-    literally none of it. Recomputed fresh on every off_duty transition so a
-    same-day correction (present -> did the work -> off_duty again) always
-    reflects the true latest state — never leaves a stale/wrong flag behind.
+    Flags a doctor/nurse/assistant if they were assigned real work today and
+    completed literally none of it, so far. Safe to call repeatedly at any
+    point in their shift, not just at off_duty — the check and the
+    create/update/clear of the notification are both keyed to today's date,
+    so re-running it mid-shift just refreshes the same flag (self-heals the
+    same way a same-day correction already does: present -> did the work ->
+    checked again -> flag clears).
+
+    Two call sites today:
+    - mark_attendance(), once, at the moment they go off_duty (immediate signal).
+    - sync_idle_staff_notifications_for_hospital(), lazily, whenever attendance
+      is read for the hospital while they're still present/on_break (catches
+      someone idling mid-shift without needing a background job).
 
     Skipped entirely (no flag, nothing touched) if fewer than
     MIN_SHIFT_HOURS_BEFORE_IDLE_CHECK hours have passed since they first
-    marked Present today — protects against an accidental/early Off Duty tap
-    being mistaken for a full idle shift.
+    marked Present today — protects against an accidental/early Off Duty tap,
+    or a lazy mid-shift check firing too early, being mistaken for a full
+    idle shift.
     """
     from datetime import date, datetime, timedelta
     from app.models.attendance import AttendanceRecord
@@ -153,7 +162,9 @@ def sync_idle_staff_notification(db: Session, doctor):
 
     if is_idle:
         role_label = "Doctor" if role == "doctor" else "Nurse"
-        message = f"{role_label} {doctor.name} was assigned {assigned_count} patient(s) today but completed none, and has gone off duty."
+        still_on_shift = attendance.status in ("present", "on_break")
+        tail = "and has gone off duty." if not still_on_shift else "and hasn't started yet."
+        message = f"{role_label} {doctor.name} was assigned {assigned_count} patient(s) today but completed none, {tail}"
         if existing:
             existing.title = "Staff inactivity"
             existing.message = message
@@ -168,6 +179,32 @@ def sync_idle_staff_notification(db: Session, doctor):
             db.delete(existing)
 
     db.commit()
+
+
+def sync_idle_staff_notifications_for_hospital(db: Session, hospital_id: int):
+    """Lazy mid-shift sweep — runs the same idle check above across every
+    doctor/nurse/assistant who marked attendance today, regardless of their
+    current status. Called opportunistically whenever attendance is read for
+    the hospital (same self-healing-on-read pattern as auto_close_stale_shifts),
+    so an idle staff member gets flagged the next time anyone loads an
+    attendance view, without needing a background job."""
+    from datetime import date
+    from app.models.attendance import AttendanceRecord
+    from app.models.doctor import Doctor
+
+    today = date.today()
+    staff_ids = [
+        r[0] for r in db.query(AttendanceRecord.doctor_id).filter(
+            AttendanceRecord.hospital_id == hospital_id,
+            AttendanceRecord.date == today,
+            AttendanceRecord.status.in_(["present", "on_break"])
+        ).all()
+    ]
+    if not staff_ids:
+        return
+    staff = db.query(Doctor).filter(Doctor.id.in_(staff_ids)).all()
+    for member in staff:
+        sync_idle_staff_notification(db, member)
 
 
 def sync_room_classification_notifications(db: Session, hospital_id: int):

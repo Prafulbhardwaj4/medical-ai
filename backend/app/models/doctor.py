@@ -38,6 +38,7 @@ class Doctor(Base):
     created_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     consultation_fee = Column(Float, nullable=True)
     room_number = Column(String, nullable=True)
+    active_consultation_id = Column(Integer, ForeignKey("consultations.id"), nullable=True)  # unconfirmed draft this doctor is currently mid-session with, if any — kept in sync by consultations.py so an emergency interrupt always resumes the *right* draft, never a guess
 
     patients = relationship("Patient", foreign_keys="Patient.created_by", back_populates="doctor")
     hospital = relationship("Hospital", backref="doctors")

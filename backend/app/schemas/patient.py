@@ -163,6 +163,8 @@ class DoctorLite(BaseModel):
     on_duty_today: bool = False
     consultation_fee: Optional[float] = None
     room_number: Optional[str] = None
+    attendance_status: Optional[str] = None  # present / on_break / off_duty / away_emergency / not_marked
+    doctor_location: Optional[str] = None    # in_cabin / on_rounds — only set while attendance_status == "present"
 
     class Config:
         from_attributes = True

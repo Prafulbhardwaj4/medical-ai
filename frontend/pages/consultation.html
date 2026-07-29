@@ -227,17 +227,9 @@
 
         <div id="last-visit-wrap"
           style="display:none;margin-bottom:16px;background:var(--smoke);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <span
-              style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em">Last
-              Visit</span>
-            <span id="last-visit-date" style="font-size:0.78rem;color:var(--slate)"></span>
-          </div>
-          <div style="font-size:0.85rem;color:var(--navy)">
-            <div style="margin-bottom:4px"><strong>Diagnosis:</strong> <span id="lv-diagnosis">—</span></div>
-            <div style="margin-bottom:4px"><strong>Medicines:</strong> <span id="lv-medicines">—</span></div>
-            <div><strong>Advice:</strong> <span id="lv-advice">—</span></div>
-          </div>
+          <div style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">
+            Past Visits</div>
+          <div id="past-visits-list"></div>
         </div>
 
         <div id="nurse-vitals-wrap"
@@ -288,6 +280,10 @@
         <div class="section-block">
           <div class="section-title">Vitals <span style="font-weight:400;color:var(--slate)">(if recorded)</span></div>
           <div class="form-row-3" id="vitals-review-fields"></div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <input class="form-control" id="recheck-vital-note" placeholder="e.g. Repeat BP after 10 min rest" style="flex:1" />
+            <button class="btn btn-outline btn-sm" onclick="sendBackForVitals()">Send back for recheck</button>
+          </div>
         </div>
 
         <div class="section-block">
@@ -369,9 +365,28 @@
             <button class="btn btn-outline" onclick="goStep(2)">← Edit</button>
             <!-- <button class="btn btn-outline btn-lg" onclick="copyPdfLink()">🔗 Copy PDF Link</button> -->
             <button class="btn btn-outline btn-lg" onclick="viewPdf()">📄 View PDF</button>
+            <button class="btn btn-outline btn-lg" onclick="openReferModal()">↗ Refer to Doctor</button>
             <button class="btn btn-navy btn-lg" onclick="goBack()">✓ Done — Back to Patient</button>
           </div>
           <div id="wa-result"></div>
+        </div>
+      </div>
+
+      <div id="refer-modal" class="modal">
+        <div class="modal-content">
+          <h3>Refer to Doctor</h3>
+          <div class="form-group">
+            <label class="form-label">Referring to</label>
+            <select class="form-control" id="refer-doctor-select"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Note for the receiving doctor</label>
+            <textarea class="form-control" id="refer-note" rows="2" placeholder="Reason for referral"></textarea>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px">
+            <button class="btn btn-outline" onclick="closeReferModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitReferral()">Send Referral</button>
+          </div>
         </div>
       </div>
 
@@ -464,15 +479,37 @@
       try {
         const visits = await api("GET", `/consultations/history/${patientId}`);
         if (!visits || visits.length === 0) return;
-        const last = visits[0];
-        const meds = safeJSON(last.medicines, []);
-        const medText = meds.length ? meds.map(m => m.brand_name ? `${m.name} (${m.brand_name}) ${m.dosage}` : `${m.name} ${m.dosage}`).join(", ") : "—";
-        document.getElementById("last-visit-date").textContent = formatDate(last.created_at);
-        document.getElementById("lv-diagnosis").textContent = last.diagnosis || "—";
-        document.getElementById("lv-medicines").textContent = medText;
-        document.getElementById("lv-advice").textContent = last.advice || "—";
+
+        const recent = visits.slice(0, 5);
+        document.getElementById("past-visits-list").innerHTML = recent.map((v, i) => {
+          const meds = safeJSON(v.medicines, []);
+          const medText = meds.length ? meds.map(m => m.brand_name ? `${m.name} (${m.brand_name}) ${m.dosage}` : `${m.name} ${m.dosage}`).join(", ") : "—";
+          return `
+            <div style="border-bottom:1px solid var(--border);padding:10px 0;${i === recent.length - 1 ? 'border-bottom:none' : ''}">
+              <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="togglePastVisit(${v.id})">
+                <span style="font-size:0.85rem;font-weight:600;color:var(--navy)">${formatDate(v.created_at)} — ${v.diagnosis || 'No diagnosis recorded'}</span>
+                <span style="font-size:0.78rem;color:var(--slate)" id="pv-toggle-${v.id}">Expand ▾</span>
+              </div>
+              <div id="pv-body-${v.id}" style="display:none;margin-top:8px;font-size:0.85rem;color:var(--navy)">
+                <div style="margin-bottom:4px"><strong>Doctor:</strong> ${v.doctor_name || '—'}</div>
+                <div style="margin-bottom:4px"><strong>Diagnosis:</strong> ${v.diagnosis || '—'}</div>
+                <div style="margin-bottom:4px"><strong>Medicines:</strong> ${medText}</div>
+                <div style="margin-bottom:4px"><strong>Advice:</strong> ${v.advice || '—'}</div>
+                <div><strong>Follow-up:</strong> ${v.followup || '—'}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
         document.getElementById("last-visit-wrap").style.display = "block";
       } catch (e) { }
+    }
+
+    function togglePastVisit(id) {
+      const body = document.getElementById(`pv-body-${id}`);
+      const toggle = document.getElementById(`pv-toggle-${id}`);
+      const open = body.style.display !== "none";
+      body.style.display = open ? "none" : "block";
+      toggle.textContent = open ? "Expand ▾" : "Collapse ▴";
     }
 
     // ── Recording ──────────────────────────────────────
@@ -482,6 +519,28 @@
     async function toggleRecording() {
       if (!isRecording) await startRecording();
       else await stopRecording();
+    }
+
+    let isPaused = false;
+
+    function pauseRecording() {
+      if (!isRecording || isPaused) return;
+      isPaused = true;
+      if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "pause" }));
+      }
+      document.getElementById("record-hint").textContent = "Paused — waiting on recheck…";
+      document.getElementById("recorder-wrap").classList.add("paused");
+    }
+
+    function resumeRecording() {
+      if (!isRecording || !isPaused) return;
+      isPaused = false;
+      if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+        wsConnection.send(JSON.stringify({ type: "resume" }));
+      }
+      document.getElementById("record-hint").textContent = "Recording… click to stop";
+      document.getElementById("recorder-wrap").classList.remove("paused");
     }
 
     async function startRecording() {
@@ -549,7 +608,7 @@
       const processor = audioContext.createScriptProcessor(4096, 1, 1);
 
       processor.onaudioprocess = (e) => {
-        if (!isRecording || !wsConnection || wsConnection.readyState !== WebSocket.OPEN) return;
+        if (!isRecording || isPaused || !wsConnection || wsConnection.readyState !== WebSocket.OPEN) return;
         const float32 = e.inputBuffer.getChannelData(0);
         const int16 = new Int16Array(float32.length);
         for (let i = 0; i < float32.length; i++) {
@@ -604,6 +663,33 @@
     async function retranscribe() {
       toast("Edit the transcript above manually, then click Analyse with AI.", "info");
     }
+
+    // ── Send back for recheck (auto-pauses recording, doesn't confirm/close the consultation) ──
+    async function sendBackForVitals() {
+      const note = document.getElementById("recheck-vital-note").value.trim();
+      if (!note) { toast("Say what needs to be rechecked.", "info"); return; }
+      try {
+        await api("POST", `/patients/${patientId}/send-back-vitals`, { note });
+        toast("Sent back to nurse for recheck.", "success");
+        document.getElementById("recheck-vital-note").value = "";
+        pauseRecording();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    // ── Away-Emergency auto-pause/resume (tab stays open, doctor stepped away) ──
+    let lastKnownAttendanceStatus = null;
+    async function pollAttendanceForEmergency() {
+      try {
+        const status = await api("GET", "/doctors/attendance/my-status");
+        if (status.status === "away_emergency" && lastKnownAttendanceStatus !== "away_emergency") {
+          if (isRecording && !isPaused) pauseRecording();
+        } else if (lastKnownAttendanceStatus === "away_emergency" && status.status === "present") {
+          if (isRecording && isPaused) resumeRecording();
+        }
+        lastKnownAttendanceStatus = status.status;
+      } catch (e) { }
+    }
+    setInterval(pollAttendanceForEmergency, 15000);
 
     // ── AI Structure ────────────────────────────────────
     async function doStructure() {
@@ -884,6 +970,33 @@
 
     function goBack() {
       window.location.href = `/pages/patient.html?${patientToken}`;
+    }
+
+    async function openReferModal() {
+      try {
+        const doctors = await api("GET", "/patients/hospital-doctors");
+        const me = getDoctor();
+        const sel = document.getElementById("refer-doctor-select");
+        sel.innerHTML = doctors
+          .filter(d => d.id !== me.id)
+          .map(d => `<option value="${d.id}">${d.title} ${d.name} — ${d.specialization}</option>`).join('');
+      } catch (e) { toast(e.message, "error"); return; }
+      document.getElementById("refer-modal").classList.add("open");
+    }
+
+    function closeReferModal() {
+      document.getElementById("refer-modal").classList.remove("open");
+    }
+
+    async function submitReferral() {
+      const toDoctorId = document.getElementById("refer-doctor-select").value;
+      const note = document.getElementById("refer-note").value.trim();
+      if (!toDoctorId) { toast("Pick a doctor to refer to.", "info"); return; }
+      try {
+        const res = await api("POST", `/patients/${patientId}/refer?to_doctor_id=${toDoctorId}`, { note });
+        toast(res.message, "success");
+        closeReferModal();
+      } catch (e) { toast(e.message, "error"); }
     }
 
     function safeJSON(str, fallback) {

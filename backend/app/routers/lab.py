@@ -324,16 +324,27 @@ def save_order_result(
     if not order:
         raise HTTPException(status_code=404, detail="Test order not found")
 
+    old_results = {}
+    if order.result_data:
+        try:
+            old_results = json.loads(order.result_data)
+        except Exception:
+            old_results = {}
+
+    was_already_completed = order.status == "completed"
+    changed_fields = [k for k in payload.results if old_results.get(k) != payload.results.get(k)]
+
     order.result_data = json.dumps(payload.results)
     db.commit()
 
     log_action(
         db, current_doctor,
-        action="test_result_saved",
+        action="test_result_edited_after_completion" if was_already_completed and changed_fields else "test_result_saved",
         target_type="test_order",
         target_id=order.id,
         target_label=order.test_name,
-        hospital_id=current_doctor.hospital_id
+        hospital_id=current_doctor.hospital_id,
+        details=json.dumps({"changed_fields": changed_fields, "old": old_results, "new": payload.results}) if (was_already_completed and changed_fields) else None
     )
     return {"id": order.id, "result_data": payload.results}
 

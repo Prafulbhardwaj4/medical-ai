@@ -27,10 +27,14 @@ def vitals_queue(
     _require_nurse(current_doctor)
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.vitals_status == "pending",
+        Checkin.vitals_status.in_(["pending", "sent_back"]),
         Checkin.visit_date == ist_today(),
         Checkin.is_paid == True
     ).order_by(Checkin.created_at.asc()).all()
+
+    # Rechecks jump the fresh-vitals-pending line — the doctor's already mid-turn
+    # waiting on this, unlike a walk-in still working through the normal queue.
+    checkins.sort(key=lambda c: 0 if c.vitals_status == "sent_back" else 1)
 
     patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
     doctors = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_([c.doctor_id for c in checkins])).all()}
@@ -51,7 +55,9 @@ def vitals_queue(
             "token_number": c.token_number,
             "issue_category": c.issue_category,
             "doctor_name": f"{d.title} {d.name}" if d else "—",
-            "created_at": c.created_at.isoformat()
+            "created_at": c.created_at.isoformat(),
+            "is_recheck": c.vitals_status == "sent_back",
+            "recheck_request": c.vitals_recheck_request
         })
     return result
 
@@ -77,16 +83,29 @@ def submit_vitals(
     if not data:
         raise HTTPException(status_code=400, detail="At least one vitals field is required")
 
-    checkin.vitals_data = json.dumps(data)
+    was_recheck = checkin.vitals_status == "sent_back"
+
+    # Merge, don't overwrite — a recheck usually only touches one vital (e.g. BP),
+    # and the rest of that vitals set already recorded earlier shouldn't be wiped.
+    existing = {}
+    if checkin.vitals_data:
+        try:
+            existing = json.loads(checkin.vitals_data)
+        except Exception:
+            existing = {}
+    existing.update(data)
+
+    checkin.vitals_data = json.dumps(existing)
     checkin.vitals_status = "done"
     checkin.vitals_recorded_by = current_doctor.id
     checkin.vitals_recorded_at = now_ist_naive()
+    checkin.vitals_recheck_request = None
     db.commit()
 
     patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
     log_action(
         db, current_doctor,
-        action="vitals_recorded",
+        action="vitals_rechecked" if was_recheck else "vitals_recorded",
         target_type="patient",
         target_id=checkin.patient_id,
         target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),

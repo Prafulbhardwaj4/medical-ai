@@ -198,6 +198,11 @@
 
       <div id="emergency-banner" style="display:none;background:#dc2626;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
 
+      <div id="resume-draft-banner" style="display:none;background:var(--slate-light,#475569);color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <span data-role="resume-text"></span>
+        <button class="btn btn-primary btn-sm" data-role="resume-btn">Resume Consultation</button>
+      </div>
+
       <div class="desktop-tab active" id="desktop-tab-home">
         <!-- Attendance tab: status only, matching lab.html -->
         <div class="mobile-section" id="section-attendance">
@@ -212,6 +217,11 @@
             <div class="staff-att-actions" id="attendance-btns">
               <select class="form-control" id="room-select" style="display:none"
                 onchange="markAttendance(currentAttendanceStatus)"></select>
+              <select class="form-control" id="location-select" style="display:none"
+                onchange="markAttendance(currentAttendanceStatus)">
+                <option value="in_cabin">In Cabin</option>
+                <option value="on_rounds">On Rounds</option>
+              </select>
               <button class="btn btn-primary" id="btn-mark-present" onclick="markAttendance('present')">Mark
                 Present</button>
               <button class="btn btn-outline" id="btn-mark-break" onclick="markAttendance('on_break')"
@@ -245,6 +255,19 @@
 
         <!-- Home tab: Today's Queue only -->
         <div class="mobile-section active" id="section-home">
+          <div class="card" id="return-queue-card" style="display:none;border-color:var(--accent-purple,#8b5cf6)">
+            <div class="card-header">
+              <h2>Return Queue</h2>
+              <span style="color:var(--slate);font-size:0.85rem">Same-day rechecks — no new token</span>
+            </div>
+            <div class="table-wrap">
+              <table class="responsive-cards">
+                <thead><tr><th>Token</th><th>Patient</th><th>Reason</th><th></th></tr></thead>
+                <tbody id="return-queue-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
           <div class="card" id="queue-card">
             <div class="card-header">
               <h2>Today's Queue</h2>
@@ -506,7 +529,25 @@
         currentAttendanceStatus = mine ? mine.status : 'not_marked';
         renderAttendanceBadge(currentAttendanceStatus);
         await loadRoomOptions(mine ? mine.room_id : null);
+        const locSelect = document.getElementById('location-select');
+        if (locSelect && mine && mine.location) locSelect.value = mine.location;
       } catch (e) { }
+    }
+
+    async function checkResumeDraft() {
+      const banner = document.getElementById('resume-draft-banner');
+      if (!banner) return;
+      try {
+        const draft = await api("GET", "/consultations/active-draft");
+        if (draft.exists) {
+          banner.style.display = '';
+          banner.querySelector('[data-role="resume-text"]').textContent =
+            `You were mid-consultation with ${draft.patient_name} when the emergency alert came in.`;
+          banner.querySelector('[data-role="resume-btn"]').onclick = () => goToPatient(draft.patient_id, draft.url_token);
+        } else {
+          banner.style.display = 'none';
+        }
+      } catch (e) { banner.style.display = 'none'; }
     }
 
     function renderAttendanceBadge(status) {
@@ -516,7 +557,9 @@
       const btnBreak = document.getElementById('btn-mark-break');
       const btnOffDuty = document.getElementById('btn-mark-offduty');
       const roomSelect = document.getElementById('room-select');
+      const locSelect = document.getElementById('location-select');
       roomSelect.style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
+      locSelect.style.display = (status === 'present') ? '' : 'none';
 
       if (status === 'present') {
         badge.className = 'badge badge-green';
@@ -541,6 +584,14 @@
         btnPresent.style.display = '';
         btnBreak.style.display = 'none';
         btnOffDuty.style.display = 'none';
+      } else if (status === 'away_emergency') {
+        badge.className = 'badge badge-red';
+        badge.textContent = 'Away — Emergency';
+        btnPresent.textContent = 'Back In Cabin';
+        btnPresent.style.display = '';
+        btnBreak.style.display = 'none';
+        btnOffDuty.style.display = 'none';
+        checkResumeDraft();
       } else {
         badge.className = 'badge badge-grey';
         badge.textContent = 'Not marked';
@@ -555,15 +606,16 @@
       try {
         const roomVal = document.getElementById('room-select').value;
         const room_id = roomVal ? parseInt(roomVal) : null;
+        const location = status === 'present' ? (document.getElementById('location-select').value || 'in_cabin') : null;
         const wasAlreadyPresent = currentAttendanceStatus === status;
-        await markAttendanceCommon(status, room_id);
+        await markAttendanceCommon(status, room_id, { location });
         renderAttendanceBadge(status);
         document.getElementById('room-display').textContent = '';
         if (!wasAlreadyPresent) {
-          const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
+          const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty.", away_emergency: "Back in cabin." };
           toast(labels[status] || "Status updated.", "success");
         } else {
-          toast("Room updated.", "success");
+          toast("Status updated.", "success");
         }
       } catch (e) { toast(e.message, "error"); }
     }
@@ -800,7 +852,8 @@
       const waiting = _queueData.filter(q => q.status === 'waiting').length;
       document.getElementById("queue-count").textContent = `${waiting} waiting`;
 
-      const data = filter === 'all' ? _queueData : _queueData.filter(q => q.status === filter);
+      const data = (filter === 'all' ? _queueData : _queueData.filter(q => q.status === filter)).filter(q => q.status !== 'returned');
+      renderReturnQueue();
 
       if (!data.length) {
         tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No patients checked in today.</p></div></td></tr>`;
@@ -810,6 +863,7 @@
         waiting: { label: 'Waiting', badge: 'badge-amber' },
         done: { label: 'Consulted', badge: 'badge-teal' },
         expected: { label: 'Expected', badge: 'badge-grey' },
+        returned: { label: 'Return Queue', badge: 'badge-purple' },
       };
       tbody.innerHTML = data.map(q => {
         const meta = statusMeta[q.status] || statusMeta.waiting;
@@ -820,13 +874,29 @@
         return `
         <tr>
           <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
-          <td data-label="Patient">${q.patient_name}</td>
+          <td data-label="Patient">${q.patient_name}${q.is_referral ? ` <span class="badge badge-navy" title="${(q.referral_note || '').replace(/"/g, '&quot;')}">Referred by ${q.referred_by_name || 'another doctor'}</span>` : ''}</td>
           <td data-label="Reason">${q.issue_category}</td>
           <td data-label="Checked In / Est. Time" style="color:var(--slate);text-align:center">${timeLabel}${q.status === 'expected' ? ' <span style="color:var(--slate-light);font-size:11px">(expected)</span>' : ''}</td>
           <td data-label="Status"><span class="badge ${meta.badge}">${meta.label}</span></td>
           <td data-label="" style="text-align:left">${q.status === 'expected' ? '' : `<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button>`}</td>
         </tr>`;
       }).join('');
+    }
+
+    function renderReturnQueue() {
+      const card = document.getElementById('return-queue-card');
+      const tbody = document.getElementById('return-queue-tbody');
+      if (!card || !tbody) return;
+      const returned = _queueData.filter(q => q.status === 'returned');
+      if (!returned.length) { card.style.display = 'none'; return; }
+      card.style.display = '';
+      tbody.innerHTML = returned.map(q => `
+        <tr>
+          <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
+          <td data-label="Patient">${q.patient_name}</td>
+          <td data-label="Reason">${q.issue_category}</td>
+          <td data-label="">${`<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button>`}</td>
+        </tr>`).join('');
     }
 
     loadQueue();

@@ -788,6 +788,16 @@ def raise_emergency_alert(admission_id: str, body: EmergencyAlertIn, current_doc
         ward=a.ward, bed_number=a.bed_number,
         message=body.message,
     )
+
+    # If the paged doctor is mid-OPD-consultation right now, pull them out of
+    # rotation and hold the queue — the exact draft they left is already
+    # pinned via active_consultation_id, so nothing to guess on return.
+    if a.admitting_doctor_id:
+        from app.routers.attendance import set_away_for_emergency
+        target_doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
+        if target_doctor and target_doctor.active_consultation_id:
+            set_away_for_emergency(db, target_doctor.id, target_doctor.hospital_id)
+
     db.commit()
     return {"message": "Emergency alert sent"}
 

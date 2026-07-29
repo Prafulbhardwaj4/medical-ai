@@ -8,12 +8,15 @@ from app.database import get_db
 from app.models.attendance import AttendanceRecord
 from app.models.doctor import Doctor, UserRole
 from app.utils.auth import get_current_doctor, ist_today
-from app.utils.notify import sync_idle_staff_notification
+from app.utils.notify import sync_idle_staff_notification, sync_idle_staff_notifications_for_hospital
 from app.utils.timezone import now_ist_naive, IST
 
 router = APIRouter(prefix="/doctors", tags=["attendance"])
 
 VALID_STATUSES = {"present", "on_break", "off_duty"}
+VALID_LOCATIONS = {"in_cabin", "on_rounds"}
+# "away_emergency" is deliberately NOT in VALID_STATUSES — it's system-set only,
+# via set_away_for_emergency() below, never selectable through this endpoint.
 
 class AttendanceMark(BaseModel):
     status: str
@@ -21,6 +24,7 @@ class AttendanceMark(BaseModel):
     expected_off_duty_at: Optional[str] = None  # ISO string from the browser, any timezone
     ward_ids: Optional[list[int]] = None    # nurse/assistant only — wards being covered
     doctor_ids: Optional[list[int]] = None  # nurse/assistant only — doctors/rooms being covered
+    location: Optional[str] = None  # doctor only, status == "present" — "in_cabin" / "on_rounds"
 
 def get_today_attendance(db: Session, doctor_id: int):
     return db.query(AttendanceRecord).filter(
@@ -55,6 +59,10 @@ def auto_close_stale_shifts(db: Session, hospital_id: int):
     if stale:
         db.commit()
 
+    # Same lazy-on-read pattern as above: catch anyone idling mid-shift
+    # (assigned work, done none of it, still clocked in) without a background job.
+    sync_idle_staff_notifications_for_hospital(db, hospital_id)
+
 def require_present(db: Session, doctor: Doctor):
     record = get_today_attendance(db, doctor.id)
     if not record or record.status not in ("present", "on_break"):
@@ -62,6 +70,17 @@ def require_present(db: Session, doctor: Doctor):
             status_code=403,
             detail="Please mark your attendance as Present before starting work."
         )
+
+def set_away_for_emergency(db: Session, doctor_id: int, hospital_id: int):
+    """System-only transition, called from admissions.py when an Emergency
+    Alert interrupts a doctor mid-OPD-consultation. Never reachable through
+    the normal /attendance toggle."""
+    record = get_today_attendance(db, doctor_id)
+    if not record or record.status not in ("present", "on_break"):
+        return  # doctor isn't currently on an active shift — nothing to interrupt
+    record.status = "away_emergency"
+    record.doctor_location = None
+    db.commit()
 
 @router.post("/attendance")
 def mark_attendance(
@@ -72,6 +91,10 @@ def mark_attendance(
     status = payload.status.strip().lower()
     if status not in VALID_STATUSES:
         raise HTTPException(status_code=400, detail=f"status must be one of {', '.join(VALID_STATUSES)}")
+
+    location = (payload.location or "").strip().lower() or None
+    if location and location not in VALID_LOCATIONS:
+        raise HTTPException(status_code=400, detail=f"location must be one of {', '.join(VALID_LOCATIONS)}")
 
     if payload.room_id is not None:
         from app.models.room import Room
@@ -115,6 +138,7 @@ def mark_attendance(
             record.created_at = now_ist_naive()
             record.expected_off_duty_at = expected_off_duty_at
             record.auto_marked = 0
+            record.doctor_location = location
             # shift_started_at deliberately NOT touched here — it stays pinned to
             # whenever they first arrived today, even if they toggle present/break/off_duty again
             if payload.room_id is not None:
@@ -128,7 +152,8 @@ def mark_attendance(
                 room_id=payload.room_id,
                 marked_by=current_doctor.id,
                 shift_started_at=now_ist_naive(),
-                expected_off_duty_at=expected_off_duty_at
+                expected_off_duty_at=expected_off_duty_at,
+                doctor_location=location
             )
             db.add(record)
     else:
@@ -137,6 +162,7 @@ def mark_attendance(
         record.status = status
         record.marked_by = current_doctor.id
         record.created_at = now_ist_naive()
+        record.doctor_location = None
         if status == "off_duty":
             record.expected_off_duty_at = None
             record.auto_marked = 0
@@ -162,7 +188,7 @@ def mark_attendance(
         sync_idle_staff_notification(db, current_doctor)
 
     coverage_out = {"ward_ids": ward_ids, "doctor_ids": doctor_ids} if is_coverage_role and status == "present" else None
-    return {"status": record.status, "room_id": record.room_id, "coverage": coverage_out}
+    return {"status": record.status, "room_id": record.room_id, "location": record.doctor_location, "coverage": coverage_out}
 
 @router.get("/attendance/today")
 def attendance_today(
@@ -195,6 +221,11 @@ def attendance_today(
     room_ids_by_doctor = {r.doctor_id: r.room_id for r in today_records}
     room_names = {r.id: r.name for r in db.query(Room).filter(Room.hospital_id == current_doctor.hospital_id).all()}
 
+    locations_by_doctor = {r.doctor_id: r.doctor_location for r in today_records}
+    active_drafts = {
+        d.id: d.active_consultation_id for d in staff if d.active_consultation_id
+    }
+
     return [
         {
             "doctor_id": d.id,
@@ -203,7 +234,9 @@ def attendance_today(
             "room_id": room_ids_by_doctor.get(d.id),
             "room_name": room_names.get(room_ids_by_doctor.get(d.id)) or "—",
             "role": d.role.value,
-            "status": records.get(d.id, "not_marked")
+            "status": records.get(d.id, "not_marked"),
+            "location": locations_by_doctor.get(d.id),
+            "has_interrupted_draft": d.id in active_drafts
         }
         for d in staff
     ]
@@ -272,7 +305,7 @@ def my_attendance_status(
     auto_close_stale_shifts(db, current_doctor.hospital_id)
     record = get_today_attendance(db, current_doctor.id)
     if not record:
-        return {"status": "not_marked", "room_id": None, "coverage": None}
+        return {"status": "not_marked", "room_id": None, "location": None, "coverage": None, "active_consultation_id": current_doctor.active_consultation_id}
     coverage = None
     if current_doctor.role.value in ("nurse", "assistant") and record.status in ("present", "on_break"):
         from app.models.attendance_coverage import AttendanceCoverage
@@ -281,4 +314,10 @@ def my_attendance_status(
             "ward_ids": [r.ward_type_id for r in rows if r.ward_type_id is not None],
             "doctor_ids": [r.doctor_id for r in rows if r.doctor_id is not None],
         }
-    return {"status": record.status, "room_id": record.room_id, "coverage": coverage}
+    return {
+        "status": record.status,
+        "room_id": record.room_id,
+        "location": record.doctor_location,
+        "coverage": coverage,
+        "active_consultation_id": current_doctor.active_consultation_id
+    }

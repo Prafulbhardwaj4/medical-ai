@@ -49,6 +49,31 @@ def today_consultations(current_doctor: Doctor = Depends(get_current_doctor), db
     ).count()
     return {"count": count}
 
+@router.get("/active-draft")
+def get_active_draft(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """The exact draft this doctor was mid-session with, if any — used to resume
+    after an Away-Emergency interruption without guessing which patient it was."""
+    if not current_doctor.active_consultation_id:
+        return {"exists": False}
+    consultation = db.query(Consultation).filter(
+        Consultation.id == current_doctor.active_consultation_id,
+        Consultation.doctor_id == current_doctor.id,
+        Consultation.token_number == None,
+        Consultation.is_voided == False
+    ).first()
+    if not consultation:
+        current_doctor.active_consultation_id = None
+        db.commit()
+        return {"exists": False}
+    patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
+    return {
+        "exists": True,
+        "consultation_id": consultation.id,
+        "patient_id": consultation.patient_id,
+        "patient_name": patient.name if patient else None,
+        "url_token": patient.url_token if patient else None
+    }
+
 @router.get("/analytics")
 def get_analytics(
     current_doctor: Doctor = Depends(get_current_doctor),
@@ -240,6 +265,9 @@ async def transcribe(
     db.commit()
     db.refresh(consultation)
 
+    current_doctor.active_consultation_id = consultation.id
+    db.commit()
+
     return {
         "consultation_id": consultation.id,
         "transcript": transcript
@@ -287,22 +315,39 @@ async def websocket_transcribe(
     )
 
     full_transcript = ""
+    is_paused = False
 
     async def receive_audio():
+        nonlocal is_paused
         try:
             while True:
                 message = await websocket.receive()
                 if message["type"] == "websocket.disconnect":
                     break
                 if message.get("bytes") is not None:
+                    if is_paused:
+                        continue  # defense in depth — client already stops sending while paused
                     await audio_queue.put(message["bytes"])
                 elif message.get("text") is not None:
                     try:
-                        payload = json.loads(message["text"])
+                        control = json.loads(message["text"])
                     except Exception:
-                        payload = {}
-                    if payload.get("type") == "stop":
+                        control = {}
+                    msg_type = control.get("type")
+                    if msg_type == "stop":
                         break
+                    elif msg_type == "pause":
+                        is_paused = True
+                        try:
+                            await websocket.send_json({"type": "paused"})
+                        except Exception:
+                            pass
+                    elif msg_type == "resume":
+                        is_paused = False
+                        try:
+                            await websocket.send_json({"type": "resumed"})
+                        except Exception:
+                            pass
         except WebSocketDisconnect:
             pass
         except Exception:
@@ -313,9 +358,15 @@ async def websocket_transcribe(
     async def send_transcript():
         nonlocal full_transcript
         while True:
+            # No audio arrives while intentionally paused — a long idle window there
+            # is expected (a recheck can take minutes), not a dead connection, so
+            # don't let the normal 30s idle timeout tear the session down for it.
+            idle_timeout = 600.0 if is_paused else 30.0
             try:
-                msg = await asyncio.wait_for(transcript_queue.get(), timeout=30.0)
+                msg = await asyncio.wait_for(transcript_queue.get(), timeout=idle_timeout)
             except asyncio.TimeoutError:
+                if is_paused:
+                    continue
                 break
 
             if msg["type"] == "transcript":
@@ -363,6 +414,9 @@ async def websocket_transcribe(
                 db.add(consultation)
             db.commit()
             db.refresh(consultation)
+
+            doctor.active_consultation_id = consultation.id
+            db.commit()
 
             try:
                 await websocket.send_json({
@@ -580,6 +634,10 @@ async def structure(
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
 
+    if current_doctor.active_consultation_id != consultation.id:
+        current_doctor.active_consultation_id = consultation.id
+        db.commit()
+
     if payload.transcript and payload.transcript.strip():
         consultation.raw_transcript = payload.transcript.strip()
         db.commit()
@@ -674,8 +732,14 @@ def confirm_prescription(
 
     import hashlib
 
+    # Scoped by doctor_id, not just patient_id — a patient can now have more than
+    # one checkin on the same day under different doctors (Same-Day Return Queue
+    # reuses the original checkin, but an OPD referral creates a genuinely new one
+    # for the receiving doctor). Without this, the wrong doctor's checkin/token
+    # could get grabbed once a referral checkin exists for the same patient today.
     todays_checkin = db.query(Checkin).filter(
         Checkin.patient_id == consultation.patient_id,
+        Checkin.doctor_id == consultation.doctor_id,
         Checkin.visit_date == ist_today()
     ).order_by(desc(Checkin.created_at)).first()
 
@@ -693,6 +757,14 @@ def confirm_prescription(
             while db.query(Consultation).filter(Consultation.token_number == f"{token_number}-{suffix}").first():
                 suffix += 1
             token_number = f"{token_number}-{suffix}"
+
+        from app.models.opd_referral import OpdReferral
+        referral = db.query(OpdReferral).filter(
+            OpdReferral.checkin_id == todays_checkin.id,
+            OpdReferral.status == "pending"
+        ).first()
+        if referral:
+            referral.status = "consulted"
     else:
         # No check-in exists for today — this happens when a doctor opens a
         # patient directly from their own patient list instead of the queue.
@@ -869,6 +941,9 @@ def confirm_prescription(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
+    if current_doctor.active_consultation_id == consultation.id:
+        current_doctor.active_consultation_id = None
+
     db.commit()
     db.refresh(consultation)
 
@@ -903,20 +978,48 @@ def update_consultation(
     ).first()
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
-    if consultation.token_number:
-        raise HTTPException(status_code=400, detail="Cannot edit a confirmed prescription.")
 
-    consultation.chief_complaint = payload.chief_complaint
-    consultation.diagnosis = payload.diagnosis
-    consultation.medicines = json.dumps([m.dict() for m in payload.medicines])
-    consultation.tests = json.dumps(payload.tests)
-    consultation.advice = payload.advice
-    consultation.followup = payload.followup
+    was_confirmed = consultation.token_number is not None
+
+    new_values = {
+        "chief_complaint": payload.chief_complaint,
+        "diagnosis": payload.diagnosis,
+        "medicines": json.dumps([m.dict() for m in payload.medicines]),
+        "tests": json.dumps(payload.tests),
+        "advice": payload.advice,
+        "followup": payload.followup,
+        "vitals": json.dumps(payload.vitals or {}),
+    }
+
+    changed_fields = []
+    field_diff = {}
+    for field, new_value in new_values.items():
+        old_value = getattr(consultation, field)
+        if old_value != new_value:
+            changed_fields.append(field)
+            field_diff[field] = {"old": old_value, "new": new_value}
+        setattr(consultation, field, new_value)
+
     consultation.has_pending_tests = len(payload.tests) > 0
-    consultation.vitals = json.dumps(payload.vitals or {})
 
     db.commit()
     db.refresh(consultation)
+
+    if was_confirmed and changed_fields:
+        patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
+        log_action(
+            db, current_doctor,
+            action="prescription_edited_after_confirmation",
+            target_type="consultation",
+            target_id=consultation.id,
+            target_label=consultation.token_number,
+            details=json.dumps({
+                "patient": f"{patient.name} ({patient.patient_uid})" if patient else None,
+                "changed_fields": changed_fields,
+                "diff": field_diff
+            })
+        )
+
     return {"message": "Consultation updated successfully"}
 
 
@@ -936,6 +1039,9 @@ def void_consultation(
         raise HTTPException(status_code=404, detail="Consultation not found")
 
     consultation.is_voided = True
+
+    if current_doctor.active_consultation_id == consultation.id:
+        current_doctor.active_consultation_id = None
 
     # Cascade: exclude any not-yet-paid test/medicine lines under this
     # consultation so they can't still be paid for or invoiced after voiding.
