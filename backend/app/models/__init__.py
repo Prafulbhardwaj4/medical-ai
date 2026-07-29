@@ -19,3 +19,4 @@ from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopup
 from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
 from app.models.day_end_close import DayEndClose
+from app.models.attendance_coverage import AttendanceCoverage
