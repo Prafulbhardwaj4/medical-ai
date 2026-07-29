@@ -135,6 +135,16 @@ function toast(msg, type = "info") {
   el._t = setTimeout(() => el.classList.remove("show"), 3500);
 }
 
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add("open");
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove("open");
+}
+
 // Fill topbar doctor info
 function fillTopbar() {
   const doc = getDoctor();
