@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nurse Station — MedScribe</title>
+  <title>Assistant Station — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <script src="../js/custom-select.js" defer></script>
   <style>
@@ -274,7 +274,7 @@
   <script>
     requireAuth();
     fillTopbar();
-    if (getDoctor()?.role !== 'nurse') redirectByRole(getDoctor()?.role);
+    if (getDoctor()?.role !== 'assistant') redirectByRole(getDoctor()?.role);
 
     function showNurseDesktopTab(id) {
       const groups = { home: ['attendance', 'vitals', 'tasks'], history: ['history'] };

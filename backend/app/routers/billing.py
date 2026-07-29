@@ -14,10 +14,19 @@ from app.models.consultation import Consultation
 from app.models.test_order import TestOrder
 from app.models.medicine_order import MedicineOrder
 from app.models.invoice import Invoice
+from app.models.opd_charge import OpdCharge
+from app.models.hospital_medicine import HospitalMedicine
+from app.models.admission import Admission
+from app.models.admission_deposit import AdmissionDeposit
+from app.models.refund import Refund
+from app.models.day_end_close import DayEndClose
+from app.schemas.billing import DayEndCloseIn
+from app.utils.gst import apply_gst
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 from app.services.pdf_service import generate_invoice_pdf
-from app.utils.timezone import ist_today, ist_day_bounds, ist_date
+from app.utils.timezone import ist_today, ist_day_bounds, ist_date, now_ist_naive
+from app.utils.receipts import next_receipt_number
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -73,12 +82,30 @@ def gather_invoice_items(db: Session, checkin: Checkin):
     ).all()
     for m in medicine_orders:
         billed = m.billed_quantity if m.billed_quantity is not None else m.quantity
+        medicine_gst_percent = None
+        if m.catalog_medicine_id:
+            hm = db.query(HospitalMedicine).filter(HospitalMedicine.id == m.catalog_medicine_id).first()
+            medicine_gst_percent = hm.gst_percent if hm else None
         items.append({
             "type": "medicine",
             "name": f"{m.medicine_name}{' (' + m.brand_name + ')' if m.brand_name else ''}",
             "qty": billed or 1,
             "unit_price": m.unit_price or 0,
-            "line_total": (m.unit_price or 0) * (billed or 1)
+            "line_total": (m.unit_price or 0) * (billed or 1),
+            "_medicine_gst_percent": medicine_gst_percent
+        })
+
+    opd_charges = db.query(OpdCharge).filter(
+        OpdCharge.checkin_id == checkin.id,
+        OpdCharge.status == "paid"
+    ).all()
+    for oc in opd_charges:
+        items.append({
+            "type": "charge",
+            "name": oc.description,
+            "qty": oc.quantity,
+            "unit_price": oc.amount,
+            "line_total": oc.amount * oc.quantity
         })
 
     return items
@@ -99,15 +126,40 @@ def finalize_invoice(
     if not checkin:
         raise HTTPException(status_code=404, detail="Visit not found")
 
-    if checkin.is_finalized and checkin.invoice_id:
-        invoice = db.query(Invoice).filter(Invoice.id == checkin.invoice_id).first()
-        return serialize_invoice(invoice)
-
     items = gather_invoice_items(db, checkin)
     if not items:
         raise HTTPException(status_code=400, detail="Nothing paid yet for this visit")
 
-    grand_total = sum(i["line_total"] for i in items)
+    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first()
+
+    items, subtotal, gst_total, grand_total = apply_gst(items, hospital)
+
+    if checkin.is_finalized and checkin.invoice_id:
+        # Combined bill regenerates in place when something new was paid later in the
+        # same visit (e.g. a test paid after the first invoice was generated) — same
+        # invoice row, same receipt number, updated items/total/PDF.
+        invoice = db.query(Invoice).filter(Invoice.id == checkin.invoice_id).first()
+        invoice.items_json = json.dumps(items)
+        invoice.grand_total = grand_total
+        invoice.subtotal = subtotal
+        invoice.gst_total = gst_total
+        invoice.generated_by = current_doctor.id
+        invoice.generated_from = current_doctor.role.value
+        pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number)
+        invoice.pdf_path = pdf_path
+        db.commit()
+        db.refresh(invoice)
+        log_action(
+            db, current_doctor,
+            action="invoice_regenerated",
+            target_type="invoice",
+            target_id=invoice.id,
+            target_label=f"Rs.{grand_total:.2f} for checkin {checkin_id}",
+            hospital_id=current_doctor.hospital_id
+        )
+        return serialize_invoice(invoice)
 
     invoice = Invoice(
         checkin_id=checkin.id,
@@ -115,17 +167,16 @@ def finalize_invoice(
         hospital_id=current_doctor.hospital_id,
         items_json=json.dumps(items),
         grand_total=grand_total,
+        subtotal=subtotal,
+        gst_total=gst_total,
         generated_by=current_doctor.id,
         generated_from=current_doctor.role.value,
+        receipt_number=next_receipt_number(db, hospital),
     )
     db.add(invoice)
     db.flush()
 
-    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
-    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
-    consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first()
-
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, consulting_doctor)
+    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number)
     invoice.pdf_path = pdf_path
 
     checkin.is_finalized = True
@@ -149,7 +200,10 @@ def serialize_invoice(invoice: Invoice):
     return {
         "id": invoice.id,
         "checkin_id": invoice.checkin_id,
+        "receipt_number": invoice.receipt_number,
         "items": json.loads(invoice.items_json),
+        "subtotal": invoice.subtotal,
+        "gst_total": invoice.gst_total,
         "grand_total": invoice.grand_total,
         "generated_from": invoice.generated_from,
         "generated_at": invoice.generated_at.isoformat() if invoice.generated_at else None
@@ -196,7 +250,7 @@ def download_invoice_pdf(
 
     checkin_for_doctor = db.query(Checkin).filter(Checkin.id == invoice.checkin_id).first()
     consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin_for_doctor.doctor_id).first() if checkin_for_doctor else None
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, invoice.grand_total, patient, consulting_doctor)
+    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, invoice.grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number)
     if invoice.pdf_path != pdf_path:
         invoice.pdf_path = pdf_path
         db.commit()
@@ -289,7 +343,7 @@ def revenue_history_daily(
         d = ist_date(inv.generated_at)
         if d not in buckets:
             buckets[d] = {"total": 0.0, "invoice_count": 0}
-        buckets[d]["total"] += inv.grand_total
+        buckets[d]["total"] += inv.subtotal if inv.subtotal is not None else inv.grand_total  # pre-tax revenue; GST collected isn't hospital revenue
         buckets[d]["invoice_count"] += 1
 
     return {
@@ -358,7 +412,7 @@ def revenue_history_monthly(
         key = (d.year, d.month)
         if key not in buckets:
             buckets[key] = {"total": 0.0, "invoice_count": 0}
-        buckets[key]["total"] += inv.grand_total
+        buckets[key]["total"] += inv.subtotal if inv.subtotal is not None else inv.grand_total  # pre-tax revenue; GST collected isn't hospital revenue
         buckets[key]["invoice_count"] += 1
 
     return {
@@ -368,6 +422,135 @@ def revenue_history_monthly(
             {"month": f"{y:04d}-{m:02d}", "total": round(v["total"], 2), "invoice_count": v["invoice_count"]}
             for (y, m), v in sorted(buckets.items())
         ]
+    }
+
+
+@router.get("/day-end-summary")
+def day_end_summary(
+    date: str = None,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """§9 — system-logged collections for the day, broken out by mode and
+    category, for reception to check their actual cash/card/UPI in hand
+    against. Cash refunds issued that day are netted out of the cash total."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    target_date = datetime.fromisoformat(date).date() if date else ist_today()
+    day_start, day_end = ist_day_bounds(target_date)
+
+    by_mode = {}
+
+    def add(mode, category, amount):
+        if not mode or not amount:
+            return
+        by_mode.setdefault(mode, {})
+        by_mode[mode][category] = round(by_mode[mode].get(category, 0) + amount, 2)
+
+    checkins = db.query(Checkin).filter(
+        Checkin.hospital_id == current_doctor.hospital_id, Checkin.is_paid == True,
+        Checkin.paid_at >= day_start, Checkin.paid_at < day_end
+    ).all()
+    for c in checkins:
+        add(c.payment_method, "consultation", c.consultation_fee or 0)
+
+    tests = db.query(TestOrder).filter(
+        TestOrder.hospital_id == current_doctor.hospital_id, TestOrder.status != "payment_pending",
+        TestOrder.paid_at >= day_start, TestOrder.paid_at < day_end
+    ).all()
+    for t in tests:
+        add(t.payment_method, "tests", t.price or 0)
+
+    charges = db.query(OpdCharge).filter(
+        OpdCharge.hospital_id == current_doctor.hospital_id, OpdCharge.status == "paid",
+        OpdCharge.paid_at >= day_start, OpdCharge.paid_at < day_end
+    ).all()
+    for ch in charges:
+        add(ch.payment_method, "opd_charges", (ch.amount or 0) * (ch.quantity or 1))
+
+    deposits = db.query(AdmissionDeposit).join(Admission, AdmissionDeposit.admission_id == Admission.id).filter(
+        Admission.hospital_id == current_doctor.hospital_id,
+        AdmissionDeposit.collected_at >= day_start, AdmissionDeposit.collected_at < day_end
+    ).all()
+    for d in deposits:
+        category = "ipd_topups" if d.note == "Top-up collected" else "ipd_deposits"
+        add(d.payment_method, category, d.amount or 0)
+
+    settlements = db.query(Invoice).filter(
+        Invoice.hospital_id == current_doctor.hospital_id, Invoice.generated_from == "admission_discharge",
+        Invoice.generated_at >= day_start, Invoice.generated_at < day_end
+    ).all()
+    for inv in settlements:
+        add(inv.payment_method, "ipd_settlements", inv.amount_collected or 0)
+
+    cash_refunds = db.query(Refund).filter(
+        Refund.hospital_id == current_doctor.hospital_id, Refund.channel == "cash",
+        Refund.processed_at >= day_start, Refund.processed_at < day_end
+    ).all()
+    total_cash_refunds = round(sum(r.amount for r in cash_refunds), 2)
+
+    system_totals = {mode: round(sum(cats.values()), 2) for mode, cats in by_mode.items()}
+    system_totals["cash"] = round(system_totals.get("cash", 0) - total_cash_refunds, 2)
+
+    existing_close = db.query(DayEndClose).filter(
+        DayEndClose.hospital_id == current_doctor.hospital_id, DayEndClose.close_date == target_date
+    ).first()
+
+    return {
+        "date": target_date.isoformat(),
+        "by_mode": by_mode,
+        "cash_refunds": total_cash_refunds,
+        "system_totals": system_totals,
+        "already_closed": bool(existing_close),
+        "close": ({
+            "counted_cash": existing_close.counted_cash, "counted_card": existing_close.counted_card, "counted_upi": existing_close.counted_upi,
+            "notes": existing_close.notes, "closed_at": existing_close.closed_at.isoformat() if existing_close.closed_at else None,
+        } if existing_close else None),
+    }
+
+
+@router.post("/day-end-close")
+def close_day_end(
+    body: DayEndCloseIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    target_date = datetime.fromisoformat(body.date).date() if body.date else ist_today()
+    existing = db.query(DayEndClose).filter(
+        DayEndClose.hospital_id == current_doctor.hospital_id, DayEndClose.close_date == target_date
+    ).first()
+    if existing and current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=400, detail="This day is already closed — only an admin can re-close it")
+
+    summary = day_end_summary(date=body.date, db=db, current_doctor=current_doctor)
+    system_totals = summary["system_totals"]
+
+    close = existing or DayEndClose(hospital_id=current_doctor.hospital_id, close_date=target_date, closed_by=current_doctor.id)
+    if not existing:
+        db.add(close)
+
+    close.system_cash = system_totals.get("cash", 0)
+    close.system_card = system_totals.get("card", 0)
+    close.system_upi = system_totals.get("upi", 0)
+    close.counted_cash = body.counted_cash
+    close.counted_card = body.counted_card
+    close.counted_upi = body.counted_upi
+    close.notes = body.notes
+    close.closed_by = current_doctor.id
+    close.closed_at = now_ist_naive()
+    db.commit()
+
+    return {
+        "message": "Day closed",
+        "variance": {
+            "cash": round(body.counted_cash - close.system_cash, 2),
+            "card": round(body.counted_card - close.system_card, 2),
+            "upi": round(body.counted_upi - close.system_upi, 2),
+        }
     }
 
 
@@ -393,7 +576,12 @@ def preview_slip(
     if scope != "all":
         items = [i for i in items if i["type"] == scope.rstrip("s")]  # "tests" -> "test", "medicines" -> "medicine"
 
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    items, subtotal, gst_total, grand_total = apply_gst(items, hospital)
+
     return {
         "items": items,
-        "total": sum(i["line_total"] for i in items)
+        "subtotal": subtotal,
+        "gst_total": gst_total,
+        "total": grand_total
     }

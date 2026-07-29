@@ -11,6 +11,7 @@ class UserRole(enum.Enum):
     doctor = "doctor"
     receptionist = "receptionist"
     nurse = "nurse"
+    assistant = "assistant"
     lab = "lab"
     pharmacy = "pharmacy"
 

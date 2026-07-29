@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime
 from app.database import Base
 from app.utils.timezone import now_ist_naive
 
@@ -13,4 +13,6 @@ class AdmissionWardType(Base):
     name = Column(String, nullable=False)          # e.g. "General Ward", "ICU", "Private Room"
     total_beds = Column(Integer, nullable=False, default=0)
     daily_charge = Column(Float, nullable=False, default=0)
+    default_deposit = Column(Float, nullable=False, default=0)  # pre-filled at admission, reception can override
+    is_icu = Column(Boolean, nullable=False, default=False)  # ICU/CCU/ICCU/NICU — always GST-exempt regardless of daily rate
     created_at = Column(DateTime, default=now_ist_naive)

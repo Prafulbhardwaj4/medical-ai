@@ -19,6 +19,8 @@ class AttendanceMark(BaseModel):
     status: str
     room_id: Optional[int] = None
     expected_off_duty_at: Optional[str] = None  # ISO string from the browser, any timezone
+    ward_ids: Optional[list[int]] = None    # nurse/assistant only — wards being covered
+    doctor_ids: Optional[list[int]] = None  # nurse/assistant only — doctors/rooms being covered
 
 def get_today_attendance(db: Session, doctor_id: int):
     return db.query(AttendanceRecord).filter(
@@ -81,6 +83,27 @@ def mark_attendance(
         if not room:
             raise HTTPException(status_code=404, detail="Room not found")
 
+    is_coverage_role = current_doctor.role.value in ("nurse", "assistant")
+    ward_ids = list(dict.fromkeys(payload.ward_ids or []))
+    doctor_ids = list(dict.fromkeys(payload.doctor_ids or []))
+    if is_coverage_role and status == "present" and (ward_ids or doctor_ids):
+        from app.models.admission_ward_type import AdmissionWardType
+        if ward_ids:
+            valid_wards = {w.id for w in db.query(AdmissionWardType.id).filter(
+                AdmissionWardType.id.in_(ward_ids),
+                AdmissionWardType.hospital_id == current_doctor.hospital_id
+            ).all()}
+            if len(valid_wards) != len(ward_ids):
+                raise HTTPException(status_code=404, detail="One or more selected wards were not found")
+        if doctor_ids:
+            valid_doctors = {d.id for d in db.query(Doctor.id).filter(
+                Doctor.id.in_(doctor_ids),
+                Doctor.hospital_id == current_doctor.hospital_id,
+                Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
+            ).all()}
+            if len(valid_doctors) != len(doctor_ids):
+                raise HTTPException(status_code=404, detail="One or more selected doctors were not found")
+
     auto_close_stale_shifts(db, current_doctor.hospital_id)
     record = get_today_attendance(db, current_doctor.id)
     expected_off_duty_at = parse_client_datetime(payload.expected_off_duty_at)
@@ -122,24 +145,38 @@ def mark_attendance(
 
     db.commit()
 
+    if is_coverage_role:
+        from app.models.attendance_coverage import AttendanceCoverage
+        if status == "present" and (ward_ids or doctor_ids):
+            db.query(AttendanceCoverage).filter(AttendanceCoverage.attendance_record_id == record.id).delete()
+            for wid in ward_ids:
+                db.add(AttendanceCoverage(attendance_record_id=record.id, ward_type_id=wid))
+            for did in doctor_ids:
+                db.add(AttendanceCoverage(attendance_record_id=record.id, doctor_id=did))
+            db.commit()
+        elif status == "off_duty":
+            db.query(AttendanceCoverage).filter(AttendanceCoverage.attendance_record_id == record.id).delete()
+            db.commit()
+
     if status == "off_duty":
         sync_idle_staff_notification(db, current_doctor)
 
-    return {"status": record.status, "room_id": record.room_id}
+    coverage_out = {"ward_ids": ward_ids, "doctor_ids": doctor_ids} if is_coverage_role and status == "present" else None
+    return {"status": record.status, "room_id": record.room_id, "coverage": coverage_out}
 
 @router.get("/attendance/today")
 def attendance_today(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "doctor", "nurse", "receptionist", "lab", "pharmacy"]:
+    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "doctor", "nurse", "assistant", "receptionist", "lab", "pharmacy"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     auto_close_stale_shifts(db, current_doctor.hospital_id)
 
     staff = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.nurse, UserRole.receptionist, UserRole.lab, UserRole.pharmacy]),
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.nurse, UserRole.assistant, UserRole.receptionist, UserRole.lab, UserRole.pharmacy]),
         Doctor.is_active == True
     ).all()
 
@@ -235,5 +272,13 @@ def my_attendance_status(
     auto_close_stale_shifts(db, current_doctor.hospital_id)
     record = get_today_attendance(db, current_doctor.id)
     if not record:
-        return {"status": "not_marked", "room_id": None}
-    return {"status": record.status, "room_id": record.room_id}
+        return {"status": "not_marked", "room_id": None, "coverage": None}
+    coverage = None
+    if current_doctor.role.value in ("nurse", "assistant") and record.status in ("present", "on_break"):
+        from app.models.attendance_coverage import AttendanceCoverage
+        rows = db.query(AttendanceCoverage).filter(AttendanceCoverage.attendance_record_id == record.id).all()
+        coverage = {
+            "ward_ids": [r.ward_type_id for r in rows if r.ward_type_id is not None],
+            "doctor_ids": [r.doctor_id for r in rows if r.doctor_id is not None],
+        }
+    return {"status": record.status, "room_id": record.room_id, "coverage": coverage}

@@ -18,6 +18,7 @@ class TestOrder(Base):
     # payment_pending -> paid -> sample_collected -> processing -> completed
 
     paid_at = Column(DateTime, nullable=True)
+    payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi"
     queued_at = Column(DateTime, nullable=True)  # set whenever this order enters a day's active queue (payment or requeue)
     collected_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)

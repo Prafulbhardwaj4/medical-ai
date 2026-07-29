@@ -15,5 +15,6 @@ class Notification(Base):
     link_type = Column(String, nullable=True)
     link_id = Column(Integer, nullable=True)
     is_read = Column(Boolean, default=False, nullable=False)
+    target_doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # None = hospital-wide (admin); set = targeted ping (e.g. emergency alert to assigned doctor)
     created_at = Column(DateTime, default=now_ist_naive)
     updated_at = Column(DateTime, default=now_ist_naive, onupdate=now_ist_naive)

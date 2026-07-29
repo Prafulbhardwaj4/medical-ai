@@ -12,6 +12,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 PHARMACY_VISIBLE_TYPES = ["low_stock", "expiring_stock", "admission_medicine_order"]
 RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request"]
 LAB_VISIBLE_TYPES = ["admission_test_sample"]
+DOCTOR_VISIBLE_TYPES = ["emergency_alert"]
 
 
 def serialize(n: Notification):
@@ -33,7 +34,7 @@ def list_notifications(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab"]:
+    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     sync_stock_notifications(db, current_doctor.hospital_id)
@@ -46,6 +47,8 @@ def list_notifications(
         query = query.filter(Notification.type.in_(RECEPTIONIST_VISIBLE_TYPES))
     if current_doctor.role.value == "lab":
         query = query.filter(Notification.type.in_(LAB_VISIBLE_TYPES))
+    if current_doctor.role.value == "doctor":
+        query = query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
     notifications = query.order_by(Notification.is_read.asc(), Notification.updated_at.desc()).limit(100).all()
 
     unread_query = db.query(Notification).filter(
@@ -58,6 +61,8 @@ def list_notifications(
         unread_query = unread_query.filter(Notification.type.in_(RECEPTIONIST_VISIBLE_TYPES))
     if current_doctor.role.value == "lab":
         unread_query = unread_query.filter(Notification.type.in_(LAB_VISIBLE_TYPES))
+    if current_doctor.role.value == "doctor":
+        unread_query = unread_query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
     unread_count = unread_query.count()
 
     return {"notifications": [serialize(n) for n in notifications], "unread_count": unread_count}
@@ -68,7 +73,7 @@ def get_unread_count(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab"]:
+    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     sync_stock_notifications(db, current_doctor.hospital_id)
@@ -84,6 +89,8 @@ def get_unread_count(
         query = query.filter(Notification.type.in_(RECEPTIONIST_VISIBLE_TYPES))
     if current_doctor.role.value == "lab":
         query = query.filter(Notification.type.in_(LAB_VISIBLE_TYPES))
+    if current_doctor.role.value == "doctor":
+        query = query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
     count = query.count()
     return {"unread_count": count}
 
@@ -94,7 +101,7 @@ def mark_read(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab"]:
+    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     n = db.query(Notification).filter(
@@ -106,6 +113,8 @@ def mark_read(
     if current_doctor.role.value == "pharmacy" and n.type not in PHARMACY_VISIBLE_TYPES:
         raise HTTPException(status_code=403, detail="Not authorized")
     if current_doctor.role.value == "receptionist" and n.type not in RECEPTIONIST_VISIBLE_TYPES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if current_doctor.role.value == "doctor" and (n.type not in DOCTOR_VISIBLE_TYPES or n.target_doctor_id != current_doctor.id):
         raise HTTPException(status_code=403, detail="Not authorized")
     if current_doctor.role.value == "lab" and n.type not in LAB_VISIBLE_TYPES:
         raise HTTPException(status_code=403, detail="Not authorized")

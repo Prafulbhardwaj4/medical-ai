@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.database import Base
 from app.utils.timezone import now_ist_naive
@@ -20,6 +20,7 @@ class Patient(Base):
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)
     created_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     created_at = Column(DateTime, default=now_ist_naive)
+    is_emergency_unverified = Column(Boolean, default=False, nullable=False)  # created via Emergency Intake — real details pending
 
     doctor = relationship("Doctor", foreign_keys=[created_by], back_populates="patients")
     hospital = relationship("Hospital")

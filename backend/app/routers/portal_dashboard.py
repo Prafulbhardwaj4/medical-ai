@@ -359,7 +359,7 @@ def download_invoice_pdf(
     checkin = db.query(Checkin).filter(Checkin.id == invoice.checkin_id).first()
     consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first() if checkin else None
 
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, invoice.grand_total, patient, consulting_doctor)
+    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, invoice.grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number)
     return FileResponse(
         pdf_path, media_type="application/pdf",
         filename=f"invoice_{invoice_id}.pdf",

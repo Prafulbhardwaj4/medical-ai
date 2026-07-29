@@ -14,7 +14,7 @@ from app.utils.timezone import now_ist_naive
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 ADMIN_ROLES = ["admin", "sub_admin"]
-STAFF_ROLES = ["doctor", "receptionist", "nurse", "lab", "pharmacy"]
+STAFF_ROLES = ["doctor", "receptionist", "nurse", "assistant", "lab", "pharmacy"]
 
 CHAT_UPLOAD_DIR = "chat_uploads"
 os.makedirs(CHAT_UPLOAD_DIR, exist_ok=True)

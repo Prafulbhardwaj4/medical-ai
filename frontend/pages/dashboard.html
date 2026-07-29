@@ -192,6 +192,8 @@
 
     <main class="main-content">
 
+      <div id="emergency-banner" style="display:none;background:#dc2626;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
+
       <div class="desktop-tab active" id="desktop-tab-home">
         <!-- Attendance tab: status only, matching lab.html -->
         <div class="mobile-section" id="section-attendance">
@@ -470,6 +472,7 @@
     if (doc && (doc.role === 'admin' || doc.role === 'super_admin')) window.location.href = 'analytics.html';
     if (doc && doc.role === 'receptionist') window.location.href = 'receptionist.html';
     if (doc && doc.role === 'nurse') window.location.href = 'nurse.html';
+    if (doc && doc.role === 'assistant') window.location.href = 'assistant.html';
 
     if (doc && doc.role === 'sub_admin') {
       document.getElementById('nav-add-doctor').style.display = '';
@@ -824,8 +827,28 @@
 
     loadQueue();
     setInterval(loadQueue, 15000);
+    loadEmergencyAlerts();
+    setInterval(loadEmergencyAlerts, 15000);
     loadPatients();
     loadStats();
+
+    async function loadEmergencyAlerts() {
+      try {
+        const data = await api("GET", "/notifications");
+        const alerts = (data.notifications || []).filter(n => n.type === 'emergency_alert' && !n.is_read);
+        const banner = document.getElementById('emergency-banner');
+        if (!alerts.length) { banner.style.display = 'none'; return; }
+        const n = alerts[0];
+        banner.style.display = 'flex';
+        banner.innerHTML = `<span>${n.message}</span><button class="btn btn-sm" style="background:#fff;color:#dc2626" onclick="dismissEmergencyAlert(${n.id})">Acknowledge</button>`;
+      } catch (e) { }
+    }
+    async function dismissEmergencyAlert(id) {
+      try {
+        await api("PATCH", `/notifications/${id}/read`);
+        loadEmergencyAlerts();
+      } catch (e) { }
+    }
 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('openAddPatient') === 'true' || urlParams.get('openAddPatient') === '1') {

@@ -13,6 +13,7 @@ class PatientCreate(BaseModel):
     gender: str
     abha_number: Optional[str] = None
     address: Optional[str] = None
+    force: bool = False  # bypass the same-phone duplicate warning once reception has confirmed
 
     @validator("name")
     def validate_name(cls, v):
@@ -62,6 +63,13 @@ class PatientCreate(BaseModel):
         if not re.match(r'^[0-9]{14}$', v):
             raise ValueError("ABHA number must be 14 digits")
         return v
+
+
+class EmergencyIntakeIn(BaseModel):
+    name: Optional[str] = None
+    approx_age: Optional[int] = None
+    approx_gender: Optional[str] = None
+
 
 class PatientOut(BaseModel):
     id: int
@@ -130,6 +138,21 @@ class NurseNoteCreate(BaseModel):
 
 class NurseTaskComplete(BaseModel):
     data: Dict[str, str] = {}
+
+class AddOpdChargeIn(BaseModel):
+    description: str
+    amount: float
+    quantity: int = 1
+
+class PaymentMethodIn(BaseModel):
+    payment_method: str  # "cash" | "card" | "upi"
+
+    @validator("payment_method")
+    def valid_method(cls, v):
+        if v not in ("cash", "card", "upi"):
+            raise ValueError("payment_method must be cash, card, or upi")
+        return v
+
 
 class DoctorLite(BaseModel):
     id: int

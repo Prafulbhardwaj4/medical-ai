@@ -248,6 +248,14 @@
           <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)"></div>
         </div>
 
+        <div id="post-consult-wrap"
+          style="display:none;margin-bottom:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius);padding:14px 16px">
+          <div style="font-size:0.75rem;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">
+            Post-Consultation Task Completed
+          </div>
+          <div id="post-consult-summary" style="font-size:0.85rem;color:var(--navy)"></div>
+        </div>
+
         <div class="recorder-wrap" id="recorder-wrap">
           <button class="record-btn idle" id="record-btn" onclick="toggleRecording()">🎙</button>
           <div class="timer" id="timer">00:00</div>
@@ -903,6 +911,13 @@
           const summaryParts = Object.entries(c.vitals_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);
           document.getElementById('nurse-vitals-summary').innerHTML = summaryParts.join(' &nbsp;·&nbsp; ');
           document.getElementById('nurse-vitals-wrap').style.display = 'block';
+        }
+        if (c.post_consult_status === 'done' && c.post_consult_data) {
+          const parts = Object.entries(c.post_consult_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);
+          let html = parts.join(' &nbsp;·&nbsp; ');
+          if (c.post_consult_nurse_name) html += ` <span style="color:var(--slate-light)">— by ${c.post_consult_nurse_name}</span>`;
+          document.getElementById('post-consult-summary').innerHTML = html;
+          document.getElementById('post-consult-wrap').style.display = 'block';
         }
       } catch (e) { }
       renderVitalsReview();

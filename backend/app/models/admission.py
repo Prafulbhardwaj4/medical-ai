@@ -71,6 +71,25 @@ class AdmissionMedicationAdministration(Base):
     order = relationship("AdmissionMedicationOrder", back_populates="administrations")
 
 
+class AdmissionMedicationReturn(Base):
+    """A return of already-dispensed/administered units against a specific
+    order — pre-discharge only. Never a silent delete: it always produces an
+    offsetting AdmissionCharge (negative amount) so the bill/audit trail
+    stays intact. restocked defaults False (wastage) — stock is only put
+    back on explicit confirmation at the point of return."""
+    __tablename__ = "admission_medication_returns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)
+    order_id = Column(Integer, ForeignKey("admission_medication_orders.id"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    restocked = Column(Boolean, default=False, nullable=False)
+    note = Column(Text, nullable=True)
+    credit_charge_id = Column(Integer, ForeignKey("admission_charges.id"), nullable=True)
+    returned_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
+    returned_at = Column(DateTime, default=now_ist_naive, nullable=False)
+
+
 class AdmissionCharge(Base):
     """A discrete billable line item added during the stay (medicine given,
     test ordered, procedure, misc). Room charges are NOT stored here — they're

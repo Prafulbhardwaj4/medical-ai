@@ -158,6 +158,26 @@
       </div>
     </nav>
 
+    <nav class="sidebar" id="sidebar-assistant" style="display:none">
+      <div class="sidebar-section-label">Navigation</div>
+      <a class="nav-item" href="assistant.html">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Home
+      </a>
+      <a class="nav-item" href="assistant.html">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        History
+      </a>
+      <div class="nav-item active">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        Admissions
+      </div>
+    </nav>
+
     <nav class="sidebar" id="app-sidebar" style="display:none"></nav>
 
 
@@ -250,6 +270,31 @@
       </button>
     </nav>
 
+    <nav class="bottom-nav" id="bottom-nav-assistant" style="display:none">
+      <button class="bottom-nav-item" onclick="location.href='assistant.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3 8 4-16 3 8h4" />
+        </svg>
+        Vitals
+      </button>
+      <button class="bottom-nav-item" onclick="location.href='assistant.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+        Tasks
+      </button>
+      <button class="bottom-nav-item active" onclick="location.href='admissions.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        Admissions
+      </button>
+      <button class="bottom-nav-item" onclick="location.href='assistant.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        Attendance
+      </button>
+    </nav>
+
     <nav class="bottom-nav" id="app-bottom-nav" style="display:none"></nav>
 
 
@@ -309,6 +354,12 @@
         <div class="form-row">
           <div class="form-group"><label class="form-label">Total Beds</label><input class="form-control" type="number" min="0" id="wt-beds" /></div>
           <div class="form-group"><label class="form-label">Daily Charge (₹)</label><input class="form-control" type="number" min="0" id="wt-charge" /></div>
+        </div>
+        <div class="form-group"><label class="form-label">Default Deposit (₹)</label><input class="form-control" type="number" min="0" id="wt-deposit" placeholder="Pre-filled at admission, reception can override" /></div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+            <input type="checkbox" id="wt-is-icu"> ICU / CCU / ICCU / NICU (always GST-exempt, regardless of daily rate)
+          </label>
         </div>
         <div class="err-msg" id="wt-err"></div>
         <div style="display:flex;gap:10px">
@@ -370,6 +421,16 @@
           <input class="form-control" id="admit-diagnosis" placeholder="Auto-suggested from last visit — edit as needed" />
         </div>
         <div class="form-group"><label class="form-label">Daily Room Charge (₹)</label><input class="form-control" type="number" min="0" id="admit-daily-charge" value="0" readonly style="background:var(--smoke)" /></div>
+        <div class="form-group"><label class="form-label">Deposit (₹)</label><input class="form-control" type="number" min="0" id="admit-deposit" value="0" oninput="onAdmitDepositChange()" /></div>
+        <div class="form-group" id="admit-deposit-method-row" style="display:none">
+          <label class="form-label">Deposit Collected Via</label>
+          <select class="form-control" id="admit-deposit-method">
+            <option value="">Select method...</option>
+            <option value="cash">Cash</option>
+            <option value="card">Card</option>
+            <option value="upi">UPI</option>
+          </select>
+        </div>
         <div class="err-msg" id="admit-err"></div>
         <div style="display:flex;gap:10px">
           <button class="btn btn-outline" style="flex:1" onclick="backToSearch()">Back</button>
@@ -406,6 +467,12 @@
       document.getElementById("sidebar-nurse").style.display = "";
       document.getElementById("bottom-nav-doctor").style.display = "none";
       document.getElementById("bottom-nav-nurse").style.display = "";
+      document.getElementById("btn-admit-patient").style.display = "none";
+    } else if (getDoctor()?.role === "assistant") {
+      document.getElementById("sidebar-doctor").style.display = "none";
+      document.getElementById("sidebar-assistant").style.display = "";
+      document.getElementById("bottom-nav-doctor").style.display = "none";
+      document.getElementById("bottom-nav-assistant").style.display = "";
       document.getElementById("btn-admit-patient").style.display = "none";
     }
 
@@ -444,15 +511,22 @@
         return;
       }
       sel.innerHTML = wardTypesCache.map(w =>
-        `<option value="${w.id}" data-charge="${w.daily_charge}" data-vacant="${w.vacant}">${sanitize(w.name)} (${w.vacant} free)</option>`
+        `<option value="${w.id}" data-charge="${w.daily_charge}" data-deposit="${w.default_deposit || 0}" data-vacant="${w.vacant}">${sanitize(w.name)} (${w.vacant} free)</option>`
       ).join('');
       onAdmitWardTypeChange();
+    }
+
+    function onAdmitDepositChange() {
+      const amount = parseFloat(document.getElementById("admit-deposit").value) || 0;
+      document.getElementById("admit-deposit-method-row").style.display = amount > 0 ? "block" : "none";
     }
 
     async function onAdmitWardTypeChange() {
       const sel = document.getElementById("admit-ward-type");
       const opt = sel.selectedOptions[0];
       document.getElementById("admit-daily-charge").value = opt ? (opt.dataset.charge || 0) : 0;
+      document.getElementById("admit-deposit").value = opt ? (opt.dataset.deposit || 0) : 0;
+      onAdmitDepositChange();
 
       const bedSel = document.getElementById("admit-bed");
       if (!sel.value) { bedSel.innerHTML = `<option value="">Select a ward first...</option>`; return; }
@@ -500,7 +574,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
           <div>
             <div style="font-weight:600">${sanitize(w.name)}</div>
-            <div style="font-size:12px;color:var(--slate-light)">${w.total_beds} beds · ₹${w.daily_charge}/day · ${w.occupied} occupied</div>
+            <div style="font-size:12px;color:var(--slate-light)">${w.total_beds} beds · ₹${w.daily_charge}/day · ₹${w.default_deposit || 0} default deposit${w.is_icu ? ' · <strong>ICU (GST-exempt)</strong>' : ''} · ${w.occupied} occupied</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick='editWardType(${JSON.stringify(w)})'>Edit</button>
@@ -533,6 +607,8 @@
       document.getElementById("wt-name").style.display = isPreset ? "none" : "";
       document.getElementById("wt-beds").value = w.total_beds;
       document.getElementById("wt-charge").value = w.daily_charge;
+      document.getElementById("wt-deposit").value = w.default_deposit || 0;
+      document.getElementById("wt-is-icu").checked = !!w.is_icu;
       document.getElementById("wt-submit-btn").textContent = "Save Changes";
       document.getElementById("wt-cancel-edit-btn").style.display = "block";
       document.getElementById("wt-err").textContent = "";
@@ -546,6 +622,8 @@
       document.getElementById("wt-name").style.display = "none";
       document.getElementById("wt-beds").value = "";
       document.getElementById("wt-charge").value = "";
+      document.getElementById("wt-deposit").value = "";
+      document.getElementById("wt-is-icu").checked = false;
       document.getElementById("wt-submit-btn").textContent = "Add Ward Type";
       document.getElementById("wt-cancel-edit-btn").style.display = "none";
       document.getElementById("wt-err").textContent = "";
@@ -557,16 +635,18 @@
       const name = document.getElementById("wt-name").value.trim();
       const beds = parseInt(document.getElementById("wt-beds").value, 10);
       const charge = parseFloat(document.getElementById("wt-charge").value);
-      if (!name || isNaN(beds) || beds < 0 || isNaN(charge) || charge < 0) {
+      const deposit = parseFloat(document.getElementById("wt-deposit").value || "0");
+      const isIcu = document.getElementById("wt-is-icu").checked;
+      if (!name || isNaN(beds) || beds < 0 || isNaN(charge) || charge < 0 || isNaN(deposit) || deposit < 0) {
         err.textContent = "Please fill in all fields with valid values";
         return;
       }
       try {
         if (editingWardTypeId) {
-          await api("PUT", `/admissions/ward-types/${editingWardTypeId}`, { name, total_beds: beds, daily_charge: charge });
+          await api("PUT", `/admissions/ward-types/${editingWardTypeId}`, { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu });
           toast("Ward type updated", "success");
         } else {
-          await api("POST", "/admissions/ward-types", { name, total_beds: beds, daily_charge: charge });
+          await api("POST", "/admissions/ward-types", { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu });
           toast("Ward type added", "success");
         }
         wardTypesCache = await api("GET", "/admissions/ward-types");
@@ -722,11 +802,15 @@
       if (!diagnosis) { err.textContent = "Diagnosis is required"; return; }
       const doctorId = document.getElementById("admit-doctor").value;
       if (!doctorId) { err.textContent = "Please select the admitting doctor"; return; }
+      const depositAmount = parseFloat(document.getElementById("admit-deposit").value) || 0;
+      const depositMethod = document.getElementById("admit-deposit-method").value;
+      if (depositAmount > 0 && !depositMethod) { err.textContent = "Please select how the deposit was collected"; return; }
 
       try {
         const res = await api("POST", "/admissions", {
           patient_id: selectedPatientId, ward_type_id: parseInt(wardTypeId, 10), bed_number: bed,
           diagnosis: diagnosis, admitting_doctor_id: parseInt(doctorId, 10),
+          deposit_amount: depositAmount, deposit_payment_method: depositAmount > 0 ? depositMethod : null,
         });
         toast("Patient admitted", "success");
         closeAdmitModal();

@@ -175,6 +175,7 @@
         <button class="btn btn-outline btn-sm" id="df-receptionist"
           onclick="setDoctorFilter('receptionist')">Receptionists</button>
         <button class="btn btn-outline btn-sm" id="df-nurse" onclick="setDoctorFilter('nurse')">Nurses</button>
+        <button class="btn btn-outline btn-sm" id="df-assistant" onclick="setDoctorFilter('assistant')">Assistants</button>
         <button class="btn btn-outline btn-sm" id="df-lab" onclick="setDoctorFilter('lab')">Lab Staff</button>
         <button class="btn btn-outline btn-sm" id="df-pharmacy"
           onclick="setDoctorFilter('pharmacy')">Pharmacists</button>
@@ -186,6 +187,7 @@
         <option value="sub_admin">Sub Admins</option>
         <option value="receptionist">Receptionists</option>
         <option value="nurse">Nurses</option>
+        <option value="assistant">Assistants</option>
         <option value="lab">Lab Staff</option>
         <option value="pharmacy">Pharmacists</option>
       </select>
@@ -208,6 +210,7 @@
         <option value="sub_admin">Sub Admin</option>
         <option value="receptionist">Receptionist</option>
         <option value="nurse">Nurse</option>
+        <option value="assistant">Assistant</option>
         <option value="lab">Lab</option>
         <option value="pharmacy">Pharmacy</option>
       </select>
@@ -430,7 +433,7 @@
 
     function setDoctorFilter(filter) {
       doctorFilter = filter;
-      ['all', 'doctor', 'sub_admin', 'receptionist', 'nurse', 'lab', 'pharmacy'].forEach(f => {
+      ['all', 'doctor', 'sub_admin', 'receptionist', 'nurse', 'assistant', 'lab', 'pharmacy'].forEach(f => {
         const btn = document.getElementById(`df-${f}`);
         if (!btn) return;
         btn.style.background = '';
@@ -451,11 +454,12 @@
       renderDoctors();
     }
 
-    const ROLE_LABEL = { sub_admin: 'Sub Admin', receptionist: 'Receptionist', nurse: 'Nurse', lab: 'Lab Staff', pharmacy: 'Pharmacist', doctor: 'Doctor' };
+    const ROLE_LABEL = { sub_admin: 'Sub Admin', receptionist: 'Receptionist', nurse: 'Nurse', assistant: 'Assistant', lab: 'Lab Staff', pharmacy: 'Pharmacist', doctor: 'Doctor' };
     const ROLE_BADGE_STYLE = {
       sub_admin: 'background:#ccfbf1;color:#0d9488',
       receptionist: 'background:#fef3c7;color:#b45309',
       nurse: 'background:#ede9fe;color:#6d28d9',
+      assistant: 'background:#e0e7ff;color:#4338ca',
       lab: 'background:#dbeafe;color:#1e40af',
       pharmacy: 'background:#fce7f3;color:#be185d',
       doctor: 'background:#f1f5f9;color:#64748b'
@@ -496,8 +500,11 @@
               </div>` : ''}
             </div>
             <div class="staff-row-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              ${d.id !== getDoctor()?.id && getDoctor()?.role === 'admin' && d.role !== 'receptionist' && d.role !== 'nurse' ? `<button class="btn btn-outline btn-sm" id="role-btn-${d.id}" onclick="toggleRole(${d.id})">
+              ${d.id !== getDoctor()?.id && getDoctor()?.role === 'admin' && d.role !== 'receptionist' && d.role !== 'nurse' && d.role !== 'assistant' ? `<button class="btn btn-outline btn-sm" id="role-btn-${d.id}" onclick="toggleRole(${d.id})">
                 ${d.role === 'sub_admin' ? 'Demote to Doctor' : 'Promote to Sub Admin'}
+              </button>` : ''}
+              ${d.id !== getDoctor()?.id && (getDoctor()?.role === 'admin' || getDoctor()?.role === 'super_admin') && (d.role === 'nurse' || d.role === 'assistant') ? `<button class="btn btn-outline btn-sm" id="na-role-btn-${d.id}" onclick="toggleNurseAssistantRole(${d.id})">
+                ${d.role === 'nurse' ? 'Convert to Assistant' : 'Convert to Nurse'}
               </button>` : ''}
               <button class="btn btn-outline btn-sm" onclick="openEditModal(${d.id})">Edit</button>
               <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" id="active-btn-${d.id}" onclick="toggleActive(${d.id})">
@@ -665,6 +672,22 @@
       btn.innerHTML = '<span class="spinner"></span>';
       try {
         const data = await api('PATCH', `/admin/doctors/${doctorId}/toggle-role`);
+        toast(`Role updated to ${data.role}.`, 'success');
+        await loadDoctors();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = original;
+        toast(e.message, 'error');
+      }
+    }
+
+    async function toggleNurseAssistantRole(doctorId) {
+      const btn = document.getElementById(`na-role-btn-${doctorId}`);
+      const original = btn.textContent.trim();
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const data = await api('PATCH', `/admin/doctors/${doctorId}/toggle-nurse-assistant`);
         toast(`Role updated to ${data.role}.`, 'success');
         await loadDoctors();
       } catch (e) {

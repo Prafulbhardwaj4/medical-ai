@@ -160,7 +160,7 @@ def create_doctor(
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "receptionist"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    if role not in ["doctor", "sub_admin", "receptionist", "nurse", "lab", "pharmacy"]:
+    if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy"]:
         raise HTTPException(status_code=400, detail="Invalid role")
 
     if current_doctor.role.value == "sub_admin" and role != "doctor":
@@ -301,7 +301,12 @@ def get_hospital_details(
         "gstin": hospital.gstin,
         "phone": hospital.phone,
         "logo_base64": hospital.logo_base64,
-        "default_consultation_fee": hospital.default_consultation_fee
+        "default_consultation_fee": hospital.default_consultation_fee,
+        "consultation_gst_percent": hospital.consultation_gst_percent,
+        "test_gst_percent": hospital.test_gst_percent,
+        "room_gst_percent": hospital.room_gst_percent,
+        "charge_gst_percent": hospital.charge_gst_percent,
+        "room_gst_threshold_per_day": hospital.room_gst_threshold_per_day
     }
 
 
@@ -310,6 +315,11 @@ class HospitalDetailsUpdate(BaseModel):
     gstin: Optional[str] = None
     phone: Optional[str] = None
     logo_base64: Optional[str] = None
+    consultation_gst_percent: Optional[float] = None
+    test_gst_percent: Optional[float] = None
+    room_gst_percent: Optional[float] = None
+    charge_gst_percent: Optional[float] = None
+    room_gst_threshold_per_day: Optional[float] = None
     # Deliberately no name/city/state/hospital_code/hospital_type here —
     # those are set once by super admin at hospital creation and tied to
     # billing/plan tracking. Admin cannot touch them even via direct API call.
@@ -344,13 +354,28 @@ def update_hospital_details(
             if len(logo) > 700_000:
                 raise HTTPException(status_code=400, detail="Logo image is too large (max ~500KB)")
             hospital.logo_base64 = logo
+    if payload.consultation_gst_percent is not None:
+        hospital.consultation_gst_percent = payload.consultation_gst_percent or None
+    if payload.test_gst_percent is not None:
+        hospital.test_gst_percent = payload.test_gst_percent or None
+    if payload.room_gst_percent is not None:
+        hospital.room_gst_percent = payload.room_gst_percent or None
+    if payload.charge_gst_percent is not None:
+        hospital.charge_gst_percent = payload.charge_gst_percent or None
+    if payload.room_gst_threshold_per_day is not None:
+        hospital.room_gst_threshold_per_day = payload.room_gst_threshold_per_day
 
     db.commit()
     return {
         "address": hospital.address,
         "gstin": hospital.gstin,
         "phone": hospital.phone,
-        "logo_base64": hospital.logo_base64
+        "logo_base64": hospital.logo_base64,
+        "consultation_gst_percent": hospital.consultation_gst_percent,
+        "test_gst_percent": hospital.test_gst_percent,
+        "room_gst_percent": hospital.room_gst_percent,
+        "charge_gst_percent": hospital.charge_gst_percent,
+        "room_gst_threshold_per_day": hospital.room_gst_threshold_per_day
     }
 
 ROOM_TYPE_PICKER_MAP = {"doctor": "Doctor", "nurse": "Nurse", "lab": "Lab"}
@@ -504,7 +529,7 @@ def list_doctors(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     doctors_query = db.query(Doctor).filter(
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.receptionist, UserRole.nurse, UserRole.lab, UserRole.pharmacy])
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.receptionist, UserRole.nurse, UserRole.assistant, UserRole.lab, UserRole.pharmacy])
     )
     if current_doctor.role.value != "super_admin":
         doctors_query = doctors_query.filter(Doctor.hospital_id == current_doctor.hospital_id)
@@ -518,7 +543,7 @@ def list_doctors(
 
     result = []
     for d in doctors:
-        if d.role.value == "nurse":
+        if d.role.value in ("nurse", "assistant"):
             total = db.query(Checkin).filter(Checkin.vitals_recorded_by == d.id).count()
             today = db.query(Checkin).filter(Checkin.vitals_recorded_by == d.id, Checkin.vitals_recorded_at >= today_start).count()
             week = db.query(Checkin).filter(Checkin.vitals_recorded_by == d.id, Checkin.vitals_recorded_at >= week_start).count()
@@ -629,6 +654,44 @@ def toggle_doctor_role(
 
     old_role = doctor.role.value
     doctor.role = UserRole.doctor if doctor.role.value == "sub_admin" else UserRole.sub_admin
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="role_changed",
+        target_type="doctor",
+        target_id=doctor.id,
+        target_label=f"{doctor.title} {doctor.name}",
+        details=f"{old_role} → {doctor.role.value}"
+    )
+
+    return {"id": doctor.id, "role": doctor.role.value}
+
+@router.patch("/doctors/{doctor_id}/toggle-nurse-assistant")
+def toggle_nurse_assistant_role(
+    doctor_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admin or super admin can change roles")
+
+    doctor_query = db.query(Doctor).filter(Doctor.id == doctor_id)
+    if current_doctor.role.value != "super_admin":
+        doctor_query = doctor_query.filter(Doctor.hospital_id == current_doctor.hospital_id)
+    doctor = doctor_query.first()
+
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+
+    if doctor.id == current_doctor.id:
+        raise HTTPException(status_code=400, detail="You cannot change your own role")
+
+    if doctor.role.value not in ["nurse", "assistant"]:
+        raise HTTPException(status_code=400, detail="Can only toggle role between nurse and assistant")
+
+    old_role = doctor.role.value
+    doctor.role = UserRole.assistant if doctor.role.value == "nurse" else UserRole.nurse
     db.commit()
 
     log_action(

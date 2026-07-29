@@ -34,3 +34,5 @@ class Checkin(Base):
 
     is_finalized = Column(Boolean, default=False, nullable=False)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
+    payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi" — how the consultation fee was collected
+    is_emergency = Column(Boolean, default=False, nullable=False)  # Emergency Intake — skipped payment/registration gate

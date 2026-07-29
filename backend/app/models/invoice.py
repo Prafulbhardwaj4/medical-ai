@@ -11,9 +11,13 @@ class Invoice(Base):
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     items_json = Column(Text, nullable=False)  # [{type, name, qty, unit_price, line_total}]
-    grand_total = Column(Float, nullable=False)
+    grand_total = Column(Float, nullable=False)  # tax-inclusive total actually payable
+    subtotal = Column(Float, nullable=True)  # pre-tax amount; null on invoices generated before GST was wired in
+    gst_total = Column(Float, nullable=True)
     generated_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     generated_from = Column(String, nullable=True)  # "reception" or "pharmacy"
     pdf_path = Column(String, nullable=True)
     payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi"
+    receipt_number = Column(String, unique=True, nullable=True, index=True)
+    amount_collected = Column(Float, nullable=True)  # actual cash/card/upi taken at discharge (shortfall vs deposit) — distinct from grand_total, which is the full bill
     generated_at = Column(DateTime, default=now_ist_naive)

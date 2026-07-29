@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionMedicationAdministration, AdmissionCharge
+from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionMedicationAdministration, AdmissionCharge, AdmissionMedicationReturn
 from app.models.admission_ward_type import AdmissionWardType
 from app.models.admission_ward_stay import AdmissionWardStay
 from app.models.admission_referral import AdmissionReferral
@@ -16,16 +16,22 @@ from app.models.hospital import Hospital
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.test_order import TestOrder
 from app.models.invoice import Invoice
+from app.models.notification import Notification
+from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
+from app.models.admission_tpa_case import AdmissionTpaCase
+from app.models.refund import Refund
 from app.schemas.admission import (
     AdmitPatientIn, AddMedicationOrderIn, AdministerDoseIn, AddChargeIn, AddAdmissionTestIn, DischargeIn,
     WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn,
-    CollectPaymentIn,
+    TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, EmergencyAlertIn,
 )
 from app.models.consultation import Consultation
 from app.utils.auth import get_current_doctor, ist_today
 from app.utils.timezone import now_ist_naive
 from app.utils.inventory import deduct_stock_fefo
-from app.utils.notify import notify_ward_change_request
+from app.utils.notify import notify_ward_change_request, notify_emergency_alert
+from app.utils.receipts import next_receipt_number
+from app.utils.gst import apply_gst
 from app.services.pdf_service import generate_invoice_pdf
 import json
 
@@ -212,6 +218,11 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
     elif not ward_name:
         raise HTTPException(status_code=400, detail="Ward is required")
 
+    if body.deposit_amount < 0:
+        raise HTTPException(status_code=400, detail="Deposit cannot be negative")
+    if body.deposit_amount > 0 and not body.deposit_payment_method:
+        raise HTTPException(status_code=400, detail="Please select how the deposit was collected")
+
     admission = Admission(
         patient_id=patient.id, hospital_id=current_doctor.hospital_id,
         admitting_doctor_id=admitting_doctor_id, ward=ward_name, ward_type_id=ward_type_id, bed_number=body.bed_number,
@@ -228,6 +239,12 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
         admission_id=admission.id, ward_type_id=ward_type_id, ward_name=ward_name,
         bed_number=body.bed_number, daily_charge=daily_charge, start_date=admission.admission_date,
     ))
+
+    if body.deposit_amount > 0:
+        db.add(AdmissionDeposit(
+            admission_id=admission.id, amount=body.deposit_amount, payment_method=body.deposit_payment_method,
+            note="Initial deposit at admission", collected_by=current_doctor.id,
+        ))
     db.commit()
     return {"id": admission.public_token, "message": "Patient admitted"}
 
@@ -307,7 +324,7 @@ def test_catalog_for_ward(current_doctor: Doctor = Depends(get_current_doctor), 
 
 @router.get("/medicine-forms")
 def list_medicine_forms(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+    if current_doctor.role.value not in ["doctor", "nurse", "assistant", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     rows = db.query(HospitalMedicine.dosage_forms).filter(
         HospitalMedicine.hospital_id == current_doctor.hospital_id,
@@ -319,7 +336,7 @@ def list_medicine_forms(current_doctor: Doctor = Depends(get_current_doctor), db
 
 @router.get("/medicine-catalog")
 def medicine_catalog_for_ward(dosage_form: str = "", current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+    if current_doctor.role.value not in ["doctor", "nurse", "assistant", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     query = db.query(HospitalMedicine).filter(
         HospitalMedicine.hospital_id == current_doctor.hospital_id,
@@ -365,7 +382,7 @@ def list_ward_types(current_doctor: Doctor = Depends(get_current_doctor), db: Se
     out = []
     for t in types:
         occupied = db.query(Admission).filter(Admission.ward_type_id == t.id, Admission.status == "admitted").count()
-        out.append(WardTypeOut(id=t.id, name=t.name, total_beds=t.total_beds, daily_charge=t.daily_charge, occupied=occupied, vacant=max(t.total_beds - occupied, 0)))
+        out.append(WardTypeOut(id=t.id, name=t.name, total_beds=t.total_beds, daily_charge=t.daily_charge, default_deposit=t.default_deposit, is_icu=t.is_icu, occupied=occupied, vacant=max(t.total_beds - occupied, 0)))
     return out
 
 
@@ -373,13 +390,13 @@ def list_ward_types(current_doctor: Doctor = Depends(get_current_doctor), db: Se
 def create_ward_type(body: WardTypeCreateIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     if current_doctor.role.value not in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    if body.total_beds < 0 or body.daily_charge < 0:
+    if body.total_beds < 0 or body.daily_charge < 0 or body.default_deposit < 0:
         raise HTTPException(status_code=400, detail="Values cannot be negative")
-    wt = AdmissionWardType(hospital_id=current_doctor.hospital_id, name=body.name.strip(), total_beds=body.total_beds, daily_charge=body.daily_charge)
+    wt = AdmissionWardType(hospital_id=current_doctor.hospital_id, name=body.name.strip(), total_beds=body.total_beds, daily_charge=body.daily_charge, default_deposit=body.default_deposit, is_icu=body.is_icu)
     db.add(wt)
     db.commit()
     db.refresh(wt)
-    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, occupied=0, vacant=wt.total_beds)
+    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, occupied=0, vacant=wt.total_beds)
 
 
 @router.put("/ward-types/{ward_type_id}", response_model=WardTypeOut)
@@ -389,7 +406,7 @@ def update_ward_type(ward_type_id: int, body: WardTypeCreateIn, current_doctor: 
     wt = db.query(AdmissionWardType).filter(AdmissionWardType.id == ward_type_id, AdmissionWardType.hospital_id == current_doctor.hospital_id).first()
     if not wt:
         raise HTTPException(status_code=404, detail="Ward type not found")
-    if body.total_beds < 0 or body.daily_charge < 0:
+    if body.total_beds < 0 or body.daily_charge < 0 or body.default_deposit < 0:
         raise HTTPException(status_code=400, detail="Values cannot be negative")
     occupied = db.query(Admission).filter(Admission.ward_type_id == wt.id, Admission.status == "admitted").count()
     if body.total_beds < occupied:
@@ -397,8 +414,10 @@ def update_ward_type(ward_type_id: int, body: WardTypeCreateIn, current_doctor: 
     wt.name = body.name.strip()
     wt.total_beds = body.total_beds
     wt.daily_charge = body.daily_charge
+    wt.default_deposit = body.default_deposit
+    wt.is_icu = body.is_icu
     db.commit()
-    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, occupied=occupied, vacant=max(wt.total_beds - occupied, 0))
+    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, occupied=occupied, vacant=max(wt.total_beds - occupied, 0))
 
 
 @router.delete("/ward-types/{ward_type_id}")
@@ -452,10 +471,12 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
     med_out = []
     for m in meds:
         doses = db.query(AdmissionMedicationAdministration).filter(AdmissionMedicationAdministration.order_id == m.id).order_by(AdmissionMedicationAdministration.administered_at.desc()).all()
+        returned_qty = sum(r.quantity for r in db.query(AdmissionMedicationReturn).filter(AdmissionMedicationReturn.order_id == m.id).all())
         med_out.append({
             "id": m.id, "medicine_name": m.medicine_name, "dosage": m.dosage, "route": m.route,
             "frequency_note": m.frequency_note, "is_active": m.is_active, "sourced_outside": m.sourced_outside,
             "doses": [{"id": d.id, "administered_at": d.administered_at.isoformat(), "notes": d.notes} for d in doses],
+            "returned_quantity": returned_qty,
         })
 
     charges = db.query(AdmissionCharge).filter(AdmissionCharge.admission_id == a.id).order_by(AdmissionCharge.charged_at.desc()).all()
@@ -470,6 +491,12 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
 
     charge_total = sum(c.amount * c.quantity for c in charges)
     room_breakdown, room_total = _room_charge_breakdown(db, a)
+    # grand_total below is computed off the actual billable (payable_here) items via the
+    # same _build_discharge_bill/apply_gst path used at real discharge, so this running
+    # total always matches what the discharge invoice will actually charge, tax included.
+    billable_items, _pretax_payable_total = _build_discharge_bill(db, a)
+    hospital_for_gst = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
+    _, gst_subtotal, gst_amount, gst_grand_total = apply_gst(billable_items, hospital_for_gst)
 
     return {
         "id": a.public_token, "status": a.status, "ward": a.ward, "bed_number": a.bed_number,
@@ -484,7 +511,7 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         "tests": tests_out,
         "bill": {
             "room_total": room_total, "room_breakdown": room_breakdown, "charges_total": charge_total,
-            "grand_total": room_total + charge_total,
+            "subtotal": gst_subtotal, "gst_total": gst_amount, "grand_total": gst_grand_total,
         }
     }
 
@@ -503,7 +530,7 @@ def token_for_admission(admission_id: int, current_doctor: Doctor = Depends(get_
 def request_ward_change(admission_id: str, body: RequestWardChangeIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     """Doctor or nurse flags that a patient should be moved to a different ward — this only
     notifies reception, it does not move anyone. Reception makes the actual change via /change-ward."""
-    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+    if current_doctor.role.value not in ["doctor", "nurse", "assistant", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
@@ -619,8 +646,8 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
 
 @router.post("/{admission_id}/medications/{order_id}/administer")
 def administer_dose(admission_id: str, order_id: int, body: AdministerDoseIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only a doctor can log a dose")
+    if current_doctor.role.value not in ["doctor", "nurse"]:
+        raise HTTPException(status_code=403, detail="Only a doctor or nurse can log a dose")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id).first()
     if not order:
@@ -681,12 +708,58 @@ def resume_medication(admission_id: str, order_id: int, current_doctor: Doctor =
     return {"message": "Medication resumed"}
 
 
+@router.post("/{admission_id}/medications/{order_id}/return")
+def return_medication(admission_id: str, order_id: int, body: ReturnMedicationIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "nurse"]:
+        raise HTTPException(status_code=403, detail="Only a doctor or nurse can record a medicine return")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="Returns can only be recorded before discharge")
+    order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Medication order not found")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+
+    doses_given = db.query(AdmissionMedicationAdministration).filter(AdmissionMedicationAdministration.order_id == order.id).count()
+    already_returned = sum(r.quantity for r in db.query(AdmissionMedicationReturn).filter(AdmissionMedicationReturn.order_id == order.id).all())
+    available_to_return = doses_given - already_returned
+    if body.quantity > available_to_return:
+        raise HTTPException(status_code=400, detail=f"Only {available_to_return} unit(s) from this order are eligible for return")
+
+    unit_price = 0.0
+    if order.medicine_id:
+        medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.medicine_id).first()
+        if medicine:
+            if medicine.billing_mode == "per_pack" and medicine.pack_size:
+                unit_price = (medicine.price_per_pack or 0) / medicine.pack_size
+            else:
+                unit_price = medicine.price or medicine.price_per_pack or 0
+            if body.restock:
+                medicine.stock_quantity = (medicine.stock_quantity or 0) + body.quantity
+
+    credit_charge = AdmissionCharge(
+        admission_id=a.id, charge_type="medicine",
+        description=f"{order.medicine_name} ({order.dosage}) — {body.quantity} returned" + (" (restocked)" if body.restock else " (wastage)"),
+        amount=-unit_price, quantity=body.quantity, added_by=current_doctor.id, charged_at=now_ist_naive(),
+    )
+    db.add(credit_charge)
+    db.flush()
+
+    db.add(AdmissionMedicationReturn(
+        admission_id=a.id, order_id=order.id, quantity=body.quantity, restocked=body.restock,
+        note=body.note, credit_charge_id=credit_charge.id, returned_by=current_doctor.id, returned_at=now_ist_naive(),
+    ))
+    db.commit()
+    return {"message": "Return recorded", "credited_amount": unit_price * body.quantity}
+
+
 # ---------- Charges (manual: procedures, misc) ----------
 
 @router.post("/{admission_id}/charges")
 def add_charge(admission_id: str, body: AddChargeIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only reception can add charges to the bill")
+    if current_doctor.role.value not in ["receptionist", "nurse", "assistant", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only reception, nurse, or assistant can add charges to the bill")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Cannot add charges to a discharged admission")
@@ -697,6 +770,26 @@ def add_charge(admission_id: str, body: AddChargeIn, current_doctor: Doctor = De
     db.add(charge)
     db.commit()
     return {"message": "Charge added"}
+
+
+@router.post("/{admission_id}/emergency-alert")
+def raise_emergency_alert(admission_id: str, body: EmergencyAlertIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    # Any staff on this hospital can raise it — deliberately no role gate
+    # beyond hospital membership, since urgency shouldn't wait on a permissions check.
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="This patient is not currently admitted")
+    patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+    notify_emergency_alert(
+        db, hospital_id=a.hospital_id, admission_id=a.id,
+        patient_name=patient.name if patient else "patient",
+        doctor_id=a.admitting_doctor_id,
+        raised_by_name=f"{current_doctor.title} {current_doctor.name}",
+        ward=a.ward, bed_number=a.bed_number,
+        message=body.message,
+    )
+    db.commit()
+    return {"message": "Emergency alert sent"}
 
 
 # ---------- Tests during admission ----------
@@ -741,8 +834,10 @@ def order_admission_test(admission_id: str, body: AddAdmissionTestIn, current_do
 def _build_discharge_bill(db: Session, a: Admission):
     charges = db.query(AdmissionCharge).filter(AdmissionCharge.admission_id == a.id).all()
     current_rate = _current_daily_rate(db, a)
+    ward_type = db.query(AdmissionWardType).filter(AdmissionWardType.id == a.ward_type_id).first() if a.ward_type_id else None
     items = [{"type": "room", "name": f"Room charges — {a.ward}, Bed {a.bed_number} ({_days_admitted(a)} day(s))",
-              "qty": _days_admitted(a), "unit_price": current_rate, "line_total": _days_admitted(a) * current_rate, "payable_here": True}]
+              "qty": _days_admitted(a), "unit_price": current_rate, "line_total": _days_admitted(a) * current_rate, "payable_here": True,
+              "_is_icu": bool(ward_type and ward_type.is_icu)}]
     for c in charges:
         # Pharmacy (medicine) charges are settled only at the pharmacy counter, never at
         # reception — still listed here as a reference so the total bill picture is visible.
@@ -753,39 +848,194 @@ def _build_discharge_bill(db: Session, a: Admission):
     return items, grand_total
 
 
-@router.post("/{admission_id}/collect-payment")
-def collect_admission_payment(admission_id: str, body: CollectPaymentIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    """Mid-stay advance payment — recorded as a negative charge line so it automatically
-    nets out of the running bill and the discharge amount due, with no schema changes."""
+def _deposit_total(db: Session, a: Admission) -> float:
+    return sum(d.amount for d in db.query(AdmissionDeposit).filter(AdmissionDeposit.admission_id == a.id).all())
+
+
+def _settlement_summary(db: Session, a: Admission):
+    """(items, subtotal, gst_total, charges_total, deposit_total, balance) — charges_total
+    is subtotal + gst_total (tax-inclusive, what's actually payable). balance > 0 means the
+    patient still owes; balance < 0 means a refund is due against the deposit."""
+    items, _pretax_total = _build_discharge_bill(db, a)
+    hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
+    items, subtotal, gst_total, charges_total = apply_gst(items, hospital)
+    deposit_total = _deposit_total(db, a)
+    return items, subtotal, gst_total, charges_total, deposit_total, charges_total - deposit_total
+
+
+@router.get("/{admission_id}/deposit-summary")
+def get_deposit_summary(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    _, subtotal, gst_total, charges_total, deposit_total, balance = _settlement_summary(db, a)
+    deposits = db.query(AdmissionDeposit).filter(AdmissionDeposit.admission_id == a.id).order_by(AdmissionDeposit.collected_at).all()
+    topups = db.query(AdmissionDepositTopupRequest).filter(AdmissionDepositTopupRequest.admission_id == a.id).order_by(AdmissionDepositTopupRequest.requested_at.desc()).all()
+    return {
+        "deposit_total": deposit_total,
+        "subtotal": subtotal,
+        "gst_total": gst_total,
+        "charges_total": charges_total,
+        "balance": balance,
+        "deposits": [
+            {"id": d.id, "amount": d.amount, "payment_method": d.payment_method, "note": d.note, "collected_at": d.collected_at.isoformat() if d.collected_at else None}
+            for d in deposits
+        ],
+        "topup_requests": [
+            {"id": t.id, "requested_amount": t.requested_amount, "reason": t.reason, "status": t.status,
+             "requested_at": t.requested_at.isoformat() if t.requested_at else None,
+             "resolved_at": t.resolved_at.isoformat() if t.resolved_at else None}
+            for t in topups
+        ],
+    }
+
+
+@router.post("/{admission_id}/topup-requests")
+def create_topup_request(admission_id: str, body: TopupRequestIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only reception can raise a deposit top-up request")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="Cannot request a top-up for a discharged admission")
+    if body.requested_amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+
+    req = AdmissionDepositTopupRequest(
+        admission_id=a.id, requested_amount=body.requested_amount, reason=body.reason,
+        requested_by=current_doctor.id,
+    )
+    db.add(req)
+
+    patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+    db.add(Notification(
+        hospital_id=a.hospital_id,
+        source_key=f"deposit_topup_request:{req.id}" if req.id else f"deposit_topup_request:{admission_id}:{now_ist_naive().isoformat()}",
+        type="deposit_topup_request", severity="info",
+        title="Deposit Top-up Requested",
+        message=f"Rs.{body.requested_amount:.2f} top-up requested for {patient.name if patient else 'patient'} — {a.ward}, Bed {a.bed_number}.",
+        link_type="admission_topup", link_id=a.id,
+    ))
+    db.commit()
+    return {"message": "Top-up request raised", "id": req.id}
+
+
+@router.post("/{admission_id}/topup-requests/{request_id}/cancel")
+def cancel_topup_request(admission_id: str, request_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    req = db.query(AdmissionDepositTopupRequest).filter(AdmissionDepositTopupRequest.id == request_id, AdmissionDepositTopupRequest.admission_id == a.id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Top-up request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Only a pending request can be cancelled")
+    req.status = "cancelled"
+    req.resolved_at = now_ist_naive()
+    db.commit()
+    return {"message": "Top-up request cancelled"}
+
+
+@router.post("/{admission_id}/topup-requests/{request_id}/collect")
+def collect_topup_request(admission_id: str, request_id: int, body: CollectTopupIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized to collect payment")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    if a.status != "admitted":
-        raise HTTPException(status_code=400, detail="Cannot collect payment for a discharged admission")
-    if body.amount <= 0:
-        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+    req = db.query(AdmissionDepositTopupRequest).filter(AdmissionDepositTopupRequest.id == request_id, AdmissionDepositTopupRequest.admission_id == a.id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Top-up request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="This request has already been resolved")
     if not body.payment_method:
         raise HTTPException(status_code=400, detail="Please select how payment was collected")
 
-    items, grand_total = _build_discharge_bill(db, a)
-    if body.amount > grand_total + 0.01:
-        raise HTTPException(status_code=400, detail=f"Amount exceeds outstanding balance of Rs.{grand_total:.2f}")
-
-    db.add(AdmissionCharge(
-        admission_id=a.id, charge_type="payment",
-        description=f"Payment collected ({body.payment_method})",
-        amount=-body.amount, quantity=1, added_by=current_doctor.id, charged_at=now_ist_naive(),
-    ))
+    deposit = AdmissionDeposit(
+        admission_id=a.id, amount=req.requested_amount, payment_method=body.payment_method,
+        note="Top-up collected", collected_by=current_doctor.id,
+    )
+    db.add(deposit)
+    db.flush()
+    req.status = "collected"
+    req.deposit_id = deposit.id
+    req.resolved_at = now_ist_naive()
     db.commit()
-    return {"message": "Payment collected", "amount_collected": body.amount}
+    return {"message": "Top-up collected", "amount_collected": req.requested_amount}
+
+
+VALID_TPA_STATUSES = {"pending", "query_raised", "approved", "denied"}
+
+
+@router.get("/{admission_id}/tpa-case")
+def get_tpa_case(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    case = db.query(AdmissionTpaCase).filter(AdmissionTpaCase.admission_id == a.id).order_by(AdmissionTpaCase.created_at.desc()).first()
+    if not case:
+        return None
+    return {
+        "id": case.id, "insurer_name": case.insurer_name, "policy_number": case.policy_number,
+        "status": case.status, "authorized_amount": case.authorized_amount,
+        "room_category_eligibility": case.room_category_eligibility, "copay_notes": case.copay_notes,
+        "query_notes": case.query_notes, "created_at": case.created_at.isoformat() if case.created_at else None,
+        "updated_at": case.updated_at.isoformat() if case.updated_at else None,
+        "resolved_at": case.resolved_at.isoformat() if case.resolved_at else None,
+    }
+
+
+@router.post("/{admission_id}/tpa-case")
+def create_tpa_case(admission_id: str, body: TpaCaseIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    existing = db.query(AdmissionTpaCase).filter(
+        AdmissionTpaCase.admission_id == a.id, AdmissionTpaCase.status.in_(["pending", "query_raised"])
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="An open TPA case already exists for this admission")
+    if not body.insurer_name.strip():
+        raise HTTPException(status_code=400, detail="Insurer name is required")
+
+    case = AdmissionTpaCase(
+        admission_id=a.id, hospital_id=a.hospital_id, insurer_name=body.insurer_name.strip(),
+        policy_number=body.policy_number, room_category_eligibility=body.room_category_eligibility,
+        copay_notes=body.copay_notes, created_by=current_doctor.id,
+    )
+    db.add(case)
+    db.commit()
+    return {"message": "TPA case logged", "id": case.id}
+
+
+@router.patch("/{admission_id}/tpa-case/{case_id}")
+def update_tpa_case(admission_id: str, case_id: int, body: TpaCaseUpdateIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    case = db.query(AdmissionTpaCase).filter(AdmissionTpaCase.id == case_id, AdmissionTpaCase.admission_id == a.id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="TPA case not found")
+    if body.status not in VALID_TPA_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    case.status = body.status
+    if body.authorized_amount is not None:
+        case.authorized_amount = body.authorized_amount
+    if body.room_category_eligibility is not None:
+        case.room_category_eligibility = body.room_category_eligibility
+    if body.copay_notes is not None:
+        case.copay_notes = body.copay_notes
+    if body.query_notes is not None:
+        case.query_notes = body.query_notes
+    if body.status in ("approved", "denied"):
+        case.resolved_at = now_ist_naive()
+    db.commit()
+    return {"message": "TPA case updated"}
 
 
 @router.get("/{admission_id}/discharge-preview")
 def discharge_preview(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     """Shows what's owed BEFORE committing discharge — reception collects this first."""
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    items, grand_total = _build_discharge_bill(db, a)
-    return {"items": items, "amount_due": grand_total}
+    items, subtotal, gst_total, charges_total, deposit_total, balance = _settlement_summary(db, a)
+    return {
+        "items": items, "subtotal": subtotal, "gst_total": gst_total, "charges_total": charges_total,
+        "deposit_total": deposit_total, "balance": balance, "amount_due": max(balance, 0), "refund_due": max(-balance, 0),
+    }
 
 
 @router.post("/{admission_id}/discharge")
@@ -796,12 +1046,16 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Already discharged")
 
-    items, grand_total = _build_discharge_bill(db, a)
+    items, subtotal, gst_total, charges_total, deposit_total, balance = _settlement_summary(db, a)
+    amount_due = max(balance, 0)
+    refund_due = max(-balance, 0)
 
-    if grand_total > 0 and not body.payment_collected:
-        raise HTTPException(status_code=402, detail=f"Payment of Rs.{grand_total:.2f} is still pending — collect payment before discharge can proceed")
+    if amount_due > 0 and not body.payment_collected:
+        raise HTTPException(status_code=402, detail=f"Payment of Rs.{amount_due:.2f} is still pending (deposit Rs.{deposit_total:.2f} vs charges Rs.{charges_total:.2f}) — collect payment before discharge can proceed")
     if body.payment_collected and not body.payment_method:
         raise HTTPException(status_code=400, detail="Please select how payment was collected")
+    if refund_due > 0 and not body.refund_channel:
+        raise HTTPException(status_code=400, detail=f"Deposit exceeds charges by Rs.{refund_due:.2f} — select how the refund will be paid out")
 
     a.status = "discharged"
     a.discharge_date = now_ist_naive()
@@ -813,21 +1067,36 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
 
     invoice = Invoice(
         checkin_id=None, admission_id=a.id, patient_id=a.patient_id, hospital_id=a.hospital_id,
-        items_json=json.dumps(items), grand_total=grand_total,
+        items_json=json.dumps(items), grand_total=charges_total, subtotal=subtotal, gst_total=gst_total,
+        amount_collected=amount_due,
         generated_by=current_doctor.id, generated_from="admission_discharge",
         payment_method=body.payment_method,
+        receipt_number=next_receipt_number(db, hospital),
     )
     db.add(invoice)
     db.commit()
     db.refresh(invoice)
 
     admitting_doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, admitting_doctor)
+    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, charges_total, patient, admitting_doctor, receipt_number=invoice.receipt_number)
     invoice.pdf_path = pdf_path
     a.discharge_invoice_id = invoice.id
+
+    if refund_due > 0:
+        db.add(Refund(
+            patient_id=a.patient_id, hospital_id=a.hospital_id, source_type="ipd_deposit", source_id=a.id,
+            amount=refund_due, channel=body.refund_channel,
+            status="pending" if body.refund_channel == "online" else "completed",
+            reason="Deposit balance refund at discharge", processed_by=current_doctor.id,
+        ))
     db.commit()
 
-    return {"message": "Patient discharged", "invoice_id": invoice.id, "grand_total": grand_total}
+    return {
+        "message": "Patient discharged", "invoice_id": invoice.id,
+        "subtotal": subtotal, "gst_total": gst_total, "grand_total": charges_total, "deposit_total": deposit_total,
+        "refund_due": refund_due,
+        "amount_collected": amount_due,
+    }
 
 
 @router.get("/{admission_id}/invoice/pdf")

@@ -15,7 +15,7 @@ from app.models.test_catalog import TestCatalogItem
 from app.models.test_order import TestOrder
 from app.models.checkin import Checkin
 import os
-from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate
+from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate, PaymentMethodIn, EmergencyIntakeIn
 from sqlalchemy import or_
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
 from app.utils.timezone import now_ist_naive
@@ -23,8 +23,80 @@ from app.utils.audit import log_action
 from app.models.attendance import AttendanceRecord
 from app.utils.order_lifecycle import is_order_expired
 from app.models.medicine_order import MedicineOrder
+from app.models.opd_charge import OpdCharge
+from app.models.admission import Admission
+from app.models.admission_deposit import AdmissionDepositTopupRequest
+from app.models.admission_tpa_case import AdmissionTpaCase
+from app.models.refund import Refund
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+
+@router.get("/lookup")
+def unified_patient_lookup(
+    query: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """§1 — single reception entry point: search by phone/UID/token and see which
+    situations apply to the patient(s) found, instead of hunting across separate screens."""
+    q = query.strip()
+    if not q:
+        return []
+
+    patients_found = {}
+
+    by_phone_uid = db.query(Patient).filter(
+        Patient.hospital_id == current_doctor.hospital_id,
+        or_(Patient.phone.like(f"%{q}%"), Patient.patient_uid.ilike(f"%{q}%"))
+    ).limit(10).all()
+    for p in by_phone_uid:
+        patients_found[p.id] = p
+
+    by_token = db.query(Checkin).filter(
+        Checkin.hospital_id == current_doctor.hospital_id, Checkin.token_number.ilike(f"%{q}%")
+    ).order_by(Checkin.created_at.desc()).limit(5).all()
+    for c in by_token:
+        p = db.query(Patient).filter(Patient.id == c.patient_id).first()
+        if p:
+            patients_found[p.id] = p
+
+    results = []
+    for p in patients_found.values():
+        situations = []
+
+        todays_checkin = db.query(Checkin).filter(
+            Checkin.patient_id == p.id, Checkin.hospital_id == current_doctor.hospital_id,
+            Checkin.visit_date == ist_today()
+        ).order_by(Checkin.created_at.desc()).first()
+        if todays_checkin and not todays_checkin.is_paid:
+            situations.append("pending_opd_payment")
+
+        if db.query(OpdCharge).filter(OpdCharge.patient_id == p.id, OpdCharge.hospital_id == current_doctor.hospital_id, OpdCharge.status == "payment_pending").count():
+            situations.append("pending_opd_charges")
+        if db.query(TestOrder).filter(TestOrder.patient_id == p.id, TestOrder.hospital_id == current_doctor.hospital_id, TestOrder.status == "payment_pending").count():
+            situations.append("pending_test_payment")
+
+        active_admission = db.query(Admission).filter(
+            Admission.patient_id == p.id, Admission.hospital_id == current_doctor.hospital_id, Admission.status == "admitted"
+        ).first()
+        if active_admission:
+            situations.append("active_admission")
+            if db.query(AdmissionDepositTopupRequest).filter(AdmissionDepositTopupRequest.admission_id == active_admission.id, AdmissionDepositTopupRequest.status == "pending").count():
+                situations.append("pending_topup_request")
+            if db.query(AdmissionTpaCase).filter(AdmissionTpaCase.admission_id == active_admission.id, AdmissionTpaCase.status.in_(["pending", "query_raised"])).count():
+                situations.append("open_tpa_case")
+
+        if db.query(Refund).filter(Refund.patient_id == p.id, Refund.hospital_id == current_doctor.hospital_id, Refund.status == "pending").count():
+            situations.append("refund_settling")
+
+        results.append({
+            "id": p.id, "name": p.name, "patient_uid": p.patient_uid, "phone": p.phone,
+            "situations": situations,
+            "active_admission_token": active_admission.public_token if active_admission else None,
+        })
+
+    return results
 
 def generate_patient_uid(db: Session, hospital_id: int, hospital_code: str) -> str:
     import secrets, string
@@ -45,7 +117,7 @@ def generate_url_token(db: Session) -> str:
         if not existing:
             return token
 
-def pick_random_nurse(db: Session, hospital_id: int):
+def pick_random_nurse(db: Session, hospital_id: int, doctor_id: int = None):
     present_nurse_ids = [
         r[0] for r in db.query(AttendanceRecord.doctor_id).filter(
             AttendanceRecord.hospital_id == hospital_id,
@@ -55,13 +127,138 @@ def pick_random_nurse(db: Session, hospital_id: int):
     ]
     if not present_nurse_ids:
         return None
-    nurses = db.query(Doctor).filter(
+
+    base_query = db.query(Doctor).filter(
         Doctor.hospital_id == hospital_id,
-        Doctor.role == UserRole.nurse,
+        Doctor.role.in_([UserRole.nurse, UserRole.assistant]),
         Doctor.is_active == True,
         Doctor.id.in_(present_nurse_ids)
-    ).all()
+    )
+
+    if doctor_id:
+        from app.models.attendance_coverage import AttendanceCoverage
+        covering_staff_ids = [
+            r[0] for r in db.query(AttendanceRecord.doctor_id).join(
+                AttendanceCoverage, AttendanceCoverage.attendance_record_id == AttendanceRecord.id
+            ).filter(
+                AttendanceRecord.hospital_id == hospital_id,
+                AttendanceRecord.date == ist_today(),
+                AttendanceRecord.status.in_(["present", "on_break"]),
+                AttendanceCoverage.doctor_id == doctor_id
+            ).all()
+        ]
+        if covering_staff_ids:
+            covering = base_query.filter(Doctor.id.in_(covering_staff_ids)).all()
+            if covering:
+                return random.choice(covering)
+        # No one has explicitly signed up to cover this doctor — fall back to
+        # any present nurse/assistant, same as before coverage existed.
+
+    nurses = base_query.all()
     return random.choice(nurses) if nurses else None
+
+def _pick_doctor_for_emergency(db: Session, hospital_id: int):
+    """Nearest available doctor = present today and least busy right now.
+    Falls back to any active doctor at the hospital if nobody's marked present
+    (an emergency should never come back empty)."""
+    present_ids = [
+        r[0] for r in db.query(AttendanceRecord.doctor_id).filter(
+            AttendanceRecord.hospital_id == hospital_id,
+            AttendanceRecord.date == ist_today(),
+            AttendanceRecord.status == "present"
+        ).all()
+    ]
+    base_query = db.query(Doctor).filter(
+        Doctor.hospital_id == hospital_id,
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
+        Doctor.is_active == True,
+    )
+    candidates = base_query.filter(Doctor.id.in_(present_ids)).all() if present_ids else []
+    if not candidates:
+        candidates = base_query.all()
+    if not candidates:
+        return None
+    today_counts = dict(
+        db.query(Checkin.doctor_id, func.count(Checkin.id))
+        .filter(Checkin.hospital_id == hospital_id, Checkin.visit_date == ist_today())
+        .group_by(Checkin.doctor_id).all()
+    )
+    candidates.sort(key=lambda d: today_counts.get(d.id, 0))
+    return candidates[0]
+
+
+@router.post("/emergency-intake", status_code=201)
+def emergency_intake(
+    payload: EmergencyIntakeIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Minimal, instant record for an emergency walk-in — no payment or full
+    registration gate, ever. Goes straight to the nearest available doctor.
+    Full registration/billing is completed retroactively via the normal
+    PUT /patients/{id} once the patient is identified/stabilized."""
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    hospital_code = hospital.hospital_code if hospital else "GEN"
+
+    doctor = _pick_doctor_for_emergency(db, current_doctor.hospital_id)
+    if not doctor:
+        raise HTTPException(status_code=400, detail="No doctor available at this hospital right now")
+
+    label = payload.name.strip() if payload.name and payload.name.strip() else (
+        f"Unidentified — approx {payload.approx_age or '?'}y, {payload.approx_gender or 'unknown'}"
+    )
+    gender = (payload.approx_gender or "Other").capitalize()
+    if gender not in ["Male", "Female", "Other"]:
+        gender = "Other"
+
+    patient = Patient(
+        patient_uid=generate_patient_uid(db, current_doctor.hospital_id, hospital_code),
+        url_token=generate_url_token(db),
+        name=label,
+        phone=f"EMRG-{int(now_ist_naive().timestamp())}",
+        age=payload.approx_age or 0,
+        gender=gender,
+        hospital_id=current_doctor.hospital_id,
+        created_by=current_doctor.id,
+        is_emergency_unverified=True,
+    )
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+
+    token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+    checkin = Checkin(
+        hospital_id=current_doctor.hospital_id,
+        patient_id=patient.id,
+        token_number=token,
+        issue_category="Emergency intake",
+        doctor_id=doctor.id,
+        created_by=current_doctor.id,
+        visit_date=ist_today(),
+        is_paid=True,  # no payment gate — billed retroactively once stabilized
+        is_emergency=True,
+    )
+    db.add(checkin)
+    db.commit()
+    db.refresh(checkin)
+
+    log_action(
+        db, current_doctor,
+        action="emergency_intake",
+        target_type="patient",
+        target_id=patient.id,
+        target_label=f"{patient.name} ({patient.patient_uid})",
+        details=f"Token {token} → {doctor.title} {doctor.name}"
+    )
+
+    return {
+        "patient_id": patient.id,
+        "url_token": patient.url_token,
+        "checkin_id": checkin.id,
+        "token_number": token,
+        "doctor_name": f"{doctor.title} {doctor.name}",
+    }
+
 
 @router.post("/", response_model=PatientOut, status_code=201)
 def create_patient(
@@ -71,6 +268,24 @@ def create_patient(
 ):
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     hospital_code = hospital.hospital_code if hospital else "GEN"
+
+    if not payload.force:
+        existing = db.query(Patient).filter(
+            Patient.hospital_id == current_doctor.hospital_id,
+            Patient.phone == payload.phone
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail={
+                "message": f"{existing.name} ({existing.patient_uid}) is already registered with this phone number.",
+                "existing_patient": {
+                    "id": existing.id,
+                    "name": existing.name,
+                    "patient_uid": existing.patient_uid,
+                    "age": existing.age,
+                    "gender": existing.gender,
+                    "phone": existing.phone
+                }
+            })
 
     patient = Patient(
         patient_uid=generate_patient_uid(db, current_doctor.hospital_id, hospital_code),
@@ -418,6 +633,7 @@ def checkin_today(
         "nurse_name": f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
         "post_consult_status": checkin.post_consult_status,
         "post_consult_note": checkin.post_consult_note,
+        "post_consult_data": json.loads(checkin.post_consult_data) if checkin.post_consult_data else None,
         "post_consult_nurse_name": f"{post_consult_nurse.title} {post_consult_nurse.name}" if post_consult_nurse else None,
         "checkin_id": checkin.id,
         "consultation_fee": checkin.consultation_fee,
@@ -479,7 +695,7 @@ def send_to_nurse(
     if not checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today.")
 
-    nurse = pick_random_nurse(db, current_doctor.hospital_id)
+    nurse = pick_random_nurse(db, current_doctor.hospital_id, current_doctor.id)
     if not nurse:
         raise HTTPException(status_code=400, detail="No nurse available at this hospital yet.")
 
@@ -519,7 +735,7 @@ def send_to_nurse_postconsult(
     if not checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today.")
 
-    nurse = pick_random_nurse(db, current_doctor.hospital_id)
+    nurse = pick_random_nurse(db, current_doctor.hospital_id, current_doctor.id)
     if not nurse:
         raise HTTPException(status_code=400, detail="No nurse available at this hospital yet.")
 
@@ -642,7 +858,7 @@ def checkin_patient(
 
     nurse = None
     if payload.send_to_nurse:
-        nurse = pick_random_nurse(db, current_doctor.hospital_id)
+        nurse = pick_random_nurse(db, current_doctor.hospital_id, doctor.id)
         if not nurse:
             raise HTTPException(status_code=400, detail="No nurse available at this hospital yet.")
 
@@ -698,6 +914,7 @@ def checkin_patient(
 @router.patch("/checkin/{checkin_id}/mark-paid")
 def mark_checkin_paid(
     checkin_id: int,
+    body: PaymentMethodIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -710,6 +927,7 @@ def mark_checkin_paid(
 
     checkin.is_paid = True
     checkin.paid_at = now_ist_naive()
+    checkin.payment_method = body.payment_method
     db.commit()
 
     patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
@@ -739,6 +957,7 @@ def mark_checkin_unpaid(
 
     checkin.is_paid = False
     checkin.paid_at = None
+    checkin.payment_method = None
     if checkin.is_finalized:
         checkin.is_finalized = False
         checkin.invoice_id = None
@@ -846,7 +1065,8 @@ def todays_queue(
             "issue_category": c.issue_category,
             "created_at": c.created_at.isoformat(),
             "estimated_time": None,
-            "status": "done" if c.token_number in confirmed_tokens else "waiting"
+            "status": "done" if c.token_number in confirmed_tokens else "waiting",
+            "is_emergency": c.is_emergency
         })
 
     # Merge in paid portal appointments for today that haven't been checked
@@ -875,7 +1095,8 @@ def todays_queue(
             "issue_category": a.notes or "Booked appointment",
             "created_at": a.requested_time.isoformat(),
             "estimated_time": a.requested_time.isoformat(),
-            "status": "expected"
+            "status": "expected",
+            "is_emergency": False
         })
 
     result.sort(key=lambda r: r.get("estimated_time") or r["created_at"])
@@ -946,6 +1167,15 @@ def reception_pending_payments(
                     pharm_status = "dispensed"
                 buckets["pharmacy"] = {"status": pharm_status}
 
+        opd_charges = db.query(OpdCharge).filter(OpdCharge.checkin_id == c.id).all()
+        if opd_charges:
+            pending_charges = [ch for ch in opd_charges if ch.status == "payment_pending"]
+            buckets["charges"] = {
+                "status": "unpaid" if pending_charges else "paid",
+                "pending_count": len(pending_charges),
+                "pending_total": sum(ch.amount * ch.quantity for ch in pending_charges)
+            }
+
         if not buckets:
             continue
 
@@ -994,10 +1224,20 @@ def get_patient_pending_tasks(
         MedicineOrder.hospital_id == current_doctor.hospital_id
     ).order_by(MedicineOrder.created_at.desc()).limit(15).all()
 
+    opd_charges = db.query(OpdCharge).filter(
+        OpdCharge.patient_id == patient_id,
+        OpdCharge.hospital_id == current_doctor.hospital_id,
+        OpdCharge.status == "payment_pending"
+    ).order_by(OpdCharge.charged_at).all()
+
     return {
         "lab": [
             {"id": t.id, "test_name": t.test_name, "price": t.price, "created_at": t.created_at.isoformat()}
             for t in lab_pending
+        ],
+        "charges": [
+            {"id": c.id, "description": c.description, "amount": c.amount, "quantity": c.quantity, "created_at": c.charged_at.isoformat()}
+            for c in opd_charges
         ],
         "pharmacy": [
             {"medicine_name": m.medicine_name, "status": m.status}
@@ -1009,6 +1249,7 @@ def get_patient_pending_tasks(
 @router.post("/{patient_id}/collect-test-payment-anyday")
 def collect_test_payment_anyday(
     patient_id: int,
+    body: PaymentMethodIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1031,6 +1272,7 @@ def collect_test_payment_anyday(
     for o in payable:
         o.status = "paid"
         o.paid_at = now
+        o.payment_method = body.payment_method
         o.queued_at = now
         total += o.price
     db.commit()
@@ -1044,6 +1286,109 @@ def collect_test_payment_anyday(
         hospital_id=current_doctor.hospital_id
     )
     return {"charged": total, "count": len(payable)}
+
+@router.get("/{patient_id}/pending-opd-charges")
+def get_pending_opd_charges(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    today_start, today_end = ist_day_bounds()
+
+    charges = db.query(OpdCharge).filter(
+        OpdCharge.patient_id == patient_id,
+        OpdCharge.hospital_id == current_doctor.hospital_id,
+        OpdCharge.status == "payment_pending",
+        OpdCharge.charged_at >= today_start,
+        OpdCharge.charged_at <= today_end
+    ).order_by(OpdCharge.charged_at).all()
+
+    return [
+        {"id": c.id, "description": c.description, "amount": c.amount, "quantity": c.quantity}
+        for c in charges
+    ]
+
+
+@router.post("/{patient_id}/collect-opd-charges")
+def collect_opd_charges(
+    patient_id: int,
+    body: PaymentMethodIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    today_start, today_end = ist_day_bounds()
+
+    charges = db.query(OpdCharge).filter(
+        OpdCharge.patient_id == patient_id,
+        OpdCharge.hospital_id == current_doctor.hospital_id,
+        OpdCharge.status == "payment_pending",
+        OpdCharge.charged_at >= today_start,
+        OpdCharge.charged_at <= today_end
+    ).all()
+    if not charges:
+        raise HTTPException(status_code=400, detail="No ad-hoc charges pending payment")
+
+    total = 0
+    now = now_ist_naive()
+    for c in charges:
+        c.status = "paid"
+        c.paid_at = now
+        c.payment_method = body.payment_method
+        total += c.amount * c.quantity
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="opd_charges_collected",
+        target_type="patient",
+        target_id=patient_id,
+        target_label=f"Rs.{total:.2f} for {len(charges)} charge(s)",
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"charged": total, "count": len(charges)}
+
+
+@router.post("/{patient_id}/collect-opd-charges-anyday")
+def collect_opd_charges_anyday(
+    patient_id: int,
+    body: PaymentMethodIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    charges = db.query(OpdCharge).filter(
+        OpdCharge.patient_id == patient_id,
+        OpdCharge.hospital_id == current_doctor.hospital_id,
+        OpdCharge.status == "payment_pending"
+    ).all()
+    if not charges:
+        raise HTTPException(status_code=400, detail="No ad-hoc charges pending payment")
+
+    total = 0
+    now = now_ist_naive()
+    for c in charges:
+        c.status = "paid"
+        c.paid_at = now
+        c.payment_method = body.payment_method
+        total += c.amount * c.quantity
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="opd_charges_collected_anyday",
+        target_type="patient",
+        target_id=patient_id,
+        target_label=f"Rs.{total:.2f} for {len(charges)} charge(s) (late collection)",
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"charged": total, "count": len(charges)}
+
 
 @router.get("/{patient_id}/pending-test-fees")
 def get_pending_test_fees(
@@ -1097,6 +1442,7 @@ def toggle_test_order_include(
 @router.post("/{patient_id}/collect-test-payment")
 def collect_test_payment(
     patient_id: int,
+    body: PaymentMethodIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1127,6 +1473,7 @@ def collect_test_payment(
     for o in orders:
         o.status = "paid"
         o.paid_at = now
+        o.payment_method = body.payment_method
         o.queued_at = now
         total += o.price
 
@@ -1146,6 +1493,7 @@ def collect_test_payment(
 @router.post("/test-orders/{order_id}/mark-paid")
 def mark_test_order_paid(
     order_id: int,
+    body: PaymentMethodIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1164,6 +1512,7 @@ def mark_test_order_paid(
 
     order.status = "paid"
     order.paid_at = now_ist_naive()
+    order.payment_method = body.payment_method
     order.queued_at = order.paid_at
     db.commit()
 

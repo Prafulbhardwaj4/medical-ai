@@ -626,7 +626,7 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     doc.build(elements)
     return filepath
 
-def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None) -> str:
+def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None, receipt_number=None) -> str:
     ensure_reports_dir()
     invoices_dir = os.path.join(os.path.dirname(__file__), "..", "..", "invoices")
     os.makedirs(invoices_dir, exist_ok=True)
@@ -652,30 +652,61 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
 
     elements.append(Paragraph(f"<b>Patient:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}", styles["Normal"]))
     elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", styles["Normal"]))
-    invoice_hash = hashlib.sha256(f"invoice-{invoice_id}-{settings.SECRET_KEY}".encode()).hexdigest()[:8].upper()
-    elements.append(Paragraph(f"<b>Invoice #:</b> INV-{invoice_hash} &nbsp;&nbsp; <b>Date:</b> {now_ist().strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
+    if receipt_number:
+        elements.append(Paragraph(f"<b>Receipt No:</b> {receipt_number} &nbsp;&nbsp; <b>Date:</b> {now_ist().strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
+    else:
+        invoice_hash = hashlib.sha256(f"invoice-{invoice_id}-{settings.SECRET_KEY}".encode()).hexdigest()[:8].upper()
+        elements.append(Paragraph(f"<b>Invoice #:</b> INV-{invoice_hash} &nbsp;&nbsp; <b>Date:</b> {now_ist().strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     if doctor:
         elements.append(Paragraph(f"<b>Consulting Doctor:</b> {doctor.title} {doctor.name}", styles["Normal"]))
     elements.append(Spacer(1, 5*mm))
 
-    table_data = [["Description", "Qty", "Unit Price", "Amount"]]
-    for item in items:
-        table_data.append([
-            item["name"],
-            str(item.get("qty", 1)),
-            f"Rs.{item['unit_price']:.2f}",
-            f"Rs.{item['line_total']:.2f}"
-        ])
-    table_data.append(["", "", "Grand Total", f"Rs.{grand_total:.2f}"])
+    # GST breakdown only appears once a hospital actually has rates configured — until then
+    # every item's tax_amount is 0 and the PDF renders exactly as it did before GST existed.
+    gst_total = sum(item.get("tax_amount", 0) or 0 for item in items)
 
-    t = Table(table_data, colWidths=[85*mm, 20*mm, 30*mm, 30*mm])
+    if gst_total > 0:
+        table_data = [["Description", "Qty", "Unit Price", "Taxable Amt", "GST", "Amount"]]
+        for item in items:
+            tax = item.get("tax_amount", 0) or 0
+            rate = item.get("gst_rate", 0) or 0
+            taxable = item.get("taxable_amount", item.get("line_total", 0))
+            table_data.append([
+                item["name"],
+                str(item.get("qty", 1)),
+                f"Rs.{item['unit_price']:.2f}",
+                f"Rs.{taxable:.2f}",
+                f"{rate:.0f}% (Rs.{tax:.2f})" if rate else "Exempt",
+                f"Rs.{item.get('total_with_tax', item['line_total']):.2f}"
+            ])
+        subtotal = sum(item.get("line_total", 0) for item in items)
+        table_data.append(["", "", "", "", "Subtotal", f"Rs.{subtotal:.2f}"])
+        table_data.append(["", "", "", "", "CGST", f"Rs.{gst_total/2:.2f}"])
+        table_data.append(["", "", "", "", "SGST", f"Rs.{gst_total/2:.2f}"])
+        table_data.append(["", "", "", "", "Grand Total", f"Rs.{grand_total:.2f}"])
+        col_widths = [55*mm, 12*mm, 22*mm, 22*mm, 26*mm, 28*mm]
+        footer_rows = 4
+    else:
+        table_data = [["Description", "Qty", "Unit Price", "Amount"]]
+        for item in items:
+            table_data.append([
+                item["name"],
+                str(item.get("qty", 1)),
+                f"Rs.{item['unit_price']:.2f}",
+                f"Rs.{item['line_total']:.2f}"
+            ])
+        table_data.append(["", "", "Grand Total", f"Rs.{grand_total:.2f}"])
+        col_widths = [85*mm, 20*mm, 30*mm, 30*mm]
+        footer_rows = 1
+
+    t = Table(table_data, colWidths=col_widths)
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("FONTNAME", (0, -footer_rows), (-1, -1), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 9.5),
-        ("GRID", (0, 0), (-1, -2), 0.4, colors.lightgrey),
-        ("LINEABOVE", (0, -1), (-1, -1), 1, colors.HexColor("#1a237e")),
+        ("GRID", (0, 0), (-1, -footer_rows - 1), 0.4, colors.lightgrey),
+        ("LINEABOVE", (0, -footer_rows), (-1, -footer_rows), 1, colors.HexColor("#1a237e")),
         ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),

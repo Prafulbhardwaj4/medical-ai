@@ -26,6 +26,7 @@ from app.routers import portal_appointments as portal_appointments_router
 from app.models.portal import PatientAccount, PatientProfileLink, InviteStatus, OTPCode, Appointment
 from app.routers import portal_appointments_staff as portal_appointments_staff_router
 from app.routers import admissions as admissions_router
+from app.routers import refunds as refunds_router
 from app.routers import doctor_slots as doctor_slots_router
 from app.routers import chat as chat_router
 from app.models.hospital import Hospital
@@ -42,6 +43,11 @@ from app.models.medicine_order import MedicineOrder
 from app.models.invoice import Invoice
 from app.models.notification import Notification
 from app.models.chat_message import ChatMessage
+from app.models.opd_charge import OpdCharge
+from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
+from app.models.admission_tpa_case import AdmissionTpaCase
+from app.models.refund import Refund
+from app.models.day_end_close import DayEndClose
 from app.config import settings
 import warnings
 import os
@@ -95,6 +101,7 @@ app.include_router(portal_hospitals_router.router)
 app.include_router(portal_appointments_router.router)
 app.include_router(portal_appointments_staff_router.router)
 app.include_router(admissions_router.router)
+app.include_router(refunds_router.router)
 app.include_router(doctor_slots_router.router)
 app.include_router(chat_router.router)
 

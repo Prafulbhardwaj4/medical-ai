@@ -23,6 +23,31 @@ def _upsert(db: Session, hospital_id: int, source_key: str, type_: str, severity
         ))
 
 
+def notify_emergency_alert(db: Session, hospital_id: int, admission_id: int, patient_name: str,
+                            doctor_id: int, raised_by_name: str, ward: str, bed_number: str, message: str = None):
+    """Urgent ping for an existing IPD patient — NOT a queue entry. Fires two
+    notifications: one targeted at the assigned doctor (so it can be pulled
+    into a banner instead of a list) and one hospital-wide for admin
+    visibility. Always a fresh timestamped row — every alert is its own
+    event, never deduped/overwritten."""
+    key = f"emergency_alert:{admission_id}:{now_ist_naive().isoformat()}"
+    base_message = f"{raised_by_name} raised an emergency alert for {patient_name} — {ward}, Bed {bed_number}."
+    if message:
+        base_message += f" {message}"
+
+    if doctor_id:
+        db.add(Notification(
+            hospital_id=hospital_id, source_key=key + ":doctor", type="emergency_alert", severity="critical",
+            title=f"🚨 Emergency — {patient_name}", message=base_message,
+            link_type="admission", link_id=admission_id, is_read=False, target_doctor_id=doctor_id,
+        ))
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key + ":admin", type="emergency_alert", severity="critical",
+        title=f"🚨 Emergency — {patient_name}", message=base_message,
+        link_type="admission", link_id=admission_id, is_read=False,
+    ))
+
+
 def notify_ward_change_request(db: Session, hospital_id: int, admission_id: int, patient_name: str,
                                 requested_ward_name: str, requested_by_name: str, note: str = None):
     """Raised when a doctor/nurse asks reception to move a patient to a
@@ -62,7 +87,7 @@ def sync_idle_staff_notification(db: Session, doctor):
     from app.models.consultation import Consultation
 
     role = doctor.role.value
-    if role not in ("doctor", "nurse"):
+    if role not in ("doctor", "nurse", "assistant"):
         return
 
     hospital_id = doctor.hospital_id
@@ -104,7 +129,7 @@ def sync_idle_staff_notification(db: Session, doctor):
             ).count()
             is_idle = completed_count == 0
 
-    elif role == "nurse":
+    elif role in ("nurse", "assistant"):
         assigned_count = db.query(Checkin).filter(
             Checkin.nurse_id == doctor.id,
             Checkin.hospital_id == hospital_id,

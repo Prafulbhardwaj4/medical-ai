@@ -153,6 +153,26 @@
       </div>
     </nav>
 
+    <nav class="sidebar" id="sidebar-assistant" style="display:none">
+      <div class="sidebar-section-label">Navigation</div>
+      <a class="nav-item" href="assistant.html">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
+        Home
+      </a>
+      <a class="nav-item" href="assistant.html">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        History
+      </a>
+      <div class="nav-item active">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        Admissions
+      </div>
+    </nav>
+
     <nav class="sidebar" id="app-sidebar" style="display:none"></nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
@@ -238,6 +258,31 @@
       </button>
     </nav>
 
+    <nav class="bottom-nav" id="bottom-nav-assistant" style="display:none">
+      <button class="bottom-nav-item" onclick="location.href='assistant.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3 8 4-16 3 8h4" />
+        </svg>
+        Vitals
+      </button>
+      <button class="bottom-nav-item" onclick="location.href='assistant.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+        Tasks
+      </button>
+      <button class="bottom-nav-item active" onclick="location.href='admissions.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+        Admissions
+      </button>
+      <button class="bottom-nav-item" onclick="location.href='assistant.html'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        Attendance
+      </button>
+    </nav>
+
     <nav class="bottom-nav" id="app-bottom-nav" style="display:none"></nav>
 
     <main class="main-content">
@@ -273,6 +318,16 @@
         </div>
 
         <div>
+          <div class="card" style="margin-bottom:20px" id="deposit-card">
+            <div class="card-header"><h2>Deposit &amp; Balance</h2></div>
+            <div id="deposit-body"><p>Loading...</p></div>
+          </div>
+
+          <div class="card" style="margin-bottom:20px" id="tpa-card">
+            <div class="card-header"><h2>TPA / Insurance</h2></div>
+            <div id="tpa-body"><p>Loading...</p></div>
+          </div>
+
           <div class="card" style="margin-bottom:20px" id="running-bill-card">
             <div class="card-header"><h2>Running Bill</h2></div>
             <div id="bill-body"><p>Loading...</p></div>
@@ -339,16 +394,38 @@
       <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" id="charge-amount" /></div>
       <div class="form-group"><label class="form-label">Quantity</label><input class="form-control" type="number" min="1" id="charge-qty" value="1" /></div>
       <div class="err-msg" id="charge-err"></div>
-      <button class="btn btn-primary" style="width:100%" onclick="submitAddCharge()">Add</button>
+        <button class="btn btn-primary" style="width:100%" onclick="submitAddCharge()">Add</button>
+    </div>
+  </div>
+
+  <!-- Return Medicine modal -->
+  <div class="modal-overlay" id="modal-return-med">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header"><h2>Return Medicine</h2><button class="modal-close" onclick="closeModal('modal-return-med')">&times;</button></div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:10px" id="return-med-name"></p>
+      <div class="form-group"><label class="form-label">Quantity Returned</label><input class="form-control" type="number" min="1" id="return-med-qty" /></div>
+      <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-weight:400"><input type="checkbox" id="return-med-restock" /> Restock (put back into sellable stock)</label></div>
+      <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-control" id="return-med-note" placeholder="e.g. discontinued, patient discharged early" /></div>
+      <div class="err-msg" id="return-med-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="submitReturnMed()">Record Return</button>
     </div>
   </div>
 
   <!-- Collect Payment modal -->
+  <div class="modal-overlay" id="modal-request-topup">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header"><h2>Request Deposit Top-up</h2><button class="modal-close" onclick="closeModal('modal-request-topup')">&times;</button></div>
+      <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="topup-amount" /></div>
+      <div class="form-group"><label class="form-label">Reason (optional)</label><input class="form-control" id="topup-reason" placeholder="e.g. balance running ahead of deposit" /></div>
+      <div class="err-msg" id="topup-req-err"></div>
+      <button class="btn btn-primary" style="width:100%" id="btn-topup-req-submit" onclick="submitTopupRequest()">Send Request</button>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="modal-collect-payment">
-    <div class="modal" style="max-width:400px">
-      <div class="modal-header"><h2>Collect Payment</h2><button class="modal-close" onclick="closeModal('modal-collect-payment')">&times;</button></div>
-      <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Outstanding balance: <strong id="cp-balance">—</strong></p>
-      <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="cp-amount" /></div>
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header"><h2>Collect Top-up</h2><button class="modal-close" onclick="closeModal('modal-collect-payment')">&times;</button></div>
+      <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Amount: <strong id="cp-balance">—</strong></p>
       <div class="form-group"><label class="form-label">Payment Method</label>
         <select class="form-control" id="cp-method">
           <option value="">Select method</option>
@@ -362,6 +439,40 @@
     </div>
   </div>
 
+  <!-- Log TPA Case modal -->
+  <div class="modal-overlay" id="modal-log-tpa">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header"><h2>Log TPA Case</h2><button class="modal-close" onclick="closeModal('modal-log-tpa')">&times;</button></div>
+      <div class="form-group"><label class="form-label">Insurer Name</label><input class="form-control" id="tpa-insurer" /></div>
+      <div class="form-group"><label class="form-label">Policy Number (optional)</label><input class="form-control" id="tpa-policy" /></div>
+      <div class="form-group"><label class="form-label">Room Category Eligibility (optional)</label><input class="form-control" id="tpa-room-elig" placeholder="e.g. up to twin-sharing" /></div>
+      <div class="form-group"><label class="form-label">Co-pay Notes (optional)</label><input class="form-control" id="tpa-copay-notes" /></div>
+      <div class="err-msg" id="tpa-log-err"></div>
+      <button class="btn btn-primary" style="width:100%" id="btn-tpa-log-submit" onclick="submitLogTpa()">Log Case</button>
+    </div>
+  </div>
+
+  <!-- Update TPA Case modal -->
+  <div class="modal-overlay" id="modal-update-tpa">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header"><h2>Update TPA Case</h2><button class="modal-close" onclick="closeModal('modal-update-tpa')">&times;</button></div>
+      <div class="form-group"><label class="form-label">Status</label>
+        <select class="form-control" id="tpa-status">
+          <option value="pending">Pending</option>
+          <option value="query_raised">Query Raised</option>
+          <option value="approved">Approved</option>
+          <option value="denied">Denied</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Authorized Amount (₹, optional)</label><input class="form-control" type="number" min="0" step="0.01" id="tpa-authorized-amount" /></div>
+      <div class="form-group"><label class="form-label">Room Category Eligibility (optional)</label><input class="form-control" id="tpa-update-room-elig" /></div>
+      <div class="form-group"><label class="form-label">Co-pay Notes (optional)</label><input class="form-control" id="tpa-update-copay-notes" /></div>
+      <div class="form-group"><label class="form-label">Query Notes (what the TPA is asking for, optional)</label><input class="form-control" id="tpa-query-notes" /></div>
+      <div class="err-msg" id="tpa-update-err"></div>
+      <button class="btn btn-primary" style="width:100%" id="btn-tpa-update-submit" onclick="submitUpdateTpa()">Save</button>
+    </div>
+  </div>
+
   <!-- Discharge confirm modal -->
   <div class="modal-overlay" id="modal-discharge">
     <div class="modal" style="max-width:440px">
@@ -369,8 +480,9 @@
       <p style="color:var(--slate);font-size:13.5px;margin-bottom:10px">This finalizes the bill and generates the discharge invoice. This can't be undone.</p>
 
       <div id="discharge-amount-box" style="background:var(--smoke);border-radius:var(--radius);padding:14px;margin-bottom:14px">
-        <div style="font-size:12px;color:var(--slate-light)">Amount Due (excludes pharmacy — settled separately)</div>
+        <div style="font-size:12px;color:var(--slate-light)" id="discharge-amount-label">Amount Due (excludes pharmacy — settled separately)</div>
         <div id="discharge-amount-due" style="font-size:1.6rem;font-weight:800;color:var(--navy)">Loading…</div>
+        <div id="discharge-deposit-context" style="font-size:12px;color:var(--slate-light);margin-top:4px"></div>
       </div>
 
       <div class="form-group" id="discharge-payment-row" style="display:none">
@@ -382,6 +494,17 @@
           <option value="cash">Cash</option>
           <option value="card">Card</option>
           <option value="upi">UPI</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="discharge-refund-row" style="display:none">
+        <label class="form-label">Refund Channel (deposit exceeds charges)</label>
+        <select class="form-control" id="discharge-refund-channel">
+          <option value="">Select...</option>
+          <option value="cash">Cash</option>
+          <option value="card">Card</option>
+          <option value="upi">UPI</option>
+          <option value="online">Online (same channel — 48–72 hrs)</option>
         </select>
       </div>
 
@@ -451,6 +574,11 @@
       document.getElementById("sidebar-nurse").style.display = "";
       document.getElementById("bottom-nav-doctor").style.display = "none";
       document.getElementById("bottom-nav-nurse").style.display = "";
+    } else if (getDoctor()?.role === "assistant") {
+      document.getElementById("sidebar-doctor").style.display = "none";
+      document.getElementById("sidebar-assistant").style.display = "";
+      document.getElementById("bottom-nav-doctor").style.display = "none";
+      document.getElementById("bottom-nav-assistant").style.display = "";
     } else if (["admin", "sub_admin"].includes(getDoctor()?.role)) {
       document.getElementById("sidebar-doctor").style.display = "none";
       document.getElementById("sidebar-receptionist").style.display = "none";
@@ -461,16 +589,19 @@
       renderAdminNav("admissions");
     }
     function canManageClinicalOrders() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
-    function canAdministerDoses() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
-    function isNurseViewer() { return getDoctor()?.role === "nurse"; }
+    function canGiveDose() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
+    function canManageMedOrders() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    function canReturnMed() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
+    function isNurseViewer() { return ["nurse", "assistant"].includes(getDoctor()?.role); }
     if (!canManageClinicalOrders()) {
       document.getElementById("btn-add-med").style.display = "none";
       document.getElementById("btn-add-test").style.display = "none";
     }
     const isAdminViewer = ["admin", "sub_admin"].includes(getDoctor()?.role);
     const isDoctorViewer = getDoctor()?.role === "doctor";
-    const canRequestWardChange = ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role);
+    const canRequestWardChange = ["doctor", "nurse", "assistant", "admin", "sub_admin"].includes(getDoctor()?.role);
     const canChangeWard = ["receptionist", "admin", "sub_admin"].includes(getDoctor()?.role);
+    const canManageTpa = ["receptionist", "admin", "sub_admin"].includes(getDoctor()?.role);
     let wardTypesForMove = [];
     if (isAdminViewer || isDoctorViewer || isNurseViewer()) document.getElementById("discharge-card").style.display = "none";
     if (isNurseViewer() || isDoctorViewer) {
@@ -486,19 +617,34 @@
     function openModal(id) { document.getElementById(id).classList.add("open"); }
 
     let admissionData = null;
+    let tpaData = null;
 
     async function loadAdmission() {
       try {
-        admissionData = await api("GET", `/admissions/${admissionId}`);
+        [admissionData, depositData, tpaData] = await Promise.all([
+          api("GET", `/admissions/${admissionId}`),
+          api("GET", `/admissions/${admissionId}/deposit-summary`),
+          api("GET", `/admissions/${admissionId}/tpa-case`),
+        ]);
         renderHeader();
         renderMeds();
         renderTests();
         renderCharges();
         renderBill();
+        renderDepositCard();
+        renderTpaCard();
         renderDischargeCard();
       } catch (e) {
         document.getElementById("patient-header").innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
       }
+    }
+
+    async function sendEmergencyAlert() {
+      if (!confirm("Send an urgent emergency alert to this patient's doctor and admin?")) return;
+      try {
+        await api("POST", `/admissions/${admissionId}/emergency-alert`, {});
+        toast("Emergency alert sent", "success");
+      } catch (e) { toast(e.message, "error"); }
     }
 
     function renderHeader() {
@@ -507,7 +653,7 @@
       document.getElementById("patient-header").innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px">
           <div>
-            <h2 style="margin:0">${sanitize(p.name)} <span class="badge ${a.status === 'admitted' ? 'badge-teal' : 'badge-grey'}" style="margin-left:8px">${a.status}</span></h2>
+             <h2 style="margin:0">${sanitize(p.name)} <span class="badge ${a.status === 'admitted' ? 'badge-teal' : 'badge-grey'}" style="margin-left:8px">${a.status}</span> ${a.status === 'admitted' ? `<button class="btn btn-sm" style="margin-left:8px;background:#dc2626;color:#fff;border-color:#dc2626" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}</h2>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">${p.age} yrs, ${p.gender} · ${sanitize(p.phone)} ${p.patient_uid ? '· ' + sanitize(p.patient_uid) : ''}</p>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
               ${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)} · Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} (${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'})
@@ -613,16 +759,18 @@
               <div style="font-weight:600">${sanitize(m.medicine_name)} — ${sanitize(m.dosage)} ${m.sourced_outside ? '<span class="badge badge-slate" style="font-weight:400">Family-sourced</span>' : ''}</div>
               <div style="font-size:12.5px;color:var(--slate-light)">${sanitize(m.route)}${m.frequency_note ? ' · ' + sanitize(m.frequency_note) : ''}</div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              ${canAdministerDoses() && admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-primary btn-sm" onclick="giveDose(${m.id})">Give Dose Now</button>` : ''}
-              ${canAdministerDoses() && admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-outline btn-sm" onclick="stopMed(${m.id})">Stop</button>` : ''}
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              ${canGiveDose() && admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-primary btn-sm" onclick="giveDose(${m.id})">Give Dose Now</button>` : ''}
+              ${canManageMedOrders() && admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-outline btn-sm" onclick="stopMed(${m.id})">Stop</button>` : ''}
               ${!m.is_active ? `<span class="badge badge-grey">Stopped</span>` : ''}
-              ${canAdministerDoses() && admissionData.status === 'admitted' && !m.is_active ? `<button class="btn btn-outline btn-sm" onclick="resumeMed(${m.id})">Resume</button>` : ''}
+              ${canManageMedOrders() && admissionData.status === 'admitted' && !m.is_active ? `<button class="btn btn-outline btn-sm" onclick="resumeMed(${m.id})">Resume</button>` : ''}
+              ${canReturnMed() && admissionData.status === 'admitted' && m.doses.length > (m.returned_quantity || 0) ? `<button class="btn btn-outline btn-sm" onclick="openReturnMedModal(${m.id})">Return</button>` : ''}
             </div>
           </div>
           <div style="margin-top:8px">
             ${m.doses.length ? m.doses.slice(0, 6).map(d => `<span class="dose-chip">${new Date(d.administered_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</span>`).join('') : `<span style="font-size:12px;color:var(--slate-light)">No doses given yet</span>`}
             ${m.doses.length > 6 ? `<span style="font-size:11px;color:var(--slate-light)"> +${m.doses.length - 6} more</span>` : ''}
+            ${m.returned_quantity ? `<div style="font-size:11.5px;color:var(--slate-light);margin-top:4px">${m.returned_quantity} unit(s) returned</div>` : ''}
           </div>
         </div>`).join('');
     }
@@ -691,32 +839,203 @@
         <div class="bill-row"><span>Tests</span><span>₹${sum(tests).toFixed(2)}</span></div>
         <div class="bill-row"><span>Consumables</span><span>₹${sum(consumables).toFixed(2)}</span></div>
         <div class="bill-row"><span>Other Charges</span><span>₹${sum(other).toFixed(2)}</span></div>
-        ${paidSoFar > 0 ? `<div class="bill-row" style="font-weight:600;color:var(--teal)"><span>Payments Received</span><span>−₹${paidSoFar.toFixed(2)}</span></div><div style="padding-left:10px;border-left:2px solid var(--border);margin:2px 0 8px">${paymentRows}</div>` : ''}
-        <div class="bill-total-row"><span>${paidSoFar > 0 ? 'Balance Due' : 'Total'}</span><span>₹${b.grand_total.toFixed(2)}</span></div>
-        ${admissionData.status === 'admitted' && !isAdminViewer ? `<button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="openCollectPaymentModal()">+ Collect Payment</button>` : ''}`;
+        ${paidSoFar > 0 ? `<div class="bill-row" style="font-weight:600;color:var(--teal)"><span>Legacy Payments Received</span><span>−₹${paidSoFar.toFixed(2)}</span></div><div style="padding-left:10px;border-left:2px solid var(--border);margin:2px 0 8px">${paymentRows}</div>` : ''}
+        ${b.gst_total > 0 ? `
+          <div class="bill-row"><span>Subtotal</span><span>₹${b.subtotal.toFixed(2)}</span></div>
+          <div class="bill-row"><span>GST</span><span>₹${b.gst_total.toFixed(2)}</span></div>` : ''}
+        <div class="bill-total-row"><span>Charges Accrued</span><span>₹${b.grand_total.toFixed(2)}</span></div>`;
     }
 
-    function openCollectPaymentModal() {
+    let depositData = null;
+
+    function renderDepositCard() {
+      const el = document.getElementById("deposit-body");
+      const d = depositData;
+      if (!d) { el.innerHTML = `<p style="color:var(--slate-light)">Could not load deposit info.</p>`; return; }
+
+      const balanceLabel = d.balance > 0 ? 'Balance Due' : (d.balance < 0 ? 'Refund Due' : 'Settled');
+      const balanceColor = d.balance > 0 ? 'var(--red, #c0392b)' : (d.balance < 0 ? 'var(--teal)' : 'var(--navy)');
+
+      const topupRows = d.topup_requests.length
+        ? d.topup_requests.map(t => `
+            <div class="bill-row" style="align-items:center">
+              <span>₹${t.requested_amount.toFixed(2)}${t.reason ? ' — ' + sanitize(t.reason) : ''}
+                <span class="badge ${t.status === 'pending' ? 'badge-orange' : t.status === 'collected' ? 'badge-teal' : 'badge-grey'}" style="margin-left:6px">${t.status}</span>
+              </span>
+              ${t.status === 'pending' && admissionData.status === 'admitted' && !isAdminViewer ? `
+                <span style="display:flex;gap:6px">
+                  <button class="btn btn-primary btn-sm" onclick="openCollectTopupModal(${t.id}, ${t.requested_amount})">Collect</button>
+                  <button class="btn btn-outline btn-sm" onclick="cancelTopupRequest(${t.id})">Cancel</button>
+                </span>` : ''}
+            </div>`).join('')
+        : `<p style="color:var(--slate-light);font-size:13px">No top-up requests yet.</p>`;
+
+      el.innerHTML = `
+        <div class="bill-row" style="font-weight:600"><span>Deposit Paid</span><span>₹${d.deposit_total.toFixed(2)}</span></div>
+        <div class="bill-row"><span>Charges Accrued</span><span>₹${d.charges_total.toFixed(2)}</span></div>
+        <div class="bill-total-row" style="color:${balanceColor}"><span>${balanceLabel}</span><span>₹${Math.abs(d.balance).toFixed(2)}</span></div>
+        <p style="font-weight:600;margin:14px 0 6px;font-size:13.5px">Top-up Requests</p>
+        ${topupRows}
+        ${admissionData.status === 'admitted' && !isAdminViewer ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openTopupRequestModal()">+ Request Top-up</button>` : ''}`;
+    }
+
+    function openTopupRequestModal() {
+      document.getElementById("topup-req-err").textContent = "";
+      document.getElementById("topup-amount").value = "";
+      document.getElementById("topup-reason").value = "";
+      openModal("modal-request-topup");
+    }
+
+    async function submitTopupRequest() {
+      const err = document.getElementById("topup-req-err");
+      err.textContent = "";
+      const amount = parseFloat(document.getElementById("topup-amount").value);
+      const reason = document.getElementById("topup-reason").value.trim();
+      if (!amount || amount <= 0) { err.textContent = "Enter a valid amount."; return; }
+      const btn = document.getElementById("btn-topup-req-submit");
+      btn.disabled = true;
+      try {
+        await api("POST", `/admissions/${admissionId}/topup-requests`, { requested_amount: amount, reason: reason || null });
+        toast("Top-up request raised.", "success");
+        closeModal("modal-request-topup");
+        await loadAdmission();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    let activeTopupRequestId = null;
+
+    function openCollectTopupModal(requestId, amount) {
+      activeTopupRequestId = requestId;
       document.getElementById("cp-err").textContent = "";
-      document.getElementById("cp-amount").value = "";
       document.getElementById("cp-method").value = "";
-      document.getElementById("cp-balance").textContent = `₹${admissionData.bill.grand_total.toFixed(2)}`;
+      document.getElementById("cp-balance").textContent = `₹${amount.toFixed(2)}`;
       openModal("modal-collect-payment");
     }
 
     async function submitCollectPayment() {
       const err = document.getElementById("cp-err");
       err.textContent = "";
-      const amount = parseFloat(document.getElementById("cp-amount").value);
       const method = document.getElementById("cp-method").value;
-      if (!amount || amount <= 0) { err.textContent = "Enter a valid amount."; return; }
       if (!method) { err.textContent = "Select a payment method."; return; }
       const btn = document.getElementById("btn-cp-submit");
       btn.disabled = true;
       try {
-        await api("POST", `/admissions/${admissionId}/collect-payment`, { amount, payment_method: method });
-        toast("Payment collected.", "success");
+        await api("POST", `/admissions/${admissionId}/topup-requests/${activeTopupRequestId}/collect`, { payment_method: method });
+        toast("Top-up collected.", "success");
         closeModal("modal-collect-payment");
+        await loadAdmission();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function cancelTopupRequest(requestId) {
+      if (!confirm("Cancel this top-up request?")) return;
+      try {
+        await api("POST", `/admissions/${admissionId}/topup-requests/${requestId}/cancel`, {});
+        toast("Top-up request cancelled.", "success");
+        await loadAdmission();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    const TPA_STATUS_BADGE = { pending: "badge-orange", query_raised: "badge-orange", approved: "badge-teal", denied: "badge-grey" };
+    const TPA_STATUS_LABEL = { pending: "Pending", query_raised: "Query Raised", approved: "Approved", denied: "Denied" };
+
+    function renderTpaCard() {
+      const el = document.getElementById("tpa-body");
+      const t = tpaData;
+      if (!t) {
+        el.innerHTML = `
+          <p style="color:var(--slate-light);font-size:13px">No TPA/insurance case logged for this admission.</p>
+          ${canManageTpa && admissionData.status === 'admitted' ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openLogTpaModal()">+ Log TPA Case</button>` : ''}`;
+        return;
+      }
+      el.innerHTML = `
+        <div class="bill-row" style="align-items:center">
+          <span><strong>${sanitize(t.insurer_name)}</strong>${t.policy_number ? ' · ' + sanitize(t.policy_number) : ''}</span>
+          <span class="badge ${TPA_STATUS_BADGE[t.status] || 'badge-grey'}">${TPA_STATUS_LABEL[t.status] || t.status}</span>
+        </div>
+        ${t.room_category_eligibility ? `<div class="bill-row"><span>Room Eligibility</span><span>${sanitize(t.room_category_eligibility)}</span></div>` : ''}
+        ${t.authorized_amount != null ? `<div class="bill-row"><span>Authorized Amount</span><span>₹${Number(t.authorized_amount).toFixed(2)}</span></div>` : ''}
+        ${t.copay_notes ? `<p style="font-size:12.5px;color:var(--slate-light);margin-top:6px"><strong>Co-pay:</strong> ${sanitize(t.copay_notes)}</p>` : ''}
+        ${t.status === 'query_raised' && t.query_notes ? `<p style="font-size:12.5px;color:var(--slate-light);margin-top:6px"><strong>Query:</strong> ${sanitize(t.query_notes)}</p>` : ''}
+        ${canManageTpa && admissionData.status === 'admitted' && !['approved', 'denied'].includes(t.status) ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openUpdateTpaModal()">Update Case</button>` : ''}
+        ${canManageTpa && admissionData.status === 'admitted' && ['approved', 'denied'].includes(t.status) ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openLogTpaModal()">+ Log New Case</button>` : ''}`;
+    }
+
+    function openLogTpaModal() {
+      document.getElementById("tpa-log-err").textContent = "";
+      document.getElementById("tpa-insurer").value = "";
+      document.getElementById("tpa-policy").value = "";
+      document.getElementById("tpa-room-elig").value = "";
+      document.getElementById("tpa-copay-notes").value = "";
+      openModal("modal-log-tpa");
+    }
+
+    async function submitLogTpa() {
+      const err = document.getElementById("tpa-log-err");
+      err.textContent = "";
+      const insurer_name = document.getElementById("tpa-insurer").value.trim();
+      const policy_number = document.getElementById("tpa-policy").value.trim();
+      const room_category_eligibility = document.getElementById("tpa-room-elig").value.trim();
+      const copay_notes = document.getElementById("tpa-copay-notes").value.trim();
+      if (!insurer_name) { err.textContent = "Insurer name is required."; return; }
+      const btn = document.getElementById("btn-tpa-log-submit");
+      btn.disabled = true;
+      try {
+        await api("POST", `/admissions/${admissionId}/tpa-case`, {
+          insurer_name,
+          policy_number: policy_number || null,
+          room_category_eligibility: room_category_eligibility || null,
+          copay_notes: copay_notes || null,
+        });
+        toast("TPA case logged.", "success");
+        closeModal("modal-log-tpa");
+        await loadAdmission();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function openUpdateTpaModal() {
+      const t = tpaData;
+      document.getElementById("tpa-update-err").textContent = "";
+      document.getElementById("tpa-status").value = t.status;
+      document.getElementById("tpa-authorized-amount").value = t.authorized_amount != null ? t.authorized_amount : "";
+      document.getElementById("tpa-update-room-elig").value = t.room_category_eligibility || "";
+      document.getElementById("tpa-update-copay-notes").value = t.copay_notes || "";
+      document.getElementById("tpa-query-notes").value = t.query_notes || "";
+      openModal("modal-update-tpa");
+    }
+
+    async function submitUpdateTpa() {
+      const err = document.getElementById("tpa-update-err");
+      err.textContent = "";
+      const status = document.getElementById("tpa-status").value;
+      const authorizedRaw = document.getElementById("tpa-authorized-amount").value;
+      const room_category_eligibility = document.getElementById("tpa-update-room-elig").value.trim();
+      const copay_notes = document.getElementById("tpa-update-copay-notes").value.trim();
+      const query_notes = document.getElementById("tpa-query-notes").value.trim();
+      const btn = document.getElementById("btn-tpa-update-submit");
+      btn.disabled = true;
+      try {
+        await api("PATCH", `/admissions/${admissionId}/tpa-case/${tpaData.id}`, {
+          status,
+          authorized_amount: authorizedRaw !== "" ? parseFloat(authorizedRaw) : null,
+          room_category_eligibility: room_category_eligibility || null,
+          copay_notes: copay_notes || null,
+          query_notes: query_notes || null,
+        });
+        toast("TPA case updated.", "success");
+        closeModal("modal-update-tpa");
         await loadAdmission();
       } catch (e) {
         err.textContent = e.message;
@@ -846,6 +1165,36 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
+    let returnMedOrderId = null;
+    function openReturnMedModal(orderId) {
+      const m = admissionData.medications.find(x => x.id === orderId);
+      if (!m) return;
+      returnMedOrderId = orderId;
+      const eligible = m.doses.length - (m.returned_quantity || 0);
+      document.getElementById("return-med-name").textContent = `${m.medicine_name} (${m.dosage}) — up to ${eligible} unit(s) eligible`;
+      document.getElementById("return-med-qty").value = "";
+      document.getElementById("return-med-qty").max = eligible;
+      document.getElementById("return-med-restock").checked = false;
+      document.getElementById("return-med-note").value = "";
+      document.getElementById("return-med-err").textContent = "";
+      openModal("modal-return-med");
+    }
+    async function submitReturnMed() {
+      const err = document.getElementById("return-med-err");
+      const qty = parseInt(document.getElementById("return-med-qty").value);
+      if (!qty || qty <= 0) { err.textContent = "Enter a valid quantity"; return; }
+      try {
+        await api("POST", `/admissions/${admissionId}/medications/${returnMedOrderId}/return`, {
+          quantity: qty,
+          restock: document.getElementById("return-med-restock").checked,
+          note: document.getElementById("return-med-note").value.trim() || null,
+        });
+        closeModal("modal-return-med");
+        toast("Return recorded", "success");
+        loadAdmission();
+      } catch (e) { err.textContent = e.message; }
+    }
+
     // ---------- Tests ----------
     let testCatalogCache = [];
     async function openAddTestModal() {
@@ -928,6 +1277,7 @@
 
     // ---------- Discharge ----------
     let dischargeAmountDue = 0;
+    let dischargeRefundDue = 0;
 
     async function openDischargeModal() {
       document.getElementById("discharge-err").textContent = "";
@@ -938,11 +1288,21 @@
       try {
         const preview = await api("GET", `/admissions/${admissionId}/discharge-preview`);
         dischargeAmountDue = preview.amount_due;
-        document.getElementById("discharge-amount-due").textContent = `₹${preview.amount_due.toFixed(2)}`;
+        if (preview.refund_due > 0) {
+          document.getElementById("discharge-amount-label").textContent = "Refund Due to Patient (deposit exceeds charges)";
+          document.getElementById("discharge-amount-due").textContent = `₹${preview.refund_due.toFixed(2)}`;
+        } else {
+          document.getElementById("discharge-amount-label").textContent = "Amount Due (excludes pharmacy — settled separately)";
+          document.getElementById("discharge-amount-due").textContent = `₹${preview.amount_due.toFixed(2)}`;
+        }
+        document.getElementById("discharge-deposit-context").textContent = `Deposit paid: ₹${preview.deposit_total.toFixed(2)} · Charges accrued: ₹${preview.charges_total.toFixed(2)}`;
         document.getElementById("discharge-payment-row").style.display = preview.amount_due > 0 ? "block" : "none";
         document.getElementById("discharge-payment-collected").checked = false;
         document.getElementById("discharge-payment-method").style.display = "none";
         document.getElementById("discharge-payment-method").value = "";
+        document.getElementById("discharge-refund-row").style.display = preview.refund_due > 0 ? "block" : "none";
+        document.getElementById("discharge-refund-channel").value = "";
+        dischargeRefundDue = preview.refund_due;
       } catch (e) {
         document.getElementById("discharge-amount-due").textContent = "—";
         document.getElementById("discharge-err").textContent = e.message;
@@ -960,6 +1320,8 @@
       const paymentCollected = document.getElementById("discharge-payment-collected").checked;
       const paymentMethod = document.getElementById("discharge-payment-method").value;
 
+      const refundChannel = document.getElementById("discharge-refund-channel").value;
+
       if (dischargeAmountDue > 0 && !paymentCollected) {
         alert(`Payment of ₹${dischargeAmountDue.toFixed(2)} is still pending. Collect payment before discharge can proceed.`);
         return;
@@ -968,12 +1330,17 @@
         err.textContent = "Please select how payment was collected";
         return;
       }
+      if (dischargeRefundDue > 0 && !refundChannel) {
+        err.textContent = "Please select how the refund will be paid out";
+        return;
+      }
 
       try {
         await api("POST", `/admissions/${admissionId}/discharge`, {
           discharge_summary: document.getElementById("discharge-summary").value.trim() || null,
           payment_collected: paymentCollected,
           payment_method: paymentCollected ? paymentMethod : null,
+          refund_channel: dischargeRefundDue > 0 ? refundChannel : null,
         });
         toast("Patient discharged", "success");
         document.getElementById("discharge-output-options").style.display = "block";

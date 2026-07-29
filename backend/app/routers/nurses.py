@@ -7,7 +7,8 @@ from app.database import get_db
 from app.models.checkin import Checkin
 from app.models.patient import Patient
 from app.models.doctor import Doctor
-from app.schemas.patient import VitalsSubmit, NurseTaskComplete
+from app.schemas.patient import VitalsSubmit, NurseTaskComplete, AddOpdChargeIn
+from app.models.opd_charge import OpdCharge
 from app.utils.auth import get_current_doctor, ist_today
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
@@ -15,7 +16,7 @@ from app.utils.audit import log_action
 router = APIRouter(prefix="/nurses", tags=["nurses"])
 
 def _require_nurse(current_doctor: Doctor):
-    if current_doctor.role.value != "nurse":
+    if current_doctor.role.value not in ("nurse", "assistant"):
         raise HTTPException(status_code=403, detail="Not authorized")
 
 @router.get("/vitals-queue")
@@ -212,3 +213,45 @@ def complete_post_consult(
         details=f"Token {checkin.token_number}"
     )
     return {"status": "done"}
+
+
+@router.post("/opd-charge/{checkin_id}")
+def add_opd_charge(
+    checkin_id: int,
+    payload: AddOpdChargeIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Ad-hoc OPD charge (dressing, injection, etc.) — goes straight to the
+    bill, no approval gate, same principle as IPD's Other Charges."""
+    _require_nurse(current_doctor)
+
+    checkin = db.query(Checkin).filter(
+        Checkin.id == checkin_id,
+        Checkin.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not checkin:
+        raise HTTPException(status_code=404, detail="Check-in not found")
+    if not payload.description.strip():
+        raise HTTPException(status_code=400, detail="Description is required")
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+
+    charge = OpdCharge(
+        checkin_id=checkin.id, patient_id=checkin.patient_id, hospital_id=checkin.hospital_id,
+        description=payload.description.strip(), amount=payload.amount, quantity=payload.quantity,
+        added_by=current_doctor.id,
+    )
+    db.add(charge)
+    db.commit()
+
+    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
+    log_action(
+        db, current_doctor,
+        action="opd_charge_added",
+        target_type="patient",
+        target_id=checkin.patient_id,
+        target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),
+        details=f"{payload.description} — Rs.{payload.amount * payload.quantity:.2f}"
+    )
+    return {"message": "Charge added"}

@@ -19,7 +19,8 @@ LOGGED_ACTIONS = [
     "payment_collected", "payment_reverted",
     "test_fee_paid", "test_fees_collected", "test_fees_collected_anyday",
     "medicine_created", "medicine_updated", "medicine_deactivated",
-    "medicine_stock_added", "medicine_fees_collected"
+    "medicine_stock_added", "medicine_fees_collected",
+    "emergency_intake"
 ]
 
 @router.get("/logs")

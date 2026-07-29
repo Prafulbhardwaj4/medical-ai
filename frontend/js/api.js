@@ -103,7 +103,13 @@ async function api(method, path, body = null, isFormData = false, silent = false
     }
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Request failed");
+    if (!res.ok) {
+      const detail = data.detail;
+      const err = new Error(typeof detail === "string" ? detail : (detail?.message || "Request failed"));
+      err.status = res.status;
+      err.data = detail;
+      throw err;
+    }
     return data;
   } finally {
     _activeRequests = Math.max(0, _activeRequests - 1);
@@ -256,6 +262,8 @@ function redirectByRole(role) {
     window.location.href = '/pages/receptionist.html';
   } else if (role === 'nurse') {
     window.location.href = '/pages/nurse.html';
+  } else if (role === 'assistant') {
+    window.location.href = '/pages/assistant.html';
   } else if (role === 'lab') {
     window.location.href = '/pages/lab.html';
   } else if (role === 'pharmacy') {
@@ -470,10 +478,10 @@ function promptOffDutyTime() {
   });
 }
 
-async function markAttendanceCommon(status, room_id) {
+async function markAttendanceCommon(status, room_id, extra) {
   let expected_off_duty_at = null;
   if (status === "present") {
     expected_off_duty_at = await promptOffDutyTime();
   }
-  return api("POST", "/doctors/attendance", { status, room_id, expected_off_duty_at });
+  return api("POST", "/doctors/attendance", { status, room_id, expected_off_duty_at, ...(extra || {}) });
 }

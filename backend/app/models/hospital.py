@@ -15,6 +15,11 @@ class Hospital(Base):
     billing_enabled = Column(Boolean, default=True, nullable=False)
     default_consultation_fee = Column(Float, nullable=True)
     gstin = Column(String, nullable=True)  # optional — hospital adds this later if/when they need GST on invoices
+    consultation_gst_percent = Column(Float, nullable=True)  # blank = no GST on consultation fee
+    test_gst_percent = Column(Float, nullable=True)  # blank = no GST on lab tests
+    room_gst_percent = Column(Float, nullable=True)  # blank = no GST on the taxable-excess portion of room charges
+    charge_gst_percent = Column(Float, nullable=True)  # blank = no GST on ad-hoc OPD/IPD charges (consumable/procedure/other)
+    room_gst_threshold_per_day = Column(Float, nullable=False, default=5000.0)  # only the daily room rate above this is taxable
     phone = Column(String, nullable=True)  # optional — shown on PDF letterheads if set
     logo_base64 = Column(Text, nullable=True)  # optional — full data URI; stored in-DB since Render's disk is ephemeral
     is_active = Column(Boolean, default=True)

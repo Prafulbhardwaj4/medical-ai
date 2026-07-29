@@ -253,6 +253,14 @@
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
         Add Patient
       </div>
+      <div class="nav-item" onclick="openQuickLookupModal()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        Quick Lookup
+      </div>
+      <div class="nav-item" onclick="openDayEndModal()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Day-End Close
+      </div>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
@@ -334,6 +342,7 @@
           </div>
           <div id="search-results" style="margin-bottom:14px"></div>
           <button class="btn btn-outline" style="width:100%" onclick="openNewPatient()">+ Add as New Patient</button>
+          <button class="btn btn-sm" style="width:100%;margin-top:8px;background:#dc2626;color:#fff;border-color:#dc2626" onclick="openEmergencyIntakeModal()">🚨 Emergency Intake</button>
         </div>
 
         <!-- STEP 2: Room -->
@@ -564,6 +573,38 @@
     </div>
   </div>
 
+  <!-- Emergency Intake Modal -->
+  <div class="modal-overlay" id="modal-emergency-intake">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <h2>🚨 Emergency Intake</h2>
+        <button class="modal-close" onclick="closeEmergencyIntakeModal()">×</button>
+      </div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:12px">No payment or registration needed — this sends the patient straight to the nearest available doctor. Full details can be filled in later.</p>
+      <div class="form-group">
+        <label class="form-label">Name (if known)</label>
+        <input class="form-control" id="em-name" placeholder="Leave blank if unknown" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Approx. Age</label>
+          <input class="form-control" id="em-age" type="number" min="0" max="120" placeholder="e.g. 30" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Approx. Gender</label>
+          <select class="form-control" id="em-gender">
+            <option value="">Unknown</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="err-msg" id="em-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="submitEmergencyIntake()">Send to Doctor Now</button>
+    </div>
+  </div>
+
   <!-- Manage Payments Modal -->
   <div class="modal-overlay" id="modal-payment-toggle">
         <div class="modal pay-toggle-modal" style="max-width:420px">
@@ -651,6 +692,74 @@
           <span>⏳ Pending</span><span class="sel-patient-option-sub">Pending payments</span>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Payment Method Modal -->
+  <div class="modal-overlay" id="modal-payment-method">
+    <div class="modal" style="max-width:320px">
+      <div class="modal-header">
+        <h2>How was this paid?</h2>
+        <button class="modal-close" onclick="resolvePaymentMethod(null)">×</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-outline" onclick="resolvePaymentMethod('cash')">💵 Cash</button>
+        <button class="btn btn-outline" onclick="resolvePaymentMethod('card')">💳 Card</button>
+        <button class="btn btn-outline" onclick="resolvePaymentMethod('upi')">📱 UPI</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Lookup Modal (C2 — single entry point) -->
+  <div class="modal-overlay" id="modal-quick-lookup">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header"><h2>Quick Lookup</h2><button class="modal-close" onclick="closeModal('modal-quick-lookup')">×</button></div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input class="form-control" id="ql-query" placeholder="Phone, Patient ID, or Token" onkeydown="if(event.key==='Enter')runQuickLookup()">
+        <button class="btn btn-primary" onclick="runQuickLookup()">Search</button>
+      </div>
+      <div id="ql-results"></div>
+    </div>
+  </div>
+
+  <!-- Record Refund Modal -->
+  <div class="modal-overlay" id="modal-record-refund">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header"><h2>Record Refund</h2><button class="modal-close" onclick="closeModal('modal-record-refund')">×</button></div>
+      <p style="color:var(--slate);font-size:13px;margin-bottom:10px" id="refund-patient-label"></p>
+      <div class="form-group">
+        <label class="form-label">What's being refunded?</label>
+        <select class="form-control" id="refund-source-type">
+          <option value="appointment">Appointment cancellation</option>
+          <option value="pharmacy">Pharmacy return (OPD)</option>
+          <option value="ipd_deposit">IPD deposit balance</option>
+          <option value="opd_charge">OPD charge reversal</option>
+          <option value="tpa">TPA overpayment</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="refund-amount"></div>
+      <div class="form-group">
+        <label class="form-label">Refund Channel</label>
+        <select class="form-control" id="refund-channel">
+          <option value="">Select...</option>
+          <option value="cash">Cash</option>
+          <option value="card">Card</option>
+          <option value="upi">UPI</option>
+          <option value="online">Online (same channel — 48–72 hrs)</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Reason (optional)</label><input class="form-control" id="refund-reason"></div>
+      <div class="err-msg" id="refund-err"></div>
+      <button class="btn btn-primary" style="width:100%" id="btn-refund-submit" onclick="submitRefund()">Record Refund</button>
+    </div>
+  </div>
+
+  <!-- Day-End Close Modal -->
+  <div class="modal-overlay" id="modal-day-end">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header"><h2>Day-End Reconciliation</h2><button class="modal-close" onclick="closeModal('modal-day-end')">×</button></div>
+      <div id="day-end-body"><p>Loading…</p></div>
     </div>
   </div>
 
@@ -1087,8 +1196,10 @@
     }
 
     async function collectTestPayment(patientId) {
+      const method = await askPaymentMethod();
+      if (!method) return;
       try {
-        const result = await api("POST", `/patients/${patientId}/collect-test-payment`, {});
+        const result = await api("POST", `/patients/${patientId}/collect-test-payment`, { payment_method: method });
         toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} test(s).`, 'success');
         loadPendingTestFees(patientId);
       } catch (e) { toast(e.message, 'error'); }
@@ -1269,6 +1380,7 @@
         const parts = [];
         if (r.buckets.consultation) parts.push(r.buckets.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
         if (r.buckets.tests) parts.push(r.buckets.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${r.buckets.tests.pending_total} pending`);
+        if (r.buckets.charges) parts.push(r.buckets.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${r.buckets.charges.pending_total} pending`);
         if (r.buckets.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[r.buckets.pharmacy.status] || r.buckets.pharmacy.status}`);
         return `
           <div id="pp-row-${r.checkin_id}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
@@ -1345,6 +1457,33 @@
             </div>`;
         }
       }
+      if (row.buckets.charges) {
+        const chargesPaid = row.buckets.charges.status === 'paid';
+        if (chargesPaid) {
+          html += `
+            <div class="pay-toggle-row">
+              <div class="pay-toggle-info">
+                <span class="pay-toggle-icon">➕</span>
+                <div>
+                  <div class="pay-toggle-label">Ad-hoc Charges</div>
+                  <div class="pay-toggle-sub is-paid">Paid</div>
+                </div>
+              </div>
+            </div>`;
+        } else {
+          html += `
+            <div class="pay-toggle-row">
+              <div class="pay-toggle-info">
+                <span class="pay-toggle-icon">➕</span>
+                <div>
+                  <div class="pay-toggle-label">Ad-hoc Charges</div>
+                  <div class="pay-toggle-sub is-unpaid">Rs.${row.buckets.charges.pending_total.toFixed(2)} pending</div>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="collectOpdChargesFromToggleModal()">Collect Payment</button>
+            </div>`;
+        }
+      }
       if (row.buckets.pharmacy) {
         html += `
           <div class="pay-toggle-row">
@@ -1386,10 +1525,25 @@
 
     async function collectTestsFromToggleModal() {
       const row = paymentToggleRow;
+      const method = await askPaymentMethod();
+      if (!method) return;
       try {
-        const result = await api("POST", `/patients/${row.patient_id}/collect-test-payment`, {});
+        const result = await api("POST", `/patients/${row.patient_id}/collect-test-payment`, { payment_method: method });
         toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
         row.buckets.tests.status = 'paid';
+        renderPaymentToggleBody();
+        loadPendingPayments();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function collectOpdChargesFromToggleModal() {
+      const row = paymentToggleRow;
+      const method = await askPaymentMethod();
+      if (!method) return;
+      try {
+        const result = await api("POST", `/patients/${row.patient_id}/collect-opd-charges`, { payment_method: method });
+        toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
+        row.buckets.charges.status = 'paid';
         renderPaymentToggleBody();
         loadPendingPayments();
       } catch (e) { toast(e.message, 'error'); }
@@ -1400,7 +1554,9 @@
       try {
         if (kind === 'consultation') {
           if (turningOn) {
-            await api("PATCH", `/patients/checkin/${row.checkin_id}/mark-paid`, {});
+            const method = await askPaymentMethod();
+            if (!method) { renderPaymentToggleBody(); return; }
+            await api("PATCH", `/patients/checkin/${row.checkin_id}/mark-paid`, { payment_method: method });
           } else {
             if (!confirm('Mark the consultation fee as unpaid?')) { renderPaymentToggleBody(); return; }
             await api("PATCH", `/patients/checkin/${row.checkin_id}/mark-unpaid`, {});
@@ -1408,7 +1564,9 @@
           row.buckets.consultation.status = turningOn ? 'paid' : 'unpaid';
         } else if (kind === 'tests') {
           if (turningOn) {
-            const result = await api("POST", `/patients/${row.patient_id}/collect-test-payment`, {});
+            const method = await askPaymentMethod();
+            if (!method) { renderPaymentToggleBody(); return; }
+            const result = await api("POST", `/patients/${row.patient_id}/collect-test-payment`, { payment_method: method });
             toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
           } else {
             if (!confirm('Mark tests as unpaid? Only tests not yet started at the lab can be reverted.')) { renderPaymentToggleBody(); return; }
@@ -1453,6 +1611,19 @@
         html += `<button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px" onclick="collectAnydayTestPayment(${patientId})">Collect Rs.${total}</button>`;
       }
 
+      html += '<h3 style="margin:16px 0 8px">Ad-hoc Charges (payment collection — any day)</h3>';
+      if (!data.charges.length) {
+        html += '<p style="color:var(--slate-light);margin-bottom:16px">No unpaid charges pending.</p>';
+      } else {
+        const chargesTotal = data.charges.reduce((s, c) => s + (c.amount * c.quantity || 0), 0);
+        html += data.charges.map(c => `
+          <div style="display:flex;justify-content:space-between;padding:6px 0">
+            <span>${c.description}${c.quantity > 1 ? ' × ' + c.quantity : ''}</span><span>Rs.${(c.amount * c.quantity).toFixed(2)}</span>
+          </div>
+        `).join('');
+        html += `<button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px" onclick="collectAnydayOpdCharges(${patientId})">Collect Rs.${chargesTotal.toFixed(2)}</button>`;
+      }
+
       html += '<h3 style="margin:16px 0 8px">Pharmacy (read-only)</h3>';
       if (!data.pharmacy.length) {
         html += '<p style="color:var(--slate-light)">No medicine orders yet.</p>';
@@ -1468,9 +1639,22 @@
     }
 
     async function collectAnydayTestPayment(patientId) {
+      const method = await askPaymentMethod();
+      if (!method) return;
       try {
-        const result = await api("POST", `/patients/${patientId}/collect-test-payment-anyday`, {});
+        const result = await api("POST", `/patients/${patientId}/collect-test-payment-anyday`, { payment_method: method });
         toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} test(s).`, 'success');
+        openPendingTasksModal(patientId, document.getElementById('pt-patient-name').textContent);
+        loadPendingPayments();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function collectAnydayOpdCharges(patientId) {
+      const method = await askPaymentMethod();
+      if (!method) return;
+      try {
+        const result = await api("POST", `/patients/${patientId}/collect-opd-charges-anyday`, { payment_method: method });
+        toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} charge(s).`, 'success');
         openPendingTasksModal(patientId, document.getElementById('pt-patient-name').textContent);
         loadPendingPayments();
       } catch (e) { toast(e.message, 'error'); }
@@ -1502,16 +1686,187 @@
       if (ctx) openPendingTasksModal(ctx.patientId, ctx.patientName);
     }
 
+    let _paymentMethodResolve = null;
+    function askPaymentMethod() {
+      document.getElementById('modal-payment-method').classList.add('open');
+      return new Promise((resolve) => { _paymentMethodResolve = resolve; });
+    }
+    function resolvePaymentMethod(method) {
+      document.getElementById('modal-payment-method').classList.remove('open');
+      if (_paymentMethodResolve) { _paymentMethodResolve(method); _paymentMethodResolve = null; }
+    }
+
+    // ---------- Quick Lookup (C2) ----------
+    const SITUATION_LABELS = {
+      pending_opd_payment: 'Consultation unpaid',
+      pending_opd_charges: 'Ad-hoc charges pending',
+      pending_test_payment: 'Test payment pending',
+      active_admission: 'Currently admitted',
+      pending_topup_request: 'Deposit top-up pending',
+      open_tpa_case: 'TPA case open',
+      refund_settling: 'Refund settling',
+    };
+
+    function openQuickLookupModal() {
+      document.getElementById('ql-query').value = '';
+      document.getElementById('ql-results').innerHTML = '';
+      openModal('modal-quick-lookup');
+      setTimeout(() => document.getElementById('ql-query').focus(), 100);
+    }
+
+    async function runQuickLookup() {
+      const q = document.getElementById('ql-query').value.trim();
+      const results = document.getElementById('ql-results');
+      if (!q) { results.innerHTML = ''; return; }
+      results.innerHTML = '<p style="color:var(--slate-light)">Searching…</p>';
+      try {
+        const patients = await api("GET", `/patients/lookup?query=${encodeURIComponent(q)}`);
+        if (!patients.length) { results.innerHTML = '<p style="color:var(--slate-light)">No matches found.</p>'; return; }
+        results.innerHTML = patients.map(p => `
+          <div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-weight:600">${sanitize(p.name)}</div>
+                <div style="font-size:12px;color:var(--slate-light)">${sanitize(p.patient_uid || '')} · ${sanitize(p.phone || '')}</div>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="openRecordRefundModal(${p.id}, ${JSON.stringify(p.name)})">Record Refund</button>
+            </div>
+            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+              ${p.situations.length
+                ? p.situations.map(s => `<span class="badge badge-orange">${SITUATION_LABELS[s] || s}</span>`).join('')
+                : '<span class="badge badge-grey">Nothing pending</span>'}
+            </div>
+            ${p.active_admission_token ? `<a class="btn btn-outline btn-sm" style="margin-top:8px;display:inline-block" href="admission-detail.html?id=${p.active_admission_token}">Open Admission</a>` : ''}
+          </div>
+        `).join('');
+      } catch (e) {
+        results.innerHTML = `<p style="color:var(--red,#c0392b)">${e.message}</p>`;
+      }
+    }
+
+    // ---------- Refunds ----------
+    let refundPatientId = null;
+
+    function openRecordRefundModal(patientId, patientName) {
+      refundPatientId = patientId;
+      document.getElementById('refund-patient-label').textContent = `For: ${patientName}`;
+      document.getElementById('refund-source-type').value = 'appointment';
+      document.getElementById('refund-amount').value = '';
+      document.getElementById('refund-channel').value = '';
+      document.getElementById('refund-reason').value = '';
+      document.getElementById('refund-err').textContent = '';
+      openModal('modal-record-refund');
+    }
+
+    async function submitRefund() {
+      const err = document.getElementById('refund-err');
+      err.textContent = '';
+      const amount = parseFloat(document.getElementById('refund-amount').value);
+      const channel = document.getElementById('refund-channel').value;
+      if (!amount || amount <= 0) { err.textContent = 'Enter a valid amount.'; return; }
+      if (!channel) { err.textContent = 'Select a refund channel.'; return; }
+      const btn = document.getElementById('btn-refund-submit');
+      btn.disabled = true;
+      try {
+        const result = await api("POST", "/refunds", {
+          patient_id: refundPatientId,
+          source_type: document.getElementById('refund-source-type').value,
+          amount, channel,
+          reason: document.getElementById('refund-reason').value.trim() || null,
+        });
+        toast(result.status === 'pending' ? 'Refund recorded — settling online.' : 'Refund recorded.', 'success');
+        closeModal('modal-record-refund');
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ---------- Day-End Reconciliation ----------
+    async function openDayEndModal() {
+      const body = document.getElementById('day-end-body');
+      body.innerHTML = '<p>Loading…</p>';
+      openModal('modal-day-end');
+      try {
+        const summary = await api("GET", "/billing/day-end-summary");
+        renderDayEndBody(summary);
+      } catch (e) {
+        body.innerHTML = `<p style="color:var(--red,#c0392b)">${e.message}</p>`;
+      }
+    }
+
+    function renderDayEndBody(summary) {
+      const body = document.getElementById('day-end-body');
+      const modes = ['cash', 'card', 'upi'];
+      const modeLabel = { cash: 'Cash', card: 'Card', upi: 'UPI' };
+      const catLabel = { consultation: 'Consultation', tests: 'Tests', opd_charges: 'Ad-hoc Charges', ipd_deposits: 'IPD Deposits', ipd_topups: 'IPD Top-ups', ipd_settlements: 'IPD Settlements' };
+
+      const breakdownHtml = modes.map(m => {
+        const cats = summary.by_mode[m] || {};
+        const rows = Object.keys(cats).map(c => `<div class="bill-row" style="font-size:12.5px"><span>${catLabel[c] || c}</span><span>₹${cats[c].toFixed(2)}</span></div>`).join('');
+        return `<p style="font-weight:600;margin:10px 0 4px">${modeLabel[m]} — System Total: ₹${(summary.system_totals[m] || 0).toFixed(2)}</p>${rows || '<p style="color:var(--slate-light);font-size:12px">Nothing logged.</p>'}`;
+      }).join('');
+
+      if (summary.already_closed) {
+        body.innerHTML = `
+          <p style="color:var(--teal);font-weight:600;margin-bottom:10px">Already closed for ${summary.date}.</p>
+          ${breakdownHtml}
+          <div class="bill-row"><span>Counted Cash</span><span>₹${summary.close.counted_cash.toFixed(2)}</span></div>
+          <div class="bill-row"><span>Counted Card</span><span>₹${summary.close.counted_card.toFixed(2)}</span></div>
+          <div class="bill-row"><span>Counted UPI</span><span>₹${summary.close.counted_upi.toFixed(2)}</span></div>
+          ${summary.close.notes ? `<p style="font-size:12.5px;color:var(--slate);margin-top:8px">${sanitize(summary.close.notes)}</p>` : ''}`;
+        return;
+      }
+
+      body.innerHTML = `
+        ${summary.cash_refunds > 0 ? `<p style="font-size:12.5px;color:var(--slate)">Cash refunds today: −₹${summary.cash_refunds.toFixed(2)} (already netted out below)</p>` : ''}
+        ${breakdownHtml}
+        <div style="border-top:1.5px solid var(--border);margin:14px 0;padding-top:14px">
+          <p style="font-weight:600;margin-bottom:8px">Enter Counted Amounts</p>
+          <div class="form-group"><label class="form-label">Cash in Hand (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="de-counted-cash"></div>
+          <div class="form-group"><label class="form-label">Card Total (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="de-counted-card"></div>
+          <div class="form-group"><label class="form-label">UPI Total (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="de-counted-upi"></div>
+          <div class="form-group"><label class="form-label">Notes (optional)</label><input class="form-control" id="de-notes"></div>
+          <div class="err-msg" id="de-err"></div>
+          <button class="btn btn-primary" style="width:100%" id="btn-de-submit" onclick="submitDayEndClose()">Close Day</button>
+        </div>`;
+    }
+
+    async function submitDayEndClose() {
+      const err = document.getElementById('de-err');
+      err.textContent = '';
+      const counted_cash = parseFloat(document.getElementById('de-counted-cash').value) || 0;
+      const counted_card = parseFloat(document.getElementById('de-counted-card').value) || 0;
+      const counted_upi = parseFloat(document.getElementById('de-counted-upi').value) || 0;
+      const notes = document.getElementById('de-notes').value.trim() || null;
+      const btn = document.getElementById('btn-de-submit');
+      btn.disabled = true;
+      try {
+        const result = await api("POST", "/billing/day-end-close", { counted_cash, counted_card, counted_upi, notes });
+        const v = result.variance;
+        const varianceLines = Object.keys(v).map(k => `${k.toUpperCase()}: ${v[k] >= 0 ? '+' : ''}₹${v[k].toFixed(2)}`).join(' · ');
+        toast(`Day closed. Variance — ${varianceLines}`, v.cash === 0 && v.card === 0 && v.upi === 0 ? 'success' : 'info');
+        closeModal('modal-day-end');
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     async function markPaid() {
       if (!currentCheckinId) {
         toast('No active check-in found. Please regenerate the token.', 'error');
         return;
       }
+      const method = await askPaymentMethod();
+      if (!method) return;
       const btn = document.getElementById('btn-mark-paid');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
       try {
-        const result = await api("PATCH", `/patients/checkin/${currentCheckinId}/mark-paid`, {});
+        const result = await api("PATCH", `/patients/checkin/${currentCheckinId}/mark-paid`, { payment_method: method });
         if (!result) {
           btn.disabled = false;
           btn.innerHTML = 'Mark as Paid';
@@ -1539,6 +1894,27 @@
       document.getElementById('p-abha').value = '';
       document.getElementById('p-address').value = '';
       document.getElementById('modal-add').classList.add('open');
+    }
+
+    function openEmergencyIntakeModal() {
+      document.getElementById('em-name').value = '';
+      document.getElementById('em-age').value = '';
+      document.getElementById('em-gender').value = '';
+      document.getElementById('em-err').textContent = '';
+      document.getElementById('modal-emergency-intake').classList.add('open');
+    }
+    function closeEmergencyIntakeModal() { document.getElementById('modal-emergency-intake').classList.remove('open'); }
+    async function submitEmergencyIntake() {
+      const err = document.getElementById('em-err');
+      try {
+        const result = await api("POST", "/patients/emergency-intake", {
+          name: document.getElementById('em-name').value.trim() || null,
+          approx_age: parseInt(document.getElementById('em-age').value) || null,
+          approx_gender: document.getElementById('em-gender').value || null,
+        });
+        closeEmergencyIntakeModal();
+        toast(`Sent to ${result.doctor_name} — Token ${result.token_number}`, "success");
+      } catch (e) { err.textContent = e.message; }
     }
 
     function openEditPatient(p) {
@@ -1582,7 +1958,8 @@
           closeAddPatient();
           loadAllPatients();
         } else {
-          const patient = await api("POST", "/patients/", payload);
+          const patient = await createPatientWithDedupCheck(payload);
+          if (!patient) return; // reception cancelled out of the duplicate prompt
           toast("Patient added", "success");
           closeAddPatient();
           selectedPatient = patient;
@@ -1597,6 +1974,45 @@
         btn.disabled = false;
         btn.innerHTML = "Save Patient";
       }
+    }
+
+    // Tries to create the patient; if the backend flags a same-phone duplicate
+    // (409), asks reception whether to use the existing record or create a new
+    // one anyway. Returns the resulting patient, or null if reception cancelled.
+    async function createPatientWithDedupCheck(payload) {
+      try {
+        return await api("POST", "/patients/", payload);
+      } catch (e) {
+        if (e.status !== 409 || !e.data?.existing_patient) throw e;
+        const choice = await promptDuplicatePatient(e.data.existing_patient, e.data.message);
+        if (choice === "existing") {
+          return e.data.existing_patient;
+        } else if (choice === "create") {
+          return await api("POST", "/patients/", { ...payload, force: true });
+        }
+        return null;
+      }
+    }
+
+    function promptDuplicatePatient(existing, message) {
+      return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "modal-overlay open";
+        overlay.innerHTML = `
+          <div class="modal" style="max-width:400px">
+            <div class="modal-header"><h2>Possible Duplicate</h2></div>
+            <p style="font-size:13px;color:var(--slate);margin-bottom:14px">${message}</p>
+            <div style="display:flex;gap:10px;margin-top:10px">
+              <button class="btn btn-outline" style="flex:1" id="dup-create-anyway">Create New Anyway</button>
+              <button class="btn btn-primary" style="flex:1" id="dup-use-existing">Use Existing Patient</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+        const cleanup = (value) => { overlay.remove(); resolve(value); };
+        overlay.querySelector("#dup-create-anyway").addEventListener("click", () => cleanup("create"));
+        overlay.querySelector("#dup-use-existing").addEventListener("click", () => cleanup("existing"));
+      });
     }
 
     function formatDate(iso) {

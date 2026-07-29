@@ -516,6 +516,33 @@
                         </div>
                         <div class="err-msg" id="hd-logo-err" style="margin-top:6px"></div>
                     </div>
+                    <div style="max-width:600px;margin-bottom:6px">
+                        <p style="font-weight:600;font-size:13.5px;margin-bottom:2px">GST Rates</p>
+                        <p style="font-size:12px;color:var(--slate-light);margin-bottom:10px">Leave a rate blank to charge no GST on that category. Only takes effect if GSTIN above is set.</p>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;max-width:760px;margin-bottom:10px">
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Consultation %</label>
+                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-consultation" placeholder="e.g. 18" />
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Tests %</label>
+                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-test" placeholder="e.g. 18" />
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Room (excess) %</label>
+                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-room" placeholder="e.g. 5" />
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Other Charges %</label>
+                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-charge" placeholder="e.g. 18" />
+                        </div>
+                    </div>
+                    <div style="max-width:600px;margin-bottom:14px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Room GST Threshold (₹/day) <span
+                                style="color:var(--slate-light);font-weight:400">(only the portion of the daily room rate above this is taxable)</span></label>
+                        <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-room-threshold" placeholder="5000" />
+                    </div>
                     <button class="btn btn-primary" onclick="saveHospitalDetails()">Save</button>
                 </div>
             </div>
@@ -786,6 +813,11 @@
                 document.getElementById('hd-address').value = h.address || '';
                 document.getElementById('hd-gstin').value = h.gstin || '';
                 document.getElementById('hd-phone').value = h.phone || '';
+                document.getElementById('hd-gst-consultation').value = h.consultation_gst_percent != null ? h.consultation_gst_percent : '';
+                document.getElementById('hd-gst-test').value = h.test_gst_percent != null ? h.test_gst_percent : '';
+                document.getElementById('hd-gst-room').value = h.room_gst_percent != null ? h.room_gst_percent : '';
+                document.getElementById('hd-gst-charge').value = h.charge_gst_percent != null ? h.charge_gst_percent : '';
+                document.getElementById('hd-gst-room-threshold').value = h.room_gst_threshold_per_day != null ? h.room_gst_threshold_per_day : '';
                 currentLogoBase64 = null;
                 const preview = document.getElementById('hd-logo-preview');
                 const removeBtn = document.getElementById('hd-logo-remove-btn');
@@ -833,10 +865,23 @@
 
         async function saveHospitalDetails() {
             try {
+                const gstRateField = (id) => {
+                    const v = document.getElementById(id).value.trim();
+                    return v === '' ? 0 : parseFloat(v);  // 0 clears the rate server-side (blank = exempt)
+                };
+                const gstThresholdField = (id) => {
+                    const v = document.getElementById(id).value.trim();
+                    return v === '' ? null : parseFloat(v);  // null = leave the existing threshold unchanged
+                };
                 const payload = {
                     address: document.getElementById('hd-address').value.trim(),
                     gstin: document.getElementById('hd-gstin').value.trim(),
-                    phone: document.getElementById('hd-phone').value.trim()
+                    phone: document.getElementById('hd-phone').value.trim(),
+                    consultation_gst_percent: gstRateField('hd-gst-consultation'),
+                    test_gst_percent: gstRateField('hd-gst-test'),
+                    room_gst_percent: gstRateField('hd-gst-room'),
+                    charge_gst_percent: gstRateField('hd-gst-charge'),
+                    room_gst_threshold_per_day: gstThresholdField('hd-gst-room-threshold')
                 };
                 if (currentLogoBase64 !== null) payload.logo_base64 = currentLogoBase64;
                 await api("PATCH", "/admin/hospital/details", payload);
