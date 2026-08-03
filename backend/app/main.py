@@ -83,9 +83,14 @@ def _run_migrations():
     alembic_cfg.set_main_option("sqlalchemy.url", db_url)
 
     try:
-        alembic_command.upgrade(alembic_cfg, "head")
+        # This repo currently has multiple Alembic heads. Using "head" can fail
+        # and leave Render's database behind the code, causing 500s on live pages.
+        alembic_command.upgrade(alembic_cfg, "heads")
+        logger.info("Database migrations applied successfully")
     except Exception as e:
+        logger.error("Database migration failed at startup:\n%s", traceback.format_exc())
         warnings.warn(f"WARNING: alembic upgrade failed at startup: {e}")
+        raise
 
 _run_migrations()
 

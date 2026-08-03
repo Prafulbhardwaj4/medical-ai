@@ -850,11 +850,13 @@
 
     let _queueData = [];
 
-    async function loadQueue() {
+    async function loadQueue(silent = false) {
       try {
-        _queueData = await api("GET", "/patients/queue/today");
+        _queueData = await api("GET", "/patients/queue/today", null, false, silent);
         renderQueueRows();
-      } catch (e) { toast(e.message, "error"); }
+      } catch (e) {
+        if (!silent) toast(e.message, "error");
+      }
     }
 
     function renderQueueRows() {
@@ -911,7 +913,7 @@
     }
 
     loadQueue();
-    setInterval(loadQueue, 15000);
+    setInterval(() => loadQueue(true), 15000);
     loadEmergencyAlerts();
     setInterval(loadEmergencyAlerts, 15000);
     loadPatients();

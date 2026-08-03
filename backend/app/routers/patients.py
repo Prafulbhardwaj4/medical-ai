@@ -1339,11 +1339,17 @@ def todays_queue(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    from app.utils.portal_checkin import sweep_todays_online_checkins
-    sweep_todays_online_checkins(db, current_doctor.hospital_id)
+    try:
+        from app.utils.portal_checkin import sweep_todays_online_checkins
+        sweep_todays_online_checkins(db, current_doctor.hospital_id)
+    except Exception:
+        db.rollback()
 
-    from app.routers.lab import _escalate_unacknowledged_critical_results
-    _escalate_unacknowledged_critical_results(db, current_doctor.hospital_id)
+    try:
+        from app.routers.lab import _escalate_unacknowledged_critical_results
+        _escalate_unacknowledged_critical_results(db, current_doctor.hospital_id)
+    except Exception:
+        db.rollback()
 
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
