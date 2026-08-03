@@ -789,14 +789,23 @@
       if (isNurseViewer()) return;
 
       try {
-        [depositData, tpaData, consentsData] = await Promise.all([
+        const [depositResult, tpaResult, consentsResult] = await Promise.allSettled([
           api("GET", `/admissions/${admissionId}/deposit-summary`),
           api("GET", `/admissions/${admissionId}/tpa-case`),
           api("GET", `/admissions/${admissionId}/consents`),
         ]);
+
+        depositData = depositResult.status === "fulfilled" ? depositResult.value : null;
+        tpaData = tpaResult.status === "fulfilled" ? tpaResult.value : null;
+        consentsData = consentsResult.status === "fulfilled" ? consentsResult.value : [];
+
         renderDepositCard();
         renderTpaCard();
         renderConsents();
+
+        [depositResult, tpaResult, consentsResult].forEach((result) => {
+          if (result.status === "rejected") console.error("Admission secondary load failed:", result.reason);
+        });
       } catch (e) {
         toast("Some billing details couldn't be loaded: " + e.message, "error");
       }
@@ -1760,6 +1769,10 @@
         const response = await fetch(`${BASE}/admissions/${admissionId}/invoice/pdf`, {
           headers: { "Authorization": `Bearer ${getToken()}` }
         });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.detail || "Could not open invoice");
+        }
         const blob = await response.blob();
         window.open(URL.createObjectURL(blob), "_blank");
       } catch (e) { toast("Could not open invoice", "error"); }

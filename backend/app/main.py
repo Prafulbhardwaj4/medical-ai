@@ -1,4 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+import logging
+import traceback
+import time
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -53,6 +57,13 @@ from app.config import settings
 import warnings
 import os
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    force=True,
+)
+logger = logging.getLogger("medscribe")
+
 if settings.SECRET_KEY == "changeme":
     warnings.warn("WARNING: SECRET_KEY is default. Set a strong key in .env before deploying.")
 
@@ -97,13 +108,38 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5500",
         "http://127.0.0.1:5500",
+        "http://localhost:5501",
+        "http://127.0.0.1:5501",
         "https://medical-s-ai.vercel.app",
         "https://medical-ai-mvv1.onrender.com",
-        ],
+    ],
+    allow_origin_regex=r"https://.*\.(vercel\.app|netlify\.app|onrender\.com)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    logger.info("REQ %s %s origin=%s", request.method, request.url.path, request.headers.get("origin"))
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.error("ERR %s %s\n%s", request.method, request.url.path, traceback.format_exc())
+        raise
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+    logger.info("RES %s %s status=%s duration_ms=%s", request.method, request.url.path, response.status_code, elapsed_ms)
+    return response
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.error("UNHANDLED %s %s\n%s", request.method, request.url.path, traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Check Render logs for traceback."},
+    )
 
 app.include_router(auth_router.router)
 app.include_router(patients_router.router)

@@ -1,4 +1,4 @@
-const BASE = "https://medical-ai-mvv1.onrender.com";
+const BASE = window.MEDSCRIBE_API_BASE || "https://medical-ai-mvv1.onrender.com";
 
 function getToken() {
   try { return localStorage.getItem("ms_token"); }
@@ -128,14 +128,26 @@ async function api(method, path, body = null, isFormData = false, silent = false
       return;
     }
 
-    const data = await res.json();
+    const text = await res.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { detail: text || "Server returned a non-JSON response" };
+    }
+
     if (!res.ok) {
-      const detail = data.detail;
-      const err = new Error(typeof detail === "string" ? detail : (detail?.message || "Request failed"));
+      const detail = data?.detail;
+      const err = new Error(
+        typeof detail === "string"
+          ? detail
+          : (detail?.message || `Request failed (${res.status})`)
+      );
       err.status = res.status;
       err.data = detail;
       throw err;
     }
+
     return data;
   } finally {
     _activeRequests = Math.max(0, _activeRequests - 1);
