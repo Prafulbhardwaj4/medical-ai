@@ -238,6 +238,8 @@
           style="margin-bottom:14px" />
         <input class="form-control" id="d-fee" type="number" min="0" step="1"
           placeholder="Consultation Fee (Rs., optional)" style="margin-bottom:14px;display:none" />
+        <input class="form-control" id="d-professional-fee" type="number" min="0" step="1"
+          placeholder="Professional Fee per Admission (Rs., optional — for visiting/empanelled consultants)" style="margin-bottom:14px;display:none" />
       </div>
 
       <div style="position:relative;margin-bottom:8px">
@@ -315,6 +317,11 @@
         <label class="form-label">Consultation Fee (Rs.)</label>
         <input class="form-control" id="edit-fee" type="number" min="0"
           placeholder="Leave blank to use hospital default" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Professional Fee per Admission (Rs.)</label>
+        <input class="form-control" id="edit-professional-fee" type="number" min="0"
+          placeholder="Leave blank if not applicable (in-house/salaried doctor)" />
       </div>
       <div class="err-msg" id="edit-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
@@ -555,6 +562,7 @@
       document.getElementById('d-reg').value = '';
       document.getElementById('d-room').value = '';
       document.getElementById('d-fee').value = getDoctor()?.default_consultation_fee ?? '';
+      document.getElementById('d-professional-fee').value = '';
       document.getElementById('d-password').value = '';
       document.getElementById('d-confirm-password').value = '';
       document.getElementById('d-role').value = 'doctor';
@@ -580,6 +588,7 @@
       const isDoctorRole = (role === 'doctor' || role === 'sub_admin');
       document.getElementById('doctor-only-fields').style.display = isDoctorRole ? '' : 'none';
       document.getElementById('d-fee').style.display = (isDoctorRole && getDoctor()?.billing_enabled) ? '' : 'none';
+      document.getElementById('d-professional-fee').style.display = (isDoctorRole && getDoctor()?.billing_enabled) ? '' : 'none';
     }
 
     function onRoleChange() {
@@ -624,6 +633,7 @@
 
       const doctor = getDoctor();
       const fee = document.getElementById('d-fee').value.trim();
+      const professionalFee = document.getElementById('d-professional-fee').value.trim();
       const room = document.getElementById('d-room')?.value.trim() || '';
       const params = new URLSearchParams({
         hospital_id: doctor.hospital_id,
@@ -632,6 +642,9 @@
       });
       if (fee && needsSpecialization && doctor.billing_enabled) {
         params.set('consultation_fee', fee);
+      }
+      if (professionalFee && needsSpecialization && doctor.billing_enabled) {
+        params.set('professional_fee_per_admission', professionalFee);
       }
 
       const roleLabels = { doctor: 'Doctor', sub_admin: 'Sub Admin', receptionist: 'Receptionist', nurse: 'Nurse', lab: 'Lab Staff', pharmacy: 'Pharmacist' };
@@ -708,6 +721,7 @@
       document.getElementById('edit-specialization').value = d.specialization;
       document.getElementById('edit-room').value = d.room_number || '';
       document.getElementById('edit-fee').value = d.consultation_fee || '';
+      document.getElementById('edit-professional-fee').value = d.professional_fee_per_admission || '';
       document.getElementById('edit-err').textContent = '';
       document.getElementById('modal-edit-staff').classList.add('open');
     }
@@ -727,6 +741,7 @@
       const specialization = document.getElementById('edit-specialization').value.trim();
       const room = document.getElementById('edit-room').value.trim();
       const fee = document.getElementById('edit-fee').value;
+      const professionalFee = document.getElementById('edit-professional-fee').value;
 
       if (!name || !email || !phone) { err.textContent = 'Name, email and phone are required.'; return; }
       if (phone.length !== 10 || !/^\d{10}$/.test(phone)) { err.textContent = 'Enter valid 10-digit phone.'; return; }
@@ -739,6 +754,7 @@
         room_number: room, title
       });
       if (fee) params.append('consultation_fee', fee);
+      if (professionalFee) params.append('professional_fee_per_admission', professionalFee);
 
       try {
         await api('PATCH', `/admin/accounts/${id}?${params.toString()}`);

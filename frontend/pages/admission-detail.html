@@ -328,8 +328,19 @@
             <div id="tpa-body"><p>Loading...</p></div>
           </div>
 
+          <div class="card" style="margin-bottom:20px" id="consents-card">
+            <div class="card-header"><h2>Consents</h2></div>
+            <div id="consents-body"><p>Loading...</p></div>
+          </div>
+
           <div class="card" style="margin-bottom:20px" id="running-bill-card">
-            <div class="card-header"><h2>Running Bill</h2></div>
+            <div class="card-header">
+              <h2>Running Bill</h2>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-outline btn-sm" onclick="logDoctorVisit()">Log Doctor Visit</button>
+                <button class="btn btn-outline btn-sm" onclick="openWaiverModal()">Waiver / Discount</button>
+              </div>
+            </div>
             <div id="bill-body"><p>Loading...</p></div>
           </div>
 
@@ -377,6 +388,18 @@
         <div class="form-group"><label class="form-label">Test Name</label><input class="form-control" id="test-name" /></div>
         <div class="form-group"><label class="form-label">Price (₹)</label><input class="form-control" type="number" min="0" id="test-price" value="0" /></div>
       </div>
+      <div class="form-group">
+        <label class="form-label">Priority</label>
+        <select class="form-control" id="test-priority">
+          <option value="routine" selected>Routine</option>
+          <option value="urgent">Urgent</option>
+          <option value="stat">STAT</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Clinical Indication (optional)</label>
+        <input class="form-control" id="test-clinical-indication" placeholder="e.g. suspected DKA" />
+      </div>
       <p id="test-price-preview" style="font-size:12.5px;color:var(--slate-light);display:none;margin-top:-8px"></p>
       <div class="err-msg" id="test-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitAddTest()">Order</button>
@@ -398,13 +421,64 @@
     </div>
   </div>
 
+  <!-- Consent modal -->
+  <div class="modal-overlay" id="modal-consent">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-header"><h2 id="consent-modal-title">Record Consent</h2><button class="modal-close" onclick="closeModal('modal-consent')">&times;</button></div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+          <input type="checkbox" id="consent-by-guardian" onchange="document.getElementById('consent-relationship-group').style.display=this.checked?'':'none'">
+          Signed on the patient's behalf (guardian / next-of-kin — required for a minor or incapacitated patient)
+        </label>
+      </div>
+      <div class="form-group"><label class="form-label">Signer's Name</label><input class="form-control" id="consent-signer-name" placeholder="Full name" /></div>
+      <div class="form-group" id="consent-relationship-group" style="display:none">
+        <label class="form-label">Relationship to Patient</label>
+        <input class="form-control" id="consent-relationship" placeholder="e.g. Father, Spouse, Legal Guardian" />
+      </div>
+      <div class="form-group"><label class="form-label">Witness (optional)</label><input class="form-control" id="consent-witness" placeholder="Independent witness name, where possible" /></div>
+      <div class="form-group"><label class="form-label">Notes (optional)</label><textarea class="form-control" id="consent-notes" rows="2" placeholder="e.g. which procedure, or capacity-evaluation note"></textarea></div>
+      <div class="err-msg" id="consent-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="submitConsent()">Save</button>
+    </div>
+  </div>
+
+  <!-- Professional Fee modal -->
+  <div class="modal-overlay" id="modal-professional-fee">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header"><h2>Doctor Professional Fee</h2><button class="modal-close" onclick="closeModal('modal-professional-fee')">&times;</button></div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:10px">The treating doctor's own fee for this admission — separate from room/facility charges. Leave blank to clear the override and fall back to the doctor's default.</p>
+      <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="professional-fee-amount" /></div>
+      <div class="err-msg" id="professional-fee-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="submitProfessionalFee()">Save</button>
+    </div>
+  </div>
+
+  <!-- Waiver / Discount modal -->
+  <div class="modal-overlay" id="modal-waiver">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header"><h2>Waiver / Discount</h2><button class="modal-close" onclick="closeModal('modal-waiver')">&times;</button></div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:10px">Applies as a credit line against the current running bill — small waivers apply immediately, larger ones go to admin for approval.</p>
+      <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="waiver-amount" /></div>
+      <div class="form-group"><label class="form-label">Reason</label><input class="form-control" id="waiver-reason" placeholder="e.g. financial hardship, service issue" /></div>
+      <div class="err-msg" id="waiver-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="submitWaiver()">Apply / Request</button>
+    </div>
+  </div>
+
   <!-- Return Medicine modal -->
   <div class="modal-overlay" id="modal-return-med">
     <div class="modal" style="max-width:400px">
       <div class="modal-header"><h2>Return Medicine</h2><button class="modal-close" onclick="closeModal('modal-return-med')">&times;</button></div>
       <p style="font-size:13px;color:var(--slate);margin-bottom:10px" id="return-med-name"></p>
       <div class="form-group"><label class="form-label">Quantity Returned</label><input class="form-control" type="number" min="1" id="return-med-qty" /></div>
-      <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-weight:400"><input type="checkbox" id="return-med-restock" /> Restock (put back into sellable stock)</label></div>
+      <div class="form-group"><label class="form-label">What happens to it physically?</label>
+        <select class="form-control" id="return-med-disposition">
+          <option value="returned_to_supplier">Returned to Supplier</option>
+          <option value="sent_to_disposal">Sent to Disposal</option>
+          <option value="restocked_to_shelf">Restocked to Shelf (unopened, unused)</option>
+        </select>
+      </div>
       <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-control" id="return-med-note" placeholder="e.g. discontinued, patient discharged early" /></div>
       <div class="err-msg" id="return-med-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitReturnMed()">Record Return</button>
@@ -446,6 +520,7 @@
       <div class="form-group"><label class="form-label">Insurer Name</label><input class="form-control" id="tpa-insurer" /></div>
       <div class="form-group"><label class="form-label">Policy Number (optional)</label><input class="form-control" id="tpa-policy" /></div>
       <div class="form-group"><label class="form-label">Room Category Eligibility (optional)</label><input class="form-control" id="tpa-room-elig" placeholder="e.g. up to twin-sharing" /></div>
+      <div class="form-group"><label class="form-label">Eligible Daily Rate (₹, optional)</label><input class="form-control" type="number" min="0" step="0.01" id="tpa-eligible-rate" placeholder="Numeric rate the policy covers — used to estimate a proportionate deduction if the actual room costs more" /></div>
       <div class="form-group"><label class="form-label">Co-pay Notes (optional)</label><input class="form-control" id="tpa-copay-notes" /></div>
       <div class="err-msg" id="tpa-log-err"></div>
       <button class="btn btn-primary" style="width:100%" id="btn-tpa-log-submit" onclick="submitLogTpa()">Log Case</button>
@@ -466,10 +541,24 @@
       </div>
       <div class="form-group"><label class="form-label">Authorized Amount (₹, optional)</label><input class="form-control" type="number" min="0" step="0.01" id="tpa-authorized-amount" /></div>
       <div class="form-group"><label class="form-label">Room Category Eligibility (optional)</label><input class="form-control" id="tpa-update-room-elig" /></div>
+      <div class="form-group"><label class="form-label">Eligible Daily Rate (₹, optional)</label><input class="form-control" type="number" min="0" step="0.01" id="tpa-update-eligible-rate" /></div>
       <div class="form-group"><label class="form-label">Co-pay Notes (optional)</label><input class="form-control" id="tpa-update-copay-notes" /></div>
       <div class="form-group"><label class="form-label">Query Notes (what the TPA is asking for, optional)</label><input class="form-control" id="tpa-query-notes" /></div>
       <div class="err-msg" id="tpa-update-err"></div>
       <button class="btn btn-primary" style="width:100%" id="btn-tpa-update-submit" onclick="submitUpdateTpa()">Save</button>
+    </div>
+  </div>
+
+  <!-- Log TPA Settlement modal -->
+  <div class="modal-overlay" id="modal-tpa-settlement">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header"><h2>Log TPA Settlement</h2><button class="modal-close" onclick="closeModal('modal-tpa-settlement')">&times;</button></div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:10px" id="tpa-settlement-claimed-note"></p>
+      <div class="form-group"><label class="form-label">Amount Received from TPA (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="tpa-settled-amount" /></div>
+      <div class="form-group"><label class="form-label">Notes (optional)</label><input class="form-control" id="tpa-settlement-notes" placeholder="e.g. payment reference" /></div>
+      <p style="font-size:12px;color:var(--slate-light);margin-bottom:10px">A shortfall becomes a debit note on the discharge invoice (patient owes the difference); an overpayment becomes a refund + credit note.</p>
+      <div class="err-msg" id="tpa-settlement-err"></div>
+      <button class="btn btn-primary" style="width:100%" id="btn-tpa-settlement-submit" onclick="submitTpaSettlement()">Save</button>
     </div>
   </div>
 
@@ -478,6 +567,31 @@
     <div class="modal" style="max-width:440px">
       <div class="modal-header"><h2>Discharge Patient</h2><button class="modal-close" onclick="closeModal('modal-discharge')">&times;</button></div>
       <p style="color:var(--slate);font-size:13.5px;margin-bottom:10px">This finalizes the bill and generates the discharge invoice. This can't be undone.</p>
+
+      <div class="form-group">
+        <label class="form-label">Discharge Type</label>
+        <select class="form-control" id="discharge-type" onchange="toggleDischargeTypeFields()">
+          <option value="planned">Planned / Routine</option>
+          <option value="lama_dama">LAMA / DAMA</option>
+          <option value="death">Death in Hospital</option>
+        </select>
+      </div>
+
+      <div id="discharge-lama-fields" style="display:none">
+        <p style="font-size:12.5px;color:var(--slate);background:var(--smoke);border-radius:var(--radius);padding:10px;margin-bottom:12px">Requires a signed LAMA/DAMA consent-to-leave on file (record it under Consents first) and a discharge summary documenting condition at time of leaving.</p>
+        <div class="form-group"><label class="form-label">Capacity Evaluation Note (if there's any question of impaired decision-making)</label><textarea class="form-control" id="discharge-capacity-note" rows="2"></textarea></div>
+      </div>
+
+      <div id="discharge-death-fields" style="display:none">
+        <div class="form-group"><label class="form-label">Time of Death</label><input class="form-control" type="datetime-local" id="discharge-time-of-death" /></div>
+        <div class="form-group"><label class="form-label">Certifying Doctor</label><select class="form-control" id="discharge-certifying-doctor"></select></div>
+        <div class="form-group"><label class="form-label">Cause of Death</label><textarea class="form-control" id="discharge-cause-of-death" rows="2"></textarea></div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+            <input type="checkbox" id="discharge-is-mlc"> Medico-Legal Case (MLC) — police/forensic involvement required before body release
+          </label>
+        </div>
+      </div>
 
       <div id="discharge-amount-box" style="background:var(--smoke);border-radius:var(--radius);padding:14px;margin-bottom:14px">
         <div style="font-size:12px;color:var(--slate-light)" id="discharge-amount-label">Amount Due (excludes pharmacy — settled separately)</div>
@@ -508,7 +622,17 @@
         </select>
       </div>
 
-      <div class="form-group"><label class="form-label">Discharge Summary (optional)</label><textarea class="form-control" id="discharge-summary" rows="4"></textarea></div>
+      <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+        <p style="font-weight:600;font-size:13.5px;margin-bottom:10px">Discharge Summary</p>
+        <div class="form-group"><label class="form-label">Discharging Doctor</label><select class="form-control" id="discharge-doctor"></select></div>
+        <div class="form-group"><label class="form-label">Course in Hospital</label><textarea class="form-control" id="discharge-course" rows="2"></textarea></div>
+        <div class="form-group"><label class="form-label">Procedures Performed</label><textarea class="form-control" id="discharge-procedures" rows="2"></textarea></div>
+        <div class="form-group"><label class="form-label">Discharge Diagnosis</label><textarea class="form-control" id="discharge-diagnosis" rows="2"></textarea></div>
+        <div class="form-group"><label class="form-label">Condition at Discharge</label><input class="form-control" id="discharge-condition" placeholder="e.g. Improved, Stable, Referred" /></div>
+        <div class="form-group"><label class="form-label">Medications on Discharge</label><textarea class="form-control" id="discharge-medications" rows="2"></textarea></div>
+        <div class="form-group"><label class="form-label">Follow-up Instructions</label><textarea class="form-control" id="discharge-followup" rows="2"></textarea></div>
+        <div class="form-group"><label class="form-label">Additional Notes (optional)</label><textarea class="form-control" id="discharge-summary" rows="3" placeholder="Anything that doesn't fit the fields above"></textarea></div>
+      </div>
       <div class="err-msg" id="discharge-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitDischarge()">Confirm Discharge</button>
 
@@ -613,18 +737,25 @@
     const admissionId = new URLSearchParams(window.location.search).get("id");
     if (!admissionId) location.href = "admissions.html";
 
+    const ADMISSION_TYPE_LABELS = {
+      planned: "Planned / Elective", emergency: "Emergency", maternity: "Maternity / Delivery",
+      transfer_in: "Transfer-in", day_care: "Day-care / Short-stay",
+    };
+
     function closeModal(id) { document.getElementById(id).classList.remove("open"); }
     function openModal(id) { document.getElementById(id).classList.add("open"); }
 
     let admissionData = null;
     let tpaData = null;
+    let consentsData = [];
 
     async function loadAdmission() {
       try {
-        [admissionData, depositData, tpaData] = await Promise.all([
+        [admissionData, depositData, tpaData, consentsData] = await Promise.all([
           api("GET", `/admissions/${admissionId}`),
           api("GET", `/admissions/${admissionId}/deposit-summary`),
           api("GET", `/admissions/${admissionId}/tpa-case`),
+          api("GET", `/admissions/${admissionId}/consents`),
         ]);
         renderHeader();
         renderMeds();
@@ -633,10 +764,74 @@
         renderBill();
         renderDepositCard();
         renderTpaCard();
+        renderConsents();
         renderDischargeCard();
       } catch (e) {
         document.getElementById("patient-header").innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
       }
+    }
+
+    const CONSENT_TYPE_LABELS = {
+      general: "General Admission Consent", procedure: "Procedure-specific Consent", anaesthesia: "Anaesthesia Consent",
+      blood_transfusion: "Blood Transfusion Consent", high_risk: "High-risk / Complication Consent", lama_dama: "LAMA / DAMA Consent",
+    };
+
+    function renderConsents() {
+      const body = document.getElementById("consents-body");
+      body.innerHTML = Object.keys(CONSENT_TYPE_LABELS).map(type => {
+        const records = consentsData.filter(c => c.consent_type === type).sort((a, b) => new Date(b.signed_at) - new Date(a.signed_at));
+        const latest = records[0];
+        const status = latest
+          ? `<span class="badge badge-green">Recorded</span> <span style="font-size:12px;color:var(--slate)">${sanitize(latest.signer_name)}${latest.relationship ? ' (' + sanitize(latest.relationship) + ')' : ''} · ${new Date(latest.signed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${records.length > 1 ? ' · ' + records.length + ' on file' : ''}</span>`
+          : `<span class="badge badge-grey">Not recorded</span>`;
+        return `
+          <div class="ns-row" style="align-items:center">
+            <div><strong>${CONSENT_TYPE_LABELS[type]}</strong><div class="ns-row-sub">${status}</div></div>
+            <button class="btn btn-outline btn-sm" onclick="openConsentModal('${type}')">+ Add</button>
+          </div>`;
+      }).join('');
+    }
+
+    let activeConsentType = null;
+    function openConsentModal(type) {
+      activeConsentType = type;
+      document.getElementById("consent-modal-title").textContent = `Record ${CONSENT_TYPE_LABELS[type]}`;
+      document.getElementById("consent-signer-name").value = "";
+      document.getElementById("consent-relationship").value = "";
+      document.getElementById("consent-witness").value = "";
+      document.getElementById("consent-notes").value = "";
+      const isMinor = admissionData?.patient?.age != null && admissionData.patient.age < 18;
+      document.getElementById("consent-by-guardian").checked = isMinor;
+      document.getElementById("consent-relationship-group").style.display = isMinor ? "" : "none";
+      document.getElementById("consent-err").textContent = "";
+      openModal("modal-consent");
+    }
+    async function submitConsent() {
+      const err = document.getElementById("consent-err");
+      const signerName = document.getElementById("consent-signer-name").value.trim();
+      const byGuardian = document.getElementById("consent-by-guardian").checked;
+      const relationship = document.getElementById("consent-relationship").value.trim();
+      if (!signerName) { err.textContent = "Signer's name is required."; return; }
+      if (byGuardian && !relationship) { err.textContent = "Relationship is required when signed on the patient's behalf."; return; }
+      try {
+        await api("POST", `/admissions/${admissionId}/consents`, {
+          consent_type: activeConsentType, signer_name: signerName, signed_by_guardian: byGuardian,
+          relationship: relationship || null,
+          witness_name: document.getElementById("consent-witness").value.trim() || null,
+          notes: document.getElementById("consent-notes").value.trim() || null,
+        });
+        closeModal("modal-consent");
+        toast("Consent recorded", "success");
+        loadAdmission();
+      } catch (e) { err.textContent = e.message; }
+    }
+
+    async function placeDischargeOrder() {
+      try {
+        await api("POST", `/admissions/${admissionId}/discharge-order`, {});
+        toast("Discharge order placed", "success");
+        loadAdmission();
+      } catch (e) { toast(e.message, "error"); }
     }
 
     async function sendEmergencyAlert() {
@@ -653,13 +848,19 @@
       document.getElementById("patient-header").innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px">
           <div>
-             <h2 style="margin:0">${sanitize(p.name)} <span class="badge ${a.status === 'admitted' ? 'badge-teal' : 'badge-grey'}" style="margin-left:8px">${a.status}</span> ${a.status === 'admitted' ? `<button class="btn btn-sm" style="margin-left:8px;background:#dc2626;color:#fff;border-color:#dc2626" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}</h2>
+             <h2 style="margin:0">${sanitize(p.name)} <span class="badge ${a.status === 'admitted' ? 'badge-teal' : 'badge-grey'}" style="margin-left:8px">${a.status}</span> ${a.status === 'discharged' && a.discharge_type && a.discharge_type !== 'planned' ? `<span class="badge badge-amber" style="margin-left:6px">${a.discharge_type === 'lama_dama' ? 'LAMA/DAMA' : 'Death in Hospital' + (a.is_mlc ? ' · MLC' : '')}</span>` : ''} ${a.status === 'admitted' ? `<button class="btn btn-sm" style="margin-left:8px;background:#dc2626;color:#fff;border-color:#dc2626" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}</h2>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">${p.age} yrs, ${p.gender} · ${sanitize(p.phone)} ${p.patient_uid ? '· ' + sanitize(p.patient_uid) : ''}</p>
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
               ${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)} · Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} (${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'})
               ${a.status === 'admitted' && canChangeWard ? `<button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="openChangeWardModal()">Change Ward/Bed</button>` : ''}
               ${a.status === 'admitted' && canRequestWardChange && !canChangeWard ? `<button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="openRequestWardChangeModal()">Request Ward/Bed Change</button>` : ''}
             </p>
+            ${a.status === 'admitted' && isDoctorViewer ? `
+            <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
+              ${a.discharge_order_at
+                ? `Discharge ordered at ${new Date(a.discharge_order_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} <button class="btn btn-outline btn-sm" style="margin-left:8px" onclick="placeDischargeOrder()">Re-confirm</button>`
+                : `<button class="btn btn-primary btn-sm" onclick="placeDischargeOrder()">Place Discharge Order</button>`}
+            </p>` : ''}
             <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
               <strong>Diagnosis:</strong> <span id="diagnosis-display">${sanitize(a.diagnosis || '—')}</span>
               <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="openEditDiagnosis()">Edit</button>
@@ -669,7 +870,7 @@
               <button class="btn btn-primary btn-sm" onclick="saveDiagnosis()">Save</button>
               <button class="btn btn-outline btn-sm" onclick="closeEditDiagnosis()">Cancel</button>
             </div>
-            <p style="color:var(--slate-light);font-size:12.5px;margin-top:4px">Admitting doctor: ${sanitize(a.admitting_doctor_name || '—')}</p>
+            <p style="color:var(--slate-light);font-size:12.5px;margin-top:4px">Admitting doctor: ${sanitize(a.admitting_doctor_name || '—')} · <span class="badge badge-navy">${ADMISSION_TYPE_LABELS[a.admission_type] || 'Planned / Elective'}</span></p>
           </div>
         </div>`;
     }
@@ -832,8 +1033,13 @@
             </div>`).join('')
         : '';
 
+      const professionalFeeRow = b.professional_fee > 0
+        ? `<div class="bill-row"><span>${sanitize(b.professional_fee_label)} <button class="btn btn-outline btn-sm" style="padding:1px 8px;margin-left:6px" onclick="openProfessionalFeeModal()">Edit</button></span><span>₹${b.professional_fee.toFixed(2)}</span></div>`
+        : `<div class="bill-row" style="color:var(--slate-light)"><span>Doctor Professional Fee <button class="btn btn-outline btn-sm" style="padding:1px 8px;margin-left:6px" onclick="openProfessionalFeeModal()">Set</button></span><span>—</span></div>`;
+
       document.getElementById("bill-body").innerHTML = `
         ${roomRows}
+        ${professionalFeeRow}
         <div class="bill-row" style="font-weight:600"><span>Medicines (${meds.length} dose${meds.length === 1 ? '' : 's'})</span><span>₹${sum(meds).toFixed(2)}</span></div>
         <div style="padding-left:10px;border-left:2px solid var(--border);margin:2px 0 8px">${medRows}</div>
         <div class="bill-row"><span>Tests</span><span>₹${sum(tests).toFixed(2)}</span></div>
@@ -962,11 +1168,22 @@
           <span class="badge ${TPA_STATUS_BADGE[t.status] || 'badge-grey'}">${TPA_STATUS_LABEL[t.status] || t.status}</span>
         </div>
         ${t.room_category_eligibility ? `<div class="bill-row"><span>Room Eligibility</span><span>${sanitize(t.room_category_eligibility)}</span></div>` : ''}
+        ${t.eligible_daily_rate != null ? `<div class="bill-row"><span>Eligible Daily Rate</span><span>₹${Number(t.eligible_daily_rate).toFixed(2)}/day</span></div>` : ''}
+        ${t.deduction_estimate > 0 ? `<div class="bill-row" style="color:var(--danger)"><span>Est. Proportionate Deduction</span><span>−₹${Number(t.deduction_estimate).toFixed(2)} (${(t.deduction_ratio * 100).toFixed(0)}% eligible)</span></div>
+        <p style="font-size:12px;color:var(--slate-light);margin-top:2px;margin-bottom:6px">Room rate exceeds the policy's eligible rate — this is an estimate based on a simple whole-claim ratio; verify the exact figure against the insurer's actual approval letter, and flag it to the patient/family before discharge.</p>` : ''}
         ${t.authorized_amount != null ? `<div class="bill-row"><span>Authorized Amount</span><span>₹${Number(t.authorized_amount).toFixed(2)}</span></div>` : ''}
         ${t.copay_notes ? `<p style="font-size:12.5px;color:var(--slate-light);margin-top:6px"><strong>Co-pay:</strong> ${sanitize(t.copay_notes)}</p>` : ''}
         ${t.status === 'query_raised' && t.query_notes ? `<p style="font-size:12.5px;color:var(--slate-light);margin-top:6px"><strong>Query:</strong> ${sanitize(t.query_notes)}</p>` : ''}
         ${canManageTpa && admissionData.status === 'admitted' && !['approved', 'denied'].includes(t.status) ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openUpdateTpaModal()">Update Case</button>` : ''}
-        ${canManageTpa && admissionData.status === 'admitted' && ['approved', 'denied'].includes(t.status) ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openLogTpaModal()">+ Log New Case</button>` : ''}`;
+        ${canManageTpa && admissionData.status === 'admitted' && ['approved', 'denied'].includes(t.status) ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openLogTpaModal()">+ Log New Case</button>` : ''}
+        ${t.settlement_status ? `
+        <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
+          <div class="bill-row"><span>Settlement</span><span class="badge ${t.settlement_status === 'settled' ? 'badge-green' : 'badge-amber'}">${t.settlement_status === 'settled' ? 'Settled' : 'Billed to TPA — Awaiting Settlement'}</span></div>
+          ${t.claim_submitted_amount != null ? `<div class="bill-row"><span>Claimed</span><span>₹${Number(t.claim_submitted_amount).toFixed(2)}</span></div>` : ''}
+          ${t.settlement_status === 'settled' ? `<div class="bill-row"><span>Settled Amount</span><span>₹${Number(t.settled_amount).toFixed(2)}</span></div>` : ''}
+          ${t.settlement_status === 'settled' && t.settlement_notes ? `<p style="font-size:12.5px;color:var(--slate-light);margin-top:4px">${sanitize(t.settlement_notes)}</p>` : ''}
+          ${canManageTpa && t.settlement_status === 'awaiting_settlement' ? `<button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="openLogTpaSettlementModal()">Log Settlement Received</button>` : ''}
+        </div>` : ''}`;
     }
 
     function openLogTpaModal() {
@@ -974,6 +1191,7 @@
       document.getElementById("tpa-insurer").value = "";
       document.getElementById("tpa-policy").value = "";
       document.getElementById("tpa-room-elig").value = "";
+      document.getElementById("tpa-eligible-rate").value = "";
       document.getElementById("tpa-copay-notes").value = "";
       openModal("modal-log-tpa");
     }
@@ -984,6 +1202,7 @@
       const insurer_name = document.getElementById("tpa-insurer").value.trim();
       const policy_number = document.getElementById("tpa-policy").value.trim();
       const room_category_eligibility = document.getElementById("tpa-room-elig").value.trim();
+      const eligibleRateRaw = document.getElementById("tpa-eligible-rate").value;
       const copay_notes = document.getElementById("tpa-copay-notes").value.trim();
       if (!insurer_name) { err.textContent = "Insurer name is required."; return; }
       const btn = document.getElementById("btn-tpa-log-submit");
@@ -993,6 +1212,7 @@
           insurer_name,
           policy_number: policy_number || null,
           room_category_eligibility: room_category_eligibility || null,
+          eligible_daily_rate: eligibleRateRaw !== "" ? parseFloat(eligibleRateRaw) : null,
           copay_notes: copay_notes || null,
         });
         toast("TPA case logged.", "success");
@@ -1011,6 +1231,7 @@
       document.getElementById("tpa-status").value = t.status;
       document.getElementById("tpa-authorized-amount").value = t.authorized_amount != null ? t.authorized_amount : "";
       document.getElementById("tpa-update-room-elig").value = t.room_category_eligibility || "";
+      document.getElementById("tpa-update-eligible-rate").value = t.eligible_daily_rate != null ? t.eligible_daily_rate : "";
       document.getElementById("tpa-update-copay-notes").value = t.copay_notes || "";
       document.getElementById("tpa-query-notes").value = t.query_notes || "";
       openModal("modal-update-tpa");
@@ -1022,6 +1243,7 @@
       const status = document.getElementById("tpa-status").value;
       const authorizedRaw = document.getElementById("tpa-authorized-amount").value;
       const room_category_eligibility = document.getElementById("tpa-update-room-elig").value.trim();
+      const eligibleRateRaw = document.getElementById("tpa-update-eligible-rate").value;
       const copay_notes = document.getElementById("tpa-update-copay-notes").value.trim();
       const query_notes = document.getElementById("tpa-query-notes").value.trim();
       const btn = document.getElementById("btn-tpa-update-submit");
@@ -1031,6 +1253,7 @@
           status,
           authorized_amount: authorizedRaw !== "" ? parseFloat(authorizedRaw) : null,
           room_category_eligibility: room_category_eligibility || null,
+          eligible_daily_rate: eligibleRateRaw !== "" ? parseFloat(eligibleRateRaw) : null,
           copay_notes: copay_notes || null,
           query_notes: query_notes || null,
         });
@@ -1044,15 +1267,57 @@
       }
     }
 
+    function formatDuration(ms) {
+      const totalMin = Math.round(ms / 60000);
+      const h = Math.floor(totalMin / 60), m = totalMin % 60;
+      return `${h}h ${m}m`;
+    }
+
+    function openLogTpaSettlementModal() {
+      const t = tpaData;
+      document.getElementById("tpa-settlement-claimed-note").textContent = `Claimed: ₹${Number(t.claim_submitted_amount || 0).toFixed(2)}`;
+      document.getElementById("tpa-settled-amount").value = "";
+      document.getElementById("tpa-settlement-notes").value = "";
+      document.getElementById("tpa-settlement-err").textContent = "";
+      openModal("modal-tpa-settlement");
+    }
+
+    async function submitTpaSettlement() {
+      const err = document.getElementById("tpa-settlement-err");
+      const settled_amount = parseFloat(document.getElementById("tpa-settled-amount").value);
+      if (isNaN(settled_amount) || settled_amount < 0) { err.textContent = "Enter a valid amount."; return; }
+      const btn = document.getElementById("btn-tpa-settlement-submit");
+      btn.disabled = true;
+      try {
+        const result = await api("POST", `/admissions/${admissionId}/tpa-case/${tpaData.id}/settle`, {
+          settled_amount, settlement_notes: document.getElementById("tpa-settlement-notes").value.trim() || null,
+        });
+        closeModal("modal-tpa-settlement");
+        toast(result.note_number ? `Settlement recorded — ${result.note_number} issued.` : "Settlement recorded.", "success");
+        await loadAdmission();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     function renderDischargeCard() {
       const el = document.getElementById("discharge-body");
       if (admissionData.status === 'discharged') {
+        const delayHtml = admissionData.discharge_order_at
+          ? `<p style="font-size:12.5px;color:var(--slate-light);margin-top:4px">Discharge order to actual departure: ${formatDuration(new Date(admissionData.discharge_date) - new Date(admissionData.discharge_order_at))}</p>`
+          : '';
         el.innerHTML = `
           <p style="font-size:13.5px;color:var(--slate)">Discharged on ${new Date(admissionData.discharge_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+          ${delayHtml}
           ${admissionData.discharge_summary ? `<p style="font-size:13px;color:var(--slate-light);margin-top:6px">${sanitize(admissionData.discharge_summary)}</p>` : ''}
           <button class="btn btn-outline" style="width:100%;margin-top:12px" onclick="downloadFile('/admissions/${admissionId}/invoice/pdf', 'discharge_invoice_${admissionId}.pdf')">Download Invoice</button>`;
       } else {
-        el.innerHTML = `<button class="btn btn-primary" style="width:100%" onclick="openDischargeModal()">Discharge Patient</button>`;
+        const orderHtml = admissionData.discharge_order_at
+          ? `<p style="font-size:12.5px;color:var(--slate);margin-bottom:10px">Discharge ordered by ${sanitize(admissionData.discharge_ordered_by_name || 'doctor')} at ${new Date(admissionData.discharge_order_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>`
+          : `<p style="font-size:12.5px;color:var(--slate-light);margin-bottom:10px">No discharge order placed yet</p>`;
+        el.innerHTML = `${orderHtml}<button class="btn btn-primary" style="width:100%" onclick="openDischargeModal()">Discharge Patient</button>`;
       }
     }
 
@@ -1174,7 +1439,7 @@
       document.getElementById("return-med-name").textContent = `${m.medicine_name} (${m.dosage}) — up to ${eligible} unit(s) eligible`;
       document.getElementById("return-med-qty").value = "";
       document.getElementById("return-med-qty").max = eligible;
-      document.getElementById("return-med-restock").checked = false;
+      document.getElementById("return-med-disposition").value = "returned_to_supplier";
       document.getElementById("return-med-note").value = "";
       document.getElementById("return-med-err").textContent = "";
       openModal("modal-return-med");
@@ -1186,7 +1451,7 @@
       try {
         await api("POST", `/admissions/${admissionId}/medications/${returnMedOrderId}/return`, {
           quantity: qty,
-          restock: document.getElementById("return-med-restock").checked,
+          disposition: document.getElementById("return-med-disposition").value,
           note: document.getElementById("return-med-note").value.trim() || null,
         });
         closeModal("modal-return-med");
@@ -1237,16 +1502,18 @@
     async function submitAddTest() {
       const err = document.getElementById("test-err");
       const sel = document.getElementById("test-catalog-select").value;
+      const priority = document.getElementById("test-priority").value;
+      const clinicalIndication = document.getElementById("test-clinical-indication").value.trim() || null;
       let payload;
 
       if (sel === "__other__" || !sel) {
         const name = document.getElementById("test-name").value.trim();
         if (!name) { err.textContent = "Test name is required"; return; }
-        payload = { test_name: name, price: parseFloat(document.getElementById("test-price").value) || 0 };
+        payload = { test_name: name, price: parseFloat(document.getElementById("test-price").value) || 0, priority, clinical_indication: clinicalIndication };
       } else {
         const t = testCatalogCache.find(x => String(x.id) === sel);
         if (!t) { err.textContent = "Please select a test"; return; }
-        payload = { test_id: t.id, test_name: t.name, price: t.fee };
+        payload = { test_id: t.id, test_name: t.name, price: t.fee, priority, clinical_indication: clinicalIndication };
       }
 
       try {
@@ -1275,16 +1542,99 @@
       } catch (e) { err.textContent = e.message; }
     }
 
+    // ---------- Doctor Visit ----------
+    async function logDoctorVisit() {
+      try {
+        const result = await api("POST", `/admissions/${admissionId}/log-visit`, {});
+        toast(`Visit logged — ₹${result.amount.toFixed(2)}`, "success");
+        loadAdmission();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    // ---------- Professional Fee ----------
+    function openProfessionalFeeModal() {
+      document.getElementById("professional-fee-amount").value = admissionData.professional_fee_override != null ? admissionData.professional_fee_override
+        : (admissionData.professional_fee_default != null ? admissionData.professional_fee_default : '');
+      document.getElementById("professional-fee-err").textContent = "";
+      openModal("modal-professional-fee");
+    }
+    async function submitProfessionalFee() {
+      const err = document.getElementById("professional-fee-err");
+      const raw = document.getElementById("professional-fee-amount").value.trim();
+      const amount = raw === '' ? null : parseFloat(raw);
+      if (amount !== null && (isNaN(amount) || amount < 0)) { err.textContent = "Enter a valid amount, or leave blank to clear."; return; }
+      try {
+        await api("PATCH", `/admissions/${admissionId}/professional-fee`, { amount });
+        closeModal("modal-professional-fee");
+        toast("Professional fee updated", "success");
+        loadAdmission();
+      } catch (e) { err.textContent = e.message; }
+    }
+
+    // ---------- Waiver / Discount ----------
+    function openWaiverModal() {
+      document.getElementById("waiver-amount").value = "";
+      document.getElementById("waiver-reason").value = "";
+      document.getElementById("waiver-err").textContent = "";
+      openModal("modal-waiver");
+    }
+    async function submitWaiver() {
+      const err = document.getElementById("waiver-err");
+      const amount = parseFloat(document.getElementById("waiver-amount").value);
+      const reason = document.getElementById("waiver-reason").value.trim();
+      if (!amount || amount <= 0) { err.textContent = "Enter a valid amount."; return; }
+      if (!reason) { err.textContent = "A reason is required."; return; }
+      try {
+        const result = await api("POST", `/billing/waivers`, { admission_token: admissionId, amount, reason });
+        closeModal("modal-waiver");
+        toast(result.status === 'pending_approval' ? 'Sent for admin approval.' : 'Waiver applied.', 'success');
+        loadAdmission();
+      } catch (e) { err.textContent = e.message; }
+    }
+
     // ---------- Discharge ----------
     let dischargeAmountDue = 0;
     let dischargeRefundDue = 0;
+
+    function toggleDischargeTypeFields() {
+      const type = document.getElementById("discharge-type").value;
+      document.getElementById("discharge-lama-fields").style.display = type === "lama_dama" ? "block" : "none";
+      document.getElementById("discharge-death-fields").style.display = type === "death" ? "block" : "none";
+    }
 
     async function openDischargeModal() {
       document.getElementById("discharge-err").textContent = "";
       document.getElementById("discharge-output-options").style.display = "none";
       document.getElementById("discharge-summary").disabled = false;
       document.getElementById("discharge-amount-due").textContent = "Loading…";
+      document.getElementById("discharge-type").value = "planned";
+      document.getElementById("discharge-capacity-note").value = "";
+      document.getElementById("discharge-time-of-death").value = "";
+      document.getElementById("discharge-cause-of-death").value = "";
+      document.getElementById("discharge-is-mlc").checked = false;
+      toggleDischargeTypeFields();
       openModal("modal-discharge");
+      document.getElementById("discharge-course").value = "";
+      document.getElementById("discharge-procedures").value = "";
+      document.getElementById("discharge-diagnosis").value = "";
+      document.getElementById("discharge-condition").value = "";
+      document.getElementById("discharge-medications").value = "";
+      document.getElementById("discharge-followup").value = "";
+      try {
+        const certifyingSel = document.getElementById("discharge-certifying-doctor");
+        const dischargingSel = document.getElementById("discharge-doctor");
+        certifyingSel.innerHTML = `<option value="">Select...</option>`;
+        dischargingSel.innerHTML = `<option value="">Select...</option>`;
+        const doctors = await api("GET", "/patients/hospital-doctors");
+        doctors.forEach(d => {
+          certifyingSel.insertAdjacentHTML('beforeend', `<option value="${d.id}">${sanitize(d.title)} ${sanitize(d.name)}</option>`);
+          dischargingSel.insertAdjacentHTML('beforeend', `<option value="${d.id}">${sanitize(d.title)} ${sanitize(d.name)}</option>`);
+        });
+        if (admissionData?.admitting_doctor_name) {
+          const match = doctors.find(d => `${d.title} ${d.name}` === admissionData.admitting_doctor_name);
+          if (match) dischargingSel.value = match.id;
+        }
+      } catch (e) { }
       try {
         const preview = await api("GET", `/admissions/${admissionId}/discharge-preview`);
         dischargeAmountDue = preview.amount_due;
@@ -1335,12 +1685,32 @@
         return;
       }
 
+      const dischargeType = document.getElementById("discharge-type").value;
+      if (dischargeType === "death") {
+        if (!document.getElementById("discharge-time-of-death").value) { err.textContent = "Time of death is required."; return; }
+        if (!document.getElementById("discharge-certifying-doctor").value) { err.textContent = "Certifying doctor is required."; return; }
+        if (!document.getElementById("discharge-cause-of-death").value.trim()) { err.textContent = "Cause of death is required."; return; }
+      }
+
       try {
         await api("POST", `/admissions/${admissionId}/discharge`, {
+          discharge_type: dischargeType,
           discharge_summary: document.getElementById("discharge-summary").value.trim() || null,
           payment_collected: paymentCollected,
           payment_method: paymentCollected ? paymentMethod : null,
           refund_channel: dischargeRefundDue > 0 ? refundChannel : null,
+          capacity_evaluation_note: dischargeType === "lama_dama" ? (document.getElementById("discharge-capacity-note").value.trim() || null) : null,
+          time_of_death: dischargeType === "death" ? new Date(document.getElementById("discharge-time-of-death").value).toISOString() : null,
+          certifying_doctor_id: dischargeType === "death" ? parseInt(document.getElementById("discharge-certifying-doctor").value) : null,
+          cause_of_death: dischargeType === "death" ? document.getElementById("discharge-cause-of-death").value.trim() : null,
+          is_mlc: dischargeType === "death" ? document.getElementById("discharge-is-mlc").checked : null,
+          discharging_doctor_id: document.getElementById("discharge-doctor").value ? parseInt(document.getElementById("discharge-doctor").value) : null,
+          course_in_hospital: document.getElementById("discharge-course").value.trim() || null,
+          procedures_performed: document.getElementById("discharge-procedures").value.trim() || null,
+          discharge_diagnosis: document.getElementById("discharge-diagnosis").value.trim() || null,
+          condition_at_discharge: document.getElementById("discharge-condition").value.trim() || null,
+          medications_on_discharge: document.getElementById("discharge-medications").value.trim() || null,
+          follow_up_instructions: document.getElementById("discharge-followup").value.trim() || null,
         });
         toast("Patient discharged", "success");
         document.getElementById("discharge-output-options").style.display = "block";

@@ -39,6 +39,7 @@ class DoctorOut(BaseModel):
     room_number: Optional[str] = None
     role: str = "doctor"
     is_active: bool = True
+    is_hiv_authorized: bool = False
     created_at: datetime
 
     class Config:

@@ -506,9 +506,10 @@
         const rows = await api("GET", `/doctor-slots/unavailable${qs}`);
         listEl.innerHTML = !rows.length ? `<p style="color:var(--slate-light);font-size:13px">No upcoming unavailable dates.</p>` : rows.map(r => `
           <div class="unavail-row">
-            <span>${new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${r.reason ? ' — ' + r.reason : ''}</span>
+            <span>${new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${r.reason ? ' — ' + r.reason : ''}${r.mass_reschedule_triggered_at ? ` <span class="badge badge-green" style="margin-left:6px">Reschedule notice sent ${new Date(r.mass_reschedule_triggered_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>` : ''}</span>
             <span style="display:flex;gap:8px;align-items:center">
               <button class="btn btn-outline btn-sm" onclick="viewAffected('${r.date}')">View Affected</button>
+              ${!r.mass_reschedule_triggered_at ? `<button class="btn btn-primary btn-sm" onclick="triggerMassReschedule(${r.id})">Notify Patients to Reschedule</button>` : ''}
               <button class="btn btn-outline btn-sm" onclick="unmarkUnavailable(${r.id})">Undo</button>
             </span>
           </div>`).join('');
@@ -518,6 +519,15 @@
     async function unmarkUnavailable(id) {
       try { await api("DELETE", `/doctor-slots/unavailable/${id}`); toast("Removed", "success"); loadUnavailable(); document.getElementById("unavail-affected").innerHTML = ""; }
       catch (e) { toast(e.message, "error"); }
+    }
+
+    async function triggerMassReschedule(unavailabilityId) {
+      if (!confirm("Send a reschedule notice to every affected paid booking on this date? They'll be able to pick a new time with you directly, same fee.")) return;
+      try {
+        const res = await api("POST", `/doctor-slots/unavailable/${unavailabilityId}/trigger-mass-reschedule`);
+        toast(res.message, "success");
+        loadUnavailable();
+      } catch (e) { toast(e.message, "error"); }
     }
 
     async function viewAffected(date) {

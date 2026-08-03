@@ -20,6 +20,9 @@ class HospitalMedicine(Base):
     price_per_pack = Column(Float, nullable=True)  # what admin actually enters — price printed on the box/strip
     billing_mode = Column(String, nullable=False, default="per_unit")  # "per_unit" or "per_pack"
     gst_percent = Column(Float, nullable=True)  # optional, applied on top of price at billing time — blank = no GST
+    hsn_code = Column(String, nullable=True)  # this drug's own HSN code — varies per medicine, so it's set here rather than as a hospital-wide default like the other item types
+    hsn_code = Column(String, nullable=True)  # HSN code for this medicine — pharmaceutical goods, distinct from the hospital's service SAC code
+    nppa_ceiling_price = Column(Float, nullable=True)  # per-unit DPCO ceiling price, if this is an NLEM/DPCO-scheduled item — admin-entered, no live NPPA feed
     stock_quantity = Column(Integer, nullable=True, default=0)
     low_stock_threshold = Column(Integer, nullable=False, default=25)
     is_active = Column(Boolean, default=True, nullable=False)

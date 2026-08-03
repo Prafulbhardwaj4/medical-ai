@@ -22,6 +22,10 @@ class MedicineOrder(Base):
     paid_at = Column(DateTime, nullable=True)
     queued_at = Column(DateTime, nullable=True)  # set whenever this order enters a day's active queue (payment or requeue)
     dispensed_at = Column(DateTime, nullable=True)
+    dispensed_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # pharmacist who dispensed — needed for the Schedule H1/X register
+    repeat_authorized = Column(Boolean, default=False, nullable=False)  # Schedule X only — doctor sign-off for a repeat dispense
+    repeat_authorized_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    repeat_authorized_at = Column(DateTime, nullable=True)
     billed_quantity = Column(Integer, nullable=True)  # actually charged/dispensed qty, capped by stock at payment time
     substitute_for_id = Column(Integer, ForeignKey("medicine_orders.id"), nullable=True)
     created_at = Column(DateTime, default=now_ist_naive)

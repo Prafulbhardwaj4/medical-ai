@@ -244,6 +244,45 @@
           <input class="form-control" id="t-range-female" placeholder="Reference Range (Female)" style="flex:1" />
           <input class="form-control" id="t-unit" placeholder="Unit (e.g. mg/dL)" style="flex:1" />
         </div>
+        <div class="form-row-3" style="display:flex;gap:12px;margin-bottom:14px">
+          <input class="form-control" id="t-critical-low" type="number" step="any" placeholder="Critical Low (optional)" style="flex:1" />
+          <input class="form-control" id="t-critical-high" type="number" step="any" placeholder="Critical High (optional)" style="flex:1" />
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <input type="checkbox" id="t-fasting-required" style="width:auto" />
+          <label class="form-label" for="t-fasting-required" style="margin:0">Fasting required (e.g. lipid profile, fasting glucose)</label>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">Required Tube/Container (optional)</label>
+          <input class="form-control" id="t-required-tube" list="tube-type-options" placeholder="e.g. EDTA (purple top)" />
+          <datalist id="tube-type-options">
+            <option value="EDTA (purple top)"></option>
+            <option value="Fluoride (grey top)"></option>
+            <option value="Citrate (blue top)"></option>
+            <option value="Plain/Clot activator (red top)"></option>
+            <option value="Gel separator (gold/yellow top)"></option>
+            <option value="Heparin (green top)"></option>
+            <option value="Sterile container"></option>
+          </datalist>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <input type="checkbox" id="t-irreplaceable-sample" style="width:auto" />
+          <label class="form-label" for="t-irreplaceable-sample" style="margin:0">Irreplaceable sample (CSF, biopsy, bone marrow, etc.) — never hard-reject, caveat only</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <input type="checkbox" id="t-nabl-accredited" style="width:auto" />
+          <label class="form-label" for="t-nabl-accredited" style="margin:0">Within NABL-accredited scope</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <input type="checkbox" id="t-hiv-test" style="width:auto" />
+          <label class="form-label" for="t-hiv-test" style="margin:0">HIV-related test — routed through the restricted release path, hidden from the general lab queue</label>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">IDSP Notifiable Disease (optional)</label>
+          <select class="form-control" id="t-notifiable-disease">
+            <option value="">— None —</option>
+          </select>
+        </div>
         <textarea class="form-control" id="t-purpose" placeholder="Purpose (what this test detects, optional)"
           style="margin-bottom:14px;min-height:50px"></textarea>
       </div>
@@ -410,7 +449,7 @@
     }
 
     function addParameterRow() {
-      currentParameters.push({ name: '', unit: '', reference_range_male: '', reference_range_female: '', purpose: '' });
+      currentParameters.push({ name: '', unit: '', reference_range_male: '', reference_range_female: '', purpose: '', critical_low: null, critical_high: null });
       renderParameterRows();
     }
 
@@ -428,6 +467,13 @@
           <input class="form-control" placeholder="13.0-17.0" value="${sanitize(p.reference_range_male)}" oninput="currentParameters[${i}].reference_range_male=this.value" />
           <input class="form-control" placeholder="12.0-15.5" value="${sanitize(p.reference_range_female)}" oninput="currentParameters[${i}].reference_range_female=this.value" />
           <button class="btn btn-outline btn-sm param-remove-btn" onclick="removeParameterRow(${i})" title="Remove">×</button>
+        </div>
+        <div class="param-row" style="display:grid;grid-template-columns:1.4fr 0.7fr 0.9fr 0.9fr 30px;gap:6px;margin-bottom:6px">
+          <div></div>
+          <div></div>
+          <input class="form-control" type="number" step="any" placeholder="Critical low" value="${p.critical_low != null ? p.critical_low : ''}" oninput="currentParameters[${i}].critical_low=this.value !== '' ? parseFloat(this.value) : null" />
+          <input class="form-control" type="number" step="any" placeholder="Critical high" value="${p.critical_high != null ? p.critical_high : ''}" oninput="currentParameters[${i}].critical_high=this.value !== '' ? parseFloat(this.value) : null" />
+          <div></div>
         </div>
       `).join('');
     }
@@ -495,6 +541,14 @@
       document.getElementById('t-range-male').value = '';
       document.getElementById('t-range-female').value = '';
       document.getElementById('t-unit').value = '';
+      document.getElementById('t-critical-low').value = '';
+      document.getElementById('t-critical-high').value = '';
+      document.getElementById('t-fasting-required').checked = false;
+      document.getElementById('t-required-tube').value = '';
+      document.getElementById('t-irreplaceable-sample').checked = false;
+      document.getElementById('t-nabl-accredited').checked = false;
+      document.getElementById('t-hiv-test').checked = false;
+      document.getElementById('t-notifiable-disease').value = '';
       document.getElementById('t-purpose').value = '';
       document.getElementById('t-panel-purpose').value = '';
       document.getElementById('t-is-panel').checked = false;
@@ -515,6 +569,14 @@
       document.getElementById('t-range-male').value = t.reference_range_male || '';
       document.getElementById('t-range-female').value = t.reference_range_female || '';
       document.getElementById('t-unit').value = t.unit || '';
+      document.getElementById('t-critical-low').value = t.critical_low != null ? t.critical_low : '';
+      document.getElementById('t-critical-high').value = t.critical_high != null ? t.critical_high : '';
+      document.getElementById('t-fasting-required').checked = !!t.fasting_required;
+      document.getElementById('t-required-tube').value = t.required_tube || '';
+      document.getElementById('t-irreplaceable-sample').checked = !!t.is_irreplaceable_sample;
+      document.getElementById('t-nabl-accredited').checked = !!t.is_nabl_accredited;
+      document.getElementById('t-hiv-test').checked = !!t.is_hiv_test;
+      document.getElementById('t-notifiable-disease').value = t.notifiable_disease_id || '';
       document.getElementById('t-purpose').value = t.is_panel ? '' : (t.purpose || '');
       document.getElementById('t-panel-purpose').value = t.is_panel ? (t.purpose || '') : '';
       document.getElementById('t-is-panel').checked = !!t.is_panel;
@@ -558,6 +620,14 @@
         reference_range_male: document.getElementById('t-range-male').value.trim(),
         reference_range_female: document.getElementById('t-range-female').value.trim(),
         unit: document.getElementById('t-unit').value.trim(),
+        critical_low: document.getElementById('t-critical-low').value !== '' ? parseFloat(document.getElementById('t-critical-low').value) : null,
+        critical_high: document.getElementById('t-critical-high').value !== '' ? parseFloat(document.getElementById('t-critical-high').value) : null,
+        fasting_required: document.getElementById('t-fasting-required').checked,
+        required_tube: document.getElementById('t-required-tube').value.trim(),
+        is_irreplaceable_sample: document.getElementById('t-irreplaceable-sample').checked,
+        is_nabl_accredited: document.getElementById('t-nabl-accredited').checked,
+        is_hiv_test: document.getElementById('t-hiv-test').checked,
+        notifiable_disease_id: document.getElementById('t-notifiable-disease').value ? parseInt(document.getElementById('t-notifiable-disease').value, 10) : null,
         parameters: isPanel ? currentParameters.filter(p => p.name.trim()) : null
       };
 
@@ -722,6 +792,40 @@
       } catch (e) { errEl.textContent = e.message; }
     }
 
+    let notifiableDiseasesCache = [];
+
+    async function loadNotifiableDiseases() {
+      try {
+        notifiableDiseasesCache = await api("GET", "/admin/tests/notifiable-diseases");
+        const sel = document.getElementById('t-notifiable-disease');
+        const current = sel.value;
+        sel.innerHTML = '<option value="">— None —</option>' +
+          notifiableDiseasesCache.map(d => `<option value="${d.id}">${sanitize(d.name)}</option>`).join('') +
+          '<option value="__manage__">+ Manage disease list…</option>';
+        sel.value = current;
+      } catch (e) { /* non-critical, just leave dropdown empty */ }
+    }
+
+    document.getElementById('t-notifiable-disease').addEventListener('change', async function () {
+      if (this.value !== '__manage__') return;
+      const action = prompt("Type a disease name to ADD it, or type 'remove:Name' to remove an existing one.\n\nCurrent list: " + notifiableDiseasesCache.map(d => d.name).join(', '));
+      this.value = '';
+      if (!action) return;
+      try {
+        if (action.toLowerCase().startsWith('remove:')) {
+          const name = action.slice(7).trim();
+          const match = notifiableDiseasesCache.find(d => d.name.toLowerCase() === name.toLowerCase());
+          if (!match) { toast('No matching disease found', 'error'); return; }
+          await api("DELETE", `/admin/tests/notifiable-diseases/${match.id}`);
+        } else {
+          await api("POST", "/admin/tests/notifiable-diseases", { name: action.trim() });
+        }
+        await loadNotifiableDiseases();
+        toast('Updated', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    });
+
+    loadNotifiableDiseases();
     loadTests();
   </script>
 </body>

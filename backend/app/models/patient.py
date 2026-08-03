@@ -21,6 +21,9 @@ class Patient(Base):
     created_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     created_at = Column(DateTime, default=now_ist_naive)
     is_emergency_unverified = Column(Boolean, default=False, nullable=False)  # created via Emergency Intake — real details pending
+    is_active = Column(Boolean, nullable=False, default=True)  # False once merged into another patient record (see PatientMergeRequest) — kept for audit history, hidden from normal search
+    merged_into_id = Column(Integer, ForeignKey("patients.id"), nullable=True)  # set when this record was merged away; the surviving record is at this id
+    merged_into_id = Column(Integer, ForeignKey("patients.id"), nullable=True)  # set once this record is merged into another — interim stopgap until ABHA (Phase 3 item 12)
 
     doctor = relationship("Doctor", foreign_keys=[created_by], back_populates="patients")
     hospital = relationship("Hospital")

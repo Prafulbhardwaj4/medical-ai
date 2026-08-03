@@ -14,8 +14,9 @@ from app.models.doctor import Doctor
 from app.models.admission import Admission, AdmissionMedicationOrder
 from app.models.test_catalog import TestCatalogItem
 from app.models.test_catalog_parameter import TestCatalogParameter
-from app.schemas.portal import DashboardStatsOut, ProfileSummaryOut, VisitOut, VisitDetailOut, VisitTestOut, AdmissionSummaryOut
+from app.schemas.portal import DashboardStatsOut, ProfileSummaryOut, VisitOut, VisitDetailOut, VisitTestOut, AdmissionSummaryOut, VisitFeedbackIn, PortalSuggestionIn
 from app.utils.portal_auth import get_current_patient_account
+from app.utils.auth import get_current_doctor
 from app.utils.timezone import now_ist_naive
 from app.services.pdf_service import generate_prescription_pdf, generate_invoice_pdf, generate_combined_test_report_pdf
 import json
@@ -24,7 +25,11 @@ router = APIRouter(prefix="/portal/dashboard", tags=["portal-dashboard"])
 
 
 def _owned_patient_ids(account: PatientAccount) -> set:
-    return {link.patient_id for link in account.profiles}
+    # Pending-confirmation links haven't been confirmed as "theirs" yet —
+    # exclude them everywhere history/documents/stats are built, so nothing
+    # from a possibly-different person silently shows up as this patient's
+    # own medical history.
+    return {link.patient_id for link in account.profiles if link.relation != "pending_confirmation"}
 
 
 @router.get("/stats", response_model=DashboardStatsOut)
@@ -46,7 +51,7 @@ def get_stats(account: PatientAccount = Depends(get_current_patient_account), db
     ).count()
 
     return DashboardStatsOut(
-        profile_count=len(account.profiles),
+        profile_count=len(patient_ids),
         consultation_count=consultation_count,
         visit_count_total=visit_count_total,
         visit_count_last_30_days=visit_count_30d,
@@ -241,6 +246,9 @@ def get_visit_detail(
 
     invoice = db.query(Invoice).filter(Invoice.id == checkin.invoice_id).first() if checkin.invoice_id else None
 
+    from app.models.feedback import VisitFeedback
+    feedback_given = db.query(VisitFeedback).filter(VisitFeedback.checkin_id == checkin.id).first() is not None
+
     return VisitDetailOut(
         checkin_id=checkin.id, token_number=checkin.token_number,
         visit_date=checkin.visit_date.isoformat(),
@@ -252,7 +260,77 @@ def get_visit_detail(
         invoice_id=invoice.id if invoice else None,
         invoice_total=invoice.grand_total if invoice else None,
         tests=tests,
+        feedback_given=feedback_given,
     )
+
+
+@router.post("/visits/{checkin_id}/feedback")
+def submit_visit_feedback(
+    checkin_id: int,
+    body: VisitFeedbackIn,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    if body.rating < 1 or body.rating > 5:
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+
+    checkin = db.query(Checkin).filter(Checkin.id == checkin_id).first()
+    if not checkin or checkin.patient_id not in _owned_patient_ids(account):
+        raise HTTPException(status_code=404, detail="Visit not found")
+    if not checkin.is_finalized:
+        raise HTTPException(status_code=400, detail="Feedback is only available once the visit is complete")
+
+    from app.models.feedback import VisitFeedback
+    existing = db.query(VisitFeedback).filter(VisitFeedback.checkin_id == checkin_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Feedback already submitted for this visit")
+
+    db.add(VisitFeedback(
+        checkin_id=checkin_id, patient_id=checkin.patient_id, hospital_id=checkin.hospital_id,
+        rating=body.rating, comment=body.comment,
+    ))
+    db.commit()
+    return {"message": "Thanks for the feedback"}
+
+
+@router.post("/suggestion")
+def submit_suggestion(
+    body: PortalSuggestionIn,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="Please enter a suggestion")
+
+    from app.models.feedback import PortalSuggestion
+    db.add(PortalSuggestion(account_id=account.id, hospital_id=body.hospital_id, message=body.message.strip()))
+    db.commit()
+    return {"message": "Thanks for the suggestion"}
+
+
+@router.get("/hospital-feedback")
+def list_hospital_feedback(
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Hospital-facing view of patient visit feedback — admin/sub_admin only."""
+    if current_doctor.role.value not in ("admin", "sub_admin"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from app.models.feedback import VisitFeedback
+    rows = db.query(VisitFeedback).filter(
+        VisitFeedback.hospital_id == current_doctor.hospital_id
+    ).order_by(VisitFeedback.created_at.desc()).limit(200).all()
+
+    result = []
+    for r in rows:
+        patient = db.query(Patient).filter(Patient.id == r.patient_id).first()
+        result.append({
+            "id": r.id, "patient_name": patient.name if patient else "Unknown",
+            "rating": r.rating, "comment": r.comment,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+    return result
 
 
 @router.get("/consultations/{consultation_id}/tests/report")
@@ -272,14 +350,14 @@ def download_consultation_test_report(
         raise HTTPException(status_code=404, detail="Visit not found")
 
     orders = db.query(TestOrder).filter(
-        TestOrder.consultation_id == consultation_id, TestOrder.status == "completed"
+        TestOrder.consultation_id == consultation_id, TestOrder.status == "verified_released"
     ).all()
     if not orders:
         raise HTTPException(status_code=404, detail="No completed test results for this visit yet")
 
     hospital = db.query(Hospital).filter(Hospital.id == consultation.hospital_id).first()
     ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first()
-    lab_staff_id = next((o.completed_by for o in orders if o.completed_by), None)
+    lab_staff_id = next((o.verified_by for o in orders if o.verified_by), None)
     lab_staff = db.query(Doctor).filter(Doctor.id == lab_staff_id).first() if lab_staff_id else None
     is_male = (patient.gender or "").lower() == "male"
 

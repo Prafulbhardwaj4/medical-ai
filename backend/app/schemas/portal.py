@@ -120,9 +120,57 @@ class AppointmentOut(BaseModel):
     payment_status: str = "unpaid"
     notes: Optional[str]
     address: Optional[str] = None
+    fee_amount: Optional[float] = None
+    arrived_at: Optional[datetime] = None
+    needs_no_show_response: bool = False
+    no_show_reschedule_deadline: Optional[datetime] = None
+    mass_reschedule_notice: bool = False
 
     class Config:
         from_attributes = True
+
+
+class DeclineAppointmentIn(BaseModel):
+    reason: Optional[str] = None
+
+
+class SuggestAppointmentIn(BaseModel):
+    new_slot_id: Optional[int] = None
+    new_doctor_id: Optional[int] = None
+
+
+class NoShowReasonIn(BaseModel):
+    reason: str  # "hospital_delay" | "patient_no_show"
+
+
+class RequestRescheduleIn(BaseModel):
+    new_slot_id: int
+
+
+class VisitFeedbackIn(BaseModel):
+    rating: int  # 1-5
+    comment: Optional[str] = None
+
+
+class PortalSuggestionIn(BaseModel):
+    message: str
+    hospital_id: Optional[int] = None
+
+
+class FamilyBookingRequestIn(BaseModel):
+    other_account_phone: str
+    hospital_id: int
+    type: str  # "scheduled" | "queue_home"
+    doctor_id: Optional[int] = None
+    slot_id: Optional[int] = None
+    notes: Optional[str] = None
+    custom_address: Optional[str] = None
+
+
+class FamilyBookingConfirmIn(BaseModel):
+    new_patient_name: Optional[str] = None
+    new_patient_gender: Optional[str] = None
+    new_patient_age: Optional[int] = None
 
 
 class SaveTemplateIn(BaseModel):
@@ -237,12 +285,24 @@ class VisitDetailOut(BaseModel):
     invoice_id: Optional[int]
     invoice_total: Optional[float]
     tests: List[VisitTestOut]
+    feedback_given: bool = False
 
 class CompleteRegisterIn(BaseModel):
     phone: str
     new_password: str
 
 
+class ConfirmProfileIn(BaseModel):
+    relation: str  # "self" | "family" — which this pending record actually is
+
+
 class ChangePasswordIn(BaseModel):
     old_password: str
     new_password: str
+
+
+class ReportIssueIn(BaseModel):
+    context: str  # "booking_payment" | "checkin" | "other"
+    hospital_id: int  # a PatientAccount has no single hospital of its own (it can link to Patient rows across many hospitals) — the booking/check-in screen this is reported from always knows which hospital it's on, so that's passed explicitly rather than guessed at
+    appointment_id: Optional[int] = None  # best-effort — may not resolve to anything if the drop happened mid-flow
+    message: Optional[str] = None

@@ -36,6 +36,28 @@ def validate_fields(name, email, phone, password):
 
 VALID_HOSPITAL_TYPES = {"government", "private"}
 
+def _seed_default_ward_types(db: Session, hospital_id: int):
+    """Starting presets for a new hospital — not a fixed enum, admin can
+    rename/add/remove freely afterward. total_beds/daily_charge are left at
+    0 for admin to actually configure; is_icu is pre-set on the ICU/NICU
+    presets since that also drives GST-exemption logic."""
+    from app.models.admission_ward_type import AdmissionWardType
+    presets = [
+        ("General Ward", "general", False),
+        ("ICU", "icu", True),
+        ("Private Room", "private", False),
+        ("Maternity Ward", "maternity", False),
+        ("NICU", "nicu", True),
+        ("Isolation Ward", "isolation", False),
+        ("Day-care / Short-stay", "day_care", False),
+    ]
+    for name, category, is_icu in presets:
+        db.add(AdmissionWardType(
+            hospital_id=hospital_id, name=name, category=category, is_icu=is_icu,
+            total_beds=0, daily_charge=0, default_deposit=0,
+        ))
+    db.commit()
+
 @router.post("/hospitals", status_code=201)
 def create_hospital(
     name: str,
@@ -71,6 +93,7 @@ def create_hospital(
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
+    _seed_default_ward_types(db, hospital.id)
     return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type, "billing_enabled": hospital.billing_enabled}
 
 @router.post("/create-admin", status_code=201)
@@ -153,6 +176,7 @@ def create_doctor(
     role: str = "doctor",
     room_number: str = "",
     consultation_fee: float = None,
+    professional_fee_per_admission: float = None,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -196,6 +220,7 @@ def create_doctor(
         is_active=True,
         created_by=current_doctor.id,
         consultation_fee=consultation_fee if role in ["doctor", "sub_admin"] else None,
+        professional_fee_per_admission=professional_fee_per_admission if role in ["doctor", "sub_admin"] else None,
         doctor_uid=generate_doctor_uid(db, hospital.hospital_code),
     )
     db.add(doctor)
@@ -306,7 +331,13 @@ def get_hospital_details(
         "test_gst_percent": hospital.test_gst_percent,
         "room_gst_percent": hospital.room_gst_percent,
         "charge_gst_percent": hospital.charge_gst_percent,
-        "room_gst_threshold_per_day": hospital.room_gst_threshold_per_day
+        "room_gst_threshold_per_day": hospital.room_gst_threshold_per_day,
+        "waiver_auto_approve_cap": hospital.waiver_auto_approve_cap,
+        "waiver_auto_approve_percent": hospital.waiver_auto_approve_percent,
+        "hsn_consultation": hospital.hsn_consultation,
+        "hsn_test": hospital.hsn_test,
+        "hsn_room": hospital.hsn_room,
+        "hsn_charge": hospital.hsn_charge
     }
 
 
@@ -320,6 +351,12 @@ class HospitalDetailsUpdate(BaseModel):
     room_gst_percent: Optional[float] = None
     charge_gst_percent: Optional[float] = None
     room_gst_threshold_per_day: Optional[float] = None
+    waiver_auto_approve_cap: Optional[float] = None
+    waiver_auto_approve_percent: Optional[float] = None
+    hsn_consultation: Optional[str] = None
+    hsn_test: Optional[str] = None
+    hsn_room: Optional[str] = None
+    hsn_charge: Optional[str] = None
     # Deliberately no name/city/state/hospital_code/hospital_type here —
     # those are set once by super admin at hospital creation and tied to
     # billing/plan tracking. Admin cannot touch them even via direct API call.
@@ -364,6 +401,18 @@ def update_hospital_details(
         hospital.charge_gst_percent = payload.charge_gst_percent or None
     if payload.room_gst_threshold_per_day is not None:
         hospital.room_gst_threshold_per_day = payload.room_gst_threshold_per_day
+    if payload.waiver_auto_approve_cap is not None:
+        hospital.waiver_auto_approve_cap = payload.waiver_auto_approve_cap or None
+    if payload.waiver_auto_approve_percent is not None:
+        hospital.waiver_auto_approve_percent = payload.waiver_auto_approve_percent or None
+    if payload.hsn_consultation is not None:
+        hospital.hsn_consultation = payload.hsn_consultation or None
+    if payload.hsn_test is not None:
+        hospital.hsn_test = payload.hsn_test or None
+    if payload.hsn_room is not None:
+        hospital.hsn_room = payload.hsn_room or None
+    if payload.hsn_charge is not None:
+        hospital.hsn_charge = payload.hsn_charge or None
 
     db.commit()
     return {
@@ -375,7 +424,13 @@ def update_hospital_details(
         "test_gst_percent": hospital.test_gst_percent,
         "room_gst_percent": hospital.room_gst_percent,
         "charge_gst_percent": hospital.charge_gst_percent,
-        "room_gst_threshold_per_day": hospital.room_gst_threshold_per_day
+        "room_gst_threshold_per_day": hospital.room_gst_threshold_per_day,
+        "waiver_auto_approve_cap": hospital.waiver_auto_approve_cap,
+        "waiver_auto_approve_percent": hospital.waiver_auto_approve_percent,
+        "hsn_consultation": hospital.hsn_consultation,
+        "hsn_test": hospital.hsn_test,
+        "hsn_room": hospital.hsn_room,
+        "hsn_charge": hospital.hsn_charge
     }
 
 ROOM_TYPE_PICKER_MAP = {"doctor": "Doctor", "nurse": "Nurse", "lab": "Lab"}
@@ -579,7 +634,9 @@ def list_doctors(
             "registration_number": d.registration_number or "",
             "is_active": d.is_active,
             "role": d.role.value,
+            "is_hiv_authorized": d.is_hiv_authorized,
             "consultation_fee": d.consultation_fee,
+            "professional_fee_per_admission": d.professional_fee_per_admission,
             "consultations_today": today,
             "consultations_week": week,
             "consultations_total": total
@@ -627,6 +684,37 @@ def toggle_doctor_active(
     )
 
     return {"id": doctor.id, "is_active": doctor.is_active}
+
+
+@router.patch("/doctors/{doctor_id}/toggle-hiv-authorized")
+def toggle_hiv_authorized(
+    doctor_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Explicit, per-person grant — tighter than the general 'lab' role
+    for HIV result access (Phase 6 item 21)."""
+    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    doctor_query = db.query(Doctor).filter(Doctor.id == doctor_id)
+    if current_doctor.role.value != "super_admin":
+        doctor_query = doctor_query.filter(Doctor.hospital_id == current_doctor.hospital_id)
+    doctor = doctor_query.first()
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+    if doctor.role.value != "lab":
+        raise HTTPException(status_code=400, detail="Only lab-role staff can be granted HIV authorization")
+
+    doctor.is_hiv_authorized = not doctor.is_hiv_authorized
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="hiv_authorization_granted" if doctor.is_hiv_authorized else "hiv_authorization_revoked",
+        target_type="doctor", target_id=doctor.id, target_label=f"{doctor.title} {doctor.name}"
+    )
+    return {"id": doctor.id, "is_hiv_authorized": doctor.is_hiv_authorized}
 
 
 @router.patch("/doctors/{doctor_id}/toggle-role")
@@ -902,6 +990,7 @@ def create_hospital_jwt(
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
+    _seed_default_ward_types(db, hospital.id)
 
     log_action(
         db, current_doctor,
@@ -1037,6 +1126,7 @@ def update_account(
     specialization: str = "",
     room_number: str = "",
     consultation_fee: float = None,
+    professional_fee_per_admission: float = None,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1067,6 +1157,8 @@ def update_account(
         account.room_number = room_number or None
     if consultation_fee is not None:
         account.consultation_fee = consultation_fee
+    if professional_fee_per_admission is not None:
+        account.professional_fee_per_admission = professional_fee_per_admission
     db.commit()
 
     log_action(

@@ -21,3 +21,14 @@ class Invoice(Base):
     receipt_number = Column(String, unique=True, nullable=True, index=True)
     amount_collected = Column(Float, nullable=True)  # actual cash/card/upi taken at discharge (shortfall vs deposit) — distinct from grand_total, which is the full bill
     generated_at = Column(DateTime, default=now_ist_naive)
+    place_of_supply = Column(String, nullable=True)  # GST-mandatory invoice field — state name, snapshotted from the hospital's own state at generation time (see app.utils.gst's documented intra-state assumption)
+
+    # Reserved for e-invoicing (IRN/QR via the government IRP) — columns
+    # only, nothing populates or reads these yet. Actual IRP integration is
+    # a separate, deferred piece of work.
+    irn = Column(String, nullable=True)  # Invoice Reference Number, returned by the IRP on successful registration
+    irn_ack_no = Column(String, nullable=True)  # IRP acknowledgement number
+    irn_ack_date = Column(DateTime, nullable=True)  # IRP acknowledgement timestamp
+    einvoice_qr_data = Column(Text, nullable=True)  # signed QR payload string returned by the IRP
+    einvoice_status = Column(String, nullable=True)  # "not_applicable" | "pending" | "generated" | "failed" — null today since nothing sets it yet
+    place_of_supply = Column(String, nullable=True)  # snapshot of the hospital's state at generation time — see app.utils.gst's intra-state assumption

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>HIV Results — Restricted Access</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <h1>HIV Results <span class="badge badge-red" style="margin-left:8px">Restricted</span></h1>
+    <button class="btn btn-outline btn-sm" onclick="window.location.href='lab.html'">← Back to Lab Queue</button>
+  </div>
+
+  <div class="page-content" style="max-width:900px;margin:0 auto;padding:20px">
+    <div class="card">
+      <p style="font-size:13px;color:var(--slate);margin-bottom:14px">
+        This view is separate from the general lab queue and requires explicit HIV-access authorization.
+        Results here follow the same entry/verify/reject actions as the main lab flow — accessed here instead of the shared board.
+      </p>
+      <div id="hiv-orders-list"><p>Loading…</p></div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="../js/api.js"></script>
+  <script>
+    if (!requireAuth()) { }
+    const role = getDoctor()?.role;
+    const isHivAuthorized = getDoctor()?.is_hiv_authorized;
+    if (!(role === 'admin' || role === 'sub_admin' || (role === 'lab' && isHivAuthorized))) {
+      window.location.href = 'login.html';
+    }
+
+    async function loadHivOrders() {
+      const el = document.getElementById('hiv-orders-list');
+      try {
+        const orders = await api("GET", "/lab/hiv-orders");
+        if (!orders.length) {
+          el.innerHTML = '<p style="color:var(--slate-light)">No HIV orders at this time.</p>';
+          return;
+        }
+        el.innerHTML = orders.map(o => `
+          <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <strong>${sanitize(o.patient_name)}</strong> ${o.patient_uid ? `<span class="badge badge-navy">${sanitize(o.patient_uid)}</span>` : ''}
+                <div style="font-size:13px;color:var(--slate)">${sanitize(o.test_name)}${o.accession_number ? ' · ULR: ' + sanitize(o.accession_number) : ''}</div>
+              </div>
+              <span class="badge ${o.status === 'verified_released' ? 'badge-green' : 'badge-amber'}">${o.status}</span>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
+              ${!o.hiv_counselling_completed
+                ? `<button class="btn btn-outline btn-sm" onclick="markCounselling(${o.id})">Mark Counselling Complete</button>`
+                : '<span class="badge badge-green">Counselling done</span>'}
+              ${o.status === 'result_entered' ? `<button class="btn btn-primary btn-sm" onclick="verifyHivOrder(${o.id})">Verify & Release</button>` : ''}
+              ${o.status === 'verified_released' ? `<button class="btn btn-outline btn-sm" onclick="downloadFile('/lab/orders/${o.id}/report', 'hiv_report_${o.id}.pdf')">Download Report</button>` : ''}
+            </div>
+          </div>`).join('');
+      } catch (e) {
+        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    async function markCounselling(orderId) {
+      try {
+        await api("POST", `/lab/hiv-orders/${orderId}/counselling-complete`);
+        toast("Marked", "success");
+        loadHivOrders();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function verifyHivOrder(orderId) {
+      try {
+        await api("POST", `/lab/orders/${orderId}/verify`);
+        toast("Verified and released", "success");
+        loadHivOrders();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    loadHivOrders();
+  </script>
+</body>
+</html>

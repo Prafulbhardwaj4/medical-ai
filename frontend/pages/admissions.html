@@ -351,6 +351,19 @@
           </select>
           <input class="form-control" id="wt-name" placeholder="Enter custom ward/room type" style="display:none;margin-top:8px" />
         </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <select class="form-control" id="wt-category">
+            <option value="general">General</option>
+            <option value="icu">ICU</option>
+            <option value="private">Private</option>
+            <option value="maternity">Maternity</option>
+            <option value="nicu">NICU</option>
+            <option value="isolation">Isolation</option>
+            <option value="day_care">Day-care</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Total Beds</label><input class="form-control" type="number" min="0" id="wt-beds" /></div>
           <div class="form-group"><label class="form-label">Daily Charge (₹)</label><input class="form-control" type="number" min="0" id="wt-charge" /></div>
@@ -360,6 +373,15 @@
           <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
             <input type="checkbox" id="wt-is-icu"> ICU / CCU / ICCU / NICU (always GST-exempt, regardless of daily rate)
           </label>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+            <input type="checkbox" id="wt-is-ot" onchange="document.getElementById('wt-ot-charge-group').style.display=this.checked?'':'none'"> Operation Theatre (auto-bills an OT charge when a patient is moved into this ward)
+          </label>
+        </div>
+        <div class="form-group" id="wt-ot-charge-group" style="display:none">
+          <label class="form-label">OT Charge (₹, per use)</label>
+          <input class="form-control" type="number" min="0" id="wt-ot-charge" placeholder="Billed once when a patient moves into this ward" />
         </div>
         <div class="err-msg" id="wt-err"></div>
         <div style="display:flex;gap:10px">
@@ -419,6 +441,16 @@
         <div class="form-group">
           <label class="form-label">Diagnosis *</label>
           <input class="form-control" id="admit-diagnosis" placeholder="Auto-suggested from last visit — edit as needed" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Admission Type</label>
+          <select class="form-control" id="admit-type">
+            <option value="planned">Planned / Elective</option>
+            <option value="emergency">Emergency</option>
+            <option value="maternity">Maternity / Delivery</option>
+            <option value="transfer_in">Transfer-in</option>
+            <option value="day_care">Day-care / Short-stay (no overnight room charge)</option>
+          </select>
         </div>
         <div class="form-group"><label class="form-label">Daily Room Charge (₹)</label><input class="form-control" type="number" min="0" id="admit-daily-charge" value="0" readonly style="background:var(--smoke)" /></div>
         <div class="form-group"><label class="form-label">Deposit (₹)</label><input class="form-control" type="number" min="0" id="admit-deposit" value="0" oninput="onAdmitDepositChange()" /></div>
@@ -574,7 +606,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
           <div>
             <div style="font-weight:600">${sanitize(w.name)}</div>
-            <div style="font-size:12px;color:var(--slate-light)">${w.total_beds} beds · ₹${w.daily_charge}/day · ₹${w.default_deposit || 0} default deposit${w.is_icu ? ' · <strong>ICU (GST-exempt)</strong>' : ''} · ${w.occupied} occupied</div>
+            <div style="font-size:12px;color:var(--slate-light)"><span class="badge badge-grey" style="text-transform:capitalize">${sanitize((w.category || 'general').replace('_', ' '))}</span> · ${w.total_beds} beds · ₹${w.daily_charge}/day · ₹${w.default_deposit || 0} default deposit${w.is_icu ? ' · <strong>ICU (GST-exempt)</strong>' : ''}${w.is_ot ? ` · <strong>OT (₹${w.ot_charge || 0}/use)</strong>` : ''} · ${w.occupied} occupied</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick='editWardType(${JSON.stringify(w)})'>Edit</button>
@@ -609,6 +641,10 @@
       document.getElementById("wt-charge").value = w.daily_charge;
       document.getElementById("wt-deposit").value = w.default_deposit || 0;
       document.getElementById("wt-is-icu").checked = !!w.is_icu;
+      document.getElementById("wt-is-ot").checked = !!w.is_ot;
+      document.getElementById("wt-ot-charge").value = w.ot_charge != null ? w.ot_charge : '';
+      document.getElementById("wt-ot-charge-group").style.display = w.is_ot ? '' : 'none';
+      document.getElementById("wt-category").value = w.category || 'general';
       document.getElementById("wt-submit-btn").textContent = "Save Changes";
       document.getElementById("wt-cancel-edit-btn").style.display = "block";
       document.getElementById("wt-err").textContent = "";
@@ -624,6 +660,10 @@
       document.getElementById("wt-charge").value = "";
       document.getElementById("wt-deposit").value = "";
       document.getElementById("wt-is-icu").checked = false;
+      document.getElementById("wt-is-ot").checked = false;
+      document.getElementById("wt-ot-charge").value = "";
+      document.getElementById("wt-ot-charge-group").style.display = 'none';
+      document.getElementById("wt-category").value = "general";
       document.getElementById("wt-submit-btn").textContent = "Add Ward Type";
       document.getElementById("wt-cancel-edit-btn").style.display = "none";
       document.getElementById("wt-err").textContent = "";
@@ -637,16 +677,23 @@
       const charge = parseFloat(document.getElementById("wt-charge").value);
       const deposit = parseFloat(document.getElementById("wt-deposit").value || "0");
       const isIcu = document.getElementById("wt-is-icu").checked;
+      const isOt = document.getElementById("wt-is-ot").checked;
+      const otCharge = document.getElementById("wt-ot-charge").value ? parseFloat(document.getElementById("wt-ot-charge").value) : null;
+      const category = document.getElementById("wt-category").value;
       if (!name || isNaN(beds) || beds < 0 || isNaN(charge) || charge < 0 || isNaN(deposit) || deposit < 0) {
         err.textContent = "Please fill in all fields with valid values";
         return;
       }
+      if (isOt && (otCharge == null || otCharge < 0)) {
+        err.textContent = "Enter a valid OT charge amount";
+        return;
+      }
       try {
         if (editingWardTypeId) {
-          await api("PUT", `/admissions/ward-types/${editingWardTypeId}`, { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu });
+          await api("PUT", `/admissions/ward-types/${editingWardTypeId}`, { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category });
           toast("Ward type updated", "success");
         } else {
-          await api("POST", "/admissions/ward-types", { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu });
+          await api("POST", "/admissions/ward-types", { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category });
           toast("Ward type added", "success");
         }
         wardTypesCache = await api("GET", "/admissions/ward-types");
@@ -771,6 +818,7 @@
       document.getElementById("admit-step-search").style.display = "none";
       document.getElementById("admit-step-details").style.display = "block";
       document.getElementById("admit-diagnosis").value = "";
+      document.getElementById("admit-type").value = "planned";
       try {
         const res = await api("GET", `/admissions/last-diagnosis/${id}`);
         if (res.diagnosis) document.getElementById("admit-diagnosis").value = res.diagnosis;
@@ -811,6 +859,7 @@
           patient_id: selectedPatientId, ward_type_id: parseInt(wardTypeId, 10), bed_number: bed,
           diagnosis: diagnosis, admitting_doctor_id: parseInt(doctorId, 10),
           deposit_amount: depositAmount, deposit_payment_method: depositAmount > 0 ? depositMethod : null,
+          admission_type: document.getElementById("admit-type").value,
         });
         toast("Patient admitted", "success");
         closeAdmitModal();
@@ -820,6 +869,23 @@
 
     loadAdmissions();
     loadVacancyOverview().then(() => { populateAdmitWardDropdown(); populateAdmissionsWardFilter(); });
+
+    // Deep-link from consultation.html's "Admit Patient" action — carries the
+    // patient straight into the admit-details form, skipping the manual
+    // search step entirely.
+    const deepLinkPatientId = new URLSearchParams(window.location.search).get("admit_patient_id");
+    if (deepLinkPatientId) {
+      openAdmitModal();
+      loadDefaultAdmitPatientList().then(() => {
+        const match = referralsCache.find(r => String(r.patient_id) === String(deepLinkPatientId));
+        if (match) {
+          selectAdmitPatient(match.patient_id, match.patient_name, match.referral_id);
+        } else {
+          toast("Referral not found yet — it may still be processing. Search for the patient below.", "info");
+        }
+      });
+      history.replaceState(null, "", "admissions.html");
+    }
   </script>
 </body>
 

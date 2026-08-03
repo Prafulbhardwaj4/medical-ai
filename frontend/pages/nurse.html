@@ -425,7 +425,8 @@
             <div>
               <strong>${v.patient_name}</strong>
               <span class="badge badge-navy" style="margin-left:8px">${v.patient_uid}</span>
-              <div class="ns-row-sub">Token ${v.token_number} · ${v.issue_category} · For ${v.doctor_name}</div>
+              ${v.source === 'online' ? '<span class="badge badge-teal" style="margin-left:8px">Online</span>' : ''}
+              <div class="ns-row-sub">Token ${v.token_number} · ${v.issue_category} · For ${v.doctor_name}${v.booked_time ? ' · Booked for ' + new Date(toIST(v.booked_time)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : ''}</div>
             </div>
             <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openVitalsModal(${v.checkin_id}, ${JSON.stringify(v.patient_name)})'>Record Vitals</button>
           </div>

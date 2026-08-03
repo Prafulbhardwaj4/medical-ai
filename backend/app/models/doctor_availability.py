@@ -37,3 +37,8 @@ class DoctorUnavailability(Base):
     date = Column(Date, nullable=False, index=True)
     reason = Column(String, nullable=True)
     created_at = Column(DateTime, default=now_ist_naive)
+
+    # Mass-reschedule trigger tracking (Phase 3 item 9) — so admin can see
+    # whether/when anyone acted on the affected paid bookings.
+    mass_reschedule_triggered_at = Column(DateTime, nullable=True)
+    mass_reschedule_triggered_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)

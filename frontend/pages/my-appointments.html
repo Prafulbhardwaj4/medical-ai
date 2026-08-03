@@ -206,6 +206,7 @@
         <h2>My Appointments</h2>
         <button class="modal-close" onclick="closeMyAppointmentsModal()">&times;</button>
       </div>
+      <div id="family-request-banner"></div>
       <div id="appt-list"><p>Loading...</p></div>
     </div>
   </div>
@@ -290,6 +291,16 @@
       state.newPatientAge = parseInt(age, 10);
       state.newPatientGender = document.getElementById("np-gender").value;
       state.newPatientBloodGroup = document.getElementById("np-blood-group").value || null;
+      setStep("datetime");
+    }
+
+    function confirmFamilyAccountProfile() {
+      const err = document.getElementById("fa-err");
+      const phone = document.getElementById("fa-phone").value.trim();
+      if (!phone) { err.textContent = "Please enter their phone number"; return; }
+      state.profileLinkId = null;
+      state.profileName = "Family member (their own account)";
+      state.familyAccountPhone = phone;
       setStep("datetime");
     }
 
@@ -458,7 +469,17 @@
 
           document.querySelectorAll('input[name="addr-choice"]').forEach || null; // no-op guard
 
-          const newPatientCard = `
+          const familyAccountCard = `
+            <div class="select-row-card" id="family-account-card" style="border:1px dashed var(--slate)">
+              <div><div class="src-name">+ Someone with their own account</div><div class="src-sub">Book for a family member who already has a separate portal login</div></div>
+            </div>
+            <div id="family-account-form" style="display:none;margin-top:10px">
+              <div class="form-group"><label class="form-label">Their phone number</label><input class="form-control" id="fa-phone" placeholder="e.g. 9876543210" /></div>
+              <div class="err-msg" id="fa-err"></div>
+              <button class="btn btn-primary" style="width:100%" onclick="confirmFamilyAccountProfile()">Continue</button>
+            </div>`;
+
+          const newPatientCard = familyAccountCard + `
             <div class="select-row-card" id="new-patient-card" style="border:1px dashed var(--teal)">
               <div><div class="src-name">+ First time at this hospital</div><div class="src-sub">Book as a new patient here</div></div>
             </div>
@@ -489,6 +510,9 @@
             document.getElementById("new-patient-card").addEventListener("click", () => {
               document.getElementById("new-patient-form").style.display = "block";
             });
+            document.getElementById("family-account-card").addEventListener("click", () => {
+              document.getElementById("family-account-form").style.display = "block";
+            });
             attachAddressToggle();
             return;
           }
@@ -506,9 +530,12 @@
           document.getElementById("new-patient-card").addEventListener("click", () => {
             document.getElementById("new-patient-form").style.display = "block";
           });
+          document.getElementById("family-account-card").addEventListener("click", () => {
+            document.getElementById("family-account-form").style.display = "block";
+          });
           area.addEventListener('click', function handler(e) {
             const card = e.target.closest('.select-row-card');
-            if (!card || card.id === "new-patient-card") return;
+            if (!card || card.id === "new-patient-card" || card.id === "family-account-card") return;
             state.profileLinkId = parseInt(card.dataset.id);
             state.profileName = card.dataset.name;
             captureAddressChoice();
@@ -672,6 +699,21 @@
       const btn = document.getElementById("btn-pay-book");
       btn.disabled = true;
       try {
+        if (state.familyAccountPhone) {
+          await api("POST", "/portal/appointments/family-booking-request", {
+            other_account_phone: state.familyAccountPhone,
+            hospital_id: state.hospitalId, doctor_id: state.doctorId,
+            slot_id: state.slotId, type: "scheduled",
+            custom_address: state.customAddress || null,
+          });
+          closeConfirmModal();
+          toast("Sent — they'll confirm it from their own portal", "success");
+          state.familyAccountPhone = null;
+          state.history = [];
+          setStep("location", false);
+          return;
+        }
+
         const appt = await api("POST", "/portal/appointments", {
           hospital_id: state.hospitalId, doctor_id: state.doctorId,
           profile_link_id: state.profileLinkId, slot_id: state.slotId, type: "scheduled",
@@ -708,8 +750,53 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
-    function openMyAppointmentsModal() { document.getElementById("modal-my-appointments").classList.add("open"); loadAppointments(); }
+    function openMyAppointmentsModal() { document.getElementById("modal-my-appointments").classList.add("open"); loadAppointments(); loadFamilyRequests(); }
     function closeMyAppointmentsModal() { document.getElementById("modal-my-appointments").classList.remove("open"); }
+
+    async function loadFamilyRequests() {
+      const banner = document.getElementById("family-request-banner");
+      try {
+        const reqs = await api("GET", "/portal/appointments/family-booking-requests");
+        if (!reqs.length) { banner.innerHTML = ""; return; }
+        banner.innerHTML = reqs.map(r => `
+          <div class="card" style="background:#fffbea;border-color:#f5d76e;margin-bottom:12px">
+            <p style="font-weight:600;margin-bottom:4px">${sanitize(r.requester_phone)} wants to book you an appointment</p>
+            <p style="font-size:13px;color:var(--slate);margin-bottom:10px">${sanitize(r.hospital_name)}${r.doctor_name ? ' · ' + sanitize(r.doctor_name) : ''}</p>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary btn-sm" onclick="confirmFamilyRequest(${r.id})">Yes, that's me</button>
+              <button class="btn btn-outline btn-sm" onclick="rejectFamilyRequest(${r.id})">Not me</button>
+            </div>
+          </div>`).join('');
+      } catch (e) { /* banner just stays empty if this fails */ }
+    }
+
+    async function confirmFamilyRequest(id) {
+      let namePrompt = null;
+      try {
+        await api("POST", `/portal/appointments/family-booking-requests/${id}/confirm`, {});
+        toast("Booking confirmed to your account", "success");
+        loadFamilyRequests();
+        loadAppointments();
+      } catch (e) {
+        if ((e.message || "").toLowerCase().includes("enter your name")) {
+          namePrompt = prompt("This hospital hasn't seen your account before — please enter your name:");
+          if (!namePrompt) return;
+          try {
+            await api("POST", `/portal/appointments/family-booking-requests/${id}/confirm`, { new_patient_name: namePrompt });
+            toast("Booking confirmed to your account", "success");
+            loadFamilyRequests();
+            loadAppointments();
+          } catch (e2) { toast(e2.message, "error"); }
+        } else {
+          toast(e.message, "error");
+        }
+      }
+    }
+
+    async function rejectFamilyRequest(id) {
+      try { await api("POST", `/portal/appointments/family-booking-requests/${id}/reject`); toast("Declined", "success"); loadFamilyRequests(); }
+      catch (e) { toast(e.message, "error"); }
+    }
 
     async function loadAppointments() {
       const list = document.getElementById("appt-list");
@@ -717,7 +804,8 @@
       try {
         const appts = await api("GET", "/portal/appointments");
         if (!appts.length) { list.innerHTML = `<p style="color:var(--slate-light)">No appointments yet.</p>`; return; }
-        const statusBadge = { booked: "badge-grey", confirmed: "badge-teal", completed: "badge-green", cancelled: "badge-red", no_show: "badge-red" };
+        const statusBadge = { booked: "badge-grey", pending_review: "badge-amber", confirmed: "badge-teal", completed: "badge-green", cancelled: "badge-red", no_show: "badge-red" };
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
         list.innerHTML = appts.map(a => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px">
             <div>
@@ -728,6 +816,12 @@
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span class="badge ${statusBadge[a.status] || 'badge-grey'}">${a.status}</span>
               <span class="badge ${a.payment_status === 'paid' ? 'badge-green' : 'badge-red'}">${a.payment_status}</span>
+              ${(a.status === 'confirmed' && new Date(a.requested_time).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === todayStr && !a.arrived_at) ? `<button class="btn btn-primary btn-sm" onclick="markMyArrival(${a.id})">I've Arrived</button>` : ''}
+              ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
+              ${a.mass_reschedule_notice ? `<button class="btn btn-primary btn-sm" onclick="openMassRescheduleModal(${a.id})">Doctor unavailable — pick new time</button>` : ''}
+              ${a.needs_no_show_response ? `<button class="btn btn-primary btn-sm" onclick="openNoShowModal(${a.id})">Running late?</button>` : ''}
+              ${(a.no_show_reschedule_deadline && new Date(a.no_show_reschedule_deadline) > new Date()) ? `<button class="btn btn-outline btn-sm" onclick="openRescheduleModal(${a.id})">Reschedule</button>` : ''}
+              ${(a.status === 'confirmed' && !a.no_show_detected_at && new Date(a.requested_time).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === todayStr) ? `<button class="btn btn-outline btn-sm" onclick="openRescheduleModal(${a.id})">Running late today?</button>` : ''}
               ${(a.status === 'booked' || a.status === 'confirmed') ? `<button class="btn btn-outline btn-sm" onclick="cancelAppt(${a.id})">Cancel</button>` : ''}
             </div>
           </div>`).join('');
@@ -737,6 +831,45 @@
     async function cancelAppt(id) {
       try { await api("POST", `/portal/appointments/${id}/cancel`); toast("Appointment cancelled", "success"); loadAppointments(); }
       catch (e) { toast(e.message, "error"); }
+    }
+
+    async function markMyArrival(id) {
+      try { await api("POST", `/portal/appointments/${id}/arrived`); toast("Thanks — we'll call you in shortly", "success"); loadAppointments(); }
+      catch (e) { toast(e.message, "error"); }
+    }
+
+    async function openNoShowModal(id) {
+      const wasHospitalIssue = confirm("We're sorry we missed your slot. Was this due to a delay on the hospital's side? (OK = Yes, hospital delay · Cancel = No, I wasn't able to make it)");
+      const reason = wasHospitalIssue ? "hospital_delay" : "patient_no_show";
+      try {
+        await api("POST", `/portal/appointments/${id}/no-show-reason`, { reason });
+        toast("Thanks for letting us know — you can reschedule from here within 72 hours.", "success");
+        loadAppointments();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function openMassRescheduleModal(id) {
+      const slotIdStr = prompt("Your doctor is unavailable for your booked slot. Enter a new slot ID with the same doctor:");
+      if (!slotIdStr) return;
+      const newSlotId = parseInt(slotIdStr.trim(), 10);
+      if (!newSlotId) { toast("Enter a valid slot ID", "error"); return; }
+      try {
+        await api("POST", `/portal/appointments/${id}/mass-reschedule`, { new_slot_id: newSlotId });
+        toast("Rescheduled — same fee carries over, no need to pay again", "success");
+        loadAppointments();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function openRescheduleModal(id) {
+      const slotIdStr = prompt("Enter the new slot ID you'd like (check the doctor's available slots page):");
+      if (!slotIdStr) return;
+      const newSlotId = parseInt(slotIdStr.trim(), 10);
+      if (!newSlotId) { toast("Enter a valid slot ID", "error"); return; }
+      try {
+        await api("POST", `/portal/appointments/${id}/request-reschedule`, { new_slot_id: newSlotId });
+        toast("Reschedule requested — waiting on hospital confirmation", "success");
+        loadAppointments();
+      } catch (e) { toast(e.message, "error"); }
     }
 
     let savedAddresses = [];

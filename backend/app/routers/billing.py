@@ -16,17 +16,19 @@ from app.models.medicine_order import MedicineOrder
 from app.models.invoice import Invoice
 from app.models.opd_charge import OpdCharge
 from app.models.hospital_medicine import HospitalMedicine
-from app.models.admission import Admission
+from app.models.admission import Admission, AdmissionCharge
 from app.models.admission_deposit import AdmissionDeposit
 from app.models.refund import Refund
 from app.models.day_end_close import DayEndClose
-from app.schemas.billing import DayEndCloseIn
+from app.models.credit_debit_note import CreditDebitNote
+from app.models.waiver_request import WaiverRequest
+from app.schemas.billing import DayEndCloseIn, CreditDebitNoteIn, WaiverIn
 from app.utils.gst import apply_gst
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 from app.services.pdf_service import generate_invoice_pdf
 from app.utils.timezone import ist_today, ist_day_bounds, ist_date, now_ist_naive
-from app.utils.receipts import next_receipt_number
+from app.utils.receipts import next_receipt_number, next_note_number
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -62,7 +64,7 @@ def gather_invoice_items(db: Session, checkin: Checkin):
     test_orders = db.query(TestOrder).filter(
         TestOrder.patient_id == checkin.patient_id,
         TestOrder.hospital_id == checkin.hospital_id,
-        TestOrder.status.in_(["paid", "sample_collected", "processing", "completed"]),
+        TestOrder.status.in_(["paid", "sample_collected", "processing", "result_entered", "verified_released"]),
         TestOrder.consultation_id.in_(consultation_ids) if consultation_ids else False
     ).all()
     for t in test_orders:
@@ -83,16 +85,19 @@ def gather_invoice_items(db: Session, checkin: Checkin):
     for m in medicine_orders:
         billed = m.billed_quantity if m.billed_quantity is not None else m.quantity
         medicine_gst_percent = None
+        medicine_hsn_code = None
         if m.catalog_medicine_id:
             hm = db.query(HospitalMedicine).filter(HospitalMedicine.id == m.catalog_medicine_id).first()
             medicine_gst_percent = hm.gst_percent if hm else None
+            medicine_hsn_code = hm.hsn_code if hm else None
         items.append({
             "type": "medicine",
             "name": f"{m.medicine_name}{' (' + m.brand_name + ')' if m.brand_name else ''}",
             "qty": billed or 1,
             "unit_price": m.unit_price or 0,
             "line_total": (m.unit_price or 0) * (billed or 1),
-            "_medicine_gst_percent": medicine_gst_percent
+            "_medicine_gst_percent": medicine_gst_percent,
+            "_medicine_hsn_code": medicine_hsn_code
         })
 
     opd_charges = db.query(OpdCharge).filter(
@@ -147,7 +152,9 @@ def finalize_invoice(
         invoice.gst_total = gst_total
         invoice.generated_by = current_doctor.id
         invoice.generated_from = current_doctor.role.value
-        pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number)
+        if not invoice.place_of_supply:
+            invoice.place_of_supply = hospital.state
+        pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply)
         invoice.pdf_path = pdf_path
         db.commit()
         db.refresh(invoice)
@@ -172,11 +179,12 @@ def finalize_invoice(
         generated_by=current_doctor.id,
         generated_from=current_doctor.role.value,
         receipt_number=next_receipt_number(db, hospital),
+        place_of_supply=hospital.state,
     )
     db.add(invoice)
     db.flush()
 
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number)
+    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply)
     invoice.pdf_path = pdf_path
 
     checkin.is_finalized = True
@@ -206,6 +214,10 @@ def serialize_invoice(invoice: Invoice):
         "gst_total": invoice.gst_total,
         "grand_total": invoice.grand_total,
         "generated_from": invoice.generated_from,
+        "place_of_supply": invoice.place_of_supply,
+        # Reserved for e-invoicing — always null until IRP integration exists.
+        "irn": invoice.irn,
+        "einvoice_status": invoice.einvoice_status,
         "generated_at": invoice.generated_at.isoformat() if invoice.generated_at else None
     }
 
@@ -227,6 +239,29 @@ def get_invoice_for_checkin(
 
     invoice = db.query(Invoice).filter(Invoice.id == checkin.invoice_id).first()
     return serialize_invoice(invoice)
+
+
+@router.get("/invoices/patient/{patient_id}")
+def list_patient_invoices(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Lightweight invoice list for a single patient — used by the refund
+    flow and the credit/debit note UI to pick which invoice a correction
+    applies to. Open to any billing-facing role, unlike /invoices (which is
+    the admin-only revenue listing)."""
+    require_billing_staff(current_doctor)
+    invoices = db.query(Invoice).filter(
+        Invoice.patient_id == patient_id,
+        Invoice.hospital_id == current_doctor.hospital_id
+    ).order_by(Invoice.generated_at.desc()).limit(50).all()
+    return [{
+        "id": inv.id,
+        "receipt_number": inv.receipt_number,
+        "grand_total": inv.grand_total,
+        "generated_at": inv.generated_at.isoformat() if inv.generated_at else None
+    } for inv in invoices]
 
 
 @router.get("/invoices/{invoice_id}/pdf")
@@ -294,6 +329,275 @@ def list_invoices(
             "generated_at": inv.generated_at.isoformat() if inv.generated_at else None
         })
     return result
+
+
+def serialize_credit_debit_note(note):
+    return {
+        "id": note.id,
+        "invoice_id": note.invoice_id,
+        "note_type": note.note_type,
+        "note_number": note.note_number,
+        "invoice_number": note.invoice_number,
+        "invoice_date": note.invoice_date.isoformat() if note.invoice_date else None,
+        "amount": note.amount,
+        "reason": note.reason,
+        "refund_id": note.refund_id,
+        "created_at": note.created_at.isoformat() if note.created_at else None,
+    }
+
+
+@router.post("/invoices/{invoice_id}/credit-debit-note")
+def create_credit_debit_note(
+    invoice_id: int,
+    body: CreditDebitNoteIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Manual credit/debit note against an already-issued invoice. The
+    original invoice is never edited directly — GST law requires a
+    supplementary document instead."""
+    require_billing_staff(current_doctor)
+    if body.note_type not in ("credit", "debit"):
+        raise HTTPException(status_code=400, detail="note_type must be 'credit' or 'debit'")
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+    if not body.reason.strip():
+        raise HTTPException(status_code=400, detail="A reason is required")
+
+    invoice = db.query(Invoice).filter(
+        Invoice.id == invoice_id,
+        Invoice.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    note = CreditDebitNote(
+        hospital_id=current_doctor.hospital_id,
+        invoice_id=invoice.id,
+        patient_id=invoice.patient_id,
+        note_type=body.note_type,
+        note_number=next_note_number(db, hospital, body.note_type),
+        invoice_number=invoice.receipt_number,
+        invoice_date=invoice.generated_at,
+        amount=body.amount,
+        reason=body.reason.strip(),
+        created_by=current_doctor.id,
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+
+    patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
+    log_action(
+        db, current_doctor,
+        action=f"{body.note_type}_note_created",
+        target_type="invoice",
+        target_id=invoice.id,
+        target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(invoice.patient_id),
+        details=f"{body.note_type.title()} note {note.note_number} — Rs.{body.amount:.2f} against invoice {invoice.receipt_number or invoice.id} — {body.reason}"
+    )
+    return serialize_credit_debit_note(note)
+
+
+@router.get("/invoices/{invoice_id}/credit-debit-notes")
+def list_credit_debit_notes(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_billing_staff(current_doctor)
+    invoice = db.query(Invoice).filter(
+        Invoice.id == invoice_id,
+        Invoice.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    notes = db.query(CreditDebitNote).filter(
+        CreditDebitNote.invoice_id == invoice_id
+    ).order_by(CreditDebitNote.created_at.desc()).all()
+    return [serialize_credit_debit_note(n) for n in notes]
+
+
+def _waiver_threshold(hospital, bill_total: float) -> float:
+    """Auto-approve limit for a waiver on this bill — the larger of the
+    hospital's flat rupee cap and its percent-of-bill cap. Either alone
+    being enough is enough; no unlimited, unlogged discretion at any tier."""
+    cap = hospital.waiver_auto_approve_cap or 0.0
+    pct_cap = (hospital.waiver_auto_approve_percent or 0.0) / 100.0 * bill_total
+    return max(cap, pct_cap)
+
+
+def _apply_waiver_charge(db: Session, waiver: WaiverRequest, actor: Doctor):
+    """Creates the actual negative bill line once a waiver is approved
+    (immediately for auto-approved ones, or on manual admin approval)."""
+    if waiver.admission_id:
+        charge = AdmissionCharge(
+            admission_id=waiver.admission_id, charge_type="other",
+            description=f"Waiver/Discount — {waiver.reason}",
+            amount=-abs(waiver.amount), quantity=1, added_by=actor.id, charged_at=now_ist_naive(),
+        )
+        db.add(charge)
+        db.flush()
+        waiver.charge_id = charge.id
+    else:
+        checkin = db.query(Checkin).filter(Checkin.id == waiver.checkin_id).first()
+        charge = OpdCharge(
+            checkin_id=waiver.checkin_id, patient_id=checkin.patient_id, hospital_id=waiver.hospital_id,
+            description=f"Waiver/Discount — {waiver.reason}", amount=-abs(waiver.amount), quantity=1,
+            added_by=actor.id, status="paid", paid_at=now_ist_naive(),
+        )
+        db.add(charge)
+        db.flush()
+        waiver.charge_id = charge.id
+
+
+@router.post("/waivers")
+def create_waiver(
+    body: WaiverIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_billing_staff(current_doctor)
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+    if not body.reason.strip():
+        raise HTTPException(status_code=400, detail="A reason is required")
+    if not body.checkin_id and not body.admission_token:
+        raise HTTPException(status_code=400, detail="Either checkin_id or admission_token is required")
+    if body.checkin_id and body.admission_token:
+        raise HTTPException(status_code=400, detail="Provide only one of checkin_id or admission_token")
+
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+
+    admission_internal_id = None
+    if body.admission_token:
+        from app.routers.admissions import _build_discharge_bill
+        admission = db.query(Admission).filter(
+            Admission.public_token == body.admission_token,
+            Admission.hospital_id == current_doctor.hospital_id
+        ).first()
+        if not admission:
+            raise HTTPException(status_code=404, detail="Admission not found")
+        if admission.status != "admitted":
+            raise HTTPException(status_code=400, detail="Cannot apply a waiver to a discharged admission")
+        admission_internal_id = admission.id
+        _, bill_total = _build_discharge_bill(db, admission)
+    else:
+        checkin = db.query(Checkin).filter(
+            Checkin.id == body.checkin_id,
+            Checkin.hospital_id == current_doctor.hospital_id
+        ).first()
+        if not checkin:
+            raise HTTPException(status_code=404, detail="Visit not found")
+        items = gather_invoice_items(db, checkin)
+        bill_total = sum(i["line_total"] for i in items)
+
+    if body.amount > bill_total:
+        raise HTTPException(status_code=400, detail="Waiver amount cannot exceed the current bill total")
+
+    threshold = _waiver_threshold(hospital, bill_total)
+    waiver = WaiverRequest(
+        hospital_id=current_doctor.hospital_id, checkin_id=body.checkin_id, admission_id=admission_internal_id,
+        amount=body.amount, reason=body.reason.strip(), requested_by=current_doctor.id,
+    )
+
+    if body.amount <= threshold:
+        waiver.status = "approved"
+        waiver.resolved_by = current_doctor.id
+        waiver.resolved_at = now_ist_naive()
+        db.add(waiver)
+        db.flush()
+        _apply_waiver_charge(db, waiver, current_doctor)
+        db.commit()
+        log_action(db, current_doctor, action="waiver_applied", target_type=("admission" if admission_internal_id else "checkin"),
+                   target_id=admission_internal_id or body.checkin_id, target_label=f"Rs.{body.amount:.2f} waiver", details=waiver.reason)
+        return {"message": "Waiver applied", "status": "approved"}
+    else:
+        waiver.status = "pending_approval"
+        db.add(waiver)
+        db.commit()
+        return {"message": "Waiver exceeds the auto-approve limit — sent for admin approval", "status": "pending_approval", "id": waiver.id}
+
+
+@router.get("/waivers/pending")
+def list_pending_waivers(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    waivers = db.query(WaiverRequest).filter(
+        WaiverRequest.hospital_id == current_doctor.hospital_id,
+        WaiverRequest.status == "pending_approval"
+    ).order_by(WaiverRequest.requested_at.desc()).all()
+
+    result = []
+    for w in waivers:
+        requester = db.query(Doctor).filter(Doctor.id == w.requested_by).first()
+        if w.admission_id:
+            adm = db.query(Admission).filter(Admission.id == w.admission_id).first()
+            p = db.query(Patient).filter(Patient.id == adm.patient_id).first() if adm else None
+            label = f"{p.name} ({p.patient_uid}) — IPD" if p else "IPD admission"
+        else:
+            c = db.query(Checkin).filter(Checkin.id == w.checkin_id).first()
+            p = db.query(Patient).filter(Patient.id == c.patient_id).first() if c else None
+            label = f"{p.name} ({p.patient_uid}) — OPD" if p else "OPD visit"
+        result.append({
+            "id": w.id, "amount": w.amount, "reason": w.reason, "label": label,
+            "requested_by": f"{requester.title} {requester.name}" if requester else "—",
+            "requested_at": w.requested_at.isoformat() if w.requested_at else None,
+        })
+    return result
+
+
+@router.patch("/waivers/{waiver_id}/approve")
+def approve_waiver(
+    waiver_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    waiver = db.query(WaiverRequest).filter(
+        WaiverRequest.id == waiver_id,
+        WaiverRequest.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not waiver:
+        raise HTTPException(status_code=404, detail="Waiver request not found")
+    if waiver.status != "pending_approval":
+        raise HTTPException(status_code=400, detail="Only a pending waiver can be approved")
+    waiver.status = "approved"
+    waiver.resolved_by = current_doctor.id
+    waiver.resolved_at = now_ist_naive()
+    _apply_waiver_charge(db, waiver, current_doctor)
+    db.commit()
+    log_action(db, current_doctor, action="waiver_approved", target_type=("admission" if waiver.admission_id else "checkin"),
+               target_id=waiver.admission_id or waiver.checkin_id, target_label=f"Rs.{waiver.amount:.2f} waiver", details=waiver.reason)
+    return {"message": "Waiver approved and applied"}
+
+
+@router.patch("/waivers/{waiver_id}/reject")
+def reject_waiver(
+    waiver_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    waiver = db.query(WaiverRequest).filter(
+        WaiverRequest.id == waiver_id,
+        WaiverRequest.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not waiver:
+        raise HTTPException(status_code=404, detail="Waiver request not found")
+    if waiver.status != "pending_approval":
+        raise HTTPException(status_code=400, detail="Only a pending waiver can be rejected")
+    waiver.status = "rejected"
+    waiver.resolved_by = current_doctor.id
+    waiver.resolved_at = now_ist_naive()
+    db.commit()
+    return {"message": "Waiver rejected"}
 
 
 # Revenue History (admin) — aggregate totals, not individual invoices (that's /invoices above).

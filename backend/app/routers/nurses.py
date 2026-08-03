@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import date, datetime
 import json
 
@@ -19,18 +20,29 @@ def _require_nurse(current_doctor: Doctor):
     if current_doctor.role.value not in ("nurse", "assistant"):
         raise HTTPException(status_code=403, detail="Not authorized")
 
+def _require_nurse_only(current_doctor: Doctor):
+    # Recording a vitals reading is a nurse-only clinical action. Assistant
+    # can view vitals status/queue (see vitals_queue below) but must never
+    # submit a reading — that scope creep is what this guards against.
+    if current_doctor.role.value != "nurse":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
 @router.get("/vitals-queue")
 def vitals_queue(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     _require_nurse(current_doctor)
+
+    from app.utils.portal_checkin import sweep_todays_online_checkins
+    sweep_todays_online_checkins(db, current_doctor.hospital_id)
+
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.vitals_status.in_(["pending", "sent_back"]),
         Checkin.visit_date == ist_today(),
         Checkin.is_paid == True
-    ).order_by(Checkin.created_at.asc()).all()
+    ).order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
 
     # Rechecks jump the fresh-vitals-pending line — the doctor's already mid-turn
     # waiting on this, unlike a walk-in still working through the normal queue.
@@ -54,10 +66,13 @@ def vitals_queue(
             "gender": p.gender,
             "token_number": c.token_number,
             "issue_category": c.issue_category,
+            "doctor_id": d.id if d else None,
             "doctor_name": f"{d.title} {d.name}" if d else "—",
             "created_at": c.created_at.isoformat(),
             "is_recheck": c.vitals_status == "sent_back",
-            "recheck_request": c.vitals_recheck_request
+            "recheck_request": c.vitals_recheck_request,
+            "source": c.source,
+            "booked_time": c.booked_time.isoformat() if c.booked_time else None,
         })
     return result
 
@@ -68,7 +83,7 @@ def submit_vitals(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    _require_nurse(current_doctor)
+    _require_nurse_only(current_doctor)
     from app.routers.attendance import require_present
     require_present(db, current_doctor)
 
@@ -188,6 +203,7 @@ def post_consult_queue(
             "patient_name": p.name,
             "patient_uid": p.patient_uid,
             "token_number": c.token_number,
+            "doctor_id": d.id if d else None,
             "doctor_name": f"{d.title} {d.name}" if d else "—",
             "note": c.post_consult_note,
             "created_at": c.created_at.isoformat()

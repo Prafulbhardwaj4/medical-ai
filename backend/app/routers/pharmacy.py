@@ -12,12 +12,15 @@ from app.models.doctor import Doctor
 from app.models.patient import Patient
 from app.models.consultation import Consultation
 from app.models.medicine_order import MedicineOrder
+from app.models.medicine_order_return import MedicineOrderReturn
 from app.models.hospital_medicine import HospitalMedicine
+from app.models.refund import Refund
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
 from app.utils.order_lifecycle import is_order_expired
 from app.routers.attendance import require_present
+from app.routers.refunds import VALID_CHANNELS
 
 router = APIRouter(prefix="/pharmacy", tags=["pharmacy"])
 
@@ -25,6 +28,49 @@ router = APIRouter(prefix="/pharmacy", tags=["pharmacy"])
 def require_pharmacy(current_doctor: Doctor):
     if current_doctor.role.value not in ["pharmacy", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+
+def _generic_identity(db: Session, catalog_medicine_id: int):
+    """Resolves a catalog row — which may be a brand-specific row — to the
+    underlying generic drug identity, so Schedule X repeat checks match
+    across different brands of the same controlled substance."""
+    med = db.query(HospitalMedicine).filter(HospitalMedicine.id == catalog_medicine_id).first()
+    if not med:
+        return None
+    if med.parent_medicine_id:
+        parent = db.query(HospitalMedicine).filter(HospitalMedicine.id == med.parent_medicine_id).first()
+        if parent:
+            return parent.generic_name
+    return med.generic_name
+
+
+def _schedule_x_repeat_block(db: Session, order: "MedicineOrder"):
+    """Returns a blocking error message if this Schedule X order is an
+    unauthorized repeat dispense for this patient, else None."""
+    if not order.catalog_medicine_id:
+        return None
+    medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.catalog_medicine_id).first()
+    if not medicine or medicine.schedule != "x":
+        return None
+
+    generic = _generic_identity(db, order.catalog_medicine_id)
+    if not generic:
+        return None
+
+    prior = db.query(MedicineOrder).join(
+        HospitalMedicine, MedicineOrder.catalog_medicine_id == HospitalMedicine.id
+    ).filter(
+        MedicineOrder.patient_id == order.patient_id,
+        MedicineOrder.hospital_id == order.hospital_id,
+        MedicineOrder.status == "dispensed",
+        MedicineOrder.id != order.id,
+        HospitalMedicine.schedule == "x",
+    ).all()
+    has_prior = any(_generic_identity(db, p.catalog_medicine_id) == generic for p in prior)
+
+    if has_prior and not order.repeat_authorized:
+        return f"{order.medicine_name} is a Schedule X repeat dispense for this patient — needs doctor authorization before it can be dispensed again."
+    return None
 
 
 @router.get("/admission-queue")
@@ -187,11 +233,18 @@ def get_pharmacy_prescription(
 def serialize_medicine_order(m: MedicineOrder, db: Session = None):
     stock_quantity = None
     low_stock_threshold = None
+    schedule = None
     if db is not None and m.catalog_medicine_id:
         catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == m.catalog_medicine_id).first()
         if catalog_item:
             stock_quantity = catalog_item.stock_quantity
             low_stock_threshold = catalog_item.low_stock_threshold
+            schedule = catalog_item.schedule
+
+    already_returned = 0
+    if db is not None and m.status == "dispensed":
+        from app.models.medicine_order_return import MedicineOrderReturn
+        already_returned = sum(r.quantity for r in db.query(MedicineOrderReturn).filter(MedicineOrderReturn.order_id == m.id).all())
 
     billed = m.billed_quantity if m.billed_quantity is not None else m.quantity
     return {
@@ -202,6 +255,7 @@ def serialize_medicine_order(m: MedicineOrder, db: Session = None):
         "frequency": m.frequency or "",
         "duration": m.duration or "",
         "catalog_medicine_id": m.catalog_medicine_id,
+        "schedule": schedule,
         "unit_price": m.unit_price,
         "quantity": m.quantity,
         "billed_quantity": m.billed_quantity,
@@ -210,7 +264,9 @@ def serialize_medicine_order(m: MedicineOrder, db: Session = None):
         "status": m.status,
         "substitute_for_id": m.substitute_for_id,
         "stock_quantity": stock_quantity,
-        "low_stock_threshold": low_stock_threshold
+        "low_stock_threshold": low_stock_threshold,
+        "repeat_authorized": m.repeat_authorized,
+        "already_returned": already_returned,
     }
 
 
@@ -567,6 +623,7 @@ def add_medicine_order(
     if payload.quantity <= 0:
         raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
 
+    dosage_form_warning = None
     if payload.substitute_for_id:
         original = db.query(MedicineOrder).filter(
             MedicineOrder.id == payload.substitute_for_id,
@@ -576,6 +633,34 @@ def add_medicine_order(
             raise HTTPException(status_code=404, detail="Original medicine order not found")
         if original.status != "advised":
             raise HTTPException(status_code=400, detail="Cannot substitute — original medicine already resolved")
+
+        # Substitution is brand-only, never a different active ingredient
+        # without the doctor's explicit sign-off — verified against the
+        # catalog, not free-text names, so both sides must be linked.
+        if not original.catalog_medicine_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Link the original order to a catalog medicine first (via link-catalog) so its salt/strength can be verified before substituting."
+            )
+        original_catalog = db.query(HospitalMedicine).filter(HospitalMedicine.id == original.catalog_medicine_id).first()
+        if not original_catalog:
+            raise HTTPException(status_code=400, detail="Original catalog medicine not found — cannot verify substitution safety")
+
+        original_generic = _generic_identity(db, original.catalog_medicine_id)
+        replacement_generic = _generic_identity(db, catalog_item.id)
+        if not original_generic or (original_generic or "").strip().lower() != (replacement_generic or "").strip().lower():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Substitution blocked — {catalog_item.generic_name} is a different active ingredient than {original_catalog.generic_name}. Brand-only substitution is allowed; a different salt needs the doctor's explicit sign-off."
+            )
+        if (original_catalog.strength or "").strip().lower() != (catalog_item.strength or "").strip().lower():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Substitution blocked — strength mismatch ({original_catalog.strength or 'unspecified'} vs {catalog_item.strength or 'unspecified'})."
+            )
+        if (original_catalog.dosage_forms or "").strip().lower() != (catalog_item.dosage_forms or "").strip().lower():
+            dosage_form_warning = f"Dosage form differs from the original ({original_catalog.dosage_forms or 'unspecified'} vs {catalog_item.dosage_forms or 'unspecified'}) — double-check this is appropriate."
+
         original.included = False
 
     new_order = MedicineOrder(
@@ -604,7 +689,10 @@ def add_medicine_order(
         hospital_id=current_doctor.hospital_id
     )
 
-    return serialize_medicine_order(new_order, db)
+    result = serialize_medicine_order(new_order, db)
+    if dosage_form_warning:
+        result["warning"] = dosage_form_warning
+    return result
 
 
 @router.post("/prescription/{token_number}/dispense")
@@ -637,10 +725,33 @@ def dispense_prescription(
     ).all()
 
     for o in paid_orders:
+        block_reason = _schedule_x_repeat_block(db, o)
+        if block_reason:
+            raise HTTPException(status_code=400, detail=block_reason)
+
+    for o in paid_orders:
         if o.catalog_medicine_id and o.billed_quantity:
             deduct_stock_fefo(db, o.catalog_medicine_id, o.billed_quantity)
         o.status = "dispensed"
         o.dispensed_at = now_ist_naive()
+        o.dispensed_by = current_doctor.id
+
+        medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == o.catalog_medicine_id).first() if o.catalog_medicine_id else None
+        if medicine and medicine.schedule == "x":
+            log_action(
+                db, current_doctor,
+                action="schedule_x_dispensed",
+                target_type="medicine_order",
+                target_id=o.id,
+                target_label=o.medicine_name,
+                details=json.dumps({
+                    "patient_id": o.patient_id,
+                    "quantity": o.billed_quantity,
+                    "repeat": o.repeat_authorized,
+                    "repeat_authorized_by": o.repeat_authorized_by,
+                }),
+                hospital_id=current_doctor.hospital_id
+            )
 
     consultation.is_dispensed = True
     consultation.dispensed_at = now_ist_naive()
@@ -724,3 +835,284 @@ def requeue_medicine_order(
         hospital_id=current_doctor.hospital_id
     )
     return {"id": order.id, "queued_at": order.queued_at.isoformat()}
+
+
+class ReturnMedicineOrderIn(BaseModel):
+    quantity: int
+    disposition: str  # "returned_to_supplier" | "sent_to_disposal" | "restocked_to_shelf"
+    channel: str       # "cash" | "card" | "upi" | "online" — how the refund is issued
+    note: Optional[str] = None
+
+
+@router.post("/medicine-orders/{order_id}/return")
+def return_medicine_order(
+    order_id: int,
+    body: ReturnMedicineOrderIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """OPD return — patient paid the hospital pharmacy directly, so this
+    issues a real Refund (unlike the IPD path, which just credits the
+    running admission bill). Stock only ever moves back up on the explicit,
+    deliberate restocked_to_shelf choice — never as a default, never for
+    returned_to_supplier or sent_to_disposal."""
+    require_pharmacy(current_doctor)
+
+    order = db.query(MedicineOrder).filter(
+        MedicineOrder.id == order_id,
+        MedicineOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Medicine order not found")
+    if order.status != "dispensed":
+        raise HTTPException(status_code=400, detail="Only a dispensed medicine can be returned")
+    if body.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+    if body.disposition not in ("returned_to_supplier", "sent_to_disposal", "restocked_to_shelf"):
+        raise HTTPException(status_code=400, detail="disposition must be 'returned_to_supplier', 'sent_to_disposal', or 'restocked_to_shelf'")
+    if body.channel not in VALID_CHANNELS:
+        raise HTTPException(status_code=400, detail="Invalid channel")
+
+    dispensed_qty = order.billed_quantity or order.quantity or 0
+    already_returned = sum(r.quantity for r in db.query(MedicineOrderReturn).filter(MedicineOrderReturn.order_id == order.id).all())
+    available_to_return = dispensed_qty - already_returned
+    if body.quantity > available_to_return:
+        raise HTTPException(status_code=400, detail=f"Only {available_to_return} unit(s) from this order are eligible for return")
+
+    # Stock only moves back up on this one explicit, deliberate choice.
+    if body.disposition == "restocked_to_shelf" and order.catalog_medicine_id:
+        catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.catalog_medicine_id).first()
+        if catalog_item:
+            catalog_item.stock_quantity = (catalog_item.stock_quantity or 0) + body.quantity
+
+    refund_amount = (order.unit_price or 0) * body.quantity
+
+    refund = Refund(
+        patient_id=order.patient_id,
+        hospital_id=order.hospital_id,
+        source_type="pharmacy",
+        source_id=order.id,
+        amount=refund_amount,
+        channel=body.channel,
+        status="pending" if body.channel == "online" else "completed",
+        reason=f"Pharmacy return — {order.medicine_name} x{body.quantity}",
+        processed_by=current_doctor.id,
+    )
+    db.add(refund)
+    db.flush()
+
+    db.add(MedicineOrderReturn(
+        order_id=order.id, quantity=body.quantity, disposition=body.disposition,
+        note=body.note, refund_id=refund.id, returned_by=current_doctor.id, returned_at=now_ist_naive(),
+    ))
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="medicine_order_returned",
+        target_type="medicine_order",
+        target_id=order.id,
+        target_label=f"{order.medicine_name} x{body.quantity} ({body.disposition})",
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"message": "Return recorded", "refunded_amount": refund_amount, "refund_status": refund.status}
+
+
+@router.patch("/medicine-orders/{order_id}/authorize-repeat")
+def authorize_schedule_x_repeat(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Doctor sign-off required before a Schedule X repeat can be dispensed —
+    locked to the original prescriber (via the order's consultation), since
+    an unlocked narcotic-repeat authorization defeats the point of requiring
+    sign-off at all. admin/sub_admin can still override for genuine
+    unavailability (doctor transferred/off duty/resigned), but that path
+    logs under a distinct action so it's never silently indistinguishable
+    from the normal same-prescriber case in the audit trail."""
+    order = db.query(MedicineOrder).filter(
+        MedicineOrder.id == order_id,
+        MedicineOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Medicine order not found")
+
+    medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.catalog_medicine_id).first() if order.catalog_medicine_id else None
+    if not medicine or medicine.schedule != "x":
+        raise HTTPException(status_code=400, detail="This order isn't a Schedule X item")
+
+    consultation = db.query(Consultation).filter(Consultation.id == order.consultation_id).first()
+    prescriber_id = consultation.doctor_id if consultation else None
+
+    is_admin_override = False
+    if current_doctor.id == prescriber_id:
+        pass  # normal case — original prescriber authorizing their own order
+    elif current_doctor.role.value in ["admin", "sub_admin"]:
+        is_admin_override = True
+    else:
+        prescriber = db.query(Doctor).filter(Doctor.id == prescriber_id).first() if prescriber_id else None
+        prescriber_label = f"{prescriber.title} {prescriber.name}" if prescriber else "the original prescriber"
+        raise HTTPException(status_code=403, detail=f"Only {prescriber_label}, who originally prescribed this, can authorize a repeat.")
+
+    order.repeat_authorized = True
+    order.repeat_authorized_by = current_doctor.id
+    order.repeat_authorized_at = now_ist_naive()
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="schedule_x_repeat_authorized_by_admin_override" if is_admin_override else "schedule_x_repeat_authorized",
+        target_type="medicine_order",
+        target_id=order.id,
+        target_label=order.medicine_name,
+        details=json.dumps({"patient_id": order.patient_id, "original_prescriber_id": prescriber_id}),
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"message": "Repeat dispense authorized", "authorized_at": order.repeat_authorized_at.isoformat()}
+
+
+@router.get("/schedule-x-register")
+def schedule_x_register(
+    start_date: date = None,
+    end_date: date = None,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Schedule X (narcotics/high-abuse-potential) dispensing register — the
+    tightest audit trail of the three tiers: who authorized it, who
+    dispensed it, when. Same MedicineOrder-backed approach as the H1
+    register; nothing here gets bulk-deleted, comfortably past the
+    legally-required 2-year retention."""
+    require_pharmacy(current_doctor)
+
+    q = db.query(MedicineOrder).join(
+        HospitalMedicine, MedicineOrder.catalog_medicine_id == HospitalMedicine.id
+    ).filter(
+        MedicineOrder.hospital_id == current_doctor.hospital_id,
+        HospitalMedicine.schedule == "x",
+        MedicineOrder.status == "dispensed",
+        MedicineOrder.included == True,  # noqa: E712
+        MedicineOrder.dispensed_at.isnot(None),
+    )
+    if start_date:
+        q = q.filter(MedicineOrder.dispensed_at >= datetime.combine(start_date, datetime.min.time()))
+    if end_date:
+        q = q.filter(MedicineOrder.dispensed_at < datetime.combine(end_date, datetime.max.time()))
+
+    orders = q.order_by(MedicineOrder.dispensed_at.desc()).all()
+
+    result = []
+    for o in orders:
+        consultation = db.query(Consultation).filter(Consultation.id == o.consultation_id).first()
+        patient = db.query(Patient).filter(Patient.id == o.patient_id).first()
+        prescriber = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first() if consultation else None
+        pharmacist = db.query(Doctor).filter(Doctor.id == o.dispensed_by).first() if o.dispensed_by else None
+        authorizer = db.query(Doctor).filter(Doctor.id == o.repeat_authorized_by).first() if o.repeat_authorized_by else None
+        result.append({
+            "id": o.id,
+            "date": o.dispensed_at.isoformat() if o.dispensed_at else None,
+            "patient_name": patient.name if patient else None,
+            "prescribing_doctor": f"{prescriber.title} {prescriber.name}" if prescriber else None,
+            "medicine_name": o.medicine_name,
+            "brand_name": o.brand_name,
+            "quantity": o.billed_quantity or o.quantity,
+            "dispensing_pharmacist": f"{pharmacist.title} {pharmacist.name}" if pharmacist else "Unrecorded (dispensed before this register was added)",
+            "is_repeat": o.repeat_authorized,
+            "repeat_authorized_by": f"{authorizer.title} {authorizer.name}" if authorizer else None,
+            "repeat_authorized_at": o.repeat_authorized_at.isoformat() if o.repeat_authorized_at else None,
+        })
+    return {"count": len(result), "entries": result}
+
+
+@router.get("/medicine-orders/schedule-x-status/{consultation_id}")
+def schedule_x_status_for_consultation(
+    consultation_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Doctor-facing visibility into this consultation's Schedule X orders —
+    lets a doctor see and authorize a repeat from their own patient-history
+    screen, not just from the pharmacy page. Deliberately scoped to Schedule
+    X status only (not full pharmacy/dispense data), since doctors otherwise
+    have no access to MedicineOrder records at all — this isn't a general
+    pharmacy read grant, just enough for this one action."""
+    consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Consultation not found")
+    patient = db.query(Patient).filter(
+        Patient.id == consultation.patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Consultation not found")
+
+    orders = db.query(MedicineOrder).join(
+        HospitalMedicine, MedicineOrder.catalog_medicine_id == HospitalMedicine.id
+    ).filter(
+        MedicineOrder.consultation_id == consultation_id,
+        HospitalMedicine.schedule == "x",
+        MedicineOrder.included == True,  # noqa: E712
+    ).all()
+
+    result = []
+    for o in orders:
+        result.append({
+            "id": o.id,
+            "medicine_name": o.medicine_name,
+            "status": o.status,
+            "repeat_authorized": o.repeat_authorized,
+        })
+    return {"orders": result}
+
+
+@router.get("/schedule-h1-register")
+def schedule_h1_register(
+    start_date: date = None,
+    end_date: date = None,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Schedule H1 dispensing register — the digital equivalent of the
+    physical register pharmacies are legally required to keep for H1 drugs
+    (antibiotics, anti-TB, certain psychotropics). Built on real MedicineOrder
+    dispense records rather than a separate table, since every field the
+    register needs — patient, prescribing doctor, medicine, quantity,
+    dispensing pharmacist, date — already lives there once dispensed.
+    Nothing in this codebase bulk-deletes MedicineOrder rows, so this stays
+    queryable indefinitely, well past the legally-required 3 years."""
+    require_pharmacy(current_doctor)
+
+    q = db.query(MedicineOrder).join(
+        HospitalMedicine, MedicineOrder.catalog_medicine_id == HospitalMedicine.id
+    ).filter(
+        MedicineOrder.hospital_id == current_doctor.hospital_id,
+        HospitalMedicine.schedule == "h1",
+        MedicineOrder.status == "dispensed",
+        MedicineOrder.included == True,  # noqa: E712 — never surface a substituted-out original alongside its replacement
+        MedicineOrder.dispensed_at.isnot(None),
+    )
+    if start_date:
+        q = q.filter(MedicineOrder.dispensed_at >= datetime.combine(start_date, datetime.min.time()))
+    if end_date:
+        q = q.filter(MedicineOrder.dispensed_at < datetime.combine(end_date, datetime.max.time()))
+
+    orders = q.order_by(MedicineOrder.dispensed_at.desc()).all()
+
+    result = []
+    for o in orders:
+        consultation = db.query(Consultation).filter(Consultation.id == o.consultation_id).first()
+        patient = db.query(Patient).filter(Patient.id == o.patient_id).first()
+        prescriber = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first() if consultation else None
+        pharmacist = db.query(Doctor).filter(Doctor.id == o.dispensed_by).first() if o.dispensed_by else None
+        result.append({
+            "id": o.id,
+            "date": o.dispensed_at.isoformat() if o.dispensed_at else None,
+            "patient_name": patient.name if patient else None,
+            "prescribing_doctor": f"{prescriber.title} {prescriber.name}" if prescriber else None,
+            "medicine_name": o.medicine_name,
+            "brand_name": o.brand_name,
+            "quantity": o.billed_quantity or o.quantity,
+            "dispensing_pharmacist": f"{pharmacist.title} {pharmacist.name}" if pharmacist else "Unrecorded (dispensed before this register was added)",
+        })
+    return {"count": len(result), "entries": result}

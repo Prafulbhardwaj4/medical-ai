@@ -428,8 +428,22 @@ def generate_test_report_pdf(
         styles["Normal"]
     ))
     elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Report Date:</b> {now_ist().strftime('%d %b %Y')}", styles["Normal"]))
+    if getattr(order, "collected_at", None):
+        elements.append(Paragraph(f"<b>Specimen Collected:</b> {order.collected_at.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
+    if getattr(order, "accession_number", None):
+        acc_time = f" ({order.accessioned_at.strftime('%d %b %Y, %I:%M %p')})" if order.accessioned_at else ""
+        elements.append(Paragraph(f"<b>Accession No:</b> {order.accession_number}{acc_time}", styles["Normal"]))
+    report_dt = order.verified_at if getattr(order, "verified_at", None) else now_ist()
+    elements.append(Paragraph(f"<b>Report Date:</b> {report_dt.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     elements.append(Spacer(1, 4*mm))
+
+    accreditation_style = ParagraphStyle("accreditation", fontSize=8.5, fontName="Helvetica-Oblique", textColor=colors.HexColor("#065f46"))
+    non_scope_style = ParagraphStyle("non_scope", fontSize=8.5, fontName="Helvetica-Oblique", textColor=colors.grey)
+    if getattr(catalog_item, "is_nabl_accredited", False):
+        elements.append(Paragraph("This test is performed within our NABL-accredited scope.", accreditation_style))
+    else:
+        elements.append(Paragraph("This test is not within our current NABL-accredited scope.", non_scope_style))
+    elements.append(Spacer(1, 2*mm))
     elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
     elements.append(Spacer(1, 4*mm))
 
@@ -475,6 +489,15 @@ def generate_test_report_pdf(
     elements.append(result_table)
     elements.append(Spacer(1, 4*mm))
 
+    if getattr(order, "fasting_confirmed", None) is False or getattr(order, "drawn_from_iv_line", False) or getattr(order, "sample_condition_caveat", None):
+        caveat_style = ParagraphStyle("caveat", fontSize=9.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#b45309"), spaceAfter=2*mm)
+        if getattr(order, "fasting_confirmed", None) is False:
+            elements.append(Paragraph("⚠ Sample was NOT drawn after fasting — interpret this result with this in mind.", caveat_style))
+        if getattr(order, "drawn_from_iv_line", False):
+            elements.append(Paragraph("⚠ Sample drawn from an IV-line arm — may affect interpretation on certain analytes.", caveat_style))
+        if getattr(order, "sample_condition_caveat", None):
+            elements.append(Paragraph(f"⚠ Sample condition note: {order.sample_condition_caveat} — reported as-is per irreplaceable-sample policy.", caveat_style))
+
     if notes:
         elements.append(Paragraph("Notes", section_style))
         elements.append(Paragraph(notes, body_style))
@@ -484,14 +507,17 @@ def generate_test_report_pdf(
     elements.append(Spacer(1, 4*mm))
 
     footer_style = ParagraphStyle("footer", fontSize=9, fontName="Helvetica", textColor=colors.HexColor("#334155"))
-    elements.append(Paragraph(
-        f"<b>Ordering Doctor:</b> {ordering_doctor.title} {ordering_doctor.name}" if ordering_doctor else "<b>Ordering Doctor:</b> —",
-        footer_style
-    ))
-    elements.append(Paragraph(
-        f"<b>Lab Staff:</b> {lab_staff.name}" if lab_staff else "<b>Lab Staff:</b> —",
-        footer_style
-    ))
+    doctor_line = f"<b>Ordering Doctor:</b> {ordering_doctor.title} {ordering_doctor.name}" if ordering_doctor else "<b>Ordering Doctor:</b> —"
+    if ordering_doctor and getattr(ordering_doctor, "registration_number", None):
+        doctor_line += f" (Reg. No: {ordering_doctor.registration_number})"
+    elements.append(Paragraph(doctor_line, footer_style))
+    if lab_staff:
+        verified_line = f"<b>Verified By:</b> {lab_staff.title} {lab_staff.name}" if getattr(lab_staff, "title", None) else f"<b>Verified By:</b> {lab_staff.name}"
+        if getattr(order, "verified_at", None):
+            verified_line += f" on {order.verified_at.strftime('%d %b %Y, %I:%M %p')}"
+        elements.append(Paragraph(verified_line, footer_style))
+    else:
+        elements.append(Paragraph("<b>Verified By:</b> —", footer_style))
 
     doc.build(elements)
     return filepath
@@ -574,13 +600,45 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
         styles["Normal"]
     ))
     elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Report Date:</b> {now_ist().strftime('%d %b %Y')}", styles["Normal"]))
+    latest_verified = max((t["verified_at"] for t in tests_payload if t.get("verified_at")), default=None)
+    report_dt = latest_verified if latest_verified else now_ist()
+    elements.append(Paragraph(f"<b>Report Date:</b> {report_dt.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     elements.append(Spacer(1, 4*mm))
     elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
+
+    caveat_style = ParagraphStyle("caveat", fontSize=9.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#b45309"), spaceAfter=2*mm)
 
     for test in tests_payload:
         elements.append(Spacer(1, 3*mm))
         elements.append(Paragraph(test["test_name"], section_style))
+        meta_bits = []
+        if test.get("collected_at"):
+            meta_bits.append(f"Specimen Collected: {test['collected_at'].strftime('%d %b %Y, %I:%M %p')}")
+        if test.get("accession_number"):
+            acc_time = f" ({test['accessioned_at'].strftime('%d %b %Y, %I:%M %p')})" if test.get("accessioned_at") else ""
+            meta_bits.append(f"Accession No: {test['accession_number']}{acc_time}")
+        if meta_bits:
+            elements.append(Paragraph(" | ".join(meta_bits), ParagraphStyle("meta", fontSize=8.5, textColor=colors.grey, spaceAfter=2*mm)))
+        if test.get("fasting_confirmed") is False:
+            elements.append(Paragraph("⚠ Sample was NOT drawn after fasting — interpret this result with this in mind.", caveat_style))
+        if test.get("drawn_from_iv_line"):
+            elements.append(Paragraph("⚠ Sample drawn from an IV-line arm — may affect interpretation on certain analytes.", caveat_style))
+        if test.get("sample_condition_caveat"):
+            elements.append(Paragraph(f"⚠ Sample condition note: {test['sample_condition_caveat']} — reported as-is per irreplaceable-sample policy.", caveat_style))
+
+        accreditation_style = ParagraphStyle("accreditation", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.HexColor("#065f46"))
+        non_scope_style = ParagraphStyle("non_scope", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.grey)
+        if test.get("is_nabl_accredited"):
+            elements.append(Paragraph("Within our NABL-accredited scope.", accreditation_style))
+        else:
+            elements.append(Paragraph("Not within our current NABL-accredited scope.", non_scope_style))
+
+        accreditation_style = ParagraphStyle("accreditation", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.HexColor("#065f46"))
+        non_scope_style = ParagraphStyle("non_scope", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.grey)
+        if test.get("is_nabl_accredited"):
+            elements.append(Paragraph("Within our NABL-accredited scope.", accreditation_style))
+        else:
+            elements.append(Paragraph("Not within our current NABL-accredited scope.", non_scope_style))
 
         table_data = [["Parameter", "Result", "Unit", "Reference Range"]]
         row_styles = []
@@ -618,15 +676,18 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     if ordering_doctor and ordering_doctor.registration_number:
         doctor_line += f" (Reg. No: {ordering_doctor.registration_number})"
     elements.append(Paragraph(doctor_line, footer_style))
-    elements.append(Paragraph(
-        f"<b>Lab Staff:</b> {lab_staff.name}" if lab_staff else "<b>Lab Staff:</b> —",
-        footer_style
-    ))
+    if lab_staff:
+        verified_line = f"<b>Verified By:</b> {lab_staff.title} {lab_staff.name}" if getattr(lab_staff, "title", None) else f"<b>Verified By:</b> {lab_staff.name}"
+        if latest_verified:
+            verified_line += f" on {latest_verified.strftime('%d %b %Y, %I:%M %p')}"
+        elements.append(Paragraph(verified_line, footer_style))
+    else:
+        elements.append(Paragraph("<b>Verified By:</b> —", footer_style))
 
     doc.build(elements)
     return filepath
 
-def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None, receipt_number=None) -> str:
+def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None, receipt_number=None, place_of_supply=None) -> str:
     ensure_reports_dir()
     invoices_dir = os.path.join(os.path.dirname(__file__), "..", "..", "invoices")
     os.makedirs(invoices_dir, exist_ok=True)
@@ -659,6 +720,8 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
         elements.append(Paragraph(f"<b>Invoice #:</b> INV-{invoice_hash} &nbsp;&nbsp; <b>Date:</b> {now_ist().strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     if doctor:
         elements.append(Paragraph(f"<b>Consulting Doctor:</b> {doctor.title} {doctor.name}", styles["Normal"]))
+    if place_of_supply:
+        elements.append(Paragraph(f"<b>Place of Supply:</b> {place_of_supply}", styles["Normal"]))
     elements.append(Spacer(1, 5*mm))
 
     # GST breakdown only appears once a hospital actually has rates configured — until then
@@ -666,13 +729,14 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
     gst_total = sum(item.get("tax_amount", 0) or 0 for item in items)
 
     if gst_total > 0:
-        table_data = [["Description", "Qty", "Unit Price", "Taxable Amt", "GST", "Amount"]]
+        table_data = [["Description", "HSN/SAC", "Qty", "Unit Price", "Taxable Amt", "GST", "Amount"]]
         for item in items:
             tax = item.get("tax_amount", 0) or 0
             rate = item.get("gst_rate", 0) or 0
             taxable = item.get("taxable_amount", item.get("line_total", 0))
             table_data.append([
                 item["name"],
+                item.get("hsn_sac") or "—",
                 str(item.get("qty", 1)),
                 f"Rs.{item['unit_price']:.2f}",
                 f"Rs.{taxable:.2f}",
@@ -680,11 +744,11 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
                 f"Rs.{item.get('total_with_tax', item['line_total']):.2f}"
             ])
         subtotal = sum(item.get("line_total", 0) for item in items)
-        table_data.append(["", "", "", "", "Subtotal", f"Rs.{subtotal:.2f}"])
-        table_data.append(["", "", "", "", "CGST", f"Rs.{gst_total/2:.2f}"])
-        table_data.append(["", "", "", "", "SGST", f"Rs.{gst_total/2:.2f}"])
-        table_data.append(["", "", "", "", "Grand Total", f"Rs.{grand_total:.2f}"])
-        col_widths = [55*mm, 12*mm, 22*mm, 22*mm, 26*mm, 28*mm]
+        table_data.append(["", "", "", "", "", "Subtotal", f"Rs.{subtotal:.2f}"])
+        table_data.append(["", "", "", "", "", "CGST", f"Rs.{gst_total/2:.2f}"])
+        table_data.append(["", "", "", "", "", "SGST", f"Rs.{gst_total/2:.2f}"])
+        table_data.append(["", "", "", "", "", "Grand Total", f"Rs.{grand_total:.2f}"])
+        col_widths = [46*mm, 18*mm, 10*mm, 20*mm, 20*mm, 24*mm, 27*mm]
         footer_rows = 4
     else:
         table_data = [["Description", "Qty", "Unit Price", "Amount"]]

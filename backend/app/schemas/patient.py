@@ -5,6 +5,12 @@ from typing import Optional, Dict
 VALID_GENDERS = {"Male", "Female", "Other"}
 VALID_BLOOD_GROUPS = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
 
+class PatientMergeIn(BaseModel):
+    primary_patient_id: int
+    duplicate_patient_id: int
+    phone_confirmed: bool  # reception ticks this only after confirming with the patient by phone — no ABHA yet to key off of
+
+
 class PatientCreate(BaseModel):
     name: str
     phone: str
@@ -168,3 +174,13 @@ class DoctorLite(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class MergeRequestIn(BaseModel):
+    primary_patient_id: int   # the record that survives
+    duplicate_patient_id: int  # the record that gets merged away
+    reason: Optional[str] = None
+
+
+class MergeConfirmIn(BaseModel):
+    confirmation_note: str  # what was confirmed on the phone call with the patient — required, this is the human verification step

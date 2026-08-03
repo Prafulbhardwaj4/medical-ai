@@ -411,6 +411,8 @@
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <span id="topbar-clinic" style="color:var(--slate)"></span>
+        <span id="hiv-results-link" style="display:none"><a href="hiv-lab.html" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)">HIV Results</a></span>
+        <button class="btn btn-outline btn-sm" onclick="openIdspReportModal()">IDSP Report</button>
         <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
       </div>
       <button class="topbar-profile-btn" onclick="toggleProfileMenu()" aria-label="Profile">
@@ -612,6 +614,149 @@
   </div>
 
   <!-- Results Confirmation Modal (new file — required for #12) -->
+  <div class="modal-overlay" id="modal-idsp-report">
+    <div class="modal" style="max-width:600px;max-height:88vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <h2 style="margin:0">IDSP Notifiable Results</h2>
+        <button class="modal-close" onclick="closeIdspReportModal()">×</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input class="form-control" type="date" id="idsp-start-date" />
+        <input class="form-control" type="date" id="idsp-end-date" />
+        <button class="btn btn-primary btn-sm" onclick="loadIdspReport()">Filter</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--slate-light);margin-bottom:8px">Actual submission to IDSP stays a manual process — this just pulls the flagged results for you to work from.</p>
+      <div id="idsp-report-body" style="overflow-y:auto;flex:1;font-size:13px"><p>Loading…</p></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-mark-mlc">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h2 style="margin:0">Flag as MLC Sample</h2>
+        <button class="modal-close" onclick="closeMarkMlcModal()">×</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Case Type</label>
+        <select class="form-control" id="mlc-case-type">
+          <option value="assault">Assault</option>
+          <option value="rta">Road Traffic Accident</option>
+          <option value="poisoning">Poisoning</option>
+          <option value="sexual_assault">Sexual Assault</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Reference Number (FIR/case, optional)</label><input class="form-control" id="mlc-reference" /></div>
+      <div class="form-group"><label class="form-label">Seal Number (optional)</label><input class="form-control" id="mlc-seal-number" /></div>
+      <div class="err-msg" id="mark-mlc-err"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-outline" style="flex:1;background:#fff" onclick="closeMarkMlcModal()">Cancel</button>
+        <button class="btn" style="flex:1;background:var(--danger);color:#fff" onclick="submitMarkMlc()">Flag Sample</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-custody-log">
+    <div class="modal" style="max-width:480px;max-height:88vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <h2 style="margin:0">Chain of Custody</h2>
+        <button class="modal-close" onclick="closeCustodyModal()">×</button>
+      </div>
+      <div id="custody-chain-body" style="overflow-y:auto;flex:1;font-size:13px;margin-bottom:12px"><p>Loading…</p></div>
+      <div style="border-top:1px solid var(--border);padding-top:12px">
+        <div class="form-group">
+          <label class="form-label">Log New Handoff</label>
+          <select class="form-control" id="custody-stage" style="margin-bottom:8px">
+            <option value="handed_to_transport">Handed to Transport</option>
+            <option value="received_at_lab">Received at Lab</option>
+            <option value="moved_to_storage">Moved to Storage</option>
+            <option value="processing_started">Processing Started</option>
+            <option value="released_to_authority">Released to Authority</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input class="form-control" id="custody-handed-external" placeholder="Handed over by (name, if external)" />
+          <input class="form-control" id="custody-received-external" placeholder="Received by (name, if external)" />
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+          <select class="form-control" id="custody-seal-intact" style="max-width:180px">
+            <option value="true">Seal Intact</option>
+            <option value="false">Seal Broken/Compromised</option>
+          </select>
+          <input class="form-control" id="custody-seal-number" placeholder="Seal number (optional)" />
+        </div>
+        <textarea class="form-control" id="custody-notes" placeholder="Notes (optional)" rows="2" style="margin-bottom:8px"></textarea>
+        <div class="err-msg" id="custody-log-err"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="submitCustodyHandoff()">Log Handoff</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-tat-trace">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h2 style="margin:0">TAT Timeline</h2>
+        <button class="modal-close" onclick="closeTatTraceModal()">×</button>
+      </div>
+      <div id="tat-trace-body" style="font-size:13px"><p>Loading…</p></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-reject-sample">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h2 style="margin:0">Reject Sample</h2>
+        <button class="modal-close" onclick="closeRejectSampleModal()">×</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Reason</label>
+        <select class="form-control" id="reject-reason-select">
+          <option value="unlabeled_mislabeled">Unlabeled/mislabeled sample</option>
+          <option value="clotted">Clotted sample</option>
+          <option value="hemolyzed">Hemolyzed sample</option>
+          <option value="insufficient_volume">Insufficient volume</option>
+          <option value="wrong_tube">Wrong tube/container</option>
+          <option value="container_compromised">Leaking/broken/contaminated container</option>
+          <option value="past_stability_window">Past stability window</option>
+          <option value="no_matching_order">No matching valid order</option>
+        </select>
+      </div>
+      <p style="font-size:12.5px;color:var(--slate-light);margin-bottom:14px">Irreplaceable sample types (CSF, biopsy, bone marrow) are never hard-rejected — this will add a report caveat instead and the result will still proceed normally.</p>
+      <div class="err-msg" id="reject-sample-err"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-outline" style="flex:1;background:#fff" onclick="closeRejectSampleModal()">Cancel</button>
+        <button class="btn" style="flex:1;background:var(--danger);color:#fff" onclick="submitRejectSample()">Confirm Rejection</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-confirm-identity">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h2 style="margin:0">Confirm Patient Identity</h2>
+        <button class="modal-close" onclick="closeIdentityConfirmModal()">×</button>
+      </div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:10px">Confirm against at least two identifiers before drawing the sample.</p>
+      <div id="identity-confirm-body" style="background:var(--smoke-mid);border-radius:8px;padding:12px;margin-bottom:14px;font-size:14px"></div>
+      <div id="identity-fasting-question" style="display:none;margin-bottom:14px">
+        <label class="form-label">Was the patient fasting?</label>
+        <div style="display:flex;gap:10px;margin-top:4px">
+          <button class="btn btn-outline btn-sm" id="fasting-yes-btn" style="flex:1" onclick="setFastingAnswer(true)">Yes, fasting</button>
+          <button class="btn btn-outline btn-sm" id="fasting-no-btn" style="flex:1" onclick="setFastingAnswer(false)">No</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <input type="checkbox" id="identity-iv-line" style="width:auto" />
+        <label class="form-label" for="identity-iv-line" style="margin:0">Drawn from IV-line arm</label>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-outline" style="flex:1;background:#fff" onclick="closeIdentityConfirmModal()">Cancel</button>
+        <button class="btn btn-primary" style="flex:1" id="identity-confirm-btn" onclick="confirmIdentityAndCollect()">Confirmed — Collect Sample</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="modal-results-confirm">
     <div class="modal" style="max-width:600px;max-height:88vh;display:flex;flex-direction:column">
       <div class="modal-header">
@@ -621,7 +766,7 @@
       <div id="results-confirm-body" style="overflow-y:auto;flex:1;padding-right:4px"></div>
       <div style="display:flex;gap:12px;padding-top:12px;border-top:1px solid var(--border)">
         <button class="btn btn-outline" style="flex:1;background:#fff" onclick="editBulkResults()">Edit</button>
-        <button class="btn" style="flex:1;background:var(--success);color:#fff" id="btn-generate-report-confirm" onclick="confirmGenerateReport()">Generate Report</button>
+        <button class="btn" style="flex:1;background:var(--success);color:#fff" id="btn-generate-report-confirm" onclick="confirmGenerateReport()">Save Results</button>
       </div>
     </div>
   </div>
@@ -632,6 +777,7 @@
   <script>
     if (!requireAuth()) throw new Error("Not authenticated");
     if (getDoctor()?.role !== 'lab') window.location.href = 'login.html';
+    if (getDoctor()?.is_hiv_authorized) document.getElementById('hiv-results-link').style.display = '';
     fillTopbar();
 
     let labCurrentStatus = 'not_marked';
@@ -854,14 +1000,18 @@
       paid: "Awaiting Sample",
       sample_collected: "Sample Collected",
       processing: "Processing",
-      completed: "Completed"
+      result_entered: "Awaiting Verification",
+      verified_released: "Completed"
     };
     const STATUS_BADGE = {
       paid: "badge-amber",
       sample_collected: "badge-navy",
       processing: "badge-teal",
-      completed: "badge-green"
+      result_entered: "badge-amber",
+      verified_released: "badge-green"
     };
+
+    const PRIORITY_RANK = { stat: 0, urgent: 1, routine: 2 };
 
     function groupQueueByPatient(items) {
       const map = new Map();
@@ -882,7 +1032,15 @@
         }
         map.get(key).tests.push(o);
       });
-      return Array.from(map.values());
+      const groups = Array.from(map.values());
+      groups.forEach(g => {
+        g.topPriority = g.tests.reduce((top, t) => {
+          const r = PRIORITY_RANK[t.priority] ?? 2;
+          return r < top ? r : top;
+        }, 2);
+      });
+      groups.sort((a, b) => a.topPriority - b.topPriority);
+      return groups;
     }
 
     function renderQueue(items) {
@@ -893,17 +1051,28 @@
       }
       const groups = groupQueueByPatient(items);
       el.innerHTML = groups.map(g => {
-        const pendingCount = g.tests.filter(t => t.status !== 'completed').length;
+        const pendingCount = g.tests.filter(t => t.status !== 'verified_released').length;
         const summaryBadge = pendingCount === 0
           ? '<span class="badge badge-green">All completed</span>'
           : `<span class="badge badge-amber">${pendingCount} pending</span>`;
         const locationLine = g.is_admission
           ? `<div class="lq-sub" style="color:var(--danger);font-weight:600">In-Patient — collect at ${sanitize(g.ward || 'Ward')}, Bed ${sanitize(g.bed_number || '-')}</div>`
           : `<div class="lq-sub">Token #${sanitize(g.token_number)} · ${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>`;
+        const priorityBadge = g.topPriority === 0
+          ? '<span class="badge badge-red" style="margin-right:6px">STAT</span>'
+          : g.topPriority === 1
+            ? '<span class="badge badge-amber" style="margin-right:6px">Urgent</span>'
+            : '';
+        const overdueBadge = g.tests.some(t => t.is_overdue)
+          ? '<span class="badge badge-red" style="margin-right:6px">OVERDUE</span>'
+          : '';
+        const cardBorder = g.topPriority === 0 ? 'border-left:4px solid var(--danger)' : g.topPriority === 1 ? 'border-left:4px solid #f59e0b' : '';
         return `
-        <div class="lq-card" onclick="openPatientTestsModal('${g.key}')">
+        <div class="lq-card" style="${cardBorder}" onclick="openPatientTestsModal('${g.key}')">
           <div class="lq-card-head">
             <div class="lq-top">
+              ${priorityBadge}
+              ${overdueBadge}
               <strong class="lq-name">${sanitize(g.patient_name)}</strong>
               ${g.is_admission ? `<div class="lq-sub">${g.tests.length} test${g.tests.length > 1 ? 's' : ''}</div>` : ''}
               ${locationLine}
@@ -961,14 +1130,43 @@
           actionHtml = `<span style="font-size:12px;color:var(--slate-light);font-style:italic">Marked for later</span>`;
         } else if (o.status === 'paid') {
           actionHtml = `<button class="btn btn-outline btn-sm" onclick="deferTest(${o.id})">Mark for Later</button>`;
+        } else if (o.status === 'sample_collected' || o.status === 'processing') {
+          actionHtml = `<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="openRejectSampleModal(${o.id})">Reject Sample</button>`;
+        } else if (o.status === 'rejected') {
+          actionHtml = `<span class="badge badge-red">Rejected${o.rejection_reason ? ': ' + sanitize(o.rejection_reason) : ''}</span>`;
         } else {
           actionHtml = '';
         }
+        const testPriorityBadge = o.priority === 'stat'
+          ? '<span class="badge badge-red" style="margin-right:4px">STAT</span>'
+          : o.priority === 'urgent'
+            ? '<span class="badge badge-amber" style="margin-right:4px">Urgent</span>'
+            : '';
+        const indicationLine = o.clinical_indication
+          ? `<div style="font-size:12px;color:var(--slate);font-style:italic;margin-top:2px">Indication: ${sanitize(o.clinical_indication)}</div>`
+          : '';
+        const fastingLine = o.fasting_required
+          ? `<div style="font-size:12px;color:var(--danger);font-weight:600;margin-top:2px">⚠ Fasting sample required</div>`
+          : '';
+        const tubeLine = o.required_tube
+          ? `<div style="font-size:12px;color:var(--slate);margin-top:2px">Tube: ${sanitize(o.required_tube)}</div>`
+          : '';
+        const mlcLine = o.is_mlc_sample
+          ? `<div style="font-size:12px;margin-top:2px"><span class="badge badge-red">MLC</span> <a href="javascript:void(0)" onclick="openCustodyModal(${o.id})" style="color:var(--teal)">Custody Log</a></div>`
+          : `<div style="font-size:11px;margin-top:2px"><a href="javascript:void(0)" onclick="openMarkMlcModal(${o.id})" style="color:var(--slate-light)">Flag as MLC</a></div>`;
+        const accessionLine = o.accession_number
+          ? `<div style="font-size:11px;color:var(--slate-light);margin-top:2px">ULR: ${sanitize(o.accession_number)} · <a href="javascript:void(0)" onclick="openTatTraceModal(${o.id})" style="color:var(--teal)">Timeline</a></div>`
+          : `<div style="font-size:11px;margin-top:2px"><a href="javascript:void(0)" onclick="openTatTraceModal(${o.id})" style="color:var(--teal)">Timeline</a></div>`;
         return `
         <div class="lp-item">
           <div style="font-size:13px">
-            <strong>${sanitize(o.test_name)}</strong>
+            <strong>${testPriorityBadge}${sanitize(o.test_name)}</strong>
             ${subtestsLine}
+            ${indicationLine}
+            ${fastingLine}
+            ${tubeLine}
+            ${mlcLine}
+            ${accessionLine}
             <div style="margin-top:4px"><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}" id="lp-status-${o.id}">${STATUS_LABEL[o.status] || o.status}</span></div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
@@ -995,32 +1193,290 @@
       const btn = document.getElementById('patient-tests-top-action');
       const hasPaid = group.tests.some(t => t.status === 'paid' && !t._deferred);
       const hasProcessing = group.tests.some(t => t.status === 'processing');
-      const completedTests = group.tests.filter(t => t.status === 'completed');
+      const awaitingVerification = group.tests.filter(t => t.status === 'result_entered');
+      const releasedTests = group.tests.filter(t => t.status === 'verified_released');
       if (hasPaid) {
         btn.style.display = '';
         btn.textContent = 'Samples Collected';
-        btn.onclick = () => { if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; } bulkAdvanceFromModal(); };
+        btn.onclick = () => { if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; } openIdentityConfirmModal(); };
       } else if (hasProcessing) {
         btn.style.display = '';
         btn.textContent = 'Enter Test Results';
         btn.onclick = () => { if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; } openBulkResultsModal(); };
-      } else if (completedTests.length) {
+      } else if (awaitingVerification.length) {
+        btn.style.display = '';
+        btn.textContent = 'Verify & Release';
+        btn.onclick = () => { if (!isLabPresent()) { toast('Mark yourself Present first.', 'info'); return; } verifyAndReleaseTests(awaitingVerification.map(t => t.id)); };
+      } else if (releasedTests.length) {
         btn.style.display = '';
         btn.textContent = 'Download Report';
-        btn.onclick = () => downloadReport(completedTests.map(t => t.id));
+        btn.onclick = () => downloadReport(releasedTests.map(t => t.id));
       } else {
         btn.style.display = 'none';
       }
     }
 
-    async function bulkAdvanceFromModal() {
+    async function verifyAndReleaseTests(orderIds) {
+      const btn = document.getElementById('patient-tests-top-action');
+      btn.disabled = true;
+      try {
+        for (const id of orderIds) {
+          const order = labQueueData.find(o => o.id === id);
+          const detail = order && order.test_id != null ? testDetailCache[order.test_id] : null;
+          let isNotifiable = false;
+          if (detail && detail.notifiable_disease_id) {
+            isNotifiable = confirm("This test is linked to an IDSP notifiable disease. Is this a confirmed notifiable finding?");
+          }
+          await api("POST", `/lab/orders/${id}/verify`, { is_idsp_notifiable: isNotifiable });
+          if (order) order.status = 'verified_released';
+        }
+        toast('Verified and released', 'success');
+        renderQueue(labQueueData);
+        refreshOpenPatientModal();
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    let _fastingAnswer = null;
+
+    function openIdspReportModal() {
+      document.getElementById('modal-idsp-report').classList.add('open');
+      loadIdspReport();
+    }
+
+    function closeIdspReportModal() {
+      document.getElementById('modal-idsp-report').classList.remove('open');
+    }
+
+    async function loadIdspReport() {
+      const body = document.getElementById('idsp-report-body');
+      body.innerHTML = '<p>Loading…</p>';
+      const start = document.getElementById('idsp-start-date').value;
+      const end = document.getElementById('idsp-end-date').value;
+      try {
+        const params = new URLSearchParams();
+        if (start) params.set('start_date', start);
+        if (end) params.set('end_date', end);
+        const rows = await api("GET", `/lab/idsp-notifiable-report?${params.toString()}`);
+        if (!rows.length) { body.innerHTML = '<p style="color:var(--slate-light)">No flagged results in this range.</p>'; return; }
+        body.innerHTML = rows.map(r => `
+          <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+            <strong>${sanitize(r.patient_name)}</strong> ${r.patient_uid ? `<span class="badge badge-navy">${sanitize(r.patient_uid)}</span>` : ''}
+            <div style="font-size:12px;color:var(--slate)">${sanitize(r.test_name)} — ${sanitize(r.disease || 'Unspecified')}</div>
+            <div style="font-size:11px;color:var(--slate-light)">${r.accession_number ? 'ULR: ' + sanitize(r.accession_number) + ' · ' : ''}${r.verified_at ? new Date(r.verified_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
+          </div>`).join('');
+      } catch (e) {
+        body.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    let _mlcOrderId = null;
+
+    function openMarkMlcModal(orderId) {
+      _mlcOrderId = orderId;
+      document.getElementById('mlc-case-type').selectedIndex = 0;
+      document.getElementById('mlc-reference').value = '';
+      document.getElementById('mlc-seal-number').value = '';
+      document.getElementById('mark-mlc-err').textContent = '';
+      document.getElementById('modal-mark-mlc').classList.add('open');
+    }
+
+    function closeMarkMlcModal() {
+      document.getElementById('modal-mark-mlc').classList.remove('open');
+    }
+
+    async function submitMarkMlc() {
+      try {
+        await api("POST", `/mlc-custody/${_mlcOrderId}/mark`, {
+          case_type: document.getElementById('mlc-case-type').value,
+          reference_number: document.getElementById('mlc-reference').value.trim() || null,
+          seal_number: document.getElementById('mlc-seal-number').value.trim() || null,
+        });
+        closeMarkMlcModal();
+        toast('Sample flagged as MLC — chain of custody started', 'success');
+        await loadQueue();
+        refreshOpenPatientModal();
+      } catch (e) {
+        document.getElementById('mark-mlc-err').textContent = e.message;
+      }
+    }
+
+    let _custodyOrderId = null;
+
+    async function openCustodyModal(orderId) {
+      _custodyOrderId = orderId;
+      document.getElementById('custody-log-err').textContent = '';
+      document.getElementById('modal-custody-log').classList.add('open');
+      await refreshCustodyChain();
+    }
+
+    function closeCustodyModal() {
+      document.getElementById('modal-custody-log').classList.remove('open');
+    }
+
+    async function refreshCustodyChain() {
+      const body = document.getElementById('custody-chain-body');
+      body.innerHTML = '<p>Loading…</p>';
+      try {
+        const data = await api("GET", `/mlc-custody/${_custodyOrderId}`);
+        body.innerHTML = `
+          <p style="margin-bottom:8px"><strong>${sanitize(data.case_type || '')}</strong>${data.reference_number ? ' · Ref: ' + sanitize(data.reference_number) : ''}</p>
+        ` + data.chain.map(e => `
+          <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between">
+              <strong>${sanitize(e.stage.replace(/_/g, ' '))}</strong>
+              <span class="badge ${e.seal_intact === false ? 'badge-red' : 'badge-green'}">${e.seal_intact === false ? 'Seal Broken' : e.seal_intact === true ? 'Seal Intact' : 'N/A'}</span>
+            </div>
+            <div style="font-size:12px;color:var(--slate)">
+              ${e.handed_over_by ? 'From: ' + sanitize(e.handed_over_by) + ' · ' : ''}${e.received_by ? 'To: ' + sanitize(e.received_by) : ''}
+            </div>
+            ${e.seal_number ? `<div style="font-size:12px;color:var(--slate-light)">Seal #: ${sanitize(e.seal_number)}</div>` : ''}
+            ${e.notes ? `<div style="font-size:12px;color:var(--slate-light);font-style:italic">${sanitize(e.notes)}</div>` : ''}
+            <div style="font-size:11px;color:var(--slate-light)">Logged by ${sanitize(e.recorded_by || 'System')} — ${e.recorded_at ? new Date(e.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</div>
+          </div>`).join('');
+      } catch (e) {
+        body.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    async function submitCustodyHandoff() {
+      const err = document.getElementById('custody-log-err');
+      try {
+        await api("POST", `/mlc-custody/${_custodyOrderId}/handoff`, {
+          stage: document.getElementById('custody-stage').value,
+          handed_over_by_external_name: document.getElementById('custody-handed-external').value.trim() || null,
+          received_by_external_name: document.getElementById('custody-received-external').value.trim() || null,
+          seal_intact: document.getElementById('custody-seal-intact').value === 'true',
+          seal_number: document.getElementById('custody-seal-number').value.trim() || null,
+          notes: document.getElementById('custody-notes').value.trim() || null,
+        });
+        document.getElementById('custody-handed-external').value = '';
+        document.getElementById('custody-received-external').value = '';
+        document.getElementById('custody-seal-number').value = '';
+        document.getElementById('custody-notes').value = '';
+        toast('Handoff logged', 'success');
+        await refreshCustodyChain();
+      } catch (e) {
+        err.textContent = e.message;
+      }
+    }
+
+    function closeTatTraceModal() {
+      document.getElementById('modal-tat-trace').classList.remove('open');
+    }
+
+    async function openTatTraceModal(orderId) {
+      document.getElementById('tat-trace-body').innerHTML = '<p>Loading…</p>';
+      document.getElementById('modal-tat-trace').classList.add('open');
+      try {
+        const data = await api("GET", `/lab/orders/${orderId}/tat-trace`);
+        const tierLabel = { routine: 'Routine (24hr)', urgent: 'Urgent (4hr)', stat: 'STAT (1hr)' };
+        const summary = `
+          <div style="padding-bottom:10px;margin-bottom:10px;border-bottom:2px solid var(--border)">
+            <div>Target: <strong>${tierLabel[data.priority] || data.priority}</strong></div>
+            ${data.actual_tat_hours != null ? `<div>Actual TAT: <strong>${data.actual_tat_hours} hrs</strong> (from accessioning)</div>` : ''}
+            ${data.is_overdue ? `<div style="color:var(--danger);font-weight:600;margin-top:4px">⚠ Overdue against target TAT</div>` : ''}
+          </div>`;
+        document.getElementById('tat-trace-body').innerHTML = summary + data.stages.map(s => `
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div>${s.label}</div>
+              ${s.minutes_since_previous_stage != null ? `<div style="font-size:11px;color:var(--slate-light)">+${s.minutes_since_previous_stage} min</div>` : ''}
+            </div>
+            <div style="text-align:right;color:${s.timestamp ? 'var(--slate)' : 'var(--slate-light)'}">
+              ${s.timestamp ? new Date(s.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Pending'}
+            </div>
+          </div>`).join('');
+      } catch (e) {
+        document.getElementById('tat-trace-body').innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    let _rejectOrderId = null;
+
+    function openRejectSampleModal(orderId) {
+      _rejectOrderId = orderId;
+      document.getElementById('reject-reason-select').selectedIndex = 0;
+      document.getElementById('reject-sample-err').textContent = '';
+      document.getElementById('modal-reject-sample').classList.add('open');
+    }
+
+    function closeRejectSampleModal() {
+      document.getElementById('modal-reject-sample').classList.remove('open');
+    }
+
+    async function submitRejectSample() {
+      const reason = document.getElementById('reject-reason-select').value;
+      try {
+        const res = await api("POST", `/lab/orders/${_rejectOrderId}/reject`, { reason });
+        closeRejectSampleModal();
+        toast(res.caveat ? `Caveat added: ${res.caveat}` : 'Sample rejected — redraw queued', 'success');
+        await loadQueue();
+        refreshOpenPatientModal();
+      } catch (e) {
+        document.getElementById('reject-sample-err').textContent = e.message;
+      }
+    }
+
+    function openIdentityConfirmModal() {
+      const group = groupQueueByPatient(labQueueData).find(g => g.key === currentPatientKey);
+      if (!group) return;
+      const identifiers = [
+        `<div><strong>Name:</strong> ${sanitize(group.patient_name)}</div>`,
+        group.patient_uid ? `<div><strong>UID:</strong> ${sanitize(group.patient_uid)}</div>` : '',
+        group.is_admission
+          ? `<div><strong>Bed:</strong> ${sanitize(group.ward || 'Ward')}, Bed ${sanitize(group.bed_number || '-')}</div>`
+          : `<div><strong>Token:</strong> #${sanitize(group.token_number)}</div>`,
+      ].filter(Boolean).join('');
+      document.getElementById('identity-confirm-body').innerHTML = identifiers;
+
+      _fastingAnswer = null;
+      const needsFasting = group.tests.some(t => t.status === 'paid' && !t._deferred && t.fasting_required);
+      document.getElementById('identity-fasting-question').style.display = needsFasting ? '' : 'none';
+      document.getElementById('fasting-yes-btn').classList.remove('btn-primary');
+      document.getElementById('fasting-no-btn').classList.remove('btn-primary');
+      document.getElementById('identity-confirm-btn').disabled = needsFasting;
+      document.getElementById('identity-iv-line').checked = false;
+
+      document.getElementById('modal-confirm-identity').classList.add('open');
+    }
+
+    function setFastingAnswer(isFasting) {
+      _fastingAnswer = isFasting;
+      document.getElementById('fasting-yes-btn').classList.toggle('btn-primary', isFasting);
+      document.getElementById('fasting-no-btn').classList.toggle('btn-primary', !isFasting);
+      document.getElementById('identity-confirm-btn').disabled = false;
+    }
+
+    function closeIdentityConfirmModal() {
+      document.getElementById('modal-confirm-identity').classList.remove('open');
+    }
+
+    function confirmIdentityAndCollect() {
+      const fastingAnswer = _fastingAnswer;
+      const ivLine = document.getElementById('identity-iv-line').checked;
+      closeIdentityConfirmModal();
+      bulkAdvanceFromModal(fastingAnswer, ivLine);
+    }
+
+    async function bulkAdvanceFromModal(fastingAnswer, ivLine) {
       const group = groupQueueByPatient(labQueueData).find(g => g.key === currentPatientKey);
       if (!group) return;
       const toAdvance = group.tests.filter(t => t.status === 'paid' && !t._deferred);
       if (!toAdvance.length) return;
       try {
         for (const t of toAdvance) {
-          await api("PATCH", `/lab/orders/${t.id}/status`, { status: 'sample_collected' });
+          const collectBody = { status: 'sample_collected' };
+          if (t.fasting_required && fastingAnswer !== null && fastingAnswer !== undefined) {
+            collectBody.fasting_confirmed = fastingAnswer;
+          }
+          if (ivLine) {
+            collectBody.drawn_from_iv_line = true;
+          }
+          await api("PATCH", `/lab/orders/${t.id}/status`, collectBody);
           await api("PATCH", `/lab/orders/${t.id}/status`, { status: 'processing' });
           const order = labQueueData.find(o => o.id === t.id);
           if (order) order.status = 'processing';
@@ -1160,7 +1616,6 @@
 
     async function confirmGenerateReport() {
       const btn = document.getElementById('btn-generate-report-confirm');
-      const reportWindow = window.open('', '_blank');
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
 
@@ -1168,23 +1623,21 @@
         const payloads = bulkResultsDraft.payloads;
         for (const p of payloads) {
           await api("POST", `/lab/orders/${p.orderId}/result`, { results: p.results });
-          await api("PATCH", `/lab/orders/${p.orderId}/status`, { status: 'completed' });
+          await api("PATCH", `/lab/orders/${p.orderId}/status`, { status: 'result_entered' });
           const order = labQueueData.find(o => o.id === p.orderId);
-          if (order) order.status = 'completed';
+          if (order) order.status = 'result_entered';
         }
         renderQueue(labQueueData);
-        toast('Results saved — generating report…', 'success');
+        toast('Results saved — awaiting independent verification before release', 'success');
         document.getElementById('modal-results-confirm').classList.remove('open');
         closeBulkResultsModal();
         refreshOpenPatientModal();
-        await downloadCombinedReport(payloads.map(p => p.orderId), reportWindow);
         bulkResultsDraft = null;
       } catch (e) {
-        if (reportWindow) reportWindow.close();
         toast(e.message, 'error');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Generate Report';
+        btn.textContent = 'Save Results';
       }
     }
 

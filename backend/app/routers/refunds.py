@@ -5,8 +5,12 @@ from app.database import get_db
 from app.models.doctor import Doctor
 from app.models.patient import Patient
 from app.models.refund import Refund
+from app.models.invoice import Invoice
+from app.models.hospital import Hospital
+from app.models.credit_debit_note import CreditDebitNote
 from app.schemas.billing import RefundIn
 from app.utils.auth import get_current_doctor
+from app.utils.receipts import next_note_number
 
 router = APIRouter(prefix="/refunds", tags=["refunds"])
 
@@ -33,6 +37,16 @@ def create_refund(body: RefundIn, db: Session = Depends(get_db), current_doctor:
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
+    invoice = None
+    if body.invoice_id:
+        invoice = db.query(Invoice).filter(
+            Invoice.id == body.invoice_id,
+            Invoice.hospital_id == current_doctor.hospital_id,
+            Invoice.patient_id == body.patient_id
+        ).first()
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found for this patient")
+
     refund = Refund(
         patient_id=body.patient_id, hospital_id=current_doctor.hospital_id,
         source_type=body.source_type, source_id=body.source_id, amount=body.amount,
@@ -42,7 +56,31 @@ def create_refund(body: RefundIn, db: Session = Depends(get_db), current_doctor:
     db.add(refund)
     db.commit()
     db.refresh(refund)
-    return {"message": "Refund recorded", "id": refund.id, "status": refund.status}
+
+    # A refund against a real invoice is a GST-relevant correction — it
+    # can't just be a cash-transaction log entry, it needs its own
+    # supplementary document referencing the original invoice.
+    credit_note_number = None
+    if invoice:
+        hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+        note = CreditDebitNote(
+            hospital_id=current_doctor.hospital_id,
+            invoice_id=invoice.id,
+            patient_id=invoice.patient_id,
+            note_type="credit",
+            note_number=next_note_number(db, hospital, "credit"),
+            invoice_number=invoice.receipt_number,
+            invoice_date=invoice.generated_at,
+            amount=body.amount,
+            reason=body.reason or "Refund issued",
+            refund_id=refund.id,
+            created_by=current_doctor.id,
+        )
+        db.add(note)
+        db.commit()
+        credit_note_number = note.note_number
+
+    return {"message": "Refund recorded", "id": refund.id, "status": refund.status, "credit_note_number": credit_note_number}
 
 
 @router.get("/patient/{patient_id}")

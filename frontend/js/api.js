@@ -121,6 +121,23 @@ async function api(method, path, body = null, isFormData = false, silent = false
   }
 }
 
+// Global error boundary — catches uncaught JS errors and unhandled promise
+// rejections that would otherwise leave the page silently blank (the root
+// cause of the earlier dashboard.html incident). Shows a persistent,
+// visible fallback instead of nothing. Included on every page via api.js,
+// so this is a single change point rather than 24 separate ones.
+let _errorBoundaryShown = false;
+function _showErrorBoundary() {
+  if (_errorBoundaryShown) return;
+  _errorBoundaryShown = true;
+  const el = document.createElement("div");
+  el.id = "error-boundary";
+  el.innerHTML = `<span>Something went wrong loading this page.</span><button onclick="location.reload()">Refresh</button>`;
+  document.body.appendChild(el);
+}
+window.onerror = function () { _showErrorBoundary(); };
+window.addEventListener("unhandledrejection", _showErrorBoundary);
+
 // Toast notification
 function toast(msg, type = "info") {
   let el = document.getElementById("toast");

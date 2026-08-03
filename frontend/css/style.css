@@ -648,6 +648,35 @@ tbody tr:hover { background: var(--smoke); }
 #toast.error   { background: var(--danger); }
 #toast.info    { background: var(--navy-mid); }
 
+#error-boundary {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10000;
+  background: var(--danger);
+  color: var(--white);
+  padding: 14px 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  box-shadow: var(--shadow-lg);
+}
+#error-boundary button {
+  background: var(--white);
+  color: var(--danger);
+  border: none;
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+#toast.warning { background: #b45309; }
+
 /* ── Modal ── */
 .modal-overlay {
   position: fixed;

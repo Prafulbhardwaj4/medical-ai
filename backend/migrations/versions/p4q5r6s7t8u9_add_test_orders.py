@@ -6,6 +6,13 @@ revision = 'p4q5r6s7t8u9'
 down_revision = 'o3p4q5r6s7t8'
 
 def upgrade():
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    if 'test_orders' in insp.get_table_names():
+        # Already created by one of the test_order_* column-add migrations
+        # on a sibling branch that ran first (see clinical_indication /
+        # priority migrations) — nothing to do.
+        return
     op.create_table(
         'test_orders',
         sa.Column('id', sa.Integer(), primary_key=True, index=True),

@@ -222,22 +222,6 @@
     </main>
   </div>
 
-  <div class="modal-overlay" id="modal-vitals">
-    <div class="modal" style="max-width:520px">
-      <div class="modal-header">
-        <h2>Record Vitals</h2>
-        <button class="modal-close" onclick="closeVitalsModal()">×</button>
-      </div>
-      <p style="color:var(--slate);font-size:13px;margin-bottom:16px" id="vitals-modal-sub"></p>
-      <div id="vitals-fields"></div>
-      <button class="btn btn-outline btn-sm" style="margin:10px 0 20px" onclick="addVitalsField()">+ Add Field</button>
-      <div style="display:flex;gap:10px;justify-content:flex-end">
-        <button class="btn btn-outline" onclick="closeVitalsModal()">Cancel</button>
-        <button class="btn btn-primary" id="btn-save-vitals" onclick="saveVitals()">Save Vitals</button>
-      </div>
-    </div>
-  </div>
-
   <div class="modal-overlay" id="modal-postconsult">
     <div class="modal" style="max-width:480px">
       <div class="modal-header">
@@ -296,83 +280,8 @@
       });
     }
 
-    const STANDARD_VITALS = ["Blood Pressure", "Pulse", "Temperature", "SpO2", "Respiratory Rate", "Weight", "Height", "Blood Sugar (GRBS)"];
-    let activeCheckinId = null;
     let activePostConsultId = null;
     let activePostConsultPatientId = null;
-
-    const VITALS_RULES = {
-      "Blood Pressure": { type: "bp", unit: "mmHg" },
-      "Pulse": { type: "number", min: 30, max: 220, unit: "bpm" },
-      "Temperature": { type: "number", min: 90, max: 110, unit: "°F" },
-      "SpO2": { type: "number", min: 50, max: 100, unit: "%" },
-      "Respiratory Rate": { type: "number", min: 8, max: 60, unit: "/min" },
-      "Weight": { type: "number", min: 1, max: 300, unit: "kg" },
-      "Height": { type: "number", min: 30, max: 250, unit: "cm" },
-      "Blood Sugar (GRBS)": { type: "number", min: 20, max: 600, unit: "mg/dL" }
-    };
-
-    function validateVitalInput(input) {
-      const row = input.closest('[data-row]');
-      const warnEl = row.querySelector('[data-warn]');
-      const ruleStr = input.getAttribute('data-rule');
-      if (!ruleStr || !warnEl) return;
-      const rule = JSON.parse(ruleStr.replace(/&#39;/g, "'"));
-      const val = input.value.trim();
-      if (!val) { warnEl.style.display = 'none'; input.style.borderColor = ''; return; }
-
-      let msg = '';
-      if (rule.type === 'bp') {
-        if (!/^\d{2,3}\/\d{2,3}$/.test(val)) {
-          msg = 'Enter as systolic/diastolic, numbers only — e.g. 120/80';
-        } else {
-          const [sys, dia] = val.split('/').map(Number);
-          if (sys < 60 || sys > 260 || dia < 30 || dia > 160) msg = 'Outside the usual range — please double-check';
-        }
-      } else if (rule.type === 'number') {
-        if (!/^\d+(\.\d+)?$/.test(val)) {
-          msg = 'Numbers only';
-        } else {
-          const n = parseFloat(val);
-          if (n < rule.min || n > rule.max) msg = `Outside the usual ${rule.min}–${rule.max} ${rule.unit} range — please double-check`;
-        }
-      }
-      warnEl.textContent = msg;
-      warnEl.style.display = msg ? 'block' : 'none';
-      input.style.borderColor = msg ? 'var(--danger)' : '';
-    }
-
-    function fieldRow(label, value, locked, rule) {
-      const ruleAttr = rule ? ` data-rule='${JSON.stringify(rule).replace(/'/g, "&#39;")}'` : '';
-      const unitHtml = `<span style="font-size:12px;color:var(--slate);white-space:nowrap;align-self:center;width:44px;flex:0 0 44px">${rule && rule.unit ? rule.unit : ''}</span>`;
-      return `
-        <div style="margin-bottom:8px" data-row>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-control" placeholder="Field" value="${(label || '').replace(/"/g, '&quot;')}" style="flex:1;min-width:0${locked ? ';background:var(--smoke,#f5f5f5);color:var(--navy);font-weight:600' : ''}" data-label ${locked ? 'readonly' : ''} />
-            <input class="form-control" placeholder="Value" value="${(value || '').replace(/"/g, '&quot;')}" style="flex:1;min-width:0" data-value${ruleAttr} oninput="validateVitalInput(this)" />
-            ${unitHtml}
-          </div>
-          <div style="font-size:12px;color:var(--danger);margin-top:2px;display:none" data-warn></div>
-        </div>`;
-    }
-
-    function addVitalsField() {
-      document.getElementById('vitals-fields').insertAdjacentHTML('beforeend', fieldRow('', ''));
-    }
-
-    function collectFields(containerId) {
-      const data = {};
-      document.querySelectorAll(`#${containerId} [data-row]`).forEach(row => {
-        const label = row.querySelector('[data-label]').value.trim();
-        let value = row.querySelector('[data-value]').value.trim();
-        if (label && value) {
-          const unit = VITALS_RULES[label]?.unit;
-          if (unit && !value.includes(unit)) value = `${value} ${unit}`;
-          data[label] = value;
-        }
-      });
-      return data;
-    }
 
     let nurseHistoryData = [];
     let nurseHistorySearch = '';
@@ -411,13 +320,38 @@
               <div class="ns-row-sub">${Object.entries(h.data).map(([k,v]) => `${k}: ${v}`).join(' · ')}</div>
             </div>
             ${h.type === 'vitals'
-              ? `<button class="btn btn-outline btn-sm" onclick='openVitalsModal(${h.checkin_id}, ${JSON.stringify(h.patient_name)}, ${JSON.stringify(h.data)})'>Edit</button>`
+              ? ''
               : `<button class="btn btn-outline btn-sm" onclick='openPostConsultModal(${h.checkin_id}, "", ${JSON.stringify(h.data)})'>Edit</button>`}
           </div>
         `).join('') : `<p style="color:var(--slate-light);padding:12px 0">${q ? 'No matching records.' : 'Nothing recorded yet today.'}</p>`;
     }
 
+    let doctorStatusMap = {};
+
+    async function loadDoctorStatuses() {
+      try {
+        const doctors = await api("GET", "/patients/hospital-doctors");
+        doctorStatusMap = {};
+        doctors.forEach(d => {
+          doctorStatusMap[d.id] = { status: d.attendance_status, location: d.doctor_location };
+        });
+      } catch (e) { /* status badges are a nice-to-have, don't block the queue on this */ }
+    }
+
+    function doctorStatusBadge(doctorId) {
+      const info = doctorStatusMap[doctorId];
+      if (!info) return '';
+      let label, cls;
+      if (info.status === 'present') { label = info.location === 'on_rounds' ? 'On Rounds' : 'In Cabin'; cls = 'badge-green'; }
+      else if (info.status === 'on_break') { label = 'On Break'; cls = 'badge-amber'; }
+      else if (info.status === 'off_duty') { label = 'Off Duty'; cls = 'badge-red'; }
+      else if (info.status === 'away_emergency') { label = 'Away — Emergency'; cls = 'badge-red'; }
+      else return '';
+      return `<span class="badge ${cls}" style="margin-left:6px">${label}</span>`;
+    }
+
     async function loadQueues() {
+      await loadDoctorStatuses();
       try {
         const vitals = await api("GET", "/nurses/vitals-queue");
         document.getElementById('vitals-list').innerHTML = vitals.length ? vitals.map(v => `
@@ -425,9 +359,9 @@
             <div>
               <strong>${v.patient_name}</strong>
               <span class="badge badge-navy" style="margin-left:8px">${v.patient_uid}</span>
-              <div class="ns-row-sub">Token ${v.token_number} · ${v.issue_category} · For ${v.doctor_name}</div>
+              <div class="ns-row-sub">Token ${v.token_number} · ${v.issue_category} · For ${v.doctor_name}${doctorStatusBadge(v.doctor_id)}</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openVitalsModal(${v.checkin_id}, ${JSON.stringify(v.patient_name)})'>Record Vitals</button>
+            <span class="badge ${v.is_recheck ? 'badge-amber' : 'badge-grey'}">${v.is_recheck ? 'Sent Back for More Vitals' : 'Vitals Pending'}</span>
           </div>
         `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No patients waiting for vitals.</p>';
       } catch (e) { toast(e.message, "error"); }
@@ -439,53 +373,13 @@
             <div>
               <strong>${t.patient_name}</strong>
               <span class="badge badge-navy" style="margin-left:8px">${t.patient_uid}</span>
-              <div class="ns-row-sub">Token ${t.token_number} · From ${t.doctor_name}</div>
+              <div class="ns-row-sub">Token ${t.token_number} · From ${t.doctor_name}${doctorStatusBadge(t.doctor_id)}</div>
               <div class="ns-row-note">${t.note || ''}</div>
             </div>
             <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openPostConsultModal(${t.checkin_id}, ${JSON.stringify(t.note || "")}, null, ${t.patient_id})'>Mark Done</button>
           </div>
         `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No pending tasks.</p>';
       } catch (e) { toast(e.message, "error"); }
-    }
-
-    function openVitalsModal(checkinId, patientName, existingData) {
-      activeCheckinId = checkinId;
-      document.getElementById('vitals-modal-sub').textContent = patientName;
-      const data = existingData || {};
-      const usedLabels = new Set();
-      const rows = STANDARD_VITALS.map(label => {
-        usedLabels.add(label);
-        return fieldRow(label, data[label] || '', true, VITALS_RULES[label]);
-      });
-      Object.keys(data).forEach(label => {
-        if (!usedLabels.has(label)) rows.push(fieldRow(label, data[label]));
-      });
-      document.getElementById('vitals-fields').innerHTML = rows.join('');
-      document.getElementById('modal-vitals').classList.add('open');
-    }
-    function closeVitalsModal() {
-      document.getElementById('modal-vitals').classList.remove('open');
-      activeCheckinId = null;
-    }
-
-    async function saveVitals() {
-      const data = collectFields('vitals-fields');
-      if (!Object.keys(data).length) { toast('Enter at least one vitals value.', 'error'); return; }
-      const btn = document.getElementById('btn-save-vitals');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span>';
-      try {
-        await api("POST", `/nurses/vitals/${activeCheckinId}`, { data });
-        toast('Vitals recorded.', 'success');
-        closeVitalsModal();
-        loadQueues();
-        loadHistory();
-      } catch (e) {
-        toast(e.message, 'error');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = 'Save Vitals';
-      }
     }
 
     function openPostConsultModal(checkinId, note, existingData, patientId) {

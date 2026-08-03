@@ -16,6 +16,7 @@ from app.routers import attendance as attendance_router
 from app.routers import medicines as medicines_router
 from app.routers import tests as tests_router
 from app.routers import lab as lab_router
+from app.routers import mlc_custody as mlc_custody_router
 from app.routers import pharmacy as pharmacy_router
 from app.routers import billing as billing_router
 from app.routers import notifications as notifications_router
@@ -92,6 +93,7 @@ app.include_router(attendance_router.router)
 app.include_router(medicines_router.router)
 app.include_router(tests_router.router)
 app.include_router(lab_router.router)
+app.include_router(mlc_custody_router.router)
 app.include_router(pharmacy_router.router)
 app.include_router(billing_router.router)
 app.include_router(notifications_router.router)

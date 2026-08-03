@@ -321,6 +321,8 @@
           </div>
           <div id="test-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
           <div id="test-total-fee" style="margin-top:10px;font-size:14px;font-weight:600;display:none"></div>
+          <input class="form-control" id="test-clinical-indication" placeholder="Clinical indication / provisional diagnosis (e.g. suspected DKA) — optional"
+            style="margin-top:12px" />
         </div>
 
         <div class="section-block">
@@ -366,6 +368,7 @@
             <!-- <button class="btn btn-outline btn-lg" onclick="copyPdfLink()">🔗 Copy PDF Link</button> -->
             <button class="btn btn-outline btn-lg" onclick="viewPdf()">📄 View PDF</button>
             <button class="btn btn-outline btn-lg" onclick="openReferModal()">↗ Refer to Doctor</button>
+            <button class="btn btn-outline btn-lg" onclick="admitPatient()">🛏️ Admit Patient</button>
             <button class="btn btn-navy btn-lg" onclick="goBack()">✓ Done — Back to Patient</button>
           </div>
           <div id="wa-result"></div>
@@ -418,6 +421,18 @@
     const patientToken = location.search.slice(1);
     if (!patientToken) window.location.href = "/pages/dashboard.html";
     let patientId = null;
+
+    async function admitPatient() {
+      if (!patientId) { toast("No patient context available.", "error"); return; }
+      try {
+        await api("POST", "/admissions/referrals", {
+          patient_id: patientId,
+          reason: document.getElementById("f-diagnosis").value.trim() || null,
+        });
+        toast("Sent for admission — opening the admission form...", "success");
+        setTimeout(() => { location.href = `admissions.html?admit_patient_id=${patientId}`; }, 500);
+      } catch (e) { toast(e.message, "error"); }
+    }
 
     document.getElementById("sidebar-patient-link").href = `patient.html?${patientToken}`;
     document.getElementById("mobile-back-link").href = `patient.html?${patientToken}`;
@@ -894,7 +909,10 @@
         }
 
         const checkedTestIds = selectedTests.map(t => t.id);
-        const data = await api("POST", `/consultations/confirm/${consultationId}`, { recommended_test_ids: checkedTestIds });
+        const testPriorities = {};
+        selectedTests.forEach(t => { testPriorities[t.id] = t.priority || 'routine'; });
+        const clinicalIndication = document.getElementById('test-clinical-indication').value.trim();
+        const data = await api("POST", `/consultations/confirm/${consultationId}`, { recommended_test_ids: checkedTestIds, test_priorities: testPriorities, clinical_indication: clinicalIndication || null });
         window._tokenNumber = data.token_number;
         window._verifyHash = data.verify_hash;
         document.getElementById("token-display").textContent = window._tokenNumber;
@@ -1073,7 +1091,7 @@
     function selectTest(id) {
       const test = hospitalTests.find(t => t.id === id);
       if (!test || selectedTests.some(t => t.id === id)) return;
-      selectedTests.push(test);
+      selectedTests.push({ ...test, priority: 'routine' });
       document.getElementById('test-catalog-search').value = '';
       document.getElementById('test-suggestions').style.display = 'none';
       renderTestChips();
@@ -1084,11 +1102,21 @@
       renderTestChips();
     }
 
+    function setTestPriority(id, priority) {
+      const t = selectedTests.find(t => t.id === id);
+      if (t) t.priority = priority;
+    }
+
     function renderTestChips() {
       const chipsEl = document.getElementById('test-chips');
       chipsEl.innerHTML = selectedTests.map(t => `
         <span class="badge badge-teal" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
           ${t.test_name} — Rs.${t.price}
+          <select class="form-control" style="width:auto;padding:2px 4px;font-size:12px" onchange="setTestPriority(${t.id}, this.value)">
+            <option value="routine" ${t.priority === 'routine' ? 'selected' : ''}>Routine</option>
+            <option value="urgent" ${t.priority === 'urgent' ? 'selected' : ''}>Urgent</option>
+            <option value="stat" ${t.priority === 'stat' ? 'selected' : ''}>STAT</option>
+          </select>
           <span onclick="removeTest(${t.id})" style="cursor:pointer;font-weight:700">×</span>
         </span>
       `).join('');

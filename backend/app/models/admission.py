@@ -20,6 +20,30 @@ class Admission(Base):
     diagnosis = Column(Text, nullable=True)
 
     daily_room_charge = Column(Float, nullable=False, default=0)
+    professional_fee_override = Column(Float, nullable=True)  # negotiated per-admission override of the admitting doctor's default professional_fee_per_admission; null = use the doctor's default
+    admission_type = Column(String, nullable=False, default="planned")  # "planned" | "emergency" | "maternity" | "transfer_in" | "day_care" — day_care skips overnight bed-night billing entirely (see _room_charge_breakdown / _build_discharge_bill)
+    discharge_type = Column(String, nullable=False, default="planned")  # "planned" | "lama_dama" | "death"
+    capacity_evaluation_note = Column(Text, nullable=True)  # LAMA/DAMA only — used if there's any question of impaired decision-making behind the choice
+    time_of_death = Column(DateTime, nullable=True)  # death discharge only
+    certifying_doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # death discharge only
+    cause_of_death = Column(Text, nullable=True)  # death discharge only
+    is_mlc = Column(Boolean, nullable=True)  # death discharge only — Medico-Legal Case flag: whether police/forensic involvement is required before body release
+
+    # Structured discharge summary (NABH-standard fields). admission_date,
+    # discharge_date, diagnosis (= admitting diagnosis), and
+    # admitting_doctor_id already exist above and aren't duplicated here.
+    # discharge_summary above is repurposed as the free-text "additional
+    # notes" field alongside these — not every field NABH lists fits neatly
+    # into a box, so that catch-all stays.
+    discharge_order_at = Column(DateTime, nullable=True)  # when a doctor clinically decided/ordered discharge — distinct from discharge_date below, which is when the patient actually leaves (billing finalized). The gap between these two is the discharge-delay metric.
+    discharge_ordered_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    discharging_doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # defaults to admitting_doctor_id if not explicitly set at discharge
+    course_in_hospital = Column(Text, nullable=True)
+    procedures_performed = Column(Text, nullable=True)
+    discharge_diagnosis = Column(Text, nullable=True)
+    condition_at_discharge = Column(Text, nullable=True)
+    medications_on_discharge = Column(Text, nullable=True)
+    follow_up_instructions = Column(Text, nullable=True)
     status = Column(String, nullable=False, default="admitted")  # "admitted" | "discharged"
 
     admission_date = Column(DateTime, default=now_ist_naive, nullable=False)
@@ -83,7 +107,8 @@ class AdmissionMedicationReturn(Base):
     admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)
     order_id = Column(Integer, ForeignKey("admission_medication_orders.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
-    restocked = Column(Boolean, default=False, nullable=False)
+    restocked = Column(Boolean, default=False, nullable=False)  # deprecated — no longer drives a stock increment, see disposition
+    disposition = Column(String, nullable=True)  # "returned_to_supplier" | "sent_to_disposal" — nullable only for pre-existing rows, required going forward
     note = Column(Text, nullable=True)
     credit_charge_id = Column(Integer, ForeignKey("admission_charges.id"), nullable=True)
     returned_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)

@@ -96,7 +96,9 @@ def upgrade():
         # Table exists from a partial earlier deploy — make sure the newer columns are there.
         existing_cols = {c['name'] for c in insp.get_columns('portal_appointments')}
         if 'slot_id' not in existing_cols:
-            op.add_column('portal_appointments', sa.Column('slot_id', sa.Integer(), sa.ForeignKey('doctor_slots.id'), nullable=True))
+            with op.batch_alter_table('portal_appointments') as batch_op:
+                batch_op.add_column(sa.Column('slot_id', sa.Integer(), nullable=True))
+                batch_op.create_foreign_key('fk_portal_appointments_slot_id', 'doctor_slots', ['slot_id'], ['id'])
         if 'payment_status' not in existing_cols:
             op.add_column('portal_appointments', sa.Column('payment_status', sa.String(), nullable=False, server_default='unpaid'))
 

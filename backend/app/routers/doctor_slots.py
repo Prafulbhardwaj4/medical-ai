@@ -200,7 +200,10 @@ def list_unavailable(doctor_id: int = None, current_doctor: Doctor = Depends(get
     rows = db.query(DoctorUnavailability).filter(
         DoctorUnavailability.doctor_id == target.id, DoctorUnavailability.date >= today
     ).order_by(DoctorUnavailability.date).all()
-    return [{"id": r.id, "date": r.date.isoformat(), "reason": r.reason} for r in rows]
+    return [{
+        "id": r.id, "date": r.date.isoformat(), "reason": r.reason,
+        "mass_reschedule_triggered_at": r.mass_reschedule_triggered_at.isoformat() if r.mass_reschedule_triggered_at else None,
+    } for r in rows]
 
 
 @router.get("/unavailable/{date}/affected-appointments")
@@ -231,3 +234,40 @@ def affected_appointments(date: str, doctor_id: int = None, current_doctor: Doct
         name = a.profile_link.patient.name if a.profile_link and a.profile_link.patient else "Unknown patient"
         result.append({"appointment_id": a.id, "patient_name": name, "requested_time": a.requested_time.isoformat()})
     return result
+
+
+@router.post("/unavailable/{unavailability_id}/trigger-mass-reschedule")
+def trigger_mass_reschedule(
+    unavailability_id: int,
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Notifies every affected paid booking's patient and lets them
+    self-serve a new slot with the same doctor, fee carrying over — no
+    reception approval needed, since the hospital already caused this."""
+    from app.models.portal import Appointment, AppointmentStatus
+
+    row = db.query(DoctorUnavailability).filter(DoctorUnavailability.id == unavailability_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    if current_doctor.role == UserRole.doctor and row.doctor_id != current_doctor.id:
+        raise HTTPException(status_code=403, detail="Not your record")
+
+    start = dt.combine(row.date, dt.min.time())
+    end = start + timedelta(days=1)
+
+    appts = db.query(Appointment).filter(
+        Appointment.doctor_id == row.doctor_id,
+        Appointment.payment_status == "paid",
+        Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed]),
+        Appointment.requested_time >= start, Appointment.requested_time < end,
+    ).all()
+
+    for a in appts:
+        a.mass_reschedule_notice = True
+
+    row.mass_reschedule_triggered_at = now_ist_naive()
+    row.mass_reschedule_triggered_by = current_doctor.id
+    db.commit()
+
+    return {"message": f"Reschedule notice sent for {len(appts)} affected booking(s)", "count": len(appts)}

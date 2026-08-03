@@ -15,4 +15,7 @@ class AdmissionWardType(Base):
     daily_charge = Column(Float, nullable=False, default=0)
     default_deposit = Column(Float, nullable=False, default=0)  # pre-filled at admission, reception can override
     is_icu = Column(Boolean, nullable=False, default=False)  # ICU/CCU/ICCU/NICU — always GST-exempt regardless of daily rate
+    is_ot = Column(Boolean, nullable=False, default=False)  # Operation Theatre segment — moving an admission into this ward type auto-bills ot_charge (see change_ward)
+    ot_charge = Column(Float, nullable=True)  # flat per-use OT fee, billed once on entry into an is_ot ward type — not a daily rate like daily_charge
+    category = Column(String, nullable=False, default="general")  # "general" | "icu" | "private" | "maternity" | "nicu" | "isolation" | "day_care" | "other" — structural label, seeded as presets on new hospital setup; admin can rename/add/remove freely
     created_at = Column(DateTime, default=now_ist_naive)

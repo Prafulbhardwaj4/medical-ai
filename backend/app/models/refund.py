@@ -12,7 +12,10 @@ class Refund(Base):
     __tablename__ = "refunds"
 
     id = Column(Integer, primary_key=True, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    # Nullable: a system-generated refund (patient self-cancel, auto-decline)
+    # has no staff actor and may predate the patient ever getting a real
+    # Patient row created by reception.
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     source_type = Column(String, nullable=False)  # appointment | pharmacy | ipd_deposit | opd_charge | tpa | other
     source_id = Column(Integer, nullable=True)
@@ -20,5 +23,5 @@ class Refund(Base):
     channel = Column(String, nullable=False)  # cash | card | upi | online
     status = Column(String, nullable=False, default="completed")  # completed | pending
     reason = Column(String, nullable=True)
-    processed_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
+    processed_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # null = system-generated, no staff actor
     processed_at = Column(DateTime, default=now_ist_naive)

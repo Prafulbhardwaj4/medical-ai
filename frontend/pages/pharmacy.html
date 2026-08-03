@@ -318,6 +318,7 @@
             style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <h2 style="margin:0">Medicine Catalog</h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" onclick="openRegisterModal()">Compliance Registers</button>
               <button class="btn btn-outline btn-sm" onclick="triggerUpload()">Upload PDF/Excel</button>
               <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Add Medicine</button>
               <input type="file" id="upload-input" accept=".pdf,.xlsx,.xls" style="display:none" onchange="handleFileSelected(event)" />
@@ -340,6 +341,25 @@
         <button class="modal-close" onclick="document.getElementById('modal-pharm-stock-issues').classList.remove('open')">&times;</button>
       </div>
       <div id="pharm-issue-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Schedule H1 / X compliance registers -->
+  <div class="modal-overlay" id="modal-register">
+    <div class="modal" style="max-width:640px;max-height:85vh;overflow-y:auto">
+      <div class="modal-header">
+        <h2>Compliance Registers</h2>
+        <button class="modal-close" onclick="closeRegisterModal()">&times;</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn btn-outline btn-sm" id="register-tab-h1" onclick="switchRegisterTab('h1')">Schedule H1</button>
+        <button class="btn btn-outline btn-sm" id="register-tab-x" onclick="switchRegisterTab('x')">Schedule X</button>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <input class="form-control" id="register-start-date" type="date" style="flex:1;min-width:140px" onchange="loadRegister()" />
+        <input class="form-control" id="register-end-date" type="date" style="flex:1;min-width:140px" onchange="loadRegister()" />
+      </div>
+      <div id="register-body"><p style="color:var(--slate)">Loading…</p></div>
     </div>
   </div>
 
@@ -608,6 +628,37 @@
       <div style="display:flex;gap:10px">
         <button class="btn btn-outline" style="flex:1" onclick="closeAddQtyModal()">Cancel</button>
         <button class="btn btn-primary" style="flex:1" onclick="confirmAddQty()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-return-medicine">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <h2>Return — <span id="return-medicine-name"></span></h2>
+        <button class="modal-close" onclick="closeReturnModal()">×</button>
+      </div>
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Quantity to Return</label>
+      <input class="form-control" id="return-qty-input" type="number" min="1" style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">What happens to it physically?</label>
+      <select class="form-control" id="return-disposition" style="margin-bottom:14px">
+        <option value="returned_to_supplier">Returned to Supplier</option>
+        <option value="sent_to_disposal">Sent to Disposal</option>
+        <option value="restocked_to_shelf">Restocked to Shelf (unopened, unused)</option>
+      </select>
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Refund Via</label>
+      <select class="form-control" id="return-channel" style="margin-bottom:14px">
+        <option value="cash">Cash</option>
+        <option value="card">Card</option>
+        <option value="upi">UPI</option>
+        <option value="online">Online</option>
+      </select>
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Note (optional)</label>
+      <input class="form-control" id="return-note" style="margin-bottom:14px" />
+      <div class="err-msg" id="return-modal-err" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" style="flex:1" onclick="closeReturnModal()">Cancel</button>
+        <button class="btn btn-primary" style="flex:1" onclick="confirmReturnMedicine()">Record Return</button>
       </div>
     </div>
   </div>
@@ -1010,6 +1061,8 @@
             </label>
             ${m.line_total != null ? `<span style="font-size:13px;font-weight:600">= Rs.${Number(m.line_total).toFixed(2)}</span>` : ''}
             ${!locked ? `<button class="btn btn-outline btn-sm" onclick="openAddMedicineModal(${m.id})">Add Substitute</button>` : ''}
+            ${m.schedule === 'x' && !locked ? `<button class="btn btn-outline btn-sm" style="border-color:#b91c1c;color:#b91c1c" onclick="authorizeScheduleXRepeat(${m.id})">${m.repeat_authorized ? '✓ Repeat Authorized' : 'Authorize Repeat (Sch. X)'}</button>` : ''}
+            ${m.status === 'dispensed' && (m.billed_quantity || 0) - (m.already_returned || 0) > 0 ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, '${sanitize(m.medicine_name).replace(/'/g, "\\'")}', ${(m.billed_quantity || 0) - (m.already_returned || 0)})">Return</button>` : ''}
           </div>
         </div>
       `}).join('') + '<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="openAddMedicineModal()">+ Add Medicine</button>';
@@ -1152,7 +1205,11 @@
         updateRxActionButtons(false);
         closeAddQtyModal();
         closeLinkCatalogModal();
-        toast('Medicine added.', 'success');
+        if (newOrder.warning) {
+          toast(newOrder.warning, 'warning');
+        } else {
+          toast('Medicine added.', 'success');
+        }
       } catch (e) { errEl.textContent = e.message; }
     }
 
@@ -1340,6 +1397,50 @@
       }
     }
 
+    async function authorizeScheduleXRepeat(orderId) {
+      if (!confirm('Confirm this doctor is explicitly authorizing a repeat dispense of this Schedule X medicine?')) return;
+      try {
+        await api("PATCH", `/pharmacy/medicine-orders/${orderId}/authorize-repeat`, {});
+        toast('Repeat dispense authorized.', 'success');
+        openPrescription(currentRxToken);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    let returnOrderId = null;
+    function openReturnModal(orderId, medicineName, maxQty) {
+      returnOrderId = orderId;
+      document.getElementById('return-medicine-name').textContent = medicineName;
+      document.getElementById('return-qty-input').value = maxQty;
+      document.getElementById('return-qty-input').max = maxQty;
+      document.getElementById('return-disposition').value = 'returned_to_supplier';
+      document.getElementById('return-channel').value = 'cash';
+      document.getElementById('return-note').value = '';
+      document.getElementById('return-modal-err').textContent = '';
+      document.getElementById('modal-return-medicine').classList.add('open');
+    }
+
+    function closeReturnModal() {
+      document.getElementById('modal-return-medicine').classList.remove('open');
+      returnOrderId = null;
+    }
+
+    async function confirmReturnMedicine() {
+      const errEl = document.getElementById('return-modal-err');
+      const quantity = parseInt(document.getElementById('return-qty-input').value);
+      if (!quantity || quantity <= 0) { errEl.textContent = 'Enter a valid quantity.'; return; }
+      try {
+        const result = await api("POST", `/pharmacy/medicine-orders/${returnOrderId}/return`, {
+          quantity,
+          disposition: document.getElementById('return-disposition').value,
+          channel: document.getElementById('return-channel').value,
+          note: document.getElementById('return-note').value.trim() || null
+        });
+        toast(`Return recorded — Rs.${Number(result.refunded_amount).toFixed(2)} ${result.refund_status === 'pending' ? 'refund pending' : 'refunded'}.`, 'success');
+        closeReturnModal();
+        openPrescription(currentRxToken);
+      } catch (e) { errEl.textContent = e.message; }
+    }
+
     function sanitize(s) {
       const div = document.createElement('div');
       div.textContent = String(s ?? '');
@@ -1442,6 +1543,64 @@
         `).join('') || '<p style="color:var(--slate-light)">Nothing here.</p>';
       }
       document.getElementById('modal-pharm-stock-issues').classList.add('open');
+    }
+
+    let currentRegisterSchedule = 'h1';
+    function openRegisterModal() {
+      const today = new Date().toISOString().slice(0, 10);
+      const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+      document.getElementById('register-start-date').value = monthAgo;
+      document.getElementById('register-end-date').value = today;
+      switchRegisterTab('h1');
+      document.getElementById('modal-register').classList.add('open');
+    }
+
+    function closeRegisterModal() {
+      document.getElementById('modal-register').classList.remove('open');
+    }
+
+    function switchRegisterTab(schedule) {
+      currentRegisterSchedule = schedule;
+      document.getElementById('register-tab-h1').className = `btn btn-sm ${schedule === 'h1' ? 'btn-primary' : 'btn-outline'}`;
+      document.getElementById('register-tab-x').className = `btn btn-sm ${schedule === 'x' ? 'btn-primary' : 'btn-outline'}`;
+      loadRegister();
+    }
+
+    async function loadRegister() {
+      const body = document.getElementById('register-body');
+      body.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+      try {
+        const startDate = document.getElementById('register-start-date').value;
+        const endDate = document.getElementById('register-end-date').value;
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate);
+        if (endDate) params.append('end_date', endDate);
+        const endpoint = currentRegisterSchedule === 'h1' ? '/pharmacy/schedule-h1-register' : '/pharmacy/schedule-x-register';
+        const result = await api("GET", `${endpoint}?${params.toString()}`);
+        renderRegister(result.entries || []);
+      } catch (e) {
+        body.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+      }
+    }
+
+    function renderRegister(entries) {
+      const body = document.getElementById('register-body');
+      if (!entries.length) {
+        body.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No dispenses in this date range.</p>';
+        return;
+      }
+      body.innerHTML = entries.map(e => `
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13.5px">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <strong>${sanitize(e.medicine_name)}${e.brand_name ? ' (' + sanitize(e.brand_name) + ')' : ''} × ${e.quantity}</strong>
+            <span style="color:var(--slate);white-space:nowrap">${e.date ? new Date(e.date).toLocaleString() : '—'}</span>
+          </div>
+          <div style="color:var(--slate);font-size:12.5px;margin-top:3px">
+            Patient: ${sanitize(e.patient_name || '—')} · Prescribed by: ${sanitize(e.prescribing_doctor || '—')} · Dispensed by: ${sanitize(e.dispensing_pharmacist || '—')}
+            ${e.is_repeat != null ? `<br>${e.is_repeat ? `Repeat — authorized by ${sanitize(e.repeat_authorized_by || '—')} at ${e.repeat_authorized_at ? new Date(e.repeat_authorized_at).toLocaleString() : '—'}` : 'First dispense'}` : ''}
+          </div>
+        </div>
+      `).join('');
     }
 
     function renderStockMedicines() {

@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.doctor import Doctor
 from app.models.test_catalog import TestCatalogItem
 from app.models.test_catalog_parameter import TestCatalogParameter
+from app.models.notifiable_disease import NotifiableDisease
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 from app.services.groq_service import extract_tests
@@ -27,6 +28,8 @@ class ParameterIn(BaseModel):
     reference_range_male: Optional[str] = ""
     reference_range_female: Optional[str] = ""
     purpose: Optional[str] = ""
+    critical_low: Optional[float] = None
+    critical_high: Optional[float] = None
 
 
 class TestIn(BaseModel):
@@ -41,6 +44,14 @@ class TestIn(BaseModel):
     is_panel: Optional[bool] = False
     parameters: Optional[list[ParameterIn]] = None
     aliases: Optional[str] = ""
+    critical_low: Optional[float] = None
+    critical_high: Optional[float] = None
+    fasting_required: Optional[bool] = False
+    required_tube: Optional[str] = ""
+    is_irreplaceable_sample: Optional[bool] = False
+    is_nabl_accredited: Optional[bool] = False
+    is_hiv_test: Optional[bool] = False
+    notifiable_disease_id: Optional[int] = None
 
 
 class TestBulkConfirm(BaseModel):
@@ -55,7 +66,9 @@ def serialize_parameter(p: TestCatalogParameter):
         "reference_range_male": p.reference_range_male or "",
         "reference_range_female": p.reference_range_female or "",
         "purpose": p.purpose or "",
-        "display_order": p.display_order
+        "display_order": p.display_order,
+        "critical_low": p.critical_low,
+        "critical_high": p.critical_high,
     }
 
 
@@ -81,8 +94,67 @@ def serialize(t: TestCatalogItem, db: Session = None):
         "is_active": t.is_active,
         "is_panel": t.is_panel,
         "aliases": t.aliases or "",
+        "critical_low": t.critical_low,
+        "critical_high": t.critical_high,
+        "fasting_required": t.fasting_required,
+        "required_tube": t.required_tube or "",
+        "is_irreplaceable_sample": t.is_irreplaceable_sample,
+        "is_nabl_accredited": t.is_nabl_accredited,
+        "is_hiv_test": t.is_hiv_test,
+        "notifiable_disease_id": t.notifiable_disease_id,
         "parameters": parameters
     }
+
+class NotifiableDiseaseIn(BaseModel):
+    name: str
+
+
+@router.get("/notifiable-diseases")
+def list_notifiable_diseases(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_admin(current_doctor)
+    rows = db.query(NotifiableDisease).filter(
+        NotifiableDisease.hospital_id == current_doctor.hospital_id,
+        NotifiableDisease.is_active == True
+    ).order_by(NotifiableDisease.name).all()
+    return [{"id": r.id, "name": r.name} for r in rows]
+
+
+@router.post("/notifiable-diseases", status_code=201)
+def create_notifiable_disease(
+    body: NotifiableDiseaseIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_admin(current_doctor)
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    disease = NotifiableDisease(hospital_id=current_doctor.hospital_id, name=name, is_active=True)
+    db.add(disease)
+    db.commit()
+    db.refresh(disease)
+    return {"id": disease.id, "name": disease.name}
+
+
+@router.delete("/notifiable-diseases/{disease_id}")
+def deactivate_notifiable_disease(
+    disease_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_admin(current_doctor)
+    disease = db.query(NotifiableDisease).filter(
+        NotifiableDisease.id == disease_id, NotifiableDisease.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not disease:
+        raise HTTPException(status_code=404, detail="Not found")
+    disease.is_active = False
+    db.commit()
+    return {"message": "Removed"}
+
 
 @router.get("")
 def list_tests(
@@ -135,6 +207,14 @@ def create_test(
         unit="" if is_panel else (payload.unit or "").strip(),
         turnaround_hours=payload.turnaround_hours,
         aliases=(payload.aliases or "").strip(),
+        critical_low=None if is_panel else payload.critical_low,
+        critical_high=None if is_panel else payload.critical_high,
+        fasting_required=bool(payload.fasting_required),
+        required_tube=(payload.required_tube or "").strip() or None,
+        is_irreplaceable_sample=bool(payload.is_irreplaceable_sample),
+        is_nabl_accredited=bool(payload.is_nabl_accredited),
+        is_hiv_test=bool(payload.is_hiv_test),
+        notifiable_disease_id=payload.notifiable_disease_id,
         is_active=True
     )
     db.add(test)
@@ -154,7 +234,9 @@ def create_test(
                 reference_range_female=(p.reference_range_female or "").strip(),
                 purpose=(p.purpose or "").strip(),
                 display_order=i,
-                is_active=True
+                is_active=True,
+                critical_low=p.critical_low,
+                critical_high=p.critical_high,
             ))
         db.commit()
 
@@ -202,6 +284,14 @@ def update_test(
     test.unit = "" if is_panel else (payload.unit or "").strip()
     test.turnaround_hours = payload.turnaround_hours
     test.aliases = (payload.aliases or "").strip()
+    test.critical_low = None if is_panel else payload.critical_low
+    test.critical_high = None if is_panel else payload.critical_high
+    test.fasting_required = bool(payload.fasting_required)
+    test.required_tube = (payload.required_tube or "").strip() or None
+    test.is_irreplaceable_sample = bool(payload.is_irreplaceable_sample)
+    test.is_nabl_accredited = bool(payload.is_nabl_accredited)
+    test.is_hiv_test = bool(payload.is_hiv_test)
+    test.notifiable_disease_id = payload.notifiable_disease_id
 
     # Replace-all: simplest and safest way to sync a small, admin-managed parameter
     # list without diffing rows. Existing parameter rows for this test are wiped
@@ -223,7 +313,9 @@ def update_test(
                 reference_range_female=(p.reference_range_female or "").strip(),
                 purpose=(p.purpose or "").strip(),
                 display_order=i,
-                is_active=True
+                is_active=True,
+                critical_low=p.critical_low,
+                critical_high=p.critical_high,
             ))
 
     db.commit()

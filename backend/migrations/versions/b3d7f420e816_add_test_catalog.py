@@ -6,16 +6,21 @@ revision = 'b3d7f420e816'
 down_revision = 'a2c6d9f31b47'
 
 def upgrade():
-    op.create_table(
-        'test_catalog_items',
-        sa.Column('id', sa.Integer(), primary_key=True, index=True),
-        sa.Column('hospital_id', sa.Integer(), sa.ForeignKey('hospitals.id'), nullable=False),
-        sa.Column('name', sa.String(), nullable=False),
-        sa.Column('fee', sa.Float(), nullable=False),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default='1'),
-        sa.Column('created_at', sa.DateTime(), nullable=True),
-    )
-    op.add_column('consultations', sa.Column('recommended_test_ids', sa.Text(), nullable=True))
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    if 'test_catalog_items' not in insp.get_table_names():
+        op.create_table(
+            'test_catalog_items',
+            sa.Column('id', sa.Integer(), primary_key=True, index=True),
+            sa.Column('hospital_id', sa.Integer(), sa.ForeignKey('hospitals.id'), nullable=False),
+            sa.Column('name', sa.String(), nullable=False),
+            sa.Column('fee', sa.Float(), nullable=False),
+            sa.Column('is_active', sa.Boolean(), nullable=False, server_default='1'),
+            sa.Column('created_at', sa.DateTime(), nullable=True),
+        )
+    consult_cols = {c['name'] for c in insp.get_columns('consultations')}
+    if 'recommended_test_ids' not in consult_cols:
+        op.add_column('consultations', sa.Column('recommended_test_ids', sa.Text(), nullable=True))
 
 def downgrade():
     op.drop_column('consultations', 'recommended_test_ids')

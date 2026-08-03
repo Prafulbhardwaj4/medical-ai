@@ -29,7 +29,23 @@ def _rate_for(item_type: str, hospital) -> float:
         return hospital.test_gst_percent or 0.0
     if item_type == "room":
         return hospital.room_gst_percent or 0.0
-    return hospital.charge_gst_percent or 0.0  # consumable / procedure / other / OPD charge
+    return hospital.charge_gst_percent or 0.0  # consumable / procedure / other / professional_fee / OPD charge
+
+
+def _hsn_for(item_type: str, hospital, medicine_hsn: str = None) -> str:
+    """HSN (goods) / SAC (services) code for a line item — GST-mandatory on
+    a tax invoice. Medicines carry their own per-drug code (varies by
+    product); every other item type uses the hospital's configured default
+    for that category."""
+    if item_type == "medicine":
+        return medicine_hsn or None
+    if item_type == "consultation":
+        return hospital.hsn_consultation or None
+    if item_type == "test":
+        return hospital.hsn_test or None
+    if item_type == "room":
+        return hospital.hsn_room or None
+    return hospital.hsn_charge or None  # consumable / procedure / other / professional_fee / OPD charge
 
 
 def apply_gst(items: list, hospital) -> tuple:
@@ -53,6 +69,8 @@ def apply_gst(items: list, hospital) -> tuple:
         line_total = item.get("line_total", 0.0)
         subtotal += line_total
         payable_here = item.get("payable_here", True)
+
+        hsn_sac = _hsn_for(item["type"], hospital, item.get("_medicine_hsn_code")) if gst_registered else None
 
         if not gst_registered or not payable_here:
             rate, taxable, tax = 0.0, 0.0, 0.0
@@ -79,10 +97,16 @@ def apply_gst(items: list, hospital) -> tuple:
             taxable = line_total if rate else 0.0
             tax = round(taxable * rate / 100, 2) if rate else 0.0
 
+        if item["type"] == "medicine":
+            hsn_sac = item.get("_medicine_hsn_code") or ""
+        else:
+            hsn_sac = (hospital.default_service_hsn_sac if hospital else None) or ""
+
         gst_total += tax
-        clean_item = {k: v for k, v in item.items() if k not in ("_medicine_gst_percent", "_is_icu")}
+        clean_item = {k: v for k, v in item.items() if k not in ("_medicine_gst_percent", "_medicine_hsn_code", "_is_icu")}
         out.append({
             **clean_item,
+            "hsn_sac": hsn_sac,
             "gst_rate": rate,
             "taxable_amount": taxable,
             "tax_amount": tax,

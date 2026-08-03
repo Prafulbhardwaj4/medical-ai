@@ -1,6 +1,6 @@
 import enum
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, UniqueConstraint, Text
+    Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, UniqueConstraint, Text, Float
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -9,6 +9,7 @@ from app.utils.timezone import now_ist_naive
 
 class AppointmentStatus(str, enum.Enum):
     booked = "booked"
+    pending_review = "pending_review"  # hospital-side approval needed — see Phase 1 item 3
     confirmed = "confirmed"
     completed = "completed"
     cancelled = "cancelled"
@@ -51,6 +52,28 @@ class PatientProfileLink(Base):
 
     account = relationship("PatientAccount", back_populates="profiles")
     patient = relationship("Patient")
+
+
+class CrossBookingRequest(Base):
+    """A patient asking to book an appointment for a family member who has
+    their OWN separate portal account, rather than creating a new profile
+    under this account. No WhatsApp yet, so 'sending an OTP' isn't possible —
+    instead the target account sees and confirms this the next time they
+    open their own portal, same pattern as the pending-confirmation profile
+    flow (Phase 1 item 3)."""
+    __tablename__ = "cross_booking_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    requesting_account_id = Column(Integer, ForeignKey("patient_accounts.id"), nullable=False)
+    target_account_id = Column(Integer, ForeignKey("patient_accounts.id"), nullable=False)
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
+    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    slot_id = Column(Integer, ForeignKey("doctor_slots.id"), nullable=True)
+    type = Column(String, nullable=False)  # "scheduled" | "queue_home"
+    notes = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="pending")  # pending | confirmed | rejected
+    created_at = Column(DateTime, default=now_ist_naive)
 
 
 class InviteStatus(Base):
@@ -112,6 +135,29 @@ class Appointment(Base):
     new_patient_gender = Column(String, nullable=True)
     new_patient_age = Column(Integer, nullable=True)
     new_patient_blood_group = Column(String, nullable=True)  # optional
+    fee_amount = Column(Float, nullable=True)  # snapshot of what was actually paid, taken at mark-paid time
+    review_deadline_at = Column(DateTime, nullable=True)          # set when status -> pending_review
+    review_followup_sent_at = Column(DateTime, nullable=True)     # set once the first follow-up alert fires
+    arrived_at = Column(DateTime, nullable=True)  # set when patient/reception marks arrival — drives grace-window + queue priority (Phase 2 item 7)
+
+    # No-show / late handling + reschedule requests (Phase 3 item 8).
+    no_show_detected_at = Column(DateTime, nullable=True)          # set once 1hr-past-slot threshold crosses with no consultation
+    no_show_reason = Column(String, nullable=True)                 # "hospital_delay" | "patient_no_show" — patient's MCQ answer
+    no_show_reschedule_deadline = Column(DateTime, nullable=True)  # requested_time + 72h once a reason is given
+    reschedule_kind = Column(String, nullable=True)                # "no_show" | "same_day" — tags an in-flight pending_review request so accept/decline/expiry know which rules apply
+    requested_reschedule_slot_id = Column(Integer, ForeignKey("doctor_slots.id"), nullable=True)
+
+    # Mass reschedule (Phase 3 item 9) — set when the doctor is marked
+    # unavailable and staff trigger the reschedule notice for this specific
+    # affected booking. Self-serve: patient picks any new slot with the
+    # SAME doctor, no reception approval needed (the hospital already
+    # caused this), already-paid fee just carries over.
+    mass_reschedule_notice = Column(Boolean, nullable=False, default=False)
+
+    requested_by_account_id = Column(Integer, ForeignKey("patient_accounts.id"), nullable=True)  # set when a family member arranged this via cross-account booking (item 11)
+
+    reschedule_balance_due = Column(Float, nullable=True)  # set when accept_appointment reschedules to a COSTLIER doctor — no live payment gateway to charge this online, so it's collected at check-in like any other OPD balance (see convert_appointment_to_checkin)
+
     created_at = Column(DateTime, default=now_ist_naive)
 
     account = relationship("PatientAccount", back_populates="appointments")

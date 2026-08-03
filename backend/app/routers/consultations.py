@@ -810,10 +810,14 @@ def confirm_prescription(
         ])
         total_test_fee = sum(t.fee for t in test_items)
         if total_test_fee > 0:
-            billing_target = todays_checkin if todays_checkin else fallback_checkin
-            billing_target.test_fee = total_test_fee
+            # todays_checkin is guaranteed set here — the branch above raises
+            # a 400 before this point whenever it isn't.
+            todays_checkin.test_fee = total_test_fee
 
+        valid_priorities = {"routine", "urgent", "stat"}
+        indication = (payload.clinical_indication or "").strip() or None
         for t in test_items:
+            requested_priority = (payload.test_priorities or {}).get(t.id, "routine")
             db.add(TestOrder(
                 consultation_id=consultation.id,
                 patient_id=consultation.patient_id,
@@ -821,7 +825,9 @@ def confirm_prescription(
                 test_id=t.id,
                 test_name=t.name,
                 price=t.fee,
-                status="payment_pending"
+                status="payment_pending",
+                priority=requested_priority if requested_priority in valid_priorities else "routine",
+                clinical_indication=indication,
             ))
 
     try:

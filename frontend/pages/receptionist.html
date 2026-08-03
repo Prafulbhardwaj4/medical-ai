@@ -381,6 +381,7 @@
             <input type="checkbox" id="send-to-nurse" style="width:auto" />
             <label for="send-to-nurse" style="font-size:14px;color:var(--slate);margin:0">Also send for vitals check (nurse room)</label>
           </div>
+          <p id="doc-coverage-note" style="font-size:13px;color:var(--slate);margin:-8px 0 12px"></p>
           <div id="fee-group" style="display:none">
             <div class="form-group">
               <label class="form-label">Consultation Fee (Rs.)</label>
@@ -420,6 +421,7 @@
           </div>
           <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:10px">
             <button class="btn btn-primary btn-sm" style="width:100%" onclick="generateBill()">🧾 Generate Bill</button>
+            <button class="btn btn-outline btn-sm" style="width:100%" onclick="openWaiverModal()">Waiver / Discount</button>
             <div style="display:flex;gap:10px">
               <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
               <button class="btn btn-outline" style="flex:1" onclick="goToStep('search')">New Check-In</button>
@@ -456,7 +458,19 @@
       </div>
 
       <div class="mobile-section" id="section-portal">
-        <div class="card">
+        <div class="card" id="pending-review-card">
+          <div class="card-header" style="flex-wrap:wrap;gap:10px">
+            <h2>Pending Appointment Reviews <span class="badge badge-red" id="pending-review-count" style="margin-left:8px">0</span></h2>
+          </div>
+          <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
+            Paid bookings that need a human decision — usually because the doctor went unavailable after the patient booked.
+          </p>
+          <div id="pending-review-list">
+            <p style="color:var(--slate-light);font-size:13px">Loading...</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px">
           <div class="card-header" style="flex-wrap:wrap;gap:10px">
             <h2>Expected Today <span class="badge badge-teal" id="expected-today-count" style="margin-left:8px">0</span></h2>
             <select class="form-control" id="expected-today-doctor-filter" style="max-width:220px">
@@ -724,6 +738,18 @@
     </div>
   </div>
 
+  <!-- Waiver / Discount Modal -->
+  <div class="modal-overlay" id="modal-waiver">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header"><h2>Waiver / Discount</h2><button class="modal-close" onclick="closeModal('modal-waiver')">×</button></div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:10px">Applies as a credit line against this visit's bill — small waivers apply immediately, larger ones go to admin for approval.</p>
+      <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="waiver-amount" /></div>
+      <div class="form-group"><label class="form-label">Reason</label><input class="form-control" id="waiver-reason" placeholder="e.g. financial hardship, service issue" /></div>
+      <div class="err-msg" id="waiver-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="submitWaiver()">Apply / Request</button>
+    </div>
+  </div>
+
   <!-- Record Refund Modal -->
   <div class="modal-overlay" id="modal-record-refund">
     <div class="modal" style="max-width:400px">
@@ -739,6 +765,10 @@
           <option value="tpa">TPA overpayment</option>
           <option value="other">Other</option>
         </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Link to invoice <span style="font-weight:400;color:var(--slate)">(optional — generates a GST credit note)</span></label>
+        <select class="form-control" id="refund-invoice"><option value="">No invoice — just a cash log entry</option></select>
       </div>
       <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="refund-amount"></div>
       <div class="form-group">
@@ -868,7 +898,7 @@
         if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
       });
       if (id === 'home') loadPendingPayments();
-      if (id === 'portal') loadExpectedToday();
+      if (id === 'portal') { loadExpectedToday(); loadPendingReview(); }
       if (id === 'availability') loadAvailabilityDoctorList();
     }
 
@@ -892,6 +922,7 @@
     } else {
       showRecSection(__startTab);
     }
+    if (__startTab === 'portal') loadPendingReview();
 
     function goToStep(step) {
       ['search', 'room', 'doctor', 'token'].forEach(s => {
@@ -1101,11 +1132,36 @@
     }
 
     function updateFeeForSelectedDoctor() {
+      updateNurseGateForSelectedDoctor();
       if (!getDoctor()?.billing_enabled) return;
       const selectedId = parseInt(document.getElementById('doc-select').value);
       const doc = hospitalDoctors.find(d => d.id === selectedId);
       const fee = (doc && doc.consultation_fee != null) ? doc.consultation_fee : (getDoctor()?.default_consultation_fee ?? '');
       document.getElementById('consultation-fee').value = fee;
+    }
+
+    async function updateNurseGateForSelectedDoctor() {
+      const selectedId = parseInt(document.getElementById('doc-select').value);
+      const checkbox = document.getElementById('send-to-nurse');
+      const note = document.getElementById('doc-coverage-note');
+      const btn = document.getElementById('btn-generate-token');
+      if (!selectedId) return;
+      let covered = true; // fail safe — assume covered, don't allow bypass on a failed check
+      try {
+        const res = await api("GET", `/patients/doctor-coverage-status/${selectedId}`);
+        covered = res.covered;
+      } catch (e) { }
+      if (covered) {
+        checkbox.checked = true;
+        checkbox.disabled = true;
+        note.textContent = 'A nurse/assistant is covering this doctor — the patient will be sent to them for vitals first.';
+        btn.textContent = 'Generate Token';
+      } else {
+        checkbox.checked = false;
+        checkbox.disabled = false;
+        note.textContent = 'No nurse/assistant is currently covering this doctor — you can Notify Doctor to check the patient straight in.';
+        btn.textContent = 'Notify Doctor';
+      }
     }
 
     let currentCheckinId = null;
@@ -1131,6 +1187,9 @@
         document.getElementById('slip-room').textContent = result.issue_category;
         document.getElementById('slip-date').textContent = formatDate(result.visit_date);
         document.getElementById('send-to-nurse').checked = false;
+        document.getElementById('send-to-nurse').disabled = false;
+        document.getElementById('btn-generate-token').textContent = 'Generate Token';
+        document.getElementById('doc-coverage-note').textContent = '';
         if (result.nurse_name) {
           document.getElementById('slip-nurse').textContent = result.nurse_name;
           document.getElementById('slip-nurse-row').style.display = '';
@@ -1207,6 +1266,26 @@
         await api("PATCH", `/patients/test-orders/${orderId}/toggle-include`, {});
         loadPendingTestFees(patientId);
       } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function openWaiverModal() {
+      if (!currentCheckinId) { toast('No active visit to bill.', 'error'); return; }
+      document.getElementById('waiver-amount').value = '';
+      document.getElementById('waiver-reason').value = '';
+      document.getElementById('waiver-err').textContent = '';
+      openModal('modal-waiver');
+    }
+    async function submitWaiver() {
+      const err = document.getElementById('waiver-err');
+      const amount = parseFloat(document.getElementById('waiver-amount').value);
+      const reason = document.getElementById('waiver-reason').value.trim();
+      if (!amount || amount <= 0) { err.textContent = 'Enter a valid amount.'; return; }
+      if (!reason) { err.textContent = 'A reason is required.'; return; }
+      try {
+        const result = await api("POST", "/billing/waivers", { checkin_id: currentCheckinId, amount, reason });
+        closeModal('modal-waiver');
+        toast(result.status === 'pending_approval' ? 'Sent for admin approval.' : 'Waiver applied.', 'success');
+      } catch (e) { err.textContent = e.message; }
     }
 
     async function generateBill() {
@@ -1774,7 +1853,7 @@
     // ---------- Refunds ----------
     let refundPatientId = null;
 
-    function openRecordRefundModal(patientId, patientName) {
+    async function openRecordRefundModal(patientId, patientName) {
       refundPatientId = patientId;
       document.getElementById('refund-patient-label').textContent = `For: ${patientName}`;
       document.getElementById('refund-source-type').value = 'appointment';
@@ -1782,7 +1861,15 @@
       document.getElementById('refund-channel').value = '';
       document.getElementById('refund-reason').value = '';
       document.getElementById('refund-err').textContent = '';
+      const invoiceSel = document.getElementById('refund-invoice');
+      invoiceSel.innerHTML = '<option value="">No invoice — just a cash log entry</option>';
       openModal('modal-record-refund');
+      try {
+        const invoices = await api("GET", `/billing/invoices/patient/${patientId}`);
+        invoices.forEach(inv => {
+          invoiceSel.insertAdjacentHTML('beforeend', `<option value="${inv.id}">${inv.receipt_number || ('Invoice #' + inv.id)} — Rs.${inv.grand_total.toFixed(2)}</option>`);
+        });
+      } catch (e) { }
     }
 
     async function submitRefund() {
@@ -1795,13 +1882,15 @@
       const btn = document.getElementById('btn-refund-submit');
       btn.disabled = true;
       try {
+        const invoiceVal = document.getElementById('refund-invoice').value;
         const result = await api("POST", "/refunds", {
           patient_id: refundPatientId,
           source_type: document.getElementById('refund-source-type').value,
           amount, channel,
           reason: document.getElementById('refund-reason').value.trim() || null,
+          invoice_id: invoiceVal ? parseInt(invoiceVal) : null,
         });
-        toast(result.status === 'pending' ? 'Refund recorded — settling online.' : 'Refund recorded.', 'success');
+        toast(result.credit_note_number ? `Refund recorded — credit note ${result.credit_note_number} issued.` : (result.status === 'pending' ? 'Refund recorded — settling online.' : 'Refund recorded.'), 'success');
         closeModal('modal-record-refund');
       } catch (e) {
         err.textContent = e.message;
@@ -2077,6 +2166,7 @@
           <td data-label="" style="text-align:left">
             <button class="btn btn-outline btn-sm" onclick='openEditPatient(${JSON.stringify(p)})'>✏️ Edit</button>
             <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>Select</button>
+            <button class="btn btn-outline btn-sm" onclick='mergeDuplicatePatient(${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.patient_uid)})'>Merge</button>
           </td>
         </tr>
       `).join('');
@@ -2090,6 +2180,23 @@
         else { btn.classList.add('btn-outline'); btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = ''; }
       });
       renderAllPatients();
+    }
+
+    async function mergeDuplicatePatient(duplicateId, duplicateName, duplicateUid) {
+      const primaryIdStr = prompt(
+        `Merging "${duplicateName}" (${duplicateUid}) as a duplicate.\n\nEnter the patient ID (numeric, from the record's edit view) of the record to keep as the primary:`
+      );
+      if (!primaryIdStr) return;
+      const primaryId = parseInt(primaryIdStr.trim(), 10);
+      if (!primaryId) { toast("Enter a valid patient ID", "error"); return; }
+      if (!confirm("Have you confirmed with the patient by phone that these are the same person? This can't be undone.")) return;
+      try {
+        const res = await api("POST", "/patients/merge", {
+          primary_patient_id: primaryId, duplicate_patient_id: duplicateId, phone_confirmed: true,
+        });
+        toast(res.message, "success");
+        loadAllPatients();
+      } catch (e) { toast(e.message, "error"); }
     }
 
     let listSearchTimer;
@@ -2340,11 +2447,101 @@
                 ${a.notes ? ' · ' + sanitize(a.notes) : ''}
               </div>
             </div>
-            <span class="badge badge-teal">${a.status}</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="badge badge-teal">${a.status}</span>
+              ${(a.status === 'confirmed' && !a.arrived_at) ? `<button class="btn btn-outline btn-sm" onclick="markArrived(${a.id})">Mark Arrived</button>` : ''}
+              ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
+            </div>
           </div>`).join('');
       } catch (e) {
         el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
       }
+    }
+
+    async function markArrived(id) {
+      try {
+        await api("POST", `/portal-appointments-staff/${id}/mark-arrived`);
+        toast("Marked arrived", "success");
+        loadExpectedToday();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function loadPendingReview() {
+      const el = document.getElementById("pending-review-list");
+      try {
+        const data = await api("GET", "/portal-appointments-staff/pending-review");
+        document.getElementById("pending-review-count").textContent = data.count;
+
+        if (!data.appointments.length) {
+          el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">Nothing awaiting review.</p>`;
+          return;
+        }
+        el.innerHTML = data.appointments.map(a => `
+          <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-weight:500">${sanitize(a.patient_name || 'Name not linked yet')}</div>
+                <div style="font-size:12px;color:var(--slate-light)">
+                  ${sanitize(a.doctor_name)} · ${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
+                  ${a.fee_amount != null ? ' · Rs.' + a.fee_amount : ''}
+                </div>
+              </div>
+              <span class="badge ${a.followup_sent ? 'badge-red' : 'badge-amber'}">${a.followup_sent ? 'Overdue' : 'Awaiting review'}</span>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="acceptReview(${a.id})">Accept</button>
+              <button class="btn btn-outline btn-sm" onclick="toggleReviewPanel('suggest', ${a.id})">Suggest new slot/doctor</button>
+              <button class="btn btn-outline btn-sm" onclick="toggleReviewPanel('decline', ${a.id})">Decline</button>
+            </div>
+            <div id="pr-suggest-${a.id}" class="pr-panel" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
+              <input class="form-control" style="max-width:160px;display:inline-block" id="pr-slot-${a.id}" placeholder="New slot ID (optional)" />
+              <input class="form-control" style="max-width:160px;display:inline-block" id="pr-doctor-${a.id}" placeholder="New doctor ID (optional)" />
+              <button class="btn btn-primary btn-sm" onclick="submitSuggest(${a.id})">Send suggestion</button>
+            </div>
+            <div id="pr-decline-${a.id}" class="pr-panel" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
+              <input class="form-control" style="max-width:260px;display:inline-block" id="pr-reason-${a.id}" placeholder="Reason (optional)" />
+              <button class="btn btn-danger btn-sm" onclick="submitDecline(${a.id})">Confirm decline &amp; refund</button>
+            </div>
+          </div>`).join('');
+      } catch (e) {
+        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    function toggleReviewPanel(kind, id) {
+      const panel = document.getElementById(`pr-${kind}-${id}`);
+      panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    }
+
+    async function acceptReview(id) {
+      try {
+        await api("POST", `/portal-appointments-staff/${id}/accept`);
+        toast("Appointment accepted", "success");
+        loadPendingReview();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function submitDecline(id) {
+      const reason = document.getElementById(`pr-reason-${id}`).value.trim();
+      try {
+        await api("POST", `/portal-appointments-staff/${id}/decline`, { reason: reason || null });
+        toast("Appointment declined and refunded", "success");
+        loadPendingReview();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function submitSuggest(id) {
+      const slotVal = document.getElementById(`pr-slot-${id}`).value.trim();
+      const doctorVal = document.getElementById(`pr-doctor-${id}`).value.trim();
+      if (!slotVal && !doctorVal) { toast("Enter a new slot ID and/or doctor ID", "error"); return; }
+      try {
+        await api("POST", `/portal-appointments-staff/${id}/suggest`, {
+          new_slot_id: slotVal ? parseInt(slotVal, 10) : null,
+          new_doctor_id: doctorVal ? parseInt(doctorVal, 10) : null,
+        });
+        toast("Suggestion sent", "success");
+        loadPendingReview();
+      } catch (e) { toast(e.message, "error"); }
     }
 
     loadAllPatients();

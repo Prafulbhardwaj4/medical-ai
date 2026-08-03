@@ -2,13 +2,20 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = 'c9d0e1f2a3b4'
+revision = '87df4bd15204'
 down_revision = 'b8c9d0e1f2a3'
 
 def upgrade():
-    op.add_column('test_catalog_items', sa.Column('is_panel', sa.Boolean(), nullable=False, server_default='0'))
-    op.add_column('test_catalog_items', sa.Column('purpose', sa.Text(), nullable=True))
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    item_cols = {c['name'] for c in insp.get_columns('test_catalog_items')}
+    if 'is_panel' not in item_cols:
+        op.add_column('test_catalog_items', sa.Column('is_panel', sa.Boolean(), nullable=False, server_default='0'))
+    if 'purpose' not in item_cols:
+        op.add_column('test_catalog_items', sa.Column('purpose', sa.Text(), nullable=True))
 
+    if 'test_catalog_parameters' in insp.get_table_names():
+        return
     op.create_table(
         'test_catalog_parameters',
         sa.Column('id', sa.Integer(), primary_key=True, index=True),

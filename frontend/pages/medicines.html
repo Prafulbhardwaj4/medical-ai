@@ -87,6 +87,10 @@
       color: var(--white);
     }
     .btn-add-stock:hover { background: #0b8078; }
+    .item-card.schedule-x {
+      border-left: 4px solid #b91c1c;
+      background: #fff9f9;
+    }
     .stock-info-note {
       font-size: 13px;
       color: var(--slate);
@@ -365,9 +369,17 @@
           <input class="form-control" id="m-gst" type="number" min="0" step="0.01" placeholder="e.g. 12 — leave blank for none" />
         </div>
         <div style="flex:1">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">HSN Code (optional)</label>
+          <input class="form-control" id="m-hsn" placeholder="e.g. 3004" />
+        </div>
+        <div style="flex:1">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Low Stock Alert At</label>
           <input class="form-control" id="m-low-stock-threshold" type="number" min="0" step="1" placeholder="25" />
         </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">NPPA/DPCO Ceiling Price per unit (Rs., optional)</label>
+        <input class="form-control" id="m-nppa-ceiling" type="number" min="0" step="0.01" placeholder="Leave blank if this isn't a DPCO-scheduled item" />
       </div>
 
       <div class="err-msg" id="medicine-modal-err" style="margin-bottom:12px"></div>
@@ -639,7 +651,8 @@
       return `<span class="badge ${cls}">${(schedule || '').toUpperCase()}</span>`;
     }
 
-    let expiringMedicineIds = new Set();
+    let nearExpiryMedicineIds = new Set();
+    let expiredMedicineIds = new Set();
     let lowStockMedicineIds = new Set();
 
     let medicinesCache = [];
@@ -661,7 +674,10 @@
           api("GET", "/admin/medicines/low-stock").catch(() => [])
         ]);
         medicinesCache = items;
-        expiringMedicineIds = new Set(expiring.map(e => e.medicine_id));
+        // is_near_expiry and is_expired are genuinely distinct states now —
+        // an already-expired batch should never show as "Expiring Soon".
+        nearExpiryMedicineIds = new Set(expiring.filter(e => e.is_near_expiry && !e.is_expired).map(e => e.medicine_id));
+        expiredMedicineIds = new Set(expiring.filter(e => e.is_expired).map(e => e.medicine_id));
         lowStockMedicineIds = new Set(lowStock.map(l => l.medicine_id));
         renderMedicines(items);
         populateCategoryFilter(items);
@@ -718,7 +734,7 @@
         return;
       }
       el.innerHTML = items.map(m => `
-        <div class="item-card">
+        <div class="item-card${m.schedule === 'x' ? ' schedule-x' : ''}">
           <div class="item-card-top">
             <div>
               <div class="item-card-title">${sanitize(m.generic_name)}${m.strength ? ' ' + sanitize(m.strength) : ''}</div>
@@ -727,7 +743,7 @@
             <div class="item-card-badges">
               ${scheduleBadge(m.schedule)}
               ${m.gst_percent != null ? `<span class="badge badge-grey">+${m.gst_percent}% GST</span>` : ''}
-              ${expiringMedicineIds.has(m.id) ? `<span class="badge badge-amber">Expiring Soon</span>` : ''}
+              ${expiredMedicineIds.has(m.id) ? `<span class="badge badge-red">Expired Stock</span>` : (nearExpiryMedicineIds.has(m.id) ? `<span class="badge badge-amber">Near Expiry</span>` : '')}
               ${lowStockMedicineIds.has(m.id) ? `<span class="badge badge-warn">Low Stock</span>` : ''}
               ${!m.is_active ? `<span class="badge badge-red">Inactive</span>` : ''}
             </div>
@@ -784,8 +800,10 @@
       document.getElementById('m-price-per-pack').value = '';
       document.getElementById('m-price-per-pack-single').value = '';
       document.getElementById('m-billing-mode').value = 'per_unit';
-      document.getElementById('m-gst').value = '';
-      document.getElementById('m-low-stock-threshold').value = '25';
+      document.getElementById('m-nppa-ceiling').value = '';
+      document.getElementById('m-gst').value = m.gst_percent != null ? m.gst_percent : '';
+      document.getElementById('m-hsn').value = m.hsn_code || '';
+      document.getElementById('m-low-stock-threshold').value = m.low_stock_threshold != null ? m.low_stock_threshold : 25;
       showStripPricing(true);
       updateComputedPrice();
       document.getElementById('m-stock-info').innerHTML = 'Stock can be added from the medicine card once this is saved.';
@@ -848,6 +866,7 @@
       document.getElementById('m-price-per-pack-single').value = m.price_per_pack != null ? m.price_per_pack : '';
       document.getElementById('m-billing-mode').value = m.billing_mode || 'per_unit';
       document.getElementById('m-gst').value = m.gst_percent != null ? m.gst_percent : '';
+      document.getElementById('m-nppa-ceiling').value = m.nppa_ceiling_price != null ? m.nppa_ceiling_price : '';
       document.getElementById('m-low-stock-threshold').value = m.low_stock_threshold != null ? m.low_stock_threshold : 25;
       updateComputedPrice();
       document.getElementById('medicine-modal-err').textContent = '';
@@ -879,7 +898,9 @@
         ? (document.getElementById('m-price-per-pack').value ? parseFloat(document.getElementById('m-price-per-pack').value) : null)
         : (document.getElementById('m-price-per-pack-single').value ? parseFloat(document.getElementById('m-price-per-pack-single').value) : null);
       const billing_mode = isDivisible ? document.getElementById('m-billing-mode').value : 'per_pack';
+      const nppa_ceiling_price = document.getElementById('m-nppa-ceiling').value ? parseFloat(document.getElementById('m-nppa-ceiling').value) : null;
       const gst_percent = document.getElementById('m-gst').value ? parseFloat(document.getElementById('m-gst').value) : null;
+      const hsn_code = document.getElementById('m-hsn').value.trim() || null;
       const low_stock_threshold = document.getElementById('m-low-stock-threshold').value ? parseInt(document.getElementById('m-low-stock-threshold').value) : 25;
 
       const payload = {
@@ -893,16 +914,22 @@
         price_per_pack,
         billing_mode,
         gst_percent,
-        low_stock_threshold
+        hsn_code,
+        low_stock_threshold,
+        nppa_ceiling_price
       };
 
       try {
+        let result;
         if (id) {
-          await api("PATCH", `/admin/medicines/${id}`, payload);
+          result = await api("PATCH", `/admin/medicines/${id}`, payload);
           toast('Medicine updated.', 'success');
         } else {
-          await api("POST", `/admin/medicines`, payload);
+          result = await api("POST", `/admin/medicines`, payload);
           toast('Medicine added.', 'success');
+        }
+        if (result && result.warning) {
+          setTimeout(() => toast(result.warning, 'warning'), 400);
         }
         closeMedicineModal();
         loadMedicines();
@@ -1094,10 +1121,10 @@
       if (!items.length) { panel.style.display = 'none'; return; }
       panel.style.display = 'block';
       const expiredCount = items.filter(i => i.is_expired).length;
-      const expiringCount = items.length - expiredCount;
+      const expiringCount = items.filter(i => i.is_near_expiry && !i.is_expired).length;
       const parts = [];
       if (expiredCount) parts.push(`${expiredCount} Expired`);
-      if (expiringCount) parts.push(`${expiringCount} Expiring Soon`);
+      if (expiringCount) parts.push(`${expiringCount} Near Expiry`);
       document.getElementById('expiring-soon-panel').querySelector('span').innerHTML =
         `⚠ ${parts.join(', ')}`;
     }

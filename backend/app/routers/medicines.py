@@ -18,6 +18,7 @@ from app.utils.notify import sync_stock_notifications
 router = APIRouter(prefix="/admin/medicines", tags=["medicines"])
 
 VALID_SCHEDULES = {"otc", "h", "h1", "x"}
+NEAR_EXPIRY_DAYS = 30  # named constant so the near-expiry cutoff is easy to adjust laterVALID_SCHEDULES = {"otc", "h", "h1", "x"}
 
 
 def require_admin(current_doctor: Doctor):
@@ -44,6 +45,8 @@ class MedicineIn(BaseModel):
     price_per_pack: Optional[float] = None
     billing_mode: Optional[str] = "per_unit"
     gst_percent: Optional[float] = None
+    hsn_code: Optional[str] = None
+    nppa_ceiling_price: Optional[float] = None
 
 
 VALID_BILLING_MODES = {"per_unit", "per_pack"}
@@ -81,10 +84,28 @@ def serialize(m: HospitalMedicine):
         "price_per_pack": m.price_per_pack,
         "billing_mode": m.billing_mode,
         "gst_percent": m.gst_percent,
+        "hsn_code": m.hsn_code,
         "price": m.price,  # computed unit price
+        "nppa_ceiling_price": m.nppa_ceiling_price,
         "stock_quantity": m.stock_quantity,
         "is_active": m.is_active
     }
+
+
+def _ceiling_price_warning(medicine: HospitalMedicine):
+    """DPCO ceiling check — this is admin-entered reference data with no live
+    NPPA feed, so it's a warning, not a hard block: a stale locally-stored
+    ceiling shouldn't be able to trap admin from correcting a price. Compared
+    against the computed per-unit price, since NPPA ceilings are quoted
+    per-tablet/unit, not per-pack (packs vary in size across brands)."""
+    if medicine.nppa_ceiling_price is None or medicine.price is None:
+        return None
+    if medicine.price > medicine.nppa_ceiling_price:
+        return (
+            f"Price ₹{medicine.price:.2f}/unit exceeds the stored NPPA/DPCO ceiling of "
+            f"₹{medicine.nppa_ceiling_price:.2f}/unit for {medicine.generic_name}. Double-check before saving."
+        )
+    return None
 
 
 @router.get("")
@@ -152,8 +173,10 @@ def create_medicine(
         low_stock_threshold=payload.low_stock_threshold or 25,
         pack_size=pack_size,
         price_per_pack=payload.price_per_pack,
+        nppa_ceiling_price=payload.nppa_ceiling_price,
         billing_mode=billing_mode,
         gst_percent=payload.gst_percent,
+        hsn_code=(payload.hsn_code or "").strip() or None,
         price=compute_unit_price(payload.price_per_pack, pack_size),
         stock_quantity=0,
         is_active=True
@@ -170,7 +193,11 @@ def create_medicine(
         target_label=medicine.generic_name,
         hospital_id=current_doctor.hospital_id
     )
-    return serialize(medicine)
+    result = serialize(medicine)
+    warning = _ceiling_price_warning(medicine)
+    if warning:
+        result["warning"] = warning
+    return result
 
 
 @router.post("/{medicine_id}/brands", status_code=201)
@@ -237,6 +264,7 @@ def add_medicine_brand(
     return serialize(brand_row)
 
 
+@router.patch("/{medicine_id}")
 def update_medicine(
     medicine_id: int,
     payload: MedicineIn,
@@ -275,7 +303,9 @@ def update_medicine(
     medicine.price_per_pack = payload.price_per_pack
     medicine.billing_mode = billing_mode
     medicine.gst_percent = payload.gst_percent
+    medicine.hsn_code = (payload.hsn_code or "").strip() or None
     medicine.price = compute_unit_price(payload.price_per_pack, pack_size)
+    medicine.nppa_ceiling_price = payload.nppa_ceiling_price
     # stock_quantity is deliberately NOT touched here — it's owned exclusively
     # by the batch endpoints (add/edit/delete batch). Editing catalog details
     # must never affect live stock.
@@ -289,7 +319,11 @@ def update_medicine(
         target_label=medicine.generic_name,
         hospital_id=current_doctor.hospital_id
     )
-    return serialize(medicine)
+    result = serialize(medicine)
+    warning = _ceiling_price_warning(medicine)
+    if warning:
+        result["warning"] = warning
+    return result
 
 
 @router.delete("/{medicine_id}")
@@ -406,6 +440,7 @@ def bulk_confirm_medicines(
             price_per_pack=item.price_per_pack,
             billing_mode=billing_mode,
             gst_percent=item.gst_percent,
+            hsn_code=(item.hsn_code or "").strip() or None,
             price=compute_unit_price(item.price_per_pack, pack_size),
             stock_quantity=0,
             is_active=True
@@ -617,7 +652,8 @@ def get_expiring_batches(
             "quantity": b.quantity,
             "expiry_date": b.expiry_date.isoformat(),
             "days_left": days_left,
-            "is_expired": days_left < 0
+            "is_expired": days_left < 0,
+            "is_near_expiry": 0 <= days_left <= NEAR_EXPIRY_DAYS,
         })
     return result
 

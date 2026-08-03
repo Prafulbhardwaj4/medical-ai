@@ -16,7 +16,7 @@ class OpdCharge(Base):
     description = Column(String, nullable=False)
     amount = Column(Float, nullable=False)
     quantity = Column(Integer, nullable=False, default=1)
-    added_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
+    added_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # nullable for system-generated charges (e.g. a reschedule fee difference applied at online check-in, no staff actor involved) — mirrors Checkin.created_by's same "system handoff" pattern
     status = Column(String, nullable=False, default="payment_pending")  # payment_pending | paid
     payment_method = Column(String, nullable=True)
     paid_at = Column(DateTime, nullable=True)

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 import json
@@ -15,7 +16,7 @@ from app.models.test_catalog import TestCatalogItem
 from app.models.test_order import TestOrder
 from app.models.checkin import Checkin
 import os
-from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate, PaymentMethodIn, EmergencyIntakeIn
+from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate, PaymentMethodIn, EmergencyIntakeIn, PatientMergeIn
 from sqlalchemy import or_
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
 from app.utils.timezone import now_ist_naive
@@ -29,6 +30,12 @@ from app.models.admission_deposit import AdmissionDepositTopupRequest
 from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
 from app.models.opd_referral import OpdReferral
+from app.models.admission_referral import AdmissionReferral
+from app.models.invoice import Invoice
+from app.models.feedback import VisitFeedback
+from app.models.patient_merge_request import PatientMergeRequest
+from app.models.portal import PatientProfileLink, InviteStatus
+from app.schemas.patient import MergeRequestIn, MergeConfirmIn
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -157,6 +164,25 @@ def pick_random_nurse(db: Session, hospital_id: int, doctor_id: int = None):
 
     nurses = base_query.all()
     return random.choice(nurses) if nurses else None
+
+def is_doctor_covered_and_present(db: Session, hospital_id: int, doctor_id: int) -> bool:
+    """True if at least one nurse/assistant who is explicitly covering this
+    doctor is currently Present/On Break — the same coverage data
+    pick_random_nurse consults, but without its fallback-to-any-nurse
+    behaviour, since this is used purely as a gate (see checkin_patient's
+    walk-in flow and /doctor-coverage-status)."""
+    from app.models.attendance_coverage import AttendanceCoverage
+    covering_staff_ids = [
+        r[0] for r in db.query(AttendanceRecord.doctor_id).join(
+            AttendanceCoverage, AttendanceCoverage.attendance_record_id == AttendanceRecord.id
+        ).filter(
+            AttendanceRecord.hospital_id == hospital_id,
+            AttendanceRecord.date == ist_today(),
+            AttendanceRecord.status.in_(["present", "on_break"]),
+            AttendanceCoverage.doctor_id == doctor_id
+        ).all()
+    ]
+    return len(covering_staff_ids) > 0
 
 def _pick_doctor_for_emergency(db: Session, hospital_id: int):
     """Nearest available doctor = present today and least busy right now.
@@ -321,10 +347,13 @@ def create_patient(
 
 def _auto_complete_matching_appointment(db: Session, patient: Patient, hospital_id: int) -> None:
     """If this patient had booked ahead or reserved a queue-from-home slot
-    for today at this hospital, mark it completed now that they've actually
-    been checked in. Does not touch the check-in/queue logic itself."""
+    for today at this hospital, generate their real day-of Checkin/token now
+    that reception has created their actual Patient record — the same
+    conversion the lazy sweep does for already-linked returning patients,
+    see utils/portal_checkin.py."""
     from datetime import datetime, timedelta
-    from app.models.portal import Appointment, AppointmentStatus
+    from app.models.portal import Appointment, AppointmentStatus, PatientProfileLink
+    from app.utils.portal_checkin import convert_appointment_to_checkin
 
     today_start = datetime.combine(now_ist_naive().date(), datetime.min.time())
     today_end = today_start + timedelta(days=1)
@@ -343,8 +372,16 @@ def _auto_complete_matching_appointment(db: Session, patient: Patient, hospital_
         Appointment.requested_time >= today_start,
         Appointment.requested_time < today_end,
     ).all():
-        a.status = AppointmentStatus.completed
-    db.commit()
+        if not a.profile_link_id:
+            link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == patient.id).first()
+            if link:
+                a.profile_link_id = link.id
+        # Reception is creating the Patient record right now because this
+        # person just walked in — that IS the arrival moment for a
+        # genuinely new patient who never got to tap "I've arrived" first.
+        if not a.arrived_at:
+            a.arrived_at = now_ist_naive()
+        convert_appointment_to_checkin(db, a, patient)
 
 
 def _auto_link_portal_profile(db: Session, patient: Patient) -> None:
@@ -367,6 +404,64 @@ def _auto_link_portal_profile(db: Session, patient: Patient) -> None:
     ))
     db.commit()
 
+@router.post("/merge")
+def merge_duplicate_patients(
+    body: PatientMergeIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor),
+):
+    """Interim stopgap until ABHA — manually flag two records as the same
+    person and merge their clinical history. Requires phone confirmation
+    with the patient first (no reliable automatic way to verify identity
+    otherwise)."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if not body.phone_confirmed:
+        raise HTTPException(status_code=400, detail="Please confirm this with the patient by phone before merging")
+    if body.primary_patient_id == body.duplicate_patient_id:
+        raise HTTPException(status_code=400, detail="Can't merge a record with itself")
+
+    primary = db.query(Patient).filter(
+        Patient.id == body.primary_patient_id, Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    duplicate = db.query(Patient).filter(
+        Patient.id == body.duplicate_patient_id, Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not primary or not duplicate:
+        raise HTTPException(status_code=404, detail="One or both patient records not found at this hospital")
+    if primary.merged_into_id or duplicate.merged_into_id:
+        raise HTTPException(status_code=400, detail="One of these records has already been merged")
+
+    from app.models.portal import PatientProfileLink
+    primary_link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == primary.id).first()
+    duplicate_link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == duplicate.id).first()
+    if primary_link and duplicate_link and primary_link.account_id != duplicate_link.account_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Both records are already linked to different portal accounts — this needs manual support review before merging",
+        )
+    if duplicate_link and not primary_link:
+        duplicate_link.patient_id = primary.id
+
+    from app.models.admission import Admission
+    from app.models.admission_referral import AdmissionReferral
+    from app.models.checkin import Checkin
+    from app.models.consultation import Consultation
+    from app.models.invoice import Invoice
+    from app.models.medicine_order import MedicineOrder
+    from app.models.opd_charge import OpdCharge
+    from app.models.opd_referral import OpdReferral
+    from app.models.refund import Refund
+    from app.models.test_order import TestOrder
+
+    for model in (Admission, AdmissionReferral, Checkin, Consultation, Invoice, MedicineOrder, OpdCharge, OpdReferral, Refund, TestOrder):
+        db.query(model).filter(model.patient_id == duplicate.id).update({"patient_id": primary.id})
+
+    duplicate.merged_into_id = primary.id
+    db.commit()
+    return {"message": f"Merged into {primary.name} ({primary.patient_uid})"}
+
+
 @router.get("/", response_model=List[PatientSummary])
 def list_patients(
     search: str = "",
@@ -376,7 +471,7 @@ def list_patients(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     offset = (page - 1) * limit
-    query = db.query(Patient).filter(Patient.hospital_id == current_doctor.hospital_id)
+    query = db.query(Patient).filter(Patient.hospital_id == current_doctor.hospital_id, Patient.merged_into_id.is_(None), Patient.is_active == True)
     if search:
         query = query.filter(
             Patient.name.ilike(f"%{search}%") |
@@ -545,6 +640,18 @@ def doctors_in_room(
     } for d in doctors]
     random.shuffle(result)
     return result
+
+@router.get("/doctor-coverage-status/{doctor_id}")
+def doctor_coverage_status(
+    doctor_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Used by reception's walk-in check-in flow to gate the 'Notify Doctor'
+    (straight-to-doctor, no nurse) option — only available when nobody
+    covering this doctor is currently present."""
+    covered = is_doctor_covered_and_present(db, current_doctor.hospital_id, doctor_id)
+    return {"covered": covered}
 
 @router.get("/hospital-nurses")
 def hospital_nurses(
@@ -1040,6 +1147,12 @@ def checkin_patient(
         nurse = pick_random_nurse(db, current_doctor.hospital_id, doctor.id)
         if not nurse:
             raise HTTPException(status_code=400, detail="No nurse available at this hospital yet.")
+    elif is_doctor_covered_and_present(db, current_doctor.hospital_id, doctor.id):
+        # Server-side backstop for the reception "Notify Doctor" gate — a
+        # present nurse/assistant is covering this doctor, so walking the
+        # patient straight to the doctor isn't allowed even if the frontend
+        # check was bypassed.
+        raise HTTPException(status_code=400, detail="A nurse/assistant covering this doctor is present — send the patient to them for vitals instead.")
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
@@ -1050,21 +1163,34 @@ def checkin_patient(
     if consultation_fee is None and hospital:
         consultation_fee = hospital.default_consultation_fee
 
-    checkin = Checkin(
-        hospital_id=current_doctor.hospital_id,
-        patient_id=patient.id,
-        token_number=token,
-        issue_category=payload.issue_category,
-        doctor_id=doctor.id,
-        created_by=current_doctor.id,
-        visit_date=ist_today(),
-        nurse_id=nurse.id if nurse else None,
-        vitals_status="pending" if nurse else "none",
-        consultation_fee=consultation_fee,
-        test_fee=payload.test_fee
-    )
-    db.add(checkin)
-    db.commit()
+    # generate_token_number's check-then-generate isn't airtight under real
+    # concurrency — the DB's unique constraint on token_number is the actual
+    # hard backstop. Retry on the IntegrityError it raises rather than
+    # letting a genuine race surface as a raw 500.
+    max_token_attempts = 5
+    for attempt in range(max_token_attempts):
+        checkin = Checkin(
+            hospital_id=current_doctor.hospital_id,
+            patient_id=patient.id,
+            token_number=token,
+            issue_category=payload.issue_category,
+            doctor_id=doctor.id,
+            created_by=current_doctor.id,
+            visit_date=ist_today(),
+            nurse_id=nurse.id if nurse else None,
+            vitals_status="pending" if nurse else "none",
+            consultation_fee=consultation_fee,
+            test_fee=payload.test_fee
+        )
+        db.add(checkin)
+        try:
+            db.commit()
+            break
+        except IntegrityError:
+            db.rollback()
+            if attempt == max_token_attempts - 1:
+                raise HTTPException(status_code=500, detail="Could not generate a unique token — please try again")
+            token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
     db.refresh(checkin)
 
     log_action(
@@ -1213,12 +1339,18 @@ def todays_queue(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    from app.utils.portal_checkin import sweep_todays_online_checkins
+    sweep_todays_online_checkins(db, current_doctor.hospital_id)
+
+    from app.routers.lab import _escalate_unacknowledged_critical_results
+    _escalate_unacknowledged_critical_results(db, current_doctor.hospital_id)
+
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.doctor_id == current_doctor.id,
         Checkin.visit_date == ist_today(),
         Checkin.is_paid == True
-    ).order_by(Checkin.created_at.asc()).all()
+    ).order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
 
     patient_ids = [c.patient_id for c in checkins]
     patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_(patient_ids)).all()}
@@ -1261,7 +1393,9 @@ def todays_queue(
             "is_emergency": c.is_emergency,
             "is_referral": ref is not None,
             "referral_note": ref.note if ref else None,
-            "referred_by_name": f"{ref_doctor.title} {ref_doctor.name}" if ref_doctor else None
+            "referred_by_name": f"{ref_doctor.title} {ref_doctor.name}" if ref_doctor else None,
+            "source": c.source,
+            "booked_time": c.booked_time.isoformat() if c.booked_time else None,
         })
 
     # Merge in paid portal appointments for today that haven't been checked
@@ -1821,8 +1955,8 @@ def get_patient_documents(
     test_orders = db.query(TestOrder).filter(
         TestOrder.patient_id == patient_id,
         TestOrder.hospital_id == current_doctor.hospital_id,
-        TestOrder.status == "completed"
-    ).order_by(TestOrder.completed_at.desc()).all()
+        TestOrder.status == "verified_released"
+    ).order_by(TestOrder.verified_at.desc()).all()
 
     grouped_by_consultation = {}
     for t in test_orders:
@@ -1875,3 +2009,150 @@ def download_prescription_staff(
 
     from fastapi.responses import FileResponse
     return FileResponse(pdf_path, media_type="application/pdf", filename=os.path.basename(pdf_path))
+
+
+# ---------- Manual duplicate-patient merge tool (interim stopgap) ----------
+
+def _require_reception_staff(current_doctor: Doctor):
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
+def _serialize_merge_request(db: Session, r: PatientMergeRequest):
+    primary = db.query(Patient).filter(Patient.id == r.primary_patient_id).first()
+    duplicate = db.query(Patient).filter(Patient.id == r.duplicate_patient_id).first()
+    return {
+        "id": r.id, "status": r.status, "reason": r.reason,
+        "primary_patient": {"id": primary.id, "name": primary.name, "phone": primary.phone, "patient_uid": primary.patient_uid} if primary else None,
+        "duplicate_patient": {"id": duplicate.id, "name": duplicate.name, "phone": duplicate.phone, "patient_uid": duplicate.patient_uid} if duplicate else None,
+        "flagged_at": r.flagged_at.isoformat() if r.flagged_at else None,
+        "confirmation_note": r.confirmation_note,
+        "confirmed_at": r.confirmed_at.isoformat() if r.confirmed_at else None,
+        "merged_at": r.merged_at.isoformat() if r.merged_at else None,
+        "unmerged_profile_link_note": r.unmerged_profile_link_note,
+    }
+
+
+@router.post("/merge-requests")
+def create_merge_request(body: MergeRequestIn, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    """Flags two patient records as a suspected duplicate. This is just the
+    flag — nothing is merged yet. A phone-confirmed identity check
+    (confirm_merge_request) and, separately, an admin's explicit execution
+    (execute_merge_request) both have to happen first."""
+    _require_reception_staff(current_doctor)
+    if body.primary_patient_id == body.duplicate_patient_id:
+        raise HTTPException(status_code=400, detail="Cannot merge a patient with themselves")
+    primary = db.query(Patient).filter(Patient.id == body.primary_patient_id, Patient.hospital_id == current_doctor.hospital_id, Patient.is_active == True).first()
+    duplicate = db.query(Patient).filter(Patient.id == body.duplicate_patient_id, Patient.hospital_id == current_doctor.hospital_id, Patient.is_active == True).first()
+    if not primary or not duplicate:
+        raise HTTPException(status_code=404, detail="One or both patients not found")
+    if db.query(Admission).filter(Admission.patient_id.in_([primary.id, duplicate.id]), Admission.status == "admitted").first():
+        raise HTTPException(status_code=400, detail="Cannot flag a merge while either patient has an active admission — complete/discharge first")
+
+    req = PatientMergeRequest(
+        hospital_id=current_doctor.hospital_id, primary_patient_id=primary.id, duplicate_patient_id=duplicate.id,
+        reason=(body.reason or "").strip() or None, flagged_by=current_doctor.id,
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    log_action(db, current_doctor, action="patient_merge_flagged", target_type="patient", target_id=primary.id,
+               target_label=f"{primary.name} <- {duplicate.name}", details=req.reason or "")
+    return _serialize_merge_request(db, req)
+
+
+@router.get("/merge-requests")
+def list_merge_requests(status: Optional[str] = None, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    _require_reception_staff(current_doctor)
+    query = db.query(PatientMergeRequest).filter(PatientMergeRequest.hospital_id == current_doctor.hospital_id)
+    if status:
+        query = query.filter(PatientMergeRequest.status == status)
+    reqs = query.order_by(PatientMergeRequest.flagged_at.desc()).all()
+    return [_serialize_merge_request(db, r) for r in reqs]
+
+
+@router.post("/merge-requests/{request_id}/confirm")
+def confirm_merge_request(request_id: int, body: MergeConfirmIn, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    """Logs the phone-based confirmation with the patient — required before
+    an admin can execute the actual merge."""
+    _require_reception_staff(current_doctor)
+    if not body.confirmation_note.strip():
+        raise HTTPException(status_code=400, detail="A confirmation note is required — describe what was confirmed with the patient by phone")
+    req = db.query(PatientMergeRequest).filter(PatientMergeRequest.id == request_id, PatientMergeRequest.hospital_id == current_doctor.hospital_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Merge request not found")
+    if req.status != "pending_confirmation":
+        raise HTTPException(status_code=400, detail="This request is not awaiting confirmation")
+    req.status = "confirmed"
+    req.confirmation_note = body.confirmation_note.strip()
+    req.confirmed_by = current_doctor.id
+    req.confirmed_at = now_ist_naive()
+    db.commit()
+    return _serialize_merge_request(db, req)
+
+
+@router.post("/merge-requests/{request_id}/cancel")
+def cancel_merge_request(request_id: int, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    _require_reception_staff(current_doctor)
+    req = db.query(PatientMergeRequest).filter(PatientMergeRequest.id == request_id, PatientMergeRequest.hospital_id == current_doctor.hospital_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Merge request not found")
+    if req.status in ("merged", "cancelled"):
+        raise HTTPException(status_code=400, detail="This request is already closed")
+    req.status = "cancelled"
+    db.commit()
+    return _serialize_merge_request(db, req)
+
+
+@router.post("/merge-requests/{request_id}/execute")
+def execute_merge_request(request_id: int, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    """The actual, irreversible merge — restricted to admin/sub_admin even
+    though flagging/confirming is open to reception, since this repoints
+    history across the whole record. The duplicate is never hard-deleted:
+    every table below gets its patient_id repointed to the primary, then
+    the duplicate row itself is soft-marked is_active=False with
+    merged_into_id set, so it stays in the DB for audit history."""
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only an admin can execute a patient merge")
+    req = db.query(PatientMergeRequest).filter(PatientMergeRequest.id == request_id, PatientMergeRequest.hospital_id == current_doctor.hospital_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Merge request not found")
+    if req.status != "confirmed":
+        raise HTTPException(status_code=400, detail="This request must be phone-confirmed before it can be executed")
+
+    primary_id, duplicate_id = req.primary_patient_id, req.duplicate_patient_id
+    primary = db.query(Patient).filter(Patient.id == primary_id).first()
+    duplicate = db.query(Patient).filter(Patient.id == duplicate_id).first()
+    if not primary or not duplicate or not primary.is_active or not duplicate.is_active:
+        raise HTTPException(status_code=400, detail="One or both patient records are no longer available to merge")
+    if db.query(Admission).filter(Admission.patient_id.in_([primary_id, duplicate_id]), Admission.status == "admitted").first():
+        raise HTTPException(status_code=400, detail="Cannot execute a merge while either patient has an active admission")
+
+    # Straightforward repoints — no uniqueness constraints on patient_id in any of these.
+    for model in (Admission, AdmissionReferral, Checkin, Consultation, VisitFeedback, Invoice, MedicineOrder, OpdCharge, OpdReferral, Refund, TestOrder, InviteStatus):
+        db.query(model).filter(model.patient_id == duplicate_id).update({model.patient_id: primary_id}, synchronize_session=False)
+
+    # patient_profile_links has a unique constraint on patient_id — only
+    # repoint if the primary doesn't already have its own portal link;
+    # otherwise leave it on the now-inactive duplicate and flag it for
+    # manual follow-up rather than risk a constraint violation.
+    unmerged_note = None
+    dup_link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == duplicate_id).first()
+    if dup_link:
+        primary_has_link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == primary_id).first()
+        if not primary_has_link:
+            dup_link.patient_id = primary_id
+        else:
+            unmerged_note = "Duplicate record had its own linked portal account, which was not carried over since the primary already has one — review manually if needed."
+
+    duplicate.is_active = False
+    duplicate.merged_into_id = primary_id
+    req.status = "merged"
+    req.merged_by = current_doctor.id
+    req.merged_at = now_ist_naive()
+    req.unmerged_profile_link_note = unmerged_note
+    db.commit()
+
+    log_action(db, current_doctor, action="patient_merge_executed", target_type="patient", target_id=primary_id,
+               target_label=f"{primary.name} <- {duplicate.name}", details=unmerged_note or "")
+    return _serialize_merge_request(db, req)

@@ -47,6 +47,8 @@ class ConsultationOut(BaseModel):
 
 class ConfirmPrescriptionPayload(BaseModel):
     recommended_test_ids: Optional[List[int]] = []
+    test_priorities: Optional[Dict[int, str]] = {}  # {test_id: "routine" | "urgent" | "stat"} — Phase 3 item 5
+    clinical_indication: Optional[str] = None  # e.g. "suspected DKA" — applies to this whole test order batch — Phase 3 item 7
 
 class ConsultationHistoryItem(BaseModel):
     id: int

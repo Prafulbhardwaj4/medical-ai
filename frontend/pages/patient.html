@@ -467,7 +467,7 @@
 
           return `
         <div class="visit-card">
-          <div class="visit-header" onclick="toggleVisit(${i})">
+          <div class="visit-header" onclick="toggleVisit(${i}, ${v.id})">
             <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;min-width:0">
               <span class="badge badge-navy">${v.token_number || "Draft"}</span>
               <span style="font-size:0.875rem;font-weight:600;color:var(--navy)">${formatDate(v.created_at)}</span>
@@ -501,6 +501,7 @@
             <div class="detail-section">
               <div class="detail-label">Medicines</div>
               <div>${meds.length ? meds.map(m => `<span class="med-pill">${m.name} ${m.dosage} — ${m.frequency}${m.duration ? " × " + m.duration : ""}</span>`).join("") : "—"}</div>
+              <div id="schedule-x-status-${v.id}" style="margin-top:8px"></div>
             </div>
             ${tests.length ? `<div class="detail-section">
               <div class="detail-label">Tests</div>
@@ -546,11 +547,43 @@
       }
     }
 
-    function toggleVisit(i) {
+    function toggleVisit(i, consultationId) {
       const body = document.getElementById(`visit-body-${i}`);
       const chev = document.getElementById(`chevron-${i}`);
+      const opening = !body.classList.contains("open");
       body.classList.toggle("open");
       chev.style.transform = body.classList.contains("open") ? "rotate(180deg)" : "";
+      if (opening && consultationId) loadScheduleXStatus(consultationId);
+    }
+
+    async function loadScheduleXStatus(consultationId, forceReload) {
+      const el = document.getElementById(`schedule-x-status-${consultationId}`);
+      if (!el || (el.dataset.loaded && !forceReload)) return;
+      try {
+        const result = await api("GET", `/pharmacy/medicine-orders/schedule-x-status/${consultationId}`);
+        if (!result.orders || !result.orders.length) return;
+        el.dataset.loaded = "1";
+        el.innerHTML = result.orders.map(o => `
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;background:#fff9f9;border:1px solid #fecaca;border-radius:6px;margin-top:4px">
+            <span class="badge badge-red">Schedule X</span>
+            <span style="font-size:0.82rem">${o.medicine_name} — ${o.status}</span>
+            ${o.repeat_authorized
+              ? `<span style="font-size:0.8rem;color:var(--success);font-weight:600">✓ Repeat Authorized</span>`
+              : `<button class="btn btn-outline btn-sm" style="border-color:#b91c1c;color:#b91c1c" onclick="authorizeScheduleXRepeatFromPatientPage(${o.id}, ${consultationId})">Authorize Repeat</button>`}
+          </div>
+        `).join("");
+      } catch (e) { /* silent — this is a supplementary panel, not core to the page */ }
+    }
+
+    async function authorizeScheduleXRepeatFromPatientPage(orderId, consultationId) {
+      if (!confirm('Confirm you are explicitly authorizing a repeat dispense of this Schedule X medicine?')) return;
+      try {
+        await api("PATCH", `/pharmacy/medicine-orders/${orderId}/authorize-repeat`, {});
+        toast('Repeat dispense authorized.', 'success');
+        // Re-fetch just this visit's panel — no full-page reload, so the
+        // visit card (and every other one) stays exactly as the doctor left it.
+        loadScheduleXStatus(consultationId, true);
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     function startConsultation() {

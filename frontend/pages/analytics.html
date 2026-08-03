@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MedScribe — Admin Dashboard</title>
     <link rel="stylesheet" href="../css/style.css?v=4" />
-  <script src="../js/custom-select.js" defer></script>
+    <script src="../js/custom-select.js" defer></script>
     <style>
         .section-grid-2 {
             display: grid;
@@ -98,6 +98,7 @@
             table.responsive-cards td.table-center {
                 text-align: right !important;
             }
+
             table.responsive-cards td.table-rank {
                 padding-left: 0 !important;
                 text-align: left !important;
@@ -126,7 +127,8 @@
                 <span id="topbar-clinic" style="color:var(--slate)"></span>
                 <button class="notif-bell-btn" id="notif-bell-btn" onclick="toggleNotifPanel()" style="display:none">
                     <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                     </svg>
                     <span class="notif-badge" id="notif-badge">0</span>
                 </button>
@@ -141,7 +143,8 @@
             </button>
         </header>
 
-        <div class="sidebar-backdrop" id="profile-menu-backdrop" onclick="closeProfileMenu()" style="display:none"></div>
+        <div class="sidebar-backdrop" id="profile-menu-backdrop" onclick="closeProfileMenu()" style="display:none">
+        </div>
         <div class="profile-menu" id="profile-menu">
             <div class="profile-menu-header">
                 <strong id="profile-menu-name"></strong>
@@ -149,25 +152,31 @@
             </div>
             <button class="profile-menu-item" onclick="closeProfileMenu(); toggleNotifPanel()">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
                 Notifications
                 <span class="profile-menu-badge" id="profile-menu-notif-badge" style="display:none">0</span>
             </button>
             <button class="profile-menu-item" onclick="closeProfileMenu(); showSection('settings')">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                     <circle cx="12" cy="12" r="3" />
                 </svg>
                 Settings
             </button>
             <button class="profile-menu-item" onclick="openEditDetailsModal()">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
                 Edit My Details
             </button>
             <button class="profile-menu-item danger" onclick="logout()">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
                 Sign out
             </button>
@@ -199,7 +208,7 @@
                 <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
             </div>
             <div class="mobile-menu-body" id="app-mobile-menu-body"></div>
-            </div>
+        </div>
 
         <main class="main-content">
 
@@ -299,7 +308,8 @@
                                 <option value="">All Doctors</option>
                             </select>
                         </div>
-                        <button class="btn btn-outline" style="width:100%;height:42px" onclick="clearConsultationFilters()">Clear</button>
+                        <button class="btn btn-outline" style="width:100%;height:42px"
+                            onclick="clearConsultationFilters()">Clear</button>
                     </div>
                 </div>
                 <div class="card">
@@ -381,9 +391,11 @@
 
             <!-- APPOINTMENTS -->
             <div id="section-appointments" class="section" style="display:none">
-                <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+                <div class="page-header"
+                    style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
                     <h1>Appointments</h1>
-                    <select class="form-control" id="appt-analytics-doctor-filter" style="width:440px;max-width:none;flex-shrink:0">
+                    <select class="form-control" id="appt-analytics-doctor-filter"
+                        style="width:440px;max-width:none;flex-shrink:0">
                         <option value="">All doctors</option>
                     </select>
                 </div>
@@ -397,13 +409,15 @@
                 <div class="card-header" style="padding:0 0 12px">
                     <h2>By Doctor</h2>
                 </div>
-                <div id="appt-analytics-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+                <div id="appt-analytics-grid"
+                    style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
                     <p>Loading...</p>
                 </div>
             </div>
 
             <div id="section-billing" class="section" style="display:none">
-                <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+                <div class="page-header"
+                    style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
                     <h1>Billing</h1>
                     <button class="btn btn-primary" onclick="openRevenueHistoryModal()">📊 Revenue History</button>
                 </div>
@@ -436,11 +450,38 @@
                         <button class="btn btn-primary" onclick="saveDefaultFee()">Save</button>
                     </div>
                 </div>
+                <div class="card" style="margin-bottom:20px" id="pending-waivers-card">
+                    <div class="card-header">
+                        <h2>Pending Waivers</h2>
+                    </div>
+                    <div id="pending-waivers-list">
+                        <p style="color:var(--slate)">Loading…</p>
+                    </div>
+                </div>
+                <div class="card" style="margin-bottom:20px" id="tpa-receivables-card">
+                    <div class="card-header">
+                        <h2>TPA Receivables</h2>
+                    </div>
+                    <div id="tpa-receivables-list">
+                        <p style="color:var(--slate)">Loading…</p>
+                    </div>
+                </div>
+                <div class="card" style="margin-bottom:20px" id="duplicate-patients-card">
+                    <div class="card-header">
+                        <h2>Duplicate Patients</h2>
+                        <button class="btn btn-outline btn-sm" onclick="openFlagDuplicateModal()">Flag New
+                            Duplicate</button>
+                    </div>
+                    <div id="duplicate-patients-list">
+                        <p style="color:var(--slate)">Loading…</p>
+                    </div>
+                </div>
                 <div class="card" style="margin-bottom:20px">
                     <div class="card-header">
                         <h2>Billing History</h2>
                     </div>
-                    <div class="billing-filter-grid" style="display:grid;grid-template-columns:1fr 160px 160px;gap:10px;margin-bottom:16px">
+                    <div class="billing-filter-grid"
+                        style="display:grid;grid-template-columns:1fr 160px 160px;gap:10px;margin-bottom:16px">
                         <input class="form-control" id="billing-search" placeholder="Search by patient name or token…"
                             oninput="loadBillingHistory()" />
                         <input class="form-control" id="billing-from-date" type="date"
@@ -508,40 +549,107 @@
                     </div>
                     <div style="max-width:600px;margin-bottom:14px">
                         <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Logo <span
-                                style="color:var(--slate-light);font-weight:400">(optional, shows on all printed PDFs)</span></label>
+                                style="color:var(--slate-light);font-weight:400">(optional, shows on all printed
+                                PDFs)</span></label>
                         <div style="display:flex;align-items:center;gap:14px">
-                            <img id="hd-logo-preview" style="display:none;max-height:48px;max-width:120px;border:1px solid var(--smoke-mid);border-radius:4px" />
-                            <input type="file" accept="image/*" id="hd-logo-file" class="file-input-styled" onchange="onLogoFileChosen(this)" />
-                            <button class="btn btn-outline btn-sm" id="hd-logo-remove-btn" style="display:none" onclick="removeLogo()">Remove</button>
+                            <img id="hd-logo-preview"
+                                style="display:none;max-height:48px;max-width:120px;border:1px solid var(--smoke-mid);border-radius:4px" />
+                            <input type="file" accept="image/*" id="hd-logo-file" class="file-input-styled"
+                                onchange="onLogoFileChosen(this)" />
+                            <button class="btn btn-outline btn-sm" id="hd-logo-remove-btn" style="display:none"
+                                onclick="removeLogo()">Remove</button>
                         </div>
                         <div class="err-msg" id="hd-logo-err" style="margin-top:6px"></div>
                     </div>
                     <div style="max-width:600px;margin-bottom:6px">
                         <p style="font-weight:600;font-size:13.5px;margin-bottom:2px">GST Rates</p>
-                        <p style="font-size:12px;color:var(--slate-light);margin-bottom:10px">Leave a rate blank to charge no GST on that category. Only takes effect if GSTIN above is set.</p>
+                        <p style="font-size:12px;color:var(--slate-light);margin-bottom:10px">Leave a rate blank to
+                            charge no GST on that category. Only takes effect if GSTIN above is set.</p>
                     </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;max-width:760px;margin-bottom:10px">
+                    <div
+                        style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;max-width:760px;margin-bottom:10px">
                         <div>
-                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Consultation %</label>
-                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-consultation" placeholder="e.g. 18" />
+                            <label
+                                style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Consultation
+                                %</label>
+                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-consultation"
+                                placeholder="e.g. 18" />
                         </div>
                         <div>
-                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Tests %</label>
-                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-test" placeholder="e.g. 18" />
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Tests
+                                %</label>
+                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-test"
+                                placeholder="e.g. 18" />
                         </div>
                         <div>
-                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Room (excess) %</label>
-                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-room" placeholder="e.g. 5" />
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Room
+                                (excess) %</label>
+                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-room"
+                                placeholder="e.g. 5" />
                         </div>
                         <div>
-                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Other Charges %</label>
-                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-charge" placeholder="e.g. 18" />
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Other
+                                Charges %</label>
+                            <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-charge"
+                                placeholder="e.g. 18" />
                         </div>
                     </div>
                     <div style="max-width:600px;margin-bottom:14px">
-                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Room GST Threshold (₹/day) <span
-                                style="color:var(--slate-light);font-weight:400">(only the portion of the daily room rate above this is taxable)</span></label>
-                        <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-room-threshold" placeholder="5000" />
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Room GST
+                            Threshold (₹/day) <span style="color:var(--slate-light);font-weight:400">(the entire daily
+                                room rate becomes taxable once it exceeds this)</span></label>
+                        <input class="form-control" type="number" min="0" step="0.01" id="hd-gst-room-threshold"
+                            placeholder="5000" />
+                    </div>
+                    <div style="margin-bottom:6px">
+                        <p style="font-weight:600;font-size:13.5px;margin-bottom:2px">Discount / Waiver Auto-Approve
+                            Limits</p>
+                        <p style="font-size:12px;color:var(--slate-light);margin-bottom:10px">A waiver under either
+                            limit can be applied directly by reception/front-desk. Anything over both requires
+                            admin/manager approval.</p>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:400px;margin-bottom:14px">
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Flat cap
+                                (₹)</label>
+                            <input class="form-control" type="number" min="0" step="0.01" id="hd-waiver-cap"
+                                placeholder="e.g. 500" />
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">% of
+                                bill</label>
+                            <input class="form-control" type="number" min="0" step="0.01" id="hd-waiver-percent"
+                                placeholder="e.g. 5" />
+                        </div>
+                    </div>
+                    <div style="margin-bottom:6px">
+                        <p style="font-weight:600;font-size:13.5px;margin-bottom:2px">HSN / SAC Codes</p>
+                        <p style="font-size:12px;color:var(--slate-light);margin-bottom:10px">Default codes printed on
+                            GST invoice lines per category. Medicines use their own per-drug code instead (set on each
+                            medicine).</p>
+                    </div>
+                    <div
+                        style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;max-width:760px;margin-bottom:14px">
+                        <div>
+                            <label
+                                style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Consultation</label>
+                            <input class="form-control" id="hd-hsn-consultation" placeholder="e.g. 999312" />
+                        </div>
+                        <div>
+                            <label
+                                style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Tests</label>
+                            <input class="form-control" id="hd-hsn-test" placeholder="e.g. 999312" />
+                        </div>
+                        <div>
+                            <label
+                                style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Room</label>
+                            <input class="form-control" id="hd-hsn-room" placeholder="e.g. 999311" />
+                        </div>
+                        <div>
+                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Other
+                                Charges</label>
+                            <input class="form-control" id="hd-hsn-charge" placeholder="e.g. 999312" />
+                        </div>
                     </div>
                     <button class="btn btn-primary" onclick="saveHospitalDetails()">Save</button>
                 </div>
@@ -553,7 +661,7 @@
     <div id="toast"></div>
     <script src="../js/api.js?v=4"></script>
     <script src="../js/nav-admin.js?v=1"></script>
-  <script src="../js/chat-widget.js?v=1"></script>
+    <script src="../js/chat-widget.js?v=1"></script>
     <script>
         const doc = getDoctor();
         renderAdminNav('overview', { inPage: true });
@@ -568,23 +676,23 @@
         }
 
         async function loadNotifUnreadCount() {
-      try {
-        const data = await api("GET", "/notifications/unread-count");
-        const badge = document.getElementById('notif-badge');
-        const dot = document.getElementById('profile-dot');
-        const pmBadge = document.getElementById('profile-menu-notif-badge');
-        if (data.unread_count > 0) {
-          badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
-          badge.style.display = 'flex';
-          if (dot) dot.style.display = 'block';
-          if (pmBadge) { pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count; pmBadge.style.display = 'inline-block'; }
-        } else {
-          badge.style.display = 'none';
-          if (dot) dot.style.display = 'none';
-          if (pmBadge) pmBadge.style.display = 'none';
+            try {
+                const data = await api("GET", "/notifications/unread-count");
+                const badge = document.getElementById('notif-badge');
+                const dot = document.getElementById('profile-dot');
+                const pmBadge = document.getElementById('profile-menu-notif-badge');
+                if (data.unread_count > 0) {
+                    badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                    badge.style.display = 'flex';
+                    if (dot) dot.style.display = 'block';
+                    if (pmBadge) { pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count; pmBadge.style.display = 'inline-block'; }
+                } else {
+                    badge.style.display = 'none';
+                    if (dot) dot.style.display = 'none';
+                    if (pmBadge) pmBadge.style.display = 'none';
+                }
+            } catch (e) { }
         }
-      } catch (e) { }
-    }
 
         async function toggleNotifPanel() {
             const panel = document.getElementById('notif-panel');
@@ -733,6 +841,165 @@
             }
             loadCollected30Days();
             loadBillingHistory();
+            loadPendingWaivers();
+            loadTpaReceivables();
+            loadDuplicatePatients();
+        }
+
+        async function loadTpaReceivables() {
+            const el = document.getElementById('tpa-receivables-list');
+            try {
+                const cases = await api("GET", "/admissions/tpa-receivables");
+                if (!cases.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No open TPA receivables.</p>'; return; }
+                const total = cases.reduce((s, c) => s + (c.claim_submitted_amount || 0), 0);
+                el.innerHTML = `<p style="font-size:13px;color:var(--slate);margin-bottom:10px">Total awaiting settlement: <strong>Rs.${total.toFixed(2)}</strong></p>` + cases.map(c => `
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+                        <div style="flex:1;min-width:200px">
+                            <strong>${sanitize(c.patient_name || '—')}</strong> (${sanitize(c.patient_uid || '—')}) — Rs.${(c.claim_submitted_amount || 0).toFixed(2)}
+                            <div style="font-size:12px;color:var(--slate)">${sanitize(c.insurer_name)}${c.policy_number ? ' · ' + sanitize(c.policy_number) : ''} · claimed ${c.claim_submitted_at ? new Date(c.claim_submitted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</div>
+                        </div>
+                        <a class="btn btn-outline btn-sm" href="admission-detail.html?id=${c.admission_id}">View Admission</a>
+                    </div>`).join('');
+            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+        }
+
+        async function loadPendingWaivers() {
+            const el = document.getElementById('pending-waivers-list');
+            try {
+                const waivers = await api("GET", "/billing/waivers/pending");
+                if (!waivers.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No waivers pending approval.</p>'; return; }
+                el.innerHTML = waivers.map(w => `
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+                        <div style="flex:1;min-width:200px">
+                            <strong>${sanitize(w.label)}</strong> — Rs.${w.amount.toFixed(2)}
+                            <div style="font-size:12px;color:var(--slate)">${sanitize(w.reason)} · requested by ${sanitize(w.requested_by)}</div>
+                        </div>
+                        <div style="display:flex;gap:8px">
+                            <button class="btn btn-primary btn-sm" onclick="resolveWaiver(${w.id}, 'approve')">Approve</button>
+                            <button class="btn btn-outline btn-sm" onclick="resolveWaiver(${w.id}, 'reject')">Reject</button>
+                        </div>
+                    </div>`).join('');
+            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+        }
+
+        async function resolveWaiver(id, action) {
+            try {
+                await api("PATCH", `/billing/waivers/${id}/${action}`, {});
+                toast(action === 'approve' ? 'Waiver approved.' : 'Waiver rejected.', 'success');
+                loadPendingWaivers();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        // ---------- Duplicate patient merge tool ----------
+        let dupSelected = { primary: null, duplicate: null };
+        let dupSearchTimers = { primary: null, duplicate: null };
+
+        function openFlagDuplicateModal() {
+            dupSelected = { primary: null, duplicate: null };
+            document.getElementById('dup-primary-search').value = '';
+            document.getElementById('dup-duplicate-search').value = '';
+            document.getElementById('dup-primary-results').innerHTML = '';
+            document.getElementById('dup-duplicate-results').innerHTML = '';
+            document.getElementById('dup-primary-selected').textContent = '';
+            document.getElementById('dup-duplicate-selected').textContent = '';
+            document.getElementById('dup-reason').value = '';
+            document.getElementById('dup-flag-err').textContent = '';
+            openModal('modal-flag-duplicate');
+        }
+
+        function searchDupCandidate(which) {
+            clearTimeout(dupSearchTimers[which]);
+            dupSearchTimers[which] = setTimeout(async () => {
+                const val = document.getElementById(`dup-${which}-search`).value.trim();
+                const resultsEl = document.getElementById(`dup-${which}-results`);
+                if (!val) { resultsEl.innerHTML = ''; return; }
+                try {
+                    const results = await api("GET", `/patients?search=${encodeURIComponent(val)}&limit=6`);
+                    resultsEl.innerHTML = results.map(p => `
+                        <div style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-top:4px;cursor:pointer" onclick='selectDupCandidate("${which}", ${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.phone)}, ${JSON.stringify(p.patient_uid)})'>
+                            <strong>${sanitize(p.name)}</strong> <span style="color:var(--slate);font-size:12px">${sanitize(p.phone)} · ${sanitize(p.patient_uid)}</span>
+                        </div>`).join('') || '<p style="font-size:12px;color:var(--slate-light)">No matches</p>';
+                } catch (e) { }
+            }, 300);
+        }
+
+        function selectDupCandidate(which, id, name, phone, uid) {
+            dupSelected[which] = id;
+            document.getElementById(`dup-${which}-selected`).textContent = `Selected: ${name} (${phone} · ${uid})`;
+            document.getElementById(`dup-${which}-results`).innerHTML = '';
+            document.getElementById(`dup-${which}-search`).value = '';
+        }
+
+        async function submitFlagDuplicate() {
+            const err = document.getElementById('dup-flag-err');
+            if (!dupSelected.primary || !dupSelected.duplicate) { err.textContent = 'Select both a primary and a duplicate record.'; return; }
+            if (dupSelected.primary === dupSelected.duplicate) { err.textContent = 'Primary and duplicate must be different patients.'; return; }
+            try {
+                await api("POST", "/patients/merge-requests", {
+                    primary_patient_id: dupSelected.primary, duplicate_patient_id: dupSelected.duplicate,
+                    reason: document.getElementById('dup-reason').value.trim() || null,
+                });
+                closeModal('modal-flag-duplicate');
+                toast('Flagged — confirm with the patient by phone before merging.', 'success');
+                loadDuplicatePatients();
+            } catch (e) { err.textContent = e.message; }
+        }
+
+        async function loadDuplicatePatients() {
+            const el = document.getElementById('duplicate-patients-list');
+            try {
+                const reqs = await api("GET", "/patients/merge-requests");
+                const open = reqs.filter(r => r.status !== 'merged' && r.status !== 'cancelled');
+                if (!open.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No open duplicate flags.</p>'; return; }
+                el.innerHTML = open.map(r => `
+                    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+                        <div><strong>${sanitize(r.primary_patient?.name || '—')}</strong> ← <strong>${sanitize(r.duplicate_patient?.name || '—')}</strong>
+                          <span class="badge ${r.status === 'confirmed' ? 'badge-green' : 'badge-amber'}" style="margin-left:6px">${r.status === 'confirmed' ? 'Confirmed' : 'Awaiting Phone Confirmation'}</span>
+                        </div>
+                        <div style="font-size:12px;color:var(--slate)">${sanitize(r.duplicate_patient?.phone || '')} · ${sanitize(r.duplicate_patient?.patient_uid || '')}${r.reason ? ' · ' + sanitize(r.reason) : ''}</div>
+                        <div style="display:flex;gap:8px;margin-top:6px">
+                            ${r.status === 'pending_confirmation' ? `<button class="btn btn-outline btn-sm" onclick="openConfirmMergeModal(${r.id})">Confirm by Phone</button>` : ''}
+                            ${r.status === 'confirmed' ? `<button class="btn btn-primary btn-sm" onclick="executeMerge(${r.id})">Execute Merge</button>` : ''}
+                            <button class="btn btn-outline btn-sm" onclick="cancelMergeRequest(${r.id})">Cancel</button>
+                        </div>
+                    </div>`).join('');
+            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+        }
+
+        let activeMergeRequestId = null;
+        function openConfirmMergeModal(id) {
+            activeMergeRequestId = id;
+            document.getElementById('merge-confirmation-note').value = '';
+            document.getElementById('merge-confirm-err').textContent = '';
+            openModal('modal-confirm-merge');
+        }
+        async function submitConfirmMerge() {
+            const err = document.getElementById('merge-confirm-err');
+            const note = document.getElementById('merge-confirmation-note').value.trim();
+            if (!note) { err.textContent = 'A confirmation note is required.'; return; }
+            try {
+                await api("POST", `/patients/merge-requests/${activeMergeRequestId}/confirm`, { confirmation_note: note });
+                closeModal('modal-confirm-merge');
+                toast('Confirmation logged.', 'success');
+                loadDuplicatePatients();
+            } catch (e) { err.textContent = e.message; }
+        }
+
+        async function executeMerge(id) {
+            if (!confirm('This permanently merges the duplicate record into the primary. This cannot be undone. Continue?')) return;
+            try {
+                const result = await api("POST", `/patients/merge-requests/${id}/execute`, {});
+                toast(result.unmerged_profile_link_note ? 'Merged — ' + result.unmerged_profile_link_note : 'Patients merged.', 'success');
+                loadDuplicatePatients();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        async function cancelMergeRequest(id) {
+            try {
+                await api("POST", `/patients/merge-requests/${id}/cancel`, {});
+                toast('Merge flag cancelled.', 'success');
+                loadDuplicatePatients();
+            } catch (e) { toast(e.message, 'error'); }
         }
 
         async function loadCollected30Days() {
@@ -818,6 +1085,12 @@
                 document.getElementById('hd-gst-room').value = h.room_gst_percent != null ? h.room_gst_percent : '';
                 document.getElementById('hd-gst-charge').value = h.charge_gst_percent != null ? h.charge_gst_percent : '';
                 document.getElementById('hd-gst-room-threshold').value = h.room_gst_threshold_per_day != null ? h.room_gst_threshold_per_day : '';
+                document.getElementById('hd-waiver-cap').value = h.waiver_auto_approve_cap != null ? h.waiver_auto_approve_cap : '';
+                document.getElementById('hd-waiver-percent').value = h.waiver_auto_approve_percent != null ? h.waiver_auto_approve_percent : '';
+                document.getElementById('hd-hsn-consultation').value = h.hsn_consultation || '';
+                document.getElementById('hd-hsn-test').value = h.hsn_test || '';
+                document.getElementById('hd-hsn-room').value = h.hsn_room || '';
+                document.getElementById('hd-hsn-charge').value = h.hsn_charge || '';
                 currentLogoBase64 = null;
                 const preview = document.getElementById('hd-logo-preview');
                 const removeBtn = document.getElementById('hd-logo-remove-btn');
@@ -881,7 +1154,13 @@
                     test_gst_percent: gstRateField('hd-gst-test'),
                     room_gst_percent: gstRateField('hd-gst-room'),
                     charge_gst_percent: gstRateField('hd-gst-charge'),
-                    room_gst_threshold_per_day: gstThresholdField('hd-gst-room-threshold')
+                    room_gst_threshold_per_day: gstThresholdField('hd-gst-room-threshold'),
+                    waiver_auto_approve_cap: gstThresholdField('hd-waiver-cap'),
+                    waiver_auto_approve_percent: gstThresholdField('hd-waiver-percent'),
+                    hsn_consultation: document.getElementById('hd-hsn-consultation').value.trim() || null,
+                    hsn_test: document.getElementById('hd-hsn-test').value.trim() || null,
+                    hsn_room: document.getElementById('hd-hsn-room').value.trim() || null,
+                    hsn_charge: document.getElementById('hd-hsn-charge').value.trim() || null
                 };
                 if (currentLogoBase64 !== null) payload.logo_base64 = currentLogoBase64;
                 await api("PATCH", "/admin/hospital/details", payload);
@@ -1015,7 +1294,7 @@
           ${statItem('Void Rate', ov.void_rate + '%')}
         `;
 
-                const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                 const istParts = new Intl.DateTimeFormat('en-US', {
                     timeZone: 'Asia/Kolkata', day: '2-digit', month: 'numeric', year: 'numeric'
                 }).formatToParts(new Date());
@@ -1187,7 +1466,7 @@
         let rhCalMonthData = {};
         let rhMonthPickerYear = null;
         let rhSelectedMonthStr = null; // 'YYYY-MM' or null for "all 18"
-        const RH_MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        const RH_MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
         function formatMonthLabel(ym) {
@@ -1397,14 +1676,59 @@
             const bodyRows = rows.map(r => `
                 <tr><td data-label="Period">${r.label}</td><td data-label="Invoices">${r.count}</td><td data-label="Revenue">Rs.${r.total.toFixed(2)}</td></tr>
             `).join('') + (rows.length > 1
-                ? `<tr style="font-weight:600"><td data-label="Period">Total</td><td data-label="Invoices">${totalCount}</td><td data-label="Revenue">Rs.${grandTotal.toFixed(2)}</td></tr>`
-                : '');
+                    ? `<tr style="font-weight:600"><td data-label="Period">Total</td><td data-label="Invoices">${totalCount}</td><td data-label="Revenue">Rs.${grandTotal.toFixed(2)}</td></tr>`
+                    : '');
             listEl.innerHTML = `<p style="color:var(--slate);font-size:12px;margin-bottom:10px">${boundNote}</p>` +
                 makeTable(["Period", "Invoices", "Revenue"], bodyRows);
         }
     </script>
 
     <!-- Revenue History Modal -->
+    <div class="modal-overlay" id="modal-flag-duplicate">
+        <div class="modal" style="max-width:480px">
+            <div class="modal-header">
+                <h2>Flag Duplicate Patients</h2><button class="modal-close"
+                    onclick="closeModal('modal-flag-duplicate')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Primary Record (the one that survives)</label>
+                <input class="form-control" id="dup-primary-search" placeholder="Search by name, phone, or UID"
+                    oninput="searchDupCandidate('primary')" />
+                <div id="dup-primary-results" style="margin-top:6px"></div>
+                <p id="dup-primary-selected" style="font-size:13px;color:var(--slate);margin-top:6px"></p>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Duplicate Record (the one that gets merged away)</label>
+                <input class="form-control" id="dup-duplicate-search" placeholder="Search by name, phone, or UID"
+                    oninput="searchDupCandidate('duplicate')" />
+                <div id="dup-duplicate-results" style="margin-top:6px"></div>
+                <p id="dup-duplicate-selected" style="font-size:13px;color:var(--slate);margin-top:6px"></p>
+            </div>
+            <div class="form-group"><label class="form-label">Reason (optional)</label><input class="form-control"
+                    id="dup-reason" placeholder="e.g. same phone number, different spelling of name" /></div>
+            <div class="err-msg" id="dup-flag-err"></div>
+            <button class="btn btn-primary" style="width:100%" onclick="submitFlagDuplicate()">Flag as
+                Duplicate</button>
+        </div>
+    </div>
+
+    <!-- Duplicate merge confirmation modal -->
+    <div class="modal-overlay" id="modal-confirm-merge">
+        <div class="modal" style="max-width:420px">
+            <div class="modal-header">
+                <h2>Confirm by Phone</h2><button class="modal-close"
+                    onclick="closeModal('modal-confirm-merge')">&times;</button>
+            </div>
+            <p style="font-size:13px;color:var(--slate);margin-bottom:10px">Describe what was confirmed with the patient
+                on the phone before this can be merged.</p>
+            <div class="form-group"><textarea class="form-control" id="merge-confirmation-note" rows="3"
+                    placeholder="e.g. Confirmed via call — same DOB and address, patient acknowledged duplicate registration"></textarea>
+            </div>
+            <div class="err-msg" id="merge-confirm-err"></div>
+            <button class="btn btn-primary" style="width:100%" onclick="submitConfirmMerge()">Save Confirmation</button>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="modal-revenue-history">
         <div class="modal" style="max-width:640px">
             <div class="modal-header">
@@ -1412,17 +1736,22 @@
                 <button class="modal-close" onclick="closeRevenueHistoryModal()">×</button>
             </div>
             <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-                <button class="btn btn-outline btn-sm" id="rh-tab-daily" onclick="setRevenueHistoryMode('daily')">Per Day</button>
-                <button class="btn btn-outline btn-sm" id="rh-tab-monthly" onclick="setRevenueHistoryMode('monthly')">Per Month</button>
-                <button class="btn btn-outline btn-sm" id="rh-tab-range" onclick="setRevenueHistoryMode('range')">Range</button>
+                <button class="btn btn-outline btn-sm" id="rh-tab-daily" onclick="setRevenueHistoryMode('daily')">Per
+                    Day</button>
+                <button class="btn btn-outline btn-sm" id="rh-tab-monthly"
+                    onclick="setRevenueHistoryMode('monthly')">Per Month</button>
+                <button class="btn btn-outline btn-sm" id="rh-tab-range"
+                    onclick="setRevenueHistoryMode('range')">Range</button>
             </div>
             <div id="rh-daily-filters" style="margin-bottom:16px">
                 <div class="rh-cal-wrap">
                     <div class="rh-cal-main">
                         <div class="rh-cal-header">
-                            <button class="rh-cal-nav-btn" id="rh-cal-prev" onclick="rhCalShiftMonth(-1)">&lsaquo;</button>
+                            <button class="rh-cal-nav-btn" id="rh-cal-prev"
+                                onclick="rhCalShiftMonth(-1)">&lsaquo;</button>
                             <strong id="rh-cal-month-label"></strong>
-                            <button class="rh-cal-nav-btn" id="rh-cal-next" onclick="rhCalShiftMonth(1)">&rsaquo;</button>
+                            <button class="rh-cal-nav-btn" id="rh-cal-next"
+                                onclick="rhCalShiftMonth(1)">&rsaquo;</button>
                         </div>
                         <div class="rh-cal-weekdays">
                             <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
@@ -1436,15 +1765,19 @@
             </div>
             <div id="rh-monthly-filters" style="display:none;margin-bottom:16px">
                 <div class="rh-cal-header">
-                    <button class="rh-cal-nav-btn" id="rh-month-prev-year" onclick="rhMonthShiftYear(-1)">&lsaquo;</button>
+                    <button class="rh-cal-nav-btn" id="rh-month-prev-year"
+                        onclick="rhMonthShiftYear(-1)">&lsaquo;</button>
                     <strong id="rh-month-year-label"></strong>
-                    <button class="rh-cal-nav-btn" id="rh-month-next-year" onclick="rhMonthShiftYear(1)">&rsaquo;</button>
+                    <button class="rh-cal-nav-btn" id="rh-month-next-year"
+                        onclick="rhMonthShiftYear(1)">&rsaquo;</button>
                 </div>
                 <div class="rh-month-grid" id="rh-month-grid"></div>
-                <button class="btn btn-outline btn-sm" style="margin-top:12px;width:100%" onclick="clearMonthFilter()">Show All 18 Months</button>
+                <button class="btn btn-outline btn-sm" style="margin-top:12px;width:100%"
+                    onclick="clearMonthFilter()">Show All 18 Months</button>
             </div>
             <div id="rh-range-filters" style="display:none;margin-bottom:16px">
-                <p style="color:var(--slate);font-size:13px;margin-bottom:10px">Pick any range within the past 18 months.</p>
+                <p style="color:var(--slate);font-size:13px;margin-bottom:10px">Pick any range within the past 18
+                    months.</p>
                 <div style="display:flex;gap:10px;flex-wrap:wrap">
                     <div style="flex:1;min-width:140px">
                         <label style="display:block;font-size:12px;color:var(--slate);margin-bottom:4px">From</label>

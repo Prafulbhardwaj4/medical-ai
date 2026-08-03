@@ -48,6 +48,52 @@ def notify_emergency_alert(db: Session, hospital_id: int, admission_id: int, pat
     ))
 
 
+def notify_critical_result(db: Session, hospital_id: int, order_id: int, patient_name: str,
+                            doctor_id: int, test_name: str, critical_note: str,
+                            ward: str = None, bed_number: str = None):
+    """Critical lab value crossed threshold — same dual-target primitive as
+    notify_emergency_alert (targeted doctor ping + hospital-wide admin
+    visibility), new entry point. Always a fresh timestamped row, same as
+    the emergency alert, since every critical result is its own event."""
+    key = f"critical_result:{order_id}:{now_ist_naive().isoformat()}"
+    location = f" — {ward}, Bed {bed_number}" if ward else ""
+    base_message = f"Critical result for {patient_name}{location}: {test_name} — {critical_note}"
+
+    if doctor_id:
+        db.add(Notification(
+            hospital_id=hospital_id, source_key=key + ":doctor", type="critical_result", severity="critical",
+            title=f"🚨 Critical result — {patient_name}", message=base_message,
+            link_type="test_order", link_id=order_id, is_read=False, target_doctor_id=doctor_id,
+        ))
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key + ":admin", type="critical_result", severity="critical",
+        title=f"🚨 Critical result — {patient_name}", message=base_message,
+        link_type="test_order", link_id=order_id, is_read=False,
+    ))
+
+
+def notify_critical_result_escalation(db: Session, hospital_id: int, order_id: int, patient_name: str,
+                                       test_name: str, critical_note: str, stage: str,
+                                       ward: str = None, bed_number: str = None):
+    """Escalation step when the ordering doctor hasn't acknowledged in time.
+    stage is "nurse_ward" (first escalation) or "admin" (final escalation) —
+    always hospital-wide (no single target_doctor_id), since at this point
+    the point is broad visibility, not a single recipient."""
+    key = f"critical_result_escalation:{order_id}:{stage}:{now_ist_naive().isoformat()}"
+    location = f" — {ward}, Bed {bed_number}" if ward else ""
+    if stage == "nurse_ward":
+        title = f"🚨 Unacknowledged critical result — {patient_name}"
+        message = f"No doctor acknowledgment yet for {patient_name}{location}: {test_name} — {critical_note}. Escalating to ward coverage."
+    else:
+        title = f"🚨 Critical result still unacknowledged — {patient_name}"
+        message = f"Still unacknowledged after escalation for {patient_name}{location}: {test_name} — {critical_note}. Needs immediate admin attention."
+
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="critical_result_escalation", severity="critical",
+        title=title, message=message, link_type="test_order", link_id=order_id, is_read=False,
+    ))
+
+
 def notify_ward_change_request(db: Session, hospital_id: int, admission_id: int, patient_name: str,
                                 requested_ward_name: str, requested_by_name: str, note: str = None):
     """Raised when a doctor/nurse asks reception to move a patient to a

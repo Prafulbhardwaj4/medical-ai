@@ -18,4 +18,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column('rooms', 'room_number')
-    op.alter_column('rooms', 'name', nullable=False)
+    with op.batch_alter_table('rooms') as batch_op:
+        batch_op.alter_column('name', nullable=False)

@@ -20,3 +20,8 @@ from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
 from app.models.day_end_close import DayEndClose
 from app.models.attendance_coverage import AttendanceCoverage
+from app.models.credit_debit_note import CreditDebitNote
+from app.models.waiver_request import WaiverRequest
+from app.models.invoice_sequence import InvoiceSequence
+from app.models.admission_consent import AdmissionConsent
+from app.models.patient_merge_request import PatientMergeRequest

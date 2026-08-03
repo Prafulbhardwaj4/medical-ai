@@ -18,6 +18,7 @@ mixed-convention column (see audit notes) and a blanket shift would corrupt
 rows that were already IST. Left for manual/no-op.
 """
 from alembic import op
+import sqlalchemy as sa
 
 revision = 'f3a1b9c8d2e7'
 down_revision = 'd3f6a1b2c9e4'
@@ -53,7 +54,24 @@ SHIFT_TARGETS = [
 def _shift(direction: str):
     bind = op.get_bind()
     dialect = bind.dialect.name
+    insp = sa.inspect(bind)
+    existing_tables = set(insp.get_table_names())
+    cols_by_table = {}
+
     for table, column in SHIFT_TARGETS:
+        if table not in existing_tables:
+            # Table doesn't exist on this DB at this point in the migration
+            # history (e.g. a branch that hasn't applied yet) — nothing to
+            # shift.
+            continue
+        if table not in cols_by_table:
+            cols_by_table[table] = {c['name'] for c in insp.get_columns(table)}
+        if column not in cols_by_table[table]:
+            # Column doesn't exist (renamed/removed/never-added on this
+            # branch) — skip rather than crash; there's no data here to
+            # shift either way.
+            continue
+
         if dialect == "sqlite":
             sign_hours = "+5 hours" if direction == "forward" else "-5 hours"
             sign_mins = "+30 minutes" if direction == "forward" else "-30 minutes"

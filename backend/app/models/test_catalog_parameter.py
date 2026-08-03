@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Float
 from app.database import Base
 from app.utils.timezone import now_ist_naive
 
@@ -20,3 +20,5 @@ class TestCatalogParameter(Base):
     display_order = Column(Integer, default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=now_ist_naive)
+    critical_low = Column(Float, nullable=True)   # hospital-configurable — below this value, a result is flagged critical (Phase 1)
+    critical_high = Column(Float, nullable=True)  # above this value, a result is flagged critical (Phase 1)

@@ -3,6 +3,9 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 
+VALID_ADMISSION_TYPES = {"planned", "emergency", "maternity", "transfer_in", "day_care"}
+
+
 class AdmitPatientIn(BaseModel):
     patient_id: int
     ward_type_id: Optional[int] = None  # preferred: pick from admin-configured ward types
@@ -13,6 +16,7 @@ class AdmitPatientIn(BaseModel):
     admitting_doctor_id: Optional[int] = None  # defaults to the patient's last consulting doctor if not given
     deposit_amount: float = 0           # pre-filled from ward type's default, reception can override
     deposit_payment_method: Optional[str] = None  # required if deposit_amount > 0
+    admission_type: str = "planned"     # "planned" | "emergency" | "maternity" | "transfer_in" | "day_care"
 
 
 class UpdateDiagnosisIn(BaseModel):
@@ -24,12 +28,18 @@ class SendToAdmissionIn(BaseModel):
     reason: Optional[str] = None
 
 
+VALID_WARD_CATEGORIES = {"general", "icu", "private", "maternity", "nicu", "isolation", "day_care", "other"}
+
+
 class WardTypeCreateIn(BaseModel):
     name: str
     total_beds: int
     daily_charge: float
     default_deposit: float = 0
     is_icu: bool = False
+    is_ot: bool = False
+    ot_charge: Optional[float] = None
+    category: str = "general"
 
 
 class WardTypeOut(BaseModel):
@@ -39,6 +49,9 @@ class WardTypeOut(BaseModel):
     daily_charge: float
     default_deposit: float = 0
     is_icu: bool = False
+    is_ot: bool = False
+    ot_charge: Optional[float] = None
+    category: str = "general"
     occupied: int = 0
     vacant: int = 0
 
@@ -77,9 +90,26 @@ class AddChargeIn(BaseModel):
     quantity: int = 1
 
 
+class ProfessionalFeeIn(BaseModel):
+    amount: Optional[float] = None  # null clears the override, falling back to the doctor's default professional_fee_per_admission
+
+
+VALID_CONSENT_TYPES = {"general", "procedure", "anaesthesia", "blood_transfusion", "high_risk", "lama_dama"}
+
+
+class AdmissionConsentIn(BaseModel):
+    consent_type: str
+    signer_name: str
+    signed_by_guardian: bool = False
+    relationship: Optional[str] = None  # required if signed_by_guardian is True
+    witness_name: Optional[str] = None
+    notes: Optional[str] = None
+
+
 class ReturnMedicationIn(BaseModel):
     quantity: int
-    restock: bool = False
+    restock: bool = False  # deprecated — retained for backward compat, no longer increments stock
+    disposition: str  # "returned_to_supplier" | "sent_to_disposal"
     note: Optional[str] = None
 
 
@@ -91,6 +121,8 @@ class AddAdmissionTestIn(BaseModel):
     test_id: Optional[int] = None
     test_name: str
     price: float = 0
+    priority: Optional[str] = "routine"  # "routine" | "urgent" | "stat" — Phase 3 item 5
+    clinical_indication: Optional[str] = None  # e.g. "suspected DKA" — Phase 3 item 7
 
 
 class RequestWardChangeIn(BaseModel):
@@ -103,11 +135,31 @@ class ChangeWardIn(BaseModel):
     bed_number: str
 
 
+VALID_DISCHARGE_TYPES = {"planned", "lama_dama", "death"}
+
+
 class DischargeIn(BaseModel):
+    discharge_type: str = "planned"  # "planned" | "lama_dama" | "death"
     discharge_summary: Optional[str] = None
     payment_collected: bool = False
     payment_method: Optional[str] = None  # "cash" | "card" | "upi", required when payment_collected is True
     refund_channel: Optional[str] = None  # "cash" | "card" | "upi" | "online", required when the deposit exceeds charges
+    # LAMA/DAMA only
+    capacity_evaluation_note: Optional[str] = None  # only needed if there's any question of impaired decision-making
+    # Death-in-hospital only
+    time_of_death: Optional[str] = None  # ISO datetime string
+    certifying_doctor_id: Optional[int] = None
+    cause_of_death: Optional[str] = None
+    is_mlc: Optional[bool] = None  # Medico-Legal Case — whether police/forensic involvement is required before body release
+    # Structured discharge summary (NABH-standard fields) — discharge_summary
+    # above remains the free-text "additional notes" catch-all
+    discharging_doctor_id: Optional[int] = None  # defaults to the admission's admitting_doctor_id if not given
+    course_in_hospital: Optional[str] = None
+    procedures_performed: Optional[str] = None
+    discharge_diagnosis: Optional[str] = None
+    condition_at_discharge: Optional[str] = None
+    medications_on_discharge: Optional[str] = None
+    follow_up_instructions: Optional[str] = None
 
 
 class TopupRequestIn(BaseModel):
@@ -123,6 +175,7 @@ class TpaCaseIn(BaseModel):
     insurer_name: str
     policy_number: Optional[str] = None
     room_category_eligibility: Optional[str] = None
+    eligible_daily_rate: Optional[float] = None  # numeric ₹/day — used to compute the proportionate deduction estimate
     copay_notes: Optional[str] = None
 
 
@@ -130,5 +183,11 @@ class TpaCaseUpdateIn(BaseModel):
     status: str  # "pending" | "query_raised" | "approved" | "denied"
     authorized_amount: Optional[float] = None
     room_category_eligibility: Optional[str] = None
+    eligible_daily_rate: Optional[float] = None
     copay_notes: Optional[str] = None
     query_notes: Optional[str] = None
+
+
+class TpaSettleIn(BaseModel):
+    settled_amount: float
+    settlement_notes: Optional[str] = None

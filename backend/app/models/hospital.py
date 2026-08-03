@@ -20,6 +20,13 @@ class Hospital(Base):
     room_gst_percent = Column(Float, nullable=True)  # blank = no GST on the taxable-excess portion of room charges
     charge_gst_percent = Column(Float, nullable=True)  # blank = no GST on ad-hoc OPD/IPD charges (consumable/procedure/other)
     room_gst_threshold_per_day = Column(Float, nullable=False, default=5000.0)  # only the daily room rate above this is taxable
+    waiver_auto_approve_cap = Column(Float, nullable=True)  # ₹ — waivers at or below this OR the percent cap below can be applied directly, no approval needed
+    waiver_auto_approve_percent = Column(Float, nullable=True)  # % of the current bill — same auto-approve logic as the cap, whichever is looser wins
+    hsn_consultation = Column(String, nullable=True)  # SAC code for consultation line items — GST-mandatory per invoice line
+    hsn_room = Column(String, nullable=True)  # SAC code for room/facility charges
+    hsn_test = Column(String, nullable=True)  # SAC code for diagnostic tests
+    hsn_charge = Column(String, nullable=True)  # SAC code for procedures/consumables/other/professional-fee charges (same catch-all bucket charge_gst_percent already uses)
+    default_service_hsn_sac = Column(String, nullable=True, default="999311")  # SAC code applied to service-type invoice lines (consultation, room, professional fee, tests, procedures) — medicines use their own catalog hsn_code instead
     phone = Column(String, nullable=True)  # optional — shown on PDF letterheads if set
     logo_base64 = Column(Text, nullable=True)  # optional — full data URI; stored in-DB since Render's disk is ephemeral
     is_active = Column(Boolean, default=True)
