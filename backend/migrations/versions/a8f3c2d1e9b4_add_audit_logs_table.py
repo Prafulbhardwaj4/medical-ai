@@ -7,6 +7,7 @@ Create Date: 2026-06-30 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 revision = 'a8f3c2d1e9b4'
 down_revision = '415ec200f5c0'
@@ -15,6 +16,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    if 'audit_logs' in inspector.get_table_names():
+        return  # table already exists (created before Alembic tracked it) — nothing to do
+
     op.create_table('audit_logs',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('actor_id', sa.Integer(), nullable=True),
