@@ -17,14 +17,16 @@
 
     @media (max-width: 900px) {
       #main-grid { grid-template-columns: 1fr !important; }
-      #main-grid.nurse-full-width { grid-template-columns: 1fr !important; }
-      @media (min-width: 901px) {
-        #main-grid.nurse-full-width { grid-template-columns: 1fr !important; }
-        #main-grid.nurse-full-width > div:last-child { display: none; }
-      }
       .med-card, .bill-row { font-size: 13px; }
       .card-header { flex-wrap: wrap; gap: 8px; }
       #patient-header { padding: 16px; }
+    }
+    /* Desktop: for nurses the entire right column (deposit/TPA/consents/running-bill/
+       discharge — all hidden for this role) ends up empty. Collapse it away instead
+       of leaving a dead empty column, rather than just narrowing it to 0 width. */
+    @media (min-width: 901px) {
+      #main-grid.nurse-full-width { grid-template-columns: 1fr !important; }
+      #main-grid.nurse-full-width > div:last-child { display: none; }
     }
   </style>
 
@@ -733,12 +735,6 @@
     const canManageTpa = ["receptionist", "admin", "sub_admin"].includes(getDoctor()?.role);
     let wardTypesForMove = [];
     if (isAdminViewer || isDoctorViewer || isNurseViewer()) document.getElementById("discharge-card").style.display = "none";
-    if (isNurseViewer()) {
-      document.getElementById("deposit-card").style.display = "none";
-      document.getElementById("tpa-card").style.display = "none";
-      document.getElementById("consents-card").style.display = "none";
-      document.getElementById("main-grid").style.gridTemplateColumns = "1fr";
-    }
     if (isNurseViewer() || isDoctorViewer) {
       document.getElementById("running-bill-card").style.display = "none";
     }
@@ -746,6 +742,9 @@
       document.getElementById("deposit-card").style.display = "none";
       document.getElementById("tpa-card").style.display = "none";
       document.getElementById("consents-card").style.display = "none";
+      // Every card in the right column is hidden for this role — collapse the
+      // whole column via CSS (handles the desktop empty-gap case) rather than
+      // just narrowing it with an inline style.
       document.getElementById("main-grid").classList.add("nurse-full-width");
     }
     fillTopbar();

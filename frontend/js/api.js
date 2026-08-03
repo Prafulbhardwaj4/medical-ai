@@ -84,10 +84,30 @@ async function api(method, path, body = null, isFormData = false, silent = false
       res = await fetch(BASE + path, opts);
     } catch (networkErr) {
       // Likely a Render cold-start: the instance was asleep and the first request
-      // timed out before the app (and CORS headers) were even up. Wait a moment
-      // for it to finish waking up and retry once, silently, before giving up.
-      await new Promise(r => setTimeout(r, 3000));
-      res = await fetch(BASE + path, opts);
+      // failed before the app (and CORS headers) were even up. A free-tier cold
+      // start can take 30-60+ seconds, so one quick retry isn't enough — retry a
+      // few times with backoff, and tell the person what's actually happening
+      // instead of silently failing after a few seconds.
+      const RETRY_DELAYS_MS = [3000, 6000, 10000, 15000];
+      let lastErr = networkErr;
+      let wokeUpToast = false;
+      for (const delay of RETRY_DELAYS_MS) {
+        if (!wokeUpToast) {
+          toast("Waking up the server — this can take up to a minute on first load.", "info");
+          wokeUpToast = true;
+        }
+        await new Promise(r => setTimeout(r, delay));
+        try {
+          res = await fetch(BASE + path, opts);
+          lastErr = null;
+          break;
+        } catch (retryErr) {
+          lastErr = retryErr;
+        }
+      }
+      if (lastErr) {
+        throw new Error("Couldn't reach the server after several attempts. It may be down — please check again shortly.");
+      }
     }
 
     if (res.status === 401) {
