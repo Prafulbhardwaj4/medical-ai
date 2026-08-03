@@ -28,7 +28,8 @@ def upgrade():
         # dialects (Postgres) it's just a normal ALTER, so this is safe
         # everywhere, not just SQLite.
         with op.batch_alter_table('test_catalog_items') as batch_op:
-            batch_op.add_column(sa.Column('notifiable_disease_id', sa.Integer(), sa.ForeignKey('notifiable_diseases.id'), nullable=True))
+            batch_op.add_column(sa.Column('notifiable_disease_id', sa.Integer(), nullable=True))
+            batch_op.create_foreign_key('fk_test_catalog_items_notifiable_disease_id', 'notifiable_diseases', ['notifiable_disease_id'], ['id'])
 
     order_cols = {c['name'] for c in insp.get_columns('test_orders')}
     if 'is_idsp_notifiable' not in order_cols:
