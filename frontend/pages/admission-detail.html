@@ -17,6 +17,11 @@
 
     @media (max-width: 900px) {
       #main-grid { grid-template-columns: 1fr !important; }
+      #main-grid.nurse-full-width { grid-template-columns: 1fr !important; }
+      @media (min-width: 901px) {
+        #main-grid.nurse-full-width { grid-template-columns: 1fr !important; }
+        #main-grid.nurse-full-width > div:last-child { display: none; }
+      }
       .med-card, .bill-row { font-size: 13px; }
       .card-header { flex-wrap: wrap; gap: 8px; }
       #patient-header { padding: 16px; }
@@ -728,8 +733,20 @@
     const canManageTpa = ["receptionist", "admin", "sub_admin"].includes(getDoctor()?.role);
     let wardTypesForMove = [];
     if (isAdminViewer || isDoctorViewer || isNurseViewer()) document.getElementById("discharge-card").style.display = "none";
+    if (isNurseViewer()) {
+      document.getElementById("deposit-card").style.display = "none";
+      document.getElementById("tpa-card").style.display = "none";
+      document.getElementById("consents-card").style.display = "none";
+      document.getElementById("main-grid").style.gridTemplateColumns = "1fr";
+    }
     if (isNurseViewer() || isDoctorViewer) {
       document.getElementById("running-bill-card").style.display = "none";
+    }
+    if (isNurseViewer()) {
+      document.getElementById("deposit-card").style.display = "none";
+      document.getElementById("tpa-card").style.display = "none";
+      document.getElementById("consents-card").style.display = "none";
+      document.getElementById("main-grid").classList.add("nurse-full-width");
     }
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
@@ -750,24 +767,39 @@
     let consentsData = [];
 
     async function loadAdmission() {
+      // Core admission data loads and renders independently — a hiccup in
+      // any one secondary card (deposit/TPA/consents) should never take
+      // down the whole page, which is what the combined Promise.all used
+      // to do (one failed fetch rejected everything, including Medications
+      // and Tests that had nothing to do with the failure).
       try {
-        [admissionData, depositData, tpaData, consentsData] = await Promise.all([
-          api("GET", `/admissions/${admissionId}`),
-          api("GET", `/admissions/${admissionId}/deposit-summary`),
-          api("GET", `/admissions/${admissionId}/tpa-case`),
-          api("GET", `/admissions/${admissionId}/consents`),
-        ]);
+        admissionData = await api("GET", `/admissions/${admissionId}`);
         renderHeader();
         renderMeds();
         renderTests();
         renderCharges();
         renderBill();
-        renderDepositCard();
-        renderTpaCard();
-        renderConsents();
         renderDischargeCard();
       } catch (e) {
         document.getElementById("patient-header").innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        return;
+      }
+
+      // Deposit/TPA/consents are billing- and legal-facing — nurses and
+      // assistants don't need them and shouldn't fetch them at all.
+      if (isNurseViewer()) return;
+
+      try {
+        [depositData, tpaData, consentsData] = await Promise.all([
+          api("GET", `/admissions/${admissionId}/deposit-summary`),
+          api("GET", `/admissions/${admissionId}/tpa-case`),
+          api("GET", `/admissions/${admissionId}/consents`),
+        ]);
+        renderDepositCard();
+        renderTpaCard();
+        renderConsents();
+      } catch (e) {
+        toast("Some billing details couldn't be loaded: " + e.message, "error");
       }
     }
 
@@ -985,12 +1017,12 @@
           <span>${sanitize(t.test_name)}</span>
           <span style="text-align:right;display:flex;align-items:center;gap:10px">
             <span>
-              <span class="badge badge-grey">${t.status}</span>
+              <span class="badge badge-grey">${t.status === 'verified_released' ? 'completed' : t.status}</span>
               <div style="font-size:11px;color:var(--slate-light);margin-top:2px">
-                ${t.completed_at ? 'Completed ' + fmt(t.completed_at) : (t.queued_at ? 'Ordered ' + fmt(t.queued_at) : '')}
+                ${t.verified_at ? 'Completed ' + fmt(t.verified_at) : (t.queued_at ? 'Ordered ' + fmt(t.queued_at) : '')}
               </div>
             </span>
-            ${t.status === 'completed' ? `<button class="btn btn-outline btn-sm" onclick="downloadFile('/lab/orders/${t.id}/report', '${sanitize(t.test_name)}_report.pdf')">Preview Report</button>` : ''}
+            ${t.status === 'verified_released' ? `<button class="btn btn-outline btn-sm" onclick="downloadFile('/lab/orders/${t.id}/report', '${sanitize(t.test_name)}_report.pdf')">Preview Report</button>` : ''}
           </span>
         </div>`).join('');
     }

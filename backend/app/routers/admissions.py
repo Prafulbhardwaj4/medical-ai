@@ -511,6 +511,7 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         "id": t.id, "test_name": t.test_name, "status": t.status, "price": t.price,
         "queued_at": t.queued_at.isoformat() if t.queued_at else None,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+        "verified_at": t.verified_at.isoformat() if t.verified_at else None,
     } for t in tests]
 
     charge_total = sum(c.amount * c.quantity for c in charges)

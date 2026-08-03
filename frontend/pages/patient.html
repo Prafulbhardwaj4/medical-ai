@@ -510,8 +510,8 @@
             ${(testOrdersByConsultation[v.id] || []).length ? `<div class="detail-section">
               <div class="detail-label">Lab Reports</div>
               <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-                ${(testOrdersByConsultation[v.id] || []).map(o => `<span class="test-pill">${o.test_name}${o.status !== 'completed' ? ` <span class="badge badge-grey" style="font-size:10px">${o.status.replace('_',' ')}</span>` : ''}</span>`).join("")}
-                ${(testOrdersByConsultation[v.id] || []).every(o => o.status === 'completed')
+                ${(testOrdersByConsultation[v.id] || []).map(o => `<span class="test-pill">${o.test_name}${o.status !== 'verified_released' ? ` <span class="badge badge-grey" style="font-size:10px">${o.status.replace('_',' ')}</span>` : ''}</span>`).join("")}
+                ${(testOrdersByConsultation[v.id] || []).every(o => o.status === 'verified_released')
                   ? `<button class="btn btn-outline btn-sm" onclick="downloadTestReport([${(testOrdersByConsultation[v.id] || []).map(o => o.id).join(',')}])">View Combined Report</button>`
                   : ''}
               </div>
