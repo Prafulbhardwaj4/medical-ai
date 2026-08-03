@@ -482,7 +482,21 @@ function promptOffDutyTime() {
         <p style="font-size:13px;color:var(--slate);margin-bottom:14px">
           What time do you expect to go off duty today? If you forget to mark yourself off duty, you'll be marked off duty automatically at this time.
         </p>
-        <input type="time" class="form-control" id="od-time-input" style="margin-bottom:8px" />
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <select class="form-control" id="od-hour" style="flex:1">
+            ${Array.from({length:12},(_,i)=>i+1).map(h=>`<option value="${h}">${h}</option>`).join('')}
+          </select>
+          <span style="font-weight:600">:</span>
+          <input class="form-control" id="od-minute" list="od-minute-list" placeholder="00" maxlength="2"
+            style="flex:1;text-align:center" />
+          <datalist id="od-minute-list">
+            <option value="00"></option><option value="15"></option><option value="30"></option><option value="45"></option>
+          </datalist>
+          <select class="form-control" id="od-ampm" style="flex:1">
+            <option value="AM">AM</option>
+            <option value="PM">PM</option>
+          </select>
+        </div>
         <div class="err-msg" id="od-time-err"></div>
         <div style="display:flex;gap:10px;margin-top:10px">
           <button class="btn btn-outline" style="flex:1" id="od-time-skip">Skip</button>
@@ -494,20 +508,27 @@ function promptOffDutyTime() {
     const cleanup = (value) => { overlay.remove(); resolve(value); };
     overlay.querySelector("#od-time-skip").addEventListener("click", () => cleanup(null));
     overlay.querySelector("#od-time-confirm").addEventListener("click", () => {
-      const val = overlay.querySelector("#od-time-input").value;
-      if (!val) { overlay.querySelector("#od-time-err").textContent = "Pick a time, or tap Skip."; return; }
-      const [h, m] = val.split(":").map(Number);
+      const hour12 = parseInt(overlay.querySelector("#od-hour").value, 10);
+      const minuteRaw = overlay.querySelector("#od-minute").value.trim();
+      const ampm = overlay.querySelector("#od-ampm").value;
+      const minute = minuteRaw === "" ? NaN : parseInt(minuteRaw, 10);
+      if (!hour12 || isNaN(minute) || minute < 0 || minute > 59) {
+        overlay.querySelector("#od-time-err").textContent = "Pick or type a valid time, or tap Skip.";
+        return;
+      }
+      let hour24 = hour12 % 12;
+      if (ampm === "PM") hour24 += 12;
       const d = new Date();
-      d.setHours(h, m, 0, 0);
+      d.setHours(hour24, minute, 0, 0);
       if (d < new Date()) d.setDate(d.getDate() + 1);
       cleanup(d.toISOString());
     });
   });
 }
 
-async function markAttendanceCommon(status, room_id, extra) {
+async function markAttendanceCommon(status, room_id, extra, alreadyActive) {
   let expected_off_duty_at = null;
-  if (status === "present") {
+  if (status === "present" && !alreadyActive) {
     expected_off_duty_at = await promptOffDutyTime();
   }
   return api("POST", "/doctors/attendance", { status, room_id, expected_off_duty_at, ...(extra || {}) });

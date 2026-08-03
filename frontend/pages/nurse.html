@@ -625,6 +625,7 @@
         const roomVal = document.getElementById('nurse-room-select').value;
         const room_id = roomVal ? parseInt(roomVal) : null;
         const wasAlreadyPresent = nurseCurrentStatus === status;
+        const alreadyActive = nurseCurrentStatus === "present" || nurseCurrentStatus === "on_break";
         const coverage = status === 'present' ? { ward_ids: nurseSelectedWardIds, doctor_ids: nurseSelectedDoctorIds } : {};
         await markAttendanceCommon(status, room_id, coverage);
         renderNurseBadge(status);

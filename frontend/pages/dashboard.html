@@ -217,11 +217,12 @@
             <div class="staff-att-actions" id="attendance-btns">
               <select class="form-control" id="room-select" style="display:none"
                 onchange="markAttendance(currentAttendanceStatus)"></select>
-              <select class="form-control" id="location-select" style="display:none"
-                onchange="markAttendance(currentAttendanceStatus)">
-                <option value="in_cabin">In Cabin</option>
-                <option value="on_rounds">On Rounds</option>
-              </select>
+              <div id="location-toggle" style="display:none;gap:6px">
+                <button type="button" class="btn btn-outline btn-sm" id="loc-btn-cabin"
+                  onclick="setDoctorLocation('in_cabin')">In Cabin</button>
+                <button type="button" class="btn btn-outline btn-sm" id="loc-btn-rounds"
+                  onclick="setDoctorLocation('on_rounds')">On Rounds</button>
+              </div>
               <button class="btn btn-primary" id="btn-mark-present" onclick="markAttendance('present')">Mark
                 Present</button>
               <button class="btn btn-outline" id="btn-mark-break" onclick="markAttendance('on_break')"
@@ -602,13 +603,23 @@
       }
     }
 
+    let currentDoctorLocation = 'in_cabin';
+
+    function setDoctorLocation(loc) {
+      currentDoctorLocation = loc;
+      document.getElementById('loc-btn-cabin').className = loc === 'in_cabin' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+      document.getElementById('loc-btn-rounds').className = loc === 'on_rounds' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+      markAttendance(currentAttendanceStatus);
+    }
+
     async function markAttendance(status) {
       try {
         const roomVal = document.getElementById('room-select').value;
         const room_id = roomVal ? parseInt(roomVal) : null;
-        const location = status === 'present' ? (document.getElementById('location-select').value || 'in_cabin') : null;
+        const location = status === 'present' ? currentDoctorLocation : null;
         const wasAlreadyPresent = currentAttendanceStatus === status;
-        await markAttendanceCommon(status, room_id, { location });
+        const alreadyActive = currentAttendanceStatus === "present" || currentAttendanceStatus === "on_break";
+        await markAttendanceCommon(status, room_id, { location }, alreadyActive);
         renderAttendanceBadge(status);
         document.getElementById('room-display').textContent = '';
         if (!wasAlreadyPresent) {

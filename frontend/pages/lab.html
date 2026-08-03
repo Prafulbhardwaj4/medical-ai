@@ -974,9 +974,10 @@
     async function markLabAttendance(status) {
       try {
         const wasAlreadyPresent = labCurrentStatus === status;
+        const alreadyActive = labCurrentStatus === "present" || labCurrentStatus === "on_break";
         const roomVal = document.getElementById('lab-room-select').value;
         const room_id = roomVal ? parseInt(roomVal) : null;
-        await markAttendanceCommon(status, room_id);
+        await markAttendanceCommon(status, room_id, null, alreadyActive);
         renderLabBadge(status);
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };

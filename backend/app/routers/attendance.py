@@ -133,10 +133,14 @@ def mark_attendance(
 
     if status == "present":
         if record:
+            starting_fresh_shift = record.status not in ("present", "on_break")
             record.status = "present"
             record.marked_by = current_doctor.id
             record.created_at = now_ist_naive()
-            record.expected_off_duty_at = expected_off_duty_at
+            if starting_fresh_shift:
+                record.expected_off_duty_at = expected_off_duty_at
+            # else: preserve whatever off-duty time was set at shift start —
+            # a room/location change or resuming from break isn't a new shift.
             record.auto_marked = 0
             record.doctor_location = location
             # shift_started_at deliberately NOT touched here — it stays pinned to

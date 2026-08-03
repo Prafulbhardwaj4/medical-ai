@@ -790,7 +790,8 @@
     async function markPharmAttendance(status) {
       try {
         const wasAlreadyPresent = pharmCurrentStatus === status;
-        await markAttendanceCommon(status, null);
+        const alreadyActive = pharmCurrentStatus === "present" || pharmCurrentStatus === "on_break";
+        await markAttendanceCommon(status, null, null, alreadyActive);
         renderPharmBadge(status);
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
