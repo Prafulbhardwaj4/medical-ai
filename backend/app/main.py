@@ -56,6 +56,12 @@ from app.models.day_end_close import DayEndClose
 from app.config import settings
 import warnings
 import os
+import logging
+from sqlalchemy import inspect, text
+from sqlalchemy.exc import SQLAlchemyError
+
+logging.basicConfig(level=logging.INFO, force=True)
+logger = logging.getLogger("medscribe")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -83,18 +89,74 @@ def _run_migrations():
     alembic_cfg.set_main_option("sqlalchemy.url", db_url)
 
     try:
-        # This repo currently has multiple Alembic heads. Using "head" can fail
-        # and leave Render's database behind the code, causing 500s on live pages.
         alembic_command.upgrade(alembic_cfg, "heads")
-        logger.info("Database migrations applied successfully")
     except Exception as e:
-        logger.error("Database migration failed at startup:\n%s", traceback.format_exc())
+        logger.exception("Alembic migration failed; runtime schema sync will try to repair missing columns")
         warnings.warn(f"WARNING: alembic upgrade failed at startup: {e}")
         raise
 
 _run_migrations()
 
+# Import every model before create_all/schema sync.
+import app.models  # noqa: F401
+
 Base.metadata.create_all(bind=engine)
+
+
+def _sql_literal(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _runtime_sync_schema():
+    """
+    Production rescue: Alembic in this repo has multiple heads and can leave
+    Render's DB behind the SQLAlchemy models. create_all() will not add missing
+    columns, so patch missing columns/tables at startup.
+    """
+    bind = engine
+    inspector = inspect(bind)
+    existing_tables = set(inspector.get_table_names())
+
+    with bind.begin() as conn:
+      for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            logger.warning("Creating missing table: %s", table.name)
+            table.create(bind=conn, checkfirst=True)
+            continue
+
+        existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing_cols:
+                continue
+            if column.primary_key:
+                continue
+
+            col_type = column.type.compile(dialect=bind.dialect)
+            default = None
+            if column.default is not None and not callable(column.default.arg):
+                default = _sql_literal(column.default.arg)
+            if column.server_default is not None:
+                default = str(column.server_default.arg).strip("'")
+
+            sql = f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}'
+            if default is not None:
+                sql += f" DEFAULT {default}"
+
+            logger.warning("Adding missing column: %s.%s", table.name, column.name)
+            conn.execute(text(sql))
+
+
+try:
+    _runtime_sync_schema()
+except SQLAlchemyError:
+    logger.exception("Runtime schema sync failed")
+    raise
 
 security = HTTPBearer()
 limiter = Limiter(key_func=get_remote_address)

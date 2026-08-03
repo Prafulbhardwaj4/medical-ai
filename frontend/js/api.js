@@ -83,48 +83,12 @@ async function api(method, path, body = null, isFormData = false, silent = false
     try {
       res = await fetch(BASE + path, opts);
     } catch (networkErr) {
-      // Likely a Render cold-start: the instance was asleep and the first request
-      // failed before the app (and CORS headers) were even up. A free-tier cold
-      // start can take 30-60+ seconds, so one quick retry isn't enough — retry a
-      // few times with backoff, and tell the person what's actually happening
-      // instead of silently failing after a few seconds.
-      const RETRY_DELAYS_MS = [3000, 6000, 10000];
-      let lastErr = networkErr;
-      let attempt = 0;
-      for (const delay of RETRY_DELAYS_MS) {
-        attempt++;
-        // Only call it a "cold start" on the first retry — if it's still
-        // failing after that, it's much more likely a real server error
-        // (e.g. a DB out of sync with the code) than a sleeping instance.
-        toast(
-          attempt === 1
-            ? "Waking up the server — this can take a moment on first load."
-            : "Still not responding — this may be a real server error, not just a cold start.",
-          "info"
-        );
-        await new Promise(r => setTimeout(r, delay));
-        try {
-          res = await fetch(BASE + path, opts);
-          lastErr = null;
-          break;
-        } catch (retryErr) {
-          lastErr = retryErr;
-        }
-      }
-      if (lastErr) {
-        throw new Error("Server unreachable after several attempts. Check the Render logs — this is often a database migration that hasn't been applied to production.");
-      }
+      throw new Error("Could not reach backend. If /health works, this is usually a backend 500 or CORS error. Check Render deploy/runtime logs.");
     }
 
     if (res.status === 401) {
       clearSession();
       window.location.href = "/pages/login.html";
-      return;
-    }
-
-    if (res.status === 403 || res.status === 404) {
-      toast("Access denied or resource not found.", "error");
-      setTimeout(() => redirectByRole(getDoctor()?.role), 1500);
       return;
     }
 
