@@ -88,14 +88,20 @@ async function api(method, path, body = null, isFormData = false, silent = false
       // start can take 30-60+ seconds, so one quick retry isn't enough — retry a
       // few times with backoff, and tell the person what's actually happening
       // instead of silently failing after a few seconds.
-      const RETRY_DELAYS_MS = [3000, 6000, 10000, 15000];
+      const RETRY_DELAYS_MS = [3000, 6000, 10000];
       let lastErr = networkErr;
-      let wokeUpToast = false;
+      let attempt = 0;
       for (const delay of RETRY_DELAYS_MS) {
-        if (!wokeUpToast) {
-          toast("Waking up the server — this can take up to a minute on first load.", "info");
-          wokeUpToast = true;
-        }
+        attempt++;
+        // Only call it a "cold start" on the first retry — if it's still
+        // failing after that, it's much more likely a real server error
+        // (e.g. a DB out of sync with the code) than a sleeping instance.
+        toast(
+          attempt === 1
+            ? "Waking up the server — this can take a moment on first load."
+            : "Still not responding — this may be a real server error, not just a cold start.",
+          "info"
+        );
         await new Promise(r => setTimeout(r, delay));
         try {
           res = await fetch(BASE + path, opts);
@@ -106,7 +112,7 @@ async function api(method, path, body = null, isFormData = false, silent = false
         }
       }
       if (lastErr) {
-        throw new Error("Couldn't reach the server after several attempts. It may be down — please check again shortly.");
+        throw new Error("Server unreachable after several attempts. Check the Render logs — this is often a database migration that hasn't been applied to production.");
       }
     }
 

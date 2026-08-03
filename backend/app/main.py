@@ -56,6 +56,28 @@ import os
 if settings.SECRET_KEY == "changeme":
     warnings.warn("WARNING: SECRET_KEY is default. Set a strong key in .env before deploying.")
 
+def _run_migrations():
+    from alembic.config import Config as AlembicConfig
+    from alembic import command as alembic_command
+
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    alembic_ini_path = os.path.join(backend_dir, "alembic.ini")
+
+    db_url = settings.DATABASE_URL
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+    alembic_cfg = AlembicConfig(alembic_ini_path)
+    alembic_cfg.set_main_option("script_location", os.path.join(backend_dir, "migrations"))
+    alembic_cfg.set_main_option("sqlalchemy.url", db_url)
+
+    try:
+        alembic_command.upgrade(alembic_cfg, "head")
+    except Exception as e:
+        warnings.warn(f"WARNING: alembic upgrade failed at startup: {e}")
+
+_run_migrations()
+
 Base.metadata.create_all(bind=engine)
 
 security = HTTPBearer()
