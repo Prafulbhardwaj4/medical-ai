@@ -35,7 +35,7 @@ class PatientAccount(Base):
     created_at = Column(DateTime, default=now_ist_naive)
 
     profiles = relationship("PatientProfileLink", back_populates="account", cascade="all, delete-orphan")
-    appointments = relationship("Appointment", back_populates="account", cascade="all, delete-orphan")
+    appointments = relationship("Appointment", back_populates="account", cascade="all, delete-orphan", foreign_keys="[Appointment.account_id]")
 
 
 class PatientProfileLink(Base):
@@ -160,5 +160,5 @@ class Appointment(Base):
 
     created_at = Column(DateTime, default=now_ist_naive)
 
-    account = relationship("PatientAccount", back_populates="appointments")
+    account = relationship("PatientAccount", back_populates="appointments", foreign_keys=[account_id])
     profile_link = relationship("PatientProfileLink")
