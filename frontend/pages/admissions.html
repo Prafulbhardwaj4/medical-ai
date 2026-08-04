@@ -1,31 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MedScribe — Admissions</title>
+  <title>Assistant Station — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <script src="../js/custom-select.js" defer></script>
   <style>
-    .ward-card {
+    .mobile-section { display: none; }
+    .mobile-section.active { display: block; }
+    @media (min-width: 901px) {
+      .mobile-section { display: block !important; margin-bottom: 20px; }
+      #section-doctors { display: none !important; }
+      #section-doctors.d-active { display: block !important; }
+    }
+    .att-top-row h2 { margin: 0; }
+    .att-top-row.card-header { border-bottom: none; padding-bottom: 0; }
+    @media (min-width: 901px) {
+      .att-top-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    }
+
+    .ns-row {
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+    .ns-row-sub { color: var(--slate); font-size: 13px; margin-top: 4px; }
+    @media (min-width: 901px) {
+      .ns-row {
+        display: flex; justify-content: space-between; align-items: center;
+        border: none; border-bottom: 1px solid var(--border); border-radius: 0;
+        padding: 14px 0; margin-bottom: 0;
+      }
+    }
+
+    .nurse-att-status { text-align: center; padding: 20px 0 16px; }
+    .nurse-att-status .badge { font-size: 15px; padding: 8px 18px; }
+    .nurse-att-actions { display: flex; flex-direction: column; gap: 10px; }
+    @media (min-width: 901px) {
+      .nurse-att-status { display: none; }
+      .nurse-att-actions { flex-direction: row; flex-wrap: wrap; }
+    }
+
+    .queue-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .queue-tab-btn {
+      flex: 1; text-align: center; padding: 10px; border-radius: var(--radius);
+      border: 1.5px solid var(--border); background: var(--white); cursor: pointer;
+      font-weight: 600; font-size: 14px; color: var(--slate);
+    }
+    .queue-tab-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .queue-panel { display: none; }
+    .queue-panel.active { display: block; }
+    @media (min-width: 901px) {
+      .queue-tabs { display: none; }
+      .queue-panel { display: block !important; margin-bottom: 24px; }
+      .queue-panel h3 { margin: 0 0 10px; font-size: 15px; color: var(--slate); }
+    }
+
+    .assigned-doctors-strip { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+    .assigned-doctor-pill {
+      display: flex; align-items: center; gap: 8px;
+      border: 1.5px solid var(--border); border-radius: 999px;
+      padding: 6px 14px; font-size: 13.5px; font-weight: 600;
+    }
+    .roster-row {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 18px; border: 1px solid var(--border); border-left: 4px solid var(--teal);
-      border-radius: var(--radius); margin-bottom: 12px; cursor: pointer;
-      background: var(--white); transition: box-shadow .15s, transform .1s;
+      border-bottom: 1px solid var(--border); padding: 12px 0;
     }
-    .ward-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
-    .ward-avatar {
-      width: 46px; height: 46px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--teal-subtle), #dff5f0); color: var(--teal);
-      display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0;
-    }
+    .roster-row:last-child { border-bottom: none; }
+    .roster-row.assigned-to-me { background: var(--bg-light, #f8fafc); border-radius: var(--radius); padding: 12px 10px; }
   </style>
 </head>
-
 <body>
   <div class="app-shell">
-
     <header class="topbar">
       <div style="display:flex;align-items:center;gap:10px">
         <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
@@ -56,837 +104,324 @@
         <span id="profile-menu-clinic"></span>
       </div>
       <button class="profile-menu-item" onclick="openEditDetailsModal()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-        Edit My Details
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        Settings
       </button>
       <button class="profile-menu-item danger" onclick="logout()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
         Sign out
       </button>
     </div>
 
-    <nav class="sidebar" id="sidebar-doctor">
-      <div class="sidebar-section-label">
-        <span id="sidebar-doctor-name"></span>
-      </div>
+    <nav class="sidebar">
       <div class="sidebar-section-label">Navigation</div>
-      <a class="nav-item" href="dashboard.html">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-        Home
-      </a>
-      <a class="nav-item" href="dashboard.html?tab=patients">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
-        </svg>
-        Patients
-      </a>
-      <a class="nav-item active" href="admissions.html">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
-        Admissions
-      </a>
-      <div class="nav-divider"></div>
-      <div class="sidebar-section-label">Quick Actions</div>
-      <div class="nav-item" onclick="location.href='dashboard.html?openAddPatient=1'">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-        </svg>
-        Add Patient
-      </div>
-      <a class="nav-item" href="doctor-slots.html">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        My Availability
-      </a>
-      <a class="nav-item" id="nav-add-doctor" href="doctors.html" style="display:none">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-        </svg>
-        Manage Staff
-      </a>
-    </nav>
-
-    <nav class="sidebar" id="sidebar-receptionist" style="display:none">
-      <div class="sidebar-section-label">Navigation</div>
-      <a class="nav-item" href="receptionist.html">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-        Home
-      </a>
-      <a class="nav-item" href="receptionist.html?tab=portal">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-        Expected Today
-      </a>
-      <a class="nav-item active" href="admissions.html">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
-        Admissions
-      </a>
-      <a class="nav-item" href="receptionist.html?tab=availability">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-        Manage Availability
-      </a>
-      <a class="nav-item" href="receptionist.html?tab=patients">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
-        </svg>
-        Patients
-      </a>
-      <div class="nav-divider"></div>
-      <div class="sidebar-section-label">Quick Actions</div>
-      <a class="nav-item" href="receptionist.html">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-        Add Patient
-      </a>
-    </nav>
-
-    <nav class="sidebar" id="sidebar-nurse" style="display:none">
-      <div class="sidebar-section-label">Navigation</div>
-      <a class="nav-item" href="nurse.html">
+      <div class="nav-item active" id="sidebar-nav-home" onclick="showAssistantDesktopTab('home')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
         Home
-      </a>
-      <a class="nav-item" href="nurse.html">
+      </div>
+      <div class="nav-item" id="sidebar-nav-doctors" onclick="showAssistantDesktopTab('doctors')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
         </svg>
-        History
-      </a>
-      <div class="nav-item active">
+        Doctors
+      </div>
+      <a class="nav-item" href="admissions.html">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
         Admissions
-      </div>
-    </nav>
-
-    <nav class="sidebar" id="sidebar-assistant" style="display:none">
-      <div class="sidebar-section-label">Navigation</div>
-      <a class="nav-item" href="assistant.html">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-        </svg>
-        Home
       </a>
-      <a class="nav-item" href="assistant.html">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        History
-      </a>
-      <div class="nav-item active">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
-        Admissions
-      </div>
     </nav>
-
-    <nav class="sidebar" id="app-sidebar" style="display:none"></nav>
-
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
-    <div class="mobile-menu-sheet" id="mobile-menu-sheet">
-      <div class="mobile-menu-header">
-        <h2>More</h2>
-        <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
-      </div>
-      <div class="mobile-menu-body" id="app-mobile-menu-body"></div>
-    </div>
-
-    <nav class="bottom-nav" id="bottom-nav-doctor">
-      <button class="bottom-nav-item" onclick="location.href='dashboard.html'">
+    <nav class="bottom-nav">
+      <button class="bottom-nav-item active" id="tab-btn-home" onclick="showAssistantSection('home')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
         Home
       </button>
-      <button class="bottom-nav-item" onclick="location.href='dashboard.html'">
+      <button class="bottom-nav-item" id="tab-btn-doctors" onclick="showAssistantSection('doctors')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
         </svg>
-        Patients
+        Doctors
       </button>
-      <button class="bottom-nav-item active" onclick="location.href='admissions.html'">
+      <button class="bottom-nav-item" onclick="location.href='admissions.html'">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
         Admissions
       </button>
-      <button class="bottom-nav-item" onclick="location.href='doctor-slots.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        Availability
-      </button>
     </nav>
-
-    <nav class="bottom-nav" id="bottom-nav-receptionist" style="display:none">
-      <button class="bottom-nav-item" onclick="location.href='receptionist.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-        </svg>
-        Home
-      </button>
-      <button class="bottom-nav-item active" onclick="location.href='admissions.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
-        Admissions
-      </button>
-      <button class="bottom-nav-item" onclick="location.href='receptionist.html?tab=patients'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
-        </svg>
-        Patients
-      </button>
-      <button class="bottom-nav-item" onclick="location.href='receptionist.html?tab=portal'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-        Expected
-      </button>
-      <button class="bottom-nav-item" onclick="location.href='receptionist.html?tab=attendance'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        Attendance
-      </button>
-    </nav>
-
-    <nav class="bottom-nav" id="bottom-nav-nurse" style="display:none">
-      <button class="bottom-nav-item" onclick="location.href='nurse.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3 8 4-16 3 8h4" />
-        </svg>
-        Vitals
-      </button>
-      <button class="bottom-nav-item" onclick="location.href='nurse.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
-        Tasks
-      </button>
-      <button class="bottom-nav-item active" onclick="location.href='admissions.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
-        Admissions
-      </button>
-      <button class="bottom-nav-item" onclick="location.href='nurse.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        Attendance
-      </button>
-    </nav>
-
-    <nav class="bottom-nav" id="bottom-nav-assistant" style="display:none">
-      <button class="bottom-nav-item" onclick="location.href='assistant.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3 8 4-16 3 8h4" />
-        </svg>
-        Vitals
-      </button>
-      <button class="bottom-nav-item" onclick="location.href='assistant.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-        </svg>
-        Tasks
-      </button>
-      <button class="bottom-nav-item active" onclick="location.href='admissions.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
-        Admissions
-      </button>
-      <button class="bottom-nav-item" onclick="location.href='assistant.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        Attendance
-      </button>
-    </nav>
-
-    <nav class="bottom-nav" id="app-bottom-nav" style="display:none"></nav>
-
 
     <main class="main-content">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px">
-        <div>
-          <h1>Admissions</h1>
-          <p style="color:var(--slate)">Currently admitted patients.</p>
+      <!-- Home: Attendance + assigned-doctor status strip + two queues -->
+      <div class="mobile-section active" id="section-home">
+
+        <div class="card" style="margin-bottom:20px">
+          <div class="att-top-row">
+            <div class="card-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
+              <h2>Today's Status</h2>
+            </div>
+            <div class="staff-att-status">
+              <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
+            </div>
+            <div class="staff-att-actions" id="nurse-attendance-btns">
+              <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
+              <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
+              <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+            </div>
+          </div>
+          <div id="nurse-coverage-block" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+            <div style="font-size:13px;color:var(--slate);font-weight:600;margin-bottom:8px">Doctor(s) you're assisting today</div>
+            <div id="nurse-doctor-chips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          </div>
         </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-outline" id="btn-manage-rooms" style="display:none" onclick="openRoomsModal()">Manage Rooms</button>
-          <button class="btn btn-primary" id="btn-admit-patient" onclick="openAdmitModal()">+ Admit Patient</button>
+
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-header"><h2>Your Assigned Doctors</h2></div>
+          <div id="assigned-doctors-strip" class="assigned-doctors-strip">
+            <p style="color:var(--slate-light);font-size:13px">Mark yourself present and pick who you're assisting to see their status here.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h2>Queue</h2></div>
+          <div class="queue-tabs">
+            <div class="queue-tab-btn active" id="qtab-walkin" onclick="showQueuePanel('walkin')">Walk-ins</div>
+            <div class="queue-tab-btn" id="qtab-online" onclick="showQueuePanel('online')">Online Appointments</div>
+          </div>
+          <div class="queue-panel active" id="qpanel-walkin">
+            <h3>Walk-ins</h3>
+            <div id="walkin-list"><p style="color:var(--slate)">Loading…</p></div>
+          </div>
+          <div class="queue-panel" id="qpanel-online">
+            <h3>Online Appointments</h3>
+            <div id="online-list"><p style="color:var(--slate)">Loading…</p></div>
+          </div>
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:20px">
-        <div class="card-header"><h2>Ward Vacancy</h2></div>
-        <div id="vacancy-overview" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
-          <p style="color:var(--slate-light)">Loading...</p>
+      <!-- Doctors tab: full roster with live status -->
+      <div class="mobile-section" id="section-doctors">
+        <div class="card">
+          <div class="card-header"><h2>Doctor Roster</h2></div>
+          <div id="doctor-roster-list"><p style="color:var(--slate)">Loading…</p></div>
         </div>
       </div>
-
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
-        <div class="form-group" style="max-width:360px;margin-bottom:0;flex:1">
-          <input class="form-control" id="admissions-search" placeholder="Search name, phone, ID, or diagnosis..." oninput="onAdmissionsSearch(this.value)" />
-        </div>
-        <div class="form-group" style="max-width:280px;min-width:220px;flex-shrink:0;margin-bottom:0">
-          <select class="form-control" id="admissions-ward-filter" onchange="loadAdmissions(document.getElementById('admissions-search').value.trim())">
-            <option value="">All Wards</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="admissions-list"><p>Loading...</p></div>
     </main>
   </div>
 
-  <!-- Rooms / ward types management (admin only) -->
-  <div class="modal-overlay" id="modal-rooms">
-    <div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto">
-      <div class="modal-header">
-        <h2>Manage Rooms &amp; Ward Types</h2>
-        <button class="modal-close" onclick="closeRoomsModal()">&times;</button>
-      </div>
-      <div class="card" style="background:var(--smoke);margin-bottom:18px">
-        <p style="font-weight:600;margin-bottom:10px" id="ward-form-title">Add Ward Type</p>
-        <div class="form-group">
-          <label class="form-label">Type</label>
-          <select class="form-control" id="wt-name-select" onchange="onWtNameSelectChange()">
-            <option value="General">General</option>
-            <option value="ICU">ICU</option>
-            <option value="Private Room">Private Room</option>
-            <option value="Other">Other</option>
-          </select>
-          <input class="form-control" id="wt-name" placeholder="Enter custom ward/room type" style="display:none;margin-top:8px" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Category</label>
-          <select class="form-control" id="wt-category">
-            <option value="general">General</option>
-            <option value="icu">ICU</option>
-            <option value="private">Private</option>
-            <option value="maternity">Maternity</option>
-            <option value="nicu">NICU</option>
-            <option value="isolation">Isolation</option>
-            <option value="day_care">Day-care</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Total Beds</label><input class="form-control" type="number" min="0" id="wt-beds" /></div>
-          <div class="form-group"><label class="form-label">Daily Charge (₹)</label><input class="form-control" type="number" min="0" id="wt-charge" /></div>
-        </div>
-        <div class="form-group"><label class="form-label">Default Deposit (₹)</label><input class="form-control" type="number" min="0" id="wt-deposit" placeholder="Pre-filled at admission, reception can override" /></div>
-        <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
-            <input type="checkbox" id="wt-is-icu"> ICU / CCU / ICCU / NICU (always GST-exempt, regardless of daily rate)
-          </label>
-        </div>
-        <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
-            <input type="checkbox" id="wt-is-ot" onchange="document.getElementById('wt-ot-charge-group').style.display=this.checked?'':'none'"> Operation Theatre (auto-bills an OT charge when a patient is moved into this ward)
-          </label>
-        </div>
-        <div class="form-group" id="wt-ot-charge-group" style="display:none">
-          <label class="form-label">OT Charge (₹, per use)</label>
-          <input class="form-control" type="number" min="0" id="wt-ot-charge" placeholder="Billed once when a patient moves into this ward" />
-        </div>
-        <div class="err-msg" id="wt-err"></div>
-        <div style="display:flex;gap:10px">
-          <button class="btn btn-outline" style="flex:1" id="wt-cancel-edit-btn" onclick="resetWardTypeForm()" style="display:none">Cancel Edit</button>
-          <button class="btn btn-primary" style="flex:1" onclick="submitWardType()" id="wt-submit-btn">Add Ward Type</button>
-        </div>
-      </div>
-      <div class="form-group" style="margin-bottom:10px">
-        <input class="form-control" id="wt-search" placeholder="Search rooms / ward types..." oninput="renderWardTypesList(this.value)" />
-      </div>
-      <div id="ward-types-list"></div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="modal-confirm-delete">
-    <div class="modal" style="max-width:380px">
-      <div class="modal-header">
-        <h2>Delete Ward Type</h2>
-        <button class="modal-close" onclick="closeConfirmDeleteModal()">&times;</button>
-      </div>
-      <p style="color:var(--slate)" id="confirm-delete-text"></p>
-      <div style="display:flex;gap:10px;margin-top:16px">
-        <button class="btn btn-outline" style="flex:1" onclick="closeConfirmDeleteModal()">Cancel</button>
-        <button class="btn btn-danger" style="flex:1" id="confirm-delete-btn">Delete</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Admit patient modal -->
-  <div class="modal-overlay" id="modal-admit">
-    <div class="modal" style="max-width:480px">
-      <div class="modal-header">
-        <h2>Admit Patient</h2>
-        <button class="modal-close" onclick="closeAdmitModal()">&times;</button>
-      </div>
-
-      <div id="admit-step-search">
-        <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Only patients a doctor has sent for admission appear here.</p>
-        <div class="form-group">
-          <label class="form-label">Filter</label>
-          <input class="form-control" id="admit-patient-search" placeholder="Filter by name..." />
-        </div>
-        <div id="admit-patient-results"></div>
-      </div>
-
-      <div id="admit-step-details" style="display:none">
-        <p style="font-weight:600;color:var(--navy);margin-bottom:14px" id="admit-selected-name"></p>
-        <div class="form-group">
-          <label class="form-label">Admitting Doctor</label>
-          <select class="form-control" id="admit-doctor"></select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Ward</label>
-          <select class="form-control" id="admit-ward-type" onchange="onAdmitWardTypeChange()"></select>
-        </div>
-        <div class="form-group"><label class="form-label">Bed</label><select class="form-control" id="admit-bed"><option value="">Select a ward first...</option></select></div>
-        <div class="form-group">
-          <label class="form-label">Diagnosis *</label>
-          <input class="form-control" id="admit-diagnosis" placeholder="Auto-suggested from last visit — edit as needed" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Admission Type</label>
-          <select class="form-control" id="admit-type">
-            <option value="planned">Planned / Elective</option>
-            <option value="emergency">Emergency</option>
-            <option value="maternity">Maternity / Delivery</option>
-            <option value="transfer_in">Transfer-in</option>
-            <option value="day_care">Day-care / Short-stay (no overnight room charge)</option>
-          </select>
-        </div>
-        <div class="form-group"><label class="form-label">Daily Room Charge (₹)</label><input class="form-control" type="number" min="0" id="admit-daily-charge" value="0" readonly style="background:var(--smoke)" /></div>
-        <div class="form-group"><label class="form-label">Deposit (₹)</label><input class="form-control" type="number" min="0" id="admit-deposit" value="0" oninput="onAdmitDepositChange()" /></div>
-        <div class="form-group" id="admit-deposit-method-row" style="display:none">
-          <label class="form-label">Deposit Collected Via</label>
-          <select class="form-control" id="admit-deposit-method">
-            <option value="">Select method...</option>
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="upi">UPI</option>
-          </select>
-        </div>
-        <div class="err-msg" id="admit-err"></div>
-        <div style="display:flex;gap:10px">
-          <button class="btn btn-outline" style="flex:1" onclick="backToSearch()">Back</button>
-          <button class="btn btn-primary" style="flex:1" onclick="submitAdmit()">Admit Patient</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script src="../js/api.js"></script>
-  <script src="../js/nav-admin.js"></script>
+  <div id="toast"></div>
+  <script src="../js/api.js?v=4"></script>
   <script src="../js/chat-widget.js?v=1"></script>
   <script>
-    if (!requireAuth()) { }
+    requireAuth();
     fillTopbar();
-    document.getElementById("profile-menu-name").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
+    if (getDoctor()?.role !== 'assistant') redirectByRole(getDoctor()?.role);
 
-    const isAdminTier = ["admin", "sub_admin"].includes(getDoctor()?.role);
-    if (isAdminTier) {
-      document.getElementById("sidebar-doctor").style.display = "none";
-      document.getElementById("bottom-nav-doctor").style.display = "none";
-      document.getElementById("app-sidebar").style.display = "";
-      document.getElementById("app-bottom-nav").style.display = "";
-      document.getElementById("btn-manage-rooms").style.display = "";
-      document.getElementById("btn-admit-patient").style.display = "none";
-      renderAdminNav("admissions");
-    } else if (getDoctor()?.role === "receptionist") {
-      document.getElementById("sidebar-doctor").style.display = "none";
-      document.getElementById("sidebar-receptionist").style.display = "";
-      document.getElementById("bottom-nav-doctor").style.display = "none";
-      document.getElementById("bottom-nav-receptionist").style.display = "";
-    } else if (getDoctor()?.role === "nurse") {
-      document.getElementById("sidebar-doctor").style.display = "none";
-      document.getElementById("sidebar-nurse").style.display = "";
-      document.getElementById("bottom-nav-doctor").style.display = "none";
-      document.getElementById("bottom-nav-nurse").style.display = "";
-      document.getElementById("btn-admit-patient").style.display = "none";
-    } else if (getDoctor()?.role === "assistant") {
-      document.getElementById("sidebar-doctor").style.display = "none";
-      document.getElementById("sidebar-assistant").style.display = "";
-      document.getElementById("bottom-nav-doctor").style.display = "none";
-      document.getElementById("bottom-nav-assistant").style.display = "";
-      document.getElementById("btn-admit-patient").style.display = "none";
+    function showAssistantDesktopTab(id) {
+      const groups = { home: ['home'], doctors: ['doctors'] };
+      ['home', 'doctors'].forEach(s => {
+        document.getElementById('section-' + s).classList.remove('d-active');
+      });
+      groups[id].forEach(s => document.getElementById('section-' + s).classList.add('d-active'));
+      ['home', 'doctors'].forEach(t => {
+        document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id);
+      });
+    }
+    if (window.innerWidth >= 901) showAssistantDesktopTab('home');
+
+    function showAssistantSection(id) {
+      ['home', 'doctors'].forEach(s => {
+        document.getElementById('section-' + s).classList.toggle('active', s === id);
+        document.getElementById('tab-btn-' + s).classList.toggle('active', s === id);
+      });
     }
 
-    let wardTypesCache = [];
+    function showQueuePanel(id) {
+      ['walkin', 'online'].forEach(s => {
+        document.getElementById('qpanel-' + s).classList.toggle('active', s === id);
+        document.getElementById('qtab-' + s).classList.toggle('active', s === id);
+      });
+    }
 
-    async function loadVacancyOverview() {
-      const el = document.getElementById("vacancy-overview");
+    let doctorStatusMap = {};
+    let allHospitalDoctors = [];
+
+    async function loadDoctorStatuses() {
       try {
-        wardTypesCache = await api("GET", "/admissions/ward-types");
-        if (!wardTypesCache.length) {
-          el.innerHTML = `<p style="color:var(--slate-light)">No ward types configured yet.${isAdminTier ? ' Click "Manage Rooms" to add one.' : ''}</p>`;
-          return;
-        }
-        el.innerHTML = wardTypesCache.map(w => `
-          <div class="card" style="margin-bottom:0">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-              <div style="font-weight:600;color:var(--navy)">${sanitize(w.name)}</div>
-              ${isAdminTier ? `<div style="display:flex;gap:6px;flex-shrink:0">
-                <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick='openRoomsModal();editWardType(${JSON.stringify(w)})'>Edit</button>
-                <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick="confirmDeleteWardType(${w.id}, ${JSON.stringify(w.name)})">Delete</button>
-              </div>` : ''}
-            </div>
-            <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin:4px 0">${w.occupied}/${w.total_beds}</div>
-            <div style="font-size:12px;color:var(--slate-light)">${w.vacant} bed${w.vacant === 1 ? '' : 's'} free · ₹${w.daily_charge}/day</div>
-          </div>
-        `).join('');
-      } catch (e) {
-        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
-      }
+        allHospitalDoctors = await api("GET", "/patients/hospital-doctors");
+        doctorStatusMap = {};
+        allHospitalDoctors.forEach(d => {
+          doctorStatusMap[d.id] = { status: d.attendance_status, location: d.doctor_location, name: `${d.title} ${d.name}` };
+        });
+      } catch (e) { /* status badges are a nice-to-have, don't block the queue on this */ }
     }
 
-    function populateAdmitWardDropdown() {
-      const sel = document.getElementById("admit-ward-type");
-      if (!wardTypesCache.length) {
-        sel.innerHTML = `<option value="">No ward types configured — set up Rooms first</option>`;
-        return;
-      }
-      sel.innerHTML = wardTypesCache.map(w =>
-        `<option value="${w.id}" data-charge="${w.daily_charge}" data-deposit="${w.default_deposit || 0}" data-vacant="${w.vacant}">${sanitize(w.name)} (${w.vacant} free)</option>`
-      ).join('');
-      onAdmitWardTypeChange();
+    function statusBadgeInfo(doctorId) {
+      const info = doctorStatusMap[doctorId];
+      if (!info) return { label: 'Unknown', cls: 'badge-grey' };
+      if (info.status === 'present') return info.location === 'on_rounds' ? { label: 'On Rounds', cls: 'badge-amber' } : { label: 'In Cabin', cls: 'badge-green' };
+      if (info.status === 'on_break') return { label: 'On Break', cls: 'badge-amber' };
+      if (info.status === 'off_duty') return { label: 'On Leave / Off Duty', cls: 'badge-red' };
+      if (info.status === 'away_emergency') return { label: 'Away — Emergency', cls: 'badge-red' };
+      return { label: 'Not Marked', cls: 'badge-grey' };
     }
 
-    function onAdmitDepositChange() {
-      const amount = parseFloat(document.getElementById("admit-deposit").value) || 0;
-      document.getElementById("admit-deposit-method-row").style.display = amount > 0 ? "block" : "none";
+    function doctorStatusBadge(doctorId) {
+      const b = statusBadgeInfo(doctorId);
+      return `<span class="badge ${b.cls}" style="margin-left:6px">${b.label}</span>`;
     }
 
-    async function onAdmitWardTypeChange() {
-      const sel = document.getElementById("admit-ward-type");
-      const opt = sel.selectedOptions[0];
-      document.getElementById("admit-daily-charge").value = opt ? (opt.dataset.charge || 0) : 0;
-      document.getElementById("admit-deposit").value = opt ? (opt.dataset.deposit || 0) : 0;
-      onAdmitDepositChange();
-
-      const bedSel = document.getElementById("admit-bed");
-      if (!sel.value) { bedSel.innerHTML = `<option value="">Select a ward first...</option>`; return; }
-      bedSel.innerHTML = `<option value="">Loading beds...</option>`;
-      try {
-        const beds = await api("GET", `/admissions/ward-types/${sel.value}/beds`);
-        const available = beds.filter(b => !b.occupied);
-        if (!available.length) {
-          bedSel.innerHTML = `<option value="">No beds available</option>`;
-          return;
-        }
-        bedSel.innerHTML = available.map(b => `<option value="${b.label}">${b.label}</option>`).join('');
-      } catch (e) {
-        bedSel.innerHTML = `<option value="">Could not load beds</option>`;
-      }
+    function vitalsStatusBadge(v) {
+      if (v.is_returned) return '<span class="badge badge-amber">Sent Back for More Vitals</span>';
+      if (v.vitals_status === 'done') return '<span class="badge badge-green">Vitals Recorded</span>';
+      if (v.vitals_status === 'sent_back') return '<span class="badge badge-amber">Sent Back for More Vitals</span>';
+      return '<span class="badge badge-grey">Vitals Pending</span>';
     }
 
-    // ---- Rooms / ward types management ----
-    let editingWardTypeId = null;
-
-    function openRoomsModal() {
-      resetWardTypeForm();
-      document.getElementById("wt-search").value = "";
-      renderWardTypesList();
-      document.getElementById("modal-rooms").classList.add("open");
-    }
-    function closeRoomsModal() {
-      document.getElementById("modal-rooms").classList.remove("open");
-      loadVacancyOverview().then(() => { populateAdmitWardDropdown(); populateAdmissionsWardFilter(); });
-    }
-
-    function renderWardTypesList(search) {
-      const el = document.getElementById("ward-types-list");
-      if (!wardTypesCache.length) {
-        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No ward types yet — add one above.</p>`;
-        return;
-      }
-      const q = (search || "").trim().toLowerCase();
-      const filtered = q ? wardTypesCache.filter(w => w.name.toLowerCase().includes(q)) : wardTypesCache;
-      if (!filtered.length) {
-        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No rooms match "${sanitize(search)}".</p>`;
-        return;
-      }
-      el.innerHTML = filtered.map(w => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+    function renderQueueList(elId, rows) {
+      const el = document.getElementById(elId);
+      if (!rows.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No patients waiting.</p>'; return; }
+      el.innerHTML = rows.map(v => `
+        <div class="ns-row">
           <div>
-            <div style="font-weight:600">${sanitize(w.name)}</div>
-            <div style="font-size:12px;color:var(--slate-light)"><span class="badge badge-grey" style="text-transform:capitalize">${sanitize((w.category || 'general').replace('_', ' '))}</span> · ${w.total_beds} beds · ₹${w.daily_charge}/day · ₹${w.default_deposit || 0} default deposit${w.is_icu ? ' · <strong>ICU (GST-exempt)</strong>' : ''}${w.is_ot ? ` · <strong>OT (₹${w.ot_charge || 0}/use)</strong>` : ''} · ${w.occupied} occupied</div>
+            <strong>${v.patient_name}</strong>
+            <span class="badge badge-navy" style="margin-left:8px">${v.patient_uid}</span>
+            ${v.is_emergency ? '<span class="badge badge-red" style="margin-left:6px">Emergency</span>' : ''}
+            <div class="ns-row-sub">Token ${v.token_number} · ${v.issue_category || ''} · For ${v.doctor_name}${doctorStatusBadge(v.doctor_id)}</div>
           </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-outline btn-sm" onclick='editWardType(${JSON.stringify(w)})'>Edit</button>
-            <button class="btn btn-outline btn-sm" onclick="confirmDeleteWardType(${w.id}, ${JSON.stringify(w.name)})">Delete</button>
-          </div>
+          ${vitalsStatusBadge(v)}
         </div>
       `).join('');
     }
 
-    const WT_NAME_PRESETS = ["General", "ICU", "Private Room"];
-
-    function onWtNameSelectChange() {
-      const val = document.getElementById("wt-name-select").value;
-      const other = document.getElementById("wt-name");
-      if (val === "Other") {
-        other.style.display = "";
-        other.value = "";
-      } else {
-        other.style.display = "none";
-        other.value = val;
-      }
-    }
-
-    function editWardType(w) {
-      editingWardTypeId = w.id;
-      document.getElementById("ward-form-title").textContent = `Edit ${w.name}`;
-      const isPreset = WT_NAME_PRESETS.includes(w.name);
-      document.getElementById("wt-name-select").value = isPreset ? w.name : "Other";
-      document.getElementById("wt-name").value = w.name;
-      document.getElementById("wt-name").style.display = isPreset ? "none" : "";
-      document.getElementById("wt-beds").value = w.total_beds;
-      document.getElementById("wt-charge").value = w.daily_charge;
-      document.getElementById("wt-deposit").value = w.default_deposit || 0;
-      document.getElementById("wt-is-icu").checked = !!w.is_icu;
-      document.getElementById("wt-is-ot").checked = !!w.is_ot;
-      document.getElementById("wt-ot-charge").value = w.ot_charge != null ? w.ot_charge : '';
-      document.getElementById("wt-ot-charge-group").style.display = w.is_ot ? '' : 'none';
-      document.getElementById("wt-category").value = w.category || 'general';
-      document.getElementById("wt-submit-btn").textContent = "Save Changes";
-      document.getElementById("wt-cancel-edit-btn").style.display = "block";
-      document.getElementById("wt-err").textContent = "";
-    }
-
-    function resetWardTypeForm() {
-      editingWardTypeId = null;
-      document.getElementById("ward-form-title").textContent = "Add Ward Type";
-      document.getElementById("wt-name-select").value = "General";
-      document.getElementById("wt-name").value = "General";
-      document.getElementById("wt-name").style.display = "none";
-      document.getElementById("wt-beds").value = "";
-      document.getElementById("wt-charge").value = "";
-      document.getElementById("wt-deposit").value = "";
-      document.getElementById("wt-is-icu").checked = false;
-      document.getElementById("wt-is-ot").checked = false;
-      document.getElementById("wt-ot-charge").value = "";
-      document.getElementById("wt-ot-charge-group").style.display = 'none';
-      document.getElementById("wt-category").value = "general";
-      document.getElementById("wt-submit-btn").textContent = "Add Ward Type";
-      document.getElementById("wt-cancel-edit-btn").style.display = "none";
-      document.getElementById("wt-err").textContent = "";
-    }
-
-    async function submitWardType() {
-      const err = document.getElementById("wt-err");
-      err.textContent = "";
-      const name = document.getElementById("wt-name").value.trim();
-      const beds = parseInt(document.getElementById("wt-beds").value, 10);
-      const charge = parseFloat(document.getElementById("wt-charge").value);
-      const deposit = parseFloat(document.getElementById("wt-deposit").value || "0");
-      const isIcu = document.getElementById("wt-is-icu").checked;
-      const isOt = document.getElementById("wt-is-ot").checked;
-      const otCharge = document.getElementById("wt-ot-charge").value ? parseFloat(document.getElementById("wt-ot-charge").value) : null;
-      const category = document.getElementById("wt-category").value;
-      if (!name || isNaN(beds) || beds < 0 || isNaN(charge) || charge < 0 || isNaN(deposit) || deposit < 0) {
-        err.textContent = "Please fill in all fields with valid values";
-        return;
-      }
-      if (isOt && (otCharge == null || otCharge < 0)) {
-        err.textContent = "Enter a valid OT charge amount";
-        return;
-      }
+    async function loadQueues() {
+      await loadDoctorStatuses();
+      renderAssignedDoctorsStrip();
       try {
-        if (editingWardTypeId) {
-          await api("PUT", `/admissions/ward-types/${editingWardTypeId}`, { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category });
-          toast("Ward type updated", "success");
-        } else {
-          await api("POST", "/admissions/ward-types", { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category });
-          toast("Ward type added", "success");
-        }
-        wardTypesCache = await api("GET", "/admissions/ward-types");
-        renderWardTypesList();
-        resetWardTypeForm();
-      } catch (e) { err.textContent = e.message; }
-    }
-
-    function confirmDeleteWardType(id, name) {
-      document.getElementById("confirm-delete-text").textContent = `Delete "${name}"? This can't be undone.`;
-      document.getElementById("confirm-delete-btn").onclick = () => doDeleteWardType(id);
-      document.getElementById("modal-confirm-delete").classList.add("open");
-    }
-    function closeConfirmDeleteModal() {
-      document.getElementById("modal-confirm-delete").classList.remove("open");
-    }
-    async function doDeleteWardType(id) {
-      closeConfirmDeleteModal();
-      try {
-        await api("DELETE", `/admissions/ward-types/${id}`);
-        wardTypesCache = await api("GET", "/admissions/ward-types");
-        renderWardTypesList();
-        loadVacancyOverview().then(() => { populateAdmitWardDropdown(); populateAdmissionsWardFilter(); });
-        toast("Ward type deleted", "success");
+        const data = await api("GET", "/patients/assistant-queue");
+        renderQueueList('walkin-list', data.walk_in || []);
+        renderQueueList('online-list', data.online || []);
       } catch (e) { toast(e.message, "error"); }
     }
 
-    let admissionsSearchDebounce;
-    function onAdmissionsSearch(q) {
-      clearTimeout(admissionsSearchDebounce);
-      admissionsSearchDebounce = setTimeout(() => loadAdmissions(q.trim()), 300);
-    }
-
-    function populateAdmissionsWardFilter() {
-      const sel = document.getElementById("admissions-ward-filter");
-      const current = sel.value;
-      sel.innerHTML = `<option value="">All Wards</option>` + wardTypesCache.map(w => `<option value="${w.id}">${sanitize(w.name)}</option>`).join('');
-      sel.value = current;
-    }
-
-    async function loadAdmissions(search = "") {
-      const list = document.getElementById("admissions-list");
-      try {
-        const wardFilter = document.getElementById("admissions-ward-filter").value;
-        const params = new URLSearchParams();
-        if (search) params.set("search", search);
-        if (wardFilter) params.set("ward_type_id", wardFilter);
-        const qs = params.toString() ? `?${params.toString()}` : "";
-        const admissions = await api("GET", `/admissions/active${qs}`);
-        if (!admissions.length) { list.innerHTML = `<div class="card"><p style="color:var(--slate-light)">${search ? 'No matching admissions.' : 'No patients currently admitted.'}</p></div>`; return; }
-        list.innerHTML = admissions.map(a => `
-          <div class="ward-card" onclick="location.href='admission-detail.html?id=${a.id}'">
-            <div style="display:flex;gap:14px;align-items:center">
-              <div class="ward-avatar">${a.patient_name.trim().split(/\s+/).slice(0,2).map(w=>w[0].toUpperCase()).join('')}</div>
-              <div>
-                <div style="font-weight:700;color:var(--navy)">${sanitize(a.patient_name)}</div>
-                <div style="font-size:13px;color:var(--slate)">${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)}${a.patient_uid ? ' · ' + sanitize(a.patient_uid) : ''}</div>
-                ${a.diagnosis ? `<div style="font-size:12.5px;color:var(--slate-light);margin-top:2px">${sanitize(a.diagnosis)}</div>` : ''}
-              </div>
-            </div>
-            <div style="text-align:right">
-              <span class="badge badge-teal">${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'}</span>
-              <div style="font-size:11px;color:var(--slate-light);margin-top:4px">Since ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
-            </div>
-          </div>`).join('');
-      } catch (e) {
-        list.innerHTML = `<div class="card"><p class="err-msg" style="display:block">${e.message}</p></div>`;
-      }
-    }
-
-    let selectedPatientId = null, selectedPatientName = null;
-
-    function openAdmitModal() {
-      document.getElementById("modal-admit").classList.add("open");
-      document.getElementById("admit-step-search").style.display = "block";
-      document.getElementById("admit-step-details").style.display = "none";
-      document.getElementById("admit-patient-search").value = "";
-      loadDefaultAdmitPatientList();
-    }
-
-    let referralsCache = [];
-
-    async function loadDefaultAdmitPatientList() {
-      const el = document.getElementById("admit-patient-results");
-      el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">Loading...</p>`;
-      try {
-        referralsCache = await api("GET", "/admissions/referrals");
-        renderReferralResults(referralsCache);
-      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
-    }
-
-    function renderReferralResults(referrals) {
-      const el = document.getElementById("admit-patient-results");
-      if (!referrals.length) {
-        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No patients sent for admission yet.</p>`;
+    function renderAssignedDoctorsStrip() {
+      const strip = document.getElementById('assigned-doctors-strip');
+      if (!nurseSelectedDoctorIds.length || !(nurseCurrentStatus === 'present' || nurseCurrentStatus === 'on_break')) {
+        strip.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Mark yourself present and pick who you\'re assisting to see their status here.</p>';
         return;
       }
-      el.innerHTML = referrals.map(r => `
-        <div class="select-row-card" style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer" onclick='selectAdmitPatient(${r.patient_id}, ${JSON.stringify(r.patient_name)}, ${r.referral_id})'>
-          <div style="font-weight:600">${sanitize(r.patient_name)}</div>
-          <div style="font-size:12px;color:var(--slate-light)">${sanitize(r.patient_uid || '')} · ${sanitize(r.phone || '')}</div>
-          <div style="font-size:12px;color:var(--teal);margin-top:4px">Sent by ${sanitize(r.referred_by_name)}${r.reason ? ' — ' + sanitize(r.reason) : ''}</div>
-        </div>`).join('');
-    }
-    function closeAdmitModal() { document.getElementById("modal-admit").classList.remove("open"); }
-    function backToSearch() {
-      document.getElementById("admit-step-search").style.display = "block";
-      document.getElementById("admit-step-details").style.display = "none";
+      strip.innerHTML = nurseSelectedDoctorIds.map(id => {
+        const info = doctorStatusMap[id];
+        const name = info ? info.name : `Doctor #${id}`;
+        return `<div class="assigned-doctor-pill">${name}${doctorStatusBadge(id)}</div>`;
+      }).join('');
     }
 
-    document.getElementById("admit-patient-search").addEventListener("input", (e) => {
-      const q = e.target.value.trim().toLowerCase();
-      if (!q) { renderReferralResults(referralsCache); return; }
-      renderReferralResults(referralsCache.filter(r => r.patient_name.toLowerCase().includes(q)));
-    });
+    function renderDoctorRoster() {
+      const list = document.getElementById('doctor-roster-list');
+      if (!allHospitalDoctors.length) { list.innerHTML = '<p style="color:var(--slate-light)">No doctors found.</p>'; return; }
+      const sorted = [...allHospitalDoctors].sort((a, b) => {
+        const mineA = nurseSelectedDoctorIds.includes(a.id) ? 0 : 1;
+        const mineB = nurseSelectedDoctorIds.includes(b.id) ? 0 : 1;
+        return mineA - mineB;
+      });
+      list.innerHTML = sorted.map(d => {
+        const b = statusBadgeInfo(d.id);
+        const mine = nurseSelectedDoctorIds.includes(d.id);
+        return `
+          <div class="roster-row ${mine ? 'assigned-to-me' : ''}">
+            <div>
+              <strong>${d.title} ${d.name}</strong>
+              ${mine ? '<span class="badge badge-navy" style="margin-left:8px">Assigned to you</span>' : ''}
+              <div class="ns-row-sub">${d.specialization || ''}</div>
+            </div>
+            <span class="badge ${b.cls}">${b.label}</span>
+          </div>
+        `;
+      }).join('');
+    }
 
-    let selectedReferralId = null;
+    let nurseCurrentStatus = 'not_marked';
+    let nurseSelectedDoctorIds = [];
 
-    async function selectAdmitPatient(id, name, referralId) {
-      selectedPatientId = id; selectedPatientName = name; selectedReferralId = referralId;
-      document.getElementById("admit-selected-name").textContent = `Admitting: ${name}`;
-      document.getElementById("admit-step-search").style.display = "none";
-      document.getElementById("admit-step-details").style.display = "block";
-      document.getElementById("admit-diagnosis").value = "";
-      document.getElementById("admit-type").value = "planned";
+    function toggleNurseChip(el, list, id) {
+      const idx = list.indexOf(id);
+      if (idx === -1) { list.push(id); el.classList.add('selected'); }
+      else { list.splice(idx, 1); el.classList.remove('selected'); }
+      renderAssignedDoctorsStrip();
+    }
+
+    async function loadNurseCoverageChips(selectedDoctorIds) {
       try {
-        const res = await api("GET", `/admissions/last-diagnosis/${id}`);
-        if (res.diagnosis) document.getElementById("admit-diagnosis").value = res.diagnosis;
-      } catch (e) { /* prefill is best-effort only */ }
+        const doctors = await api("GET", "/patients/hospital-doctors");
+        nurseSelectedDoctorIds = [...selectedDoctorIds];
+        document.getElementById('nurse-doctor-chips').innerHTML = doctors.map(d => `
+          <div class="day-chip ${nurseSelectedDoctorIds.includes(d.id) ? 'selected' : ''}" onclick="toggleNurseChip(this, nurseSelectedDoctorIds, ${d.id})">${d.title} ${d.name}</div>
+        `).join('') || '<div style="font-size:13px;color:var(--slate-light)">No doctors found.</div>';
+      } catch (e) { }
+    }
 
-      const docSel = document.getElementById("admit-doctor");
-      docSel.innerHTML = `<option value="">Loading...</option>`;
+    async function loadNurseAttendance() {
       try {
-        const [doctors, suggested] = await Promise.all([
-          api("GET", "/patients/hospital-doctors"),
-          api("GET", `/admissions/last-doctor/${id}`)
-        ]);
-        docSel.innerHTML = doctors.map(d => `<option value="${d.id}">${sanitize(d.title)} ${sanitize(d.name)}</option>`).join('');
-        if (suggested.doctor_id) docSel.value = suggested.doctor_id;
-        else if (!doctors.length) docSel.innerHTML = `<option value="">No doctors found — add one first</option>`;
-      } catch (e) {
-        docSel.innerHTML = `<option value="">Could not load doctors</option>`;
+        const data = await api("GET", "/doctors/attendance/my-status");
+        renderNurseBadge(data.status);
+        await loadNurseCoverageChips(data.coverage?.doctor_ids || []);
+        renderAssignedDoctorsStrip();
+      } catch(e) {}
+    }
+
+    function renderNurseBadge(status) {
+      nurseCurrentStatus = status;
+      const badge = document.getElementById('nurse-attendance-badge');
+      const btnPresent = document.getElementById('nurse-btn-present');
+      const btnBreak = document.getElementById('nurse-btn-break');
+      const btnOffDuty = document.getElementById('nurse-btn-offduty');
+      document.getElementById('nurse-coverage-block').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
+      if (status === 'present') {
+        badge.className = 'badge badge-green'; badge.textContent = 'Present';
+        btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
+      } else if (status === 'on_break') {
+        badge.className = 'badge badge-amber'; badge.textContent = 'On Break';
+        btnPresent.textContent = 'Resume'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = '';
+      } else if (status === 'off_duty') {
+        badge.className = 'badge badge-red'; badge.textContent = 'Off Duty';
+        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
+      } else {
+        badge.className = 'badge badge-grey'; badge.textContent = 'Not marked';
+        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
       }
     }
 
-    async function submitAdmit() {
-      const err = document.getElementById("admit-err");
-      err.textContent = "";
-      const wardTypeId = document.getElementById("admit-ward-type").value;
-      const bed = document.getElementById("admit-bed").value.trim();
-      if (!wardTypeId) { err.textContent = "Please select a ward — set one up under Manage Rooms if none exist"; return; }
-      if (!bed) { err.textContent = "Bed number is required"; return; }
-      const diagnosis = document.getElementById("admit-diagnosis").value.trim();
-      if (!diagnosis) { err.textContent = "Diagnosis is required"; return; }
-      const doctorId = document.getElementById("admit-doctor").value;
-      if (!doctorId) { err.textContent = "Please select the admitting doctor"; return; }
-      const depositAmount = parseFloat(document.getElementById("admit-deposit").value) || 0;
-      const depositMethod = document.getElementById("admit-deposit-method").value;
-      if (depositAmount > 0 && !depositMethod) { err.textContent = "Please select how the deposit was collected"; return; }
-
+    async function markNurseAttendance(status) {
       try {
-        const res = await api("POST", "/admissions", {
-          patient_id: selectedPatientId, ward_type_id: parseInt(wardTypeId, 10), bed_number: bed,
-          diagnosis: diagnosis, admitting_doctor_id: parseInt(doctorId, 10),
-          deposit_amount: depositAmount, deposit_payment_method: depositAmount > 0 ? depositMethod : null,
-          admission_type: document.getElementById("admit-type").value,
-        });
-        toast("Patient admitted", "success");
-        closeAdmitModal();
-        location.href = `admission-detail.html?id=${res.id}`;
-      } catch (e) { err.textContent = e.message; }
-    }
-
-    loadAdmissions();
-    loadVacancyOverview().then(() => { populateAdmitWardDropdown(); populateAdmissionsWardFilter(); });
-
-    // Deep-link from consultation.html's "Admit Patient" action — carries the
-    // patient straight into the admit-details form, skipping the manual
-    // search step entirely.
-    const deepLinkPatientId = new URLSearchParams(window.location.search).get("admit_patient_id");
-    if (deepLinkPatientId) {
-      openAdmitModal();
-      loadDefaultAdmitPatientList().then(() => {
-        const match = referralsCache.find(r => String(r.patient_id) === String(deepLinkPatientId));
-        if (match) {
-          selectAdmitPatient(match.patient_id, match.patient_name, match.referral_id);
-        } else {
-          toast("Referral not found yet — it may still be processing. Search for the patient below.", "info");
+        const wasAlreadyPresent = nurseCurrentStatus === status;
+        const coverage = status === 'present' ? { doctor_ids: nurseSelectedDoctorIds } : {};
+        await markAttendanceCommon(status, null, coverage);
+        renderNurseBadge(status);
+        if (!wasAlreadyPresent) {
+          const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
+          toast(labels[status] || "Status updated.", "success");
         }
-      });
-      history.replaceState(null, "", "admissions.html");
+        loadQueues();
+        renderDoctorRoster();
+      } catch (e) { toast(e.message, "error"); }
     }
+
+    async function refreshAll() {
+      await loadQueues();
+      renderDoctorRoster();
+    }
+
+    loadNurseAttendance().then(refreshAll);
+    setInterval(refreshAll, 15000);
   </script>
 </body>
-
 </html>

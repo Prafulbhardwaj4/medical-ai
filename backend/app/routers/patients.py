@@ -1455,6 +1455,93 @@ def todays_queue(
     return result
 
 
+@router.get("/assistant-queue")
+def assistant_queue(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Combined walk-in + online queue across every doctor the assistant is
+    currently covering (today's AttendanceCoverage doctor_ids) — not one
+    doctor's queue like /queue/today, since an assistant stands in front of
+    a cabin and may be covering several doctors' patients at once. Excludes
+    already-consulted patients; includes vitals_status so the assistant can
+    see Vitals Pending / Sent Back for More Vitals / Vitals Recorded at a
+    glance without touching the vitals themselves."""
+    if current_doctor.role.value not in ("nurse", "assistant"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from app.models.attendance import AttendanceRecord
+    from app.models.attendance_coverage import AttendanceCoverage
+    from app.utils.portal_checkin import sweep_todays_online_checkins
+    try:
+        sweep_todays_online_checkins(db, current_doctor.hospital_id)
+    except Exception:
+        db.rollback()
+
+    my_record = db.query(AttendanceRecord).filter(
+        AttendanceRecord.doctor_id == current_doctor.id,
+        AttendanceRecord.hospital_id == current_doctor.hospital_id,
+        AttendanceRecord.date == ist_today(),
+        AttendanceRecord.status.in_(["present", "on_break"])
+    ).first()
+    if not my_record:
+        return {"covering_doctor_ids": [], "walk_in": [], "online": []}
+
+    covering_doctor_ids = [
+        row.doctor_id for row in db.query(AttendanceCoverage).filter(
+            AttendanceCoverage.attendance_record_id == my_record.id,
+            AttendanceCoverage.doctor_id.isnot(None)
+        ).all()
+    ]
+    if not covering_doctor_ids:
+        return {"covering_doctor_ids": [], "walk_in": [], "online": []}
+
+    checkins = db.query(Checkin).filter(
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.doctor_id.in_(covering_doctor_ids),
+        Checkin.visit_date == ist_today(),
+        Checkin.is_paid == True
+    ).order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
+
+    token_numbers = [c.token_number for c in checkins]
+    confirmed_tokens = set(
+        t[0] for t in db.query(Consultation.token_number)
+        .filter(Consultation.token_number.in_(token_numbers)).all()
+    )
+    checkins = [c for c in checkins if c.token_number not in confirmed_tokens]
+
+    patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
+    doctors = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_(covering_doctor_ids)).all()}
+
+    walk_in, online = [], []
+    for c in checkins:
+        p = patients.get(c.patient_id)
+        if not p:
+            continue
+        d = doctors.get(c.doctor_id)
+        row = {
+            "checkin_id": c.id,
+            "patient_id": p.id,
+            "patient_name": p.name,
+            "patient_uid": p.patient_uid,
+            "age": p.age,
+            "gender": p.gender,
+            "token_number": c.token_number,
+            "issue_category": c.issue_category,
+            "doctor_id": d.id if d else None,
+            "doctor_name": f"{d.title} {d.name}" if d else "—",
+            "created_at": c.created_at.isoformat(),
+            "is_emergency": c.is_emergency,
+            "is_returned": c.is_returned,
+            "vitals_status": c.vitals_status,
+            "source": c.source,
+            "booked_time": c.booked_time.isoformat() if c.booked_time else None,
+        }
+        (online if c.source == "online" else walk_in).append(row)
+
+    return {"covering_doctor_ids": covering_doctor_ids, "walk_in": walk_in, "online": online}
+
+
 @router.get("/reception/pending-payments")
 def reception_pending_payments(
     db: Session = Depends(get_db),

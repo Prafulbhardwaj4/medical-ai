@@ -12,8 +12,8 @@
     .mobile-section.active { display: block; }
     @media (min-width: 901px) {
       .mobile-section { display: block !important; margin-bottom: 20px; }
-      #section-vitals, #section-tasks, #section-history, #section-attendance { display: none !important; }
-      #section-vitals.d-active, #section-tasks.d-active, #section-history.d-active, #section-attendance.d-active { display: block !important; }
+      #section-vitals, #section-tasks, #section-history { display: none !important; }
+      #section-vitals.d-active, #section-tasks.d-active, #section-history.d-active { display: block !important; }
     }
     /* Today's Status row — title left, controls right on desktop; stacked on mobile */
     .att-top-row h2 { margin: 0; }
@@ -553,7 +553,6 @@
     }
 
     let nurseCurrentStatus = 'not_marked';
-    let nurseSelectedWardIds = [];
     let nurseSelectedDoctorIds = [];
 
     async function loadNurseRoomOptions(selectedId) {
@@ -562,29 +561,6 @@
         document.getElementById('nurse-room-select').innerHTML =
           '<option value="">No room</option>' +
           rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.display || r.name || r.room_number}</option>`).join('');
-      } catch (e) { }
-    }
-
-    function toggleNurseChip(el, list, id) {
-      const idx = list.indexOf(id);
-      if (idx === -1) { list.push(id); el.classList.add('selected'); }
-      else { list.splice(idx, 1); el.classList.remove('selected'); }
-    }
-
-    async function loadNurseCoverageChips(selectedWardIds, selectedDoctorIds) {
-      try {
-        const [wards, doctors] = await Promise.all([
-          api("GET", "/admissions/ward-types"),
-          api("GET", "/patients/hospital-doctors")
-        ]);
-        nurseSelectedWardIds = [...selectedWardIds];
-        nurseSelectedDoctorIds = [...selectedDoctorIds];
-        document.getElementById('nurse-ward-chips').innerHTML = wards.map(w => `
-          <div class="day-chip ${nurseSelectedWardIds.includes(w.id) ? 'selected' : ''}" onclick="toggleNurseChip(this, nurseSelectedWardIds, ${w.id})">${w.name}</div>
-        `).join('') || '<div style="font-size:13px;color:var(--slate-light)">No wards set up yet.</div>';
-        document.getElementById('nurse-doctor-chips').innerHTML = doctors.map(d => `
-          <div class="day-chip ${nurseSelectedDoctorIds.includes(d.id) ? 'selected' : ''}" onclick="toggleNurseChip(this, nurseSelectedDoctorIds, ${d.id})">${d.title} ${d.name}</div>
-        `).join('') || '<div style="font-size:13px;color:var(--slate-light)">No doctors found.</div>';
       } catch (e) { }
     }
 
@@ -604,7 +580,6 @@
       const btnBreak = document.getElementById('nurse-btn-break');
       const btnOffDuty = document.getElementById('nurse-btn-offduty');
       document.getElementById('nurse-room-select').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
-      document.getElementById('nurse-coverage-block').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';
         btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
@@ -626,8 +601,7 @@
         const room_id = roomVal ? parseInt(roomVal) : null;
         const wasAlreadyPresent = nurseCurrentStatus === status;
         const alreadyActive = nurseCurrentStatus === "present" || nurseCurrentStatus === "on_break";
-        const coverage = status === 'present' ? { ward_ids: nurseSelectedWardIds, doctor_ids: nurseSelectedDoctorIds } : {};
-        await markAttendanceCommon(status, room_id, coverage);
+        await markAttendanceCommon(status, room_id, {});
         renderNurseBadge(status);
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
