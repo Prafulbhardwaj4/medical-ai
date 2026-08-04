@@ -122,8 +122,6 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
                 db.add(slot)
                 created.append(slot)
     db.commit()
-    for s in created:
-        db.refresh(s)
     return created
 
 

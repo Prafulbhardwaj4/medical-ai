@@ -430,6 +430,7 @@
         </div>
 
         <button id="btn-requeue" class="btn btn-outline" style="display:none;margin-top:8px" onclick="">Send back to doctor's queue (same-day return)</button>
+        <button id="btn-new-token-today" class="btn btn-outline" style="display:none;margin-top:8px" onclick="">Generate a new token for today instead</button>
 
       </div>
 
@@ -618,6 +619,25 @@
       </div>
       <div class="err-msg" id="em-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitEmergencyIntake()">Send to Doctor Now</button>
+    </div>
+  </div>
+
+  <!-- Merge Duplicate Patient Modal -->
+  <div class="modal-overlay" id="modal-merge-patient">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h2>Merge Duplicate Patient</h2>
+        <button class="modal-close" onclick="closeMergeModal()">×</button>
+      </div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:14px">
+        Merging <strong id="mg-dup-name"></strong> (<span id="mg-dup-uid"></span>) as a duplicate. This can't be undone.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Primary patient ID to keep (from the record's edit view)</label>
+        <input class="form-control" id="mg-primary-id" type="number" placeholder="e.g. 128" />
+      </div>
+      <div class="err-msg" id="mg-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="submitMerge()">Merge</button>
     </div>
   </div>
 
@@ -968,6 +988,10 @@
     let preferredDoctorId = null;
 
     async function selectExistingPatient(p) {
+      if (p.currently_admitted) {
+        toast(`${p.name} is already admitted at this hospital — no new token needed. Open their admission from Admissions instead.`, "info");
+        return;
+      }
       selectedPatient = p;
       preferredDoctorId = null;
 
@@ -1011,6 +1035,16 @@
         }
       }
 
+      const newTokenBtn = document.getElementById('btn-new-token-today');
+      if (newTokenBtn) {
+        if (t.is_consulted) {
+          newTokenBtn.style.display = '';
+          newTokenBtn.onclick = () => startFreshTokenToday();
+        } else {
+          newTokenBtn.style.display = 'none';
+        }
+      }
+
       if (t.is_returned) {
         toast('Already checked in today — patient is back in the doctor\'s Return Queue.', 'info');
       } else if (t.is_consulted) {
@@ -1018,6 +1052,16 @@
       } else {
         toast('Already checked in today — showing existing token.', 'info');
       }
+    }
+
+    async function startFreshTokenToday() {
+      const ok = await confirmDialog(
+        `${selectedPatient.name} already has a token today. Generate a brand new token for a separate visit anyway?`,
+        "Generate New Token"
+      );
+      if (!ok) return;
+      document.getElementById('cat-patient-name').textContent = `${selectedPatient.name} (${selectedPatient.patient_uid})`;
+      goToStepRoom();
     }
 
     async function requeueCheckin(checkinId) {
@@ -2182,21 +2226,38 @@
       renderAllPatients();
     }
 
-    async function mergeDuplicatePatient(duplicateId, duplicateName, duplicateUid) {
-      const primaryIdStr = prompt(
-        `Merging "${duplicateName}" (${duplicateUid}) as a duplicate.\n\nEnter the patient ID (numeric, from the record's edit view) of the record to keep as the primary:`
+    let mergeDuplicateId = null;
+
+    function openMergeModal(duplicateId, duplicateName, duplicateUid) {
+      mergeDuplicateId = duplicateId;
+      document.getElementById('mg-dup-name').textContent = duplicateName;
+      document.getElementById('mg-dup-uid').textContent = duplicateUid;
+      document.getElementById('mg-primary-id').value = '';
+      document.getElementById('mg-err').textContent = '';
+      document.getElementById('modal-merge-patient').classList.add('open');
+    }
+
+    function closeMergeModal() {
+      document.getElementById('modal-merge-patient').classList.remove('open');
+    }
+
+    async function submitMerge() {
+      const errEl = document.getElementById('mg-err');
+      const primaryId = parseInt(document.getElementById('mg-primary-id').value, 10);
+      if (!primaryId) { errEl.textContent = "Enter a valid patient ID."; return; }
+      const ok = await confirmDialog(
+        "Have you confirmed with the patient by phone that these are the same person? This can't be undone.",
+        "Yes, Merge"
       );
-      if (!primaryIdStr) return;
-      const primaryId = parseInt(primaryIdStr.trim(), 10);
-      if (!primaryId) { toast("Enter a valid patient ID", "error"); return; }
-      if (!confirm("Have you confirmed with the patient by phone that these are the same person? This can't be undone.")) return;
+      if (!ok) return;
       try {
         const res = await api("POST", "/patients/merge", {
-          primary_patient_id: primaryId, duplicate_patient_id: duplicateId, phone_confirmed: true,
+          primary_patient_id: primaryId, duplicate_patient_id: mergeDuplicateId, phone_confirmed: true,
         });
         toast(res.message, "success");
+        closeMergeModal();
         loadAllPatients();
-      } catch (e) { toast(e.message, "error"); }
+      } catch (e) { errEl.textContent = e.message; }
     }
 
     let listSearchTimer;

@@ -530,7 +530,7 @@
         currentAttendanceStatus = mine ? mine.status : 'not_marked';
         renderAttendanceBadge(currentAttendanceStatus);
         await loadRoomOptions(mine ? mine.room_id : null);
-        const locSelect = document.getElementById('location-select');
+        const locSelect = document.getElementById('location-toggle');
         if (locSelect && mine && mine.location) locSelect.value = mine.location;
       } catch (e) { }
     }
@@ -558,7 +558,7 @@
       const btnBreak = document.getElementById('btn-mark-break');
       const btnOffDuty = document.getElementById('btn-mark-offduty');
       const roomSelect = document.getElementById('room-select');
-      const locSelect = document.getElementById('location-select');
+      const locSelect = document.getElementById('location-toggle');
       roomSelect.style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       locSelect.style.display = (status === 'present') ? '' : 'none';
 
