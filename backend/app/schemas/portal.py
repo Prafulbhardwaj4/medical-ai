@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 from pydantic import BaseModel
 
@@ -207,7 +207,7 @@ class MarkUnavailableIn(BaseModel):
 
 class SlotOut(BaseModel):
     id: int
-    slot_date: str
+    slot_date: date
     slot_time: str
     period: str
     capacity: int

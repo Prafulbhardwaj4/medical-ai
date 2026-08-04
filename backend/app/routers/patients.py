@@ -1134,6 +1134,23 @@ def checkin_patient(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
+    if not payload.force:
+        from app.models.admission import Admission
+        active_admission = db.query(Admission).filter(
+            Admission.patient_id == patient.id,
+            Admission.hospital_id == current_doctor.hospital_id,
+            Admission.status == "admitted",
+        ).first()
+        if active_admission:
+            raise HTTPException(status_code=409, detail={
+                "message": f"{patient.name} is already admitted (Ward {active_admission.ward}, Bed {active_admission.bed_number}) at this hospital. A new OPD token usually isn't needed.",
+                "admission": {
+                    "public_token": active_admission.public_token,
+                    "ward": active_admission.ward,
+                    "bed_number": active_admission.bed_number,
+                }
+            })
+
     doctor = db.query(Doctor).filter(
         Doctor.id == payload.doctor_id,
         Doctor.hospital_id == current_doctor.hospital_id,

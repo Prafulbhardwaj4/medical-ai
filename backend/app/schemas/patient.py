@@ -119,6 +119,7 @@ class CheckinCreate(BaseModel):
     send_to_nurse: Optional[bool] = False
     consultation_fee: Optional[float] = None
     test_fee: Optional[float] = None
+    force: Optional[bool] = False  # bypass the already-admitted warning once reception has confirmed
 
 class CheckinOut(BaseModel):
     checkin_id: int

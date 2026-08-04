@@ -83,7 +83,7 @@ async function api(method, path, body = null, isFormData = false, silent = false
     try {
       res = await fetch(BASE + path, opts);
     } catch (networkErr) {
-      throw new Error("Could not reach backend. If /health works, this is usually a backend 500 or CORS error. Check Render deploy/runtime logs.");
+      throw new Error("Backend request failed. Please try again once; if it repeats, contact admin.");
     }
 
     if (res.status === 401) {
@@ -532,9 +532,5 @@ function promptOffDutyTime() {
 }
 
 async function markAttendanceCommon(status, room_id, extra, alreadyActive) {
-  let expected_off_duty_at = null;
-  if (status === "present" && !alreadyActive) {
-    expected_off_duty_at = await promptOffDutyTime();
-  }
-  return api("POST", "/doctors/attendance", { status, room_id, expected_off_duty_at, ...(extra || {}) });
+  return api("POST", "/doctors/attendance", { status, room_id, ...(extra || {}) });
 }

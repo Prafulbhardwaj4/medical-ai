@@ -84,7 +84,34 @@
       box-shadow: var(--shadow-xs);
     }
     .pay-toggle-switch input:checked + .pay-toggle-slider { background: var(--teal); }
-    .pay-toggle-switch input:checked + .pay-toggle-slider::before { transform: translateX(18px); }
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .patient-name-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .ql-help {
+      margin: -2px 0 12px;
+      color: var(--slate);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .ql-search-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 640px) {
+      .ql-search-row { grid-template-columns: 1fr; }
+      .row-actions .btn { flex: 1 1 auto; }
+    }
   </style>
 </head>
 <body>
@@ -630,7 +657,10 @@
         <button class="modal-close" onclick="closeMergeModal()">×</button>
       </div>
       <p style="font-size:13px;color:var(--slate);margin-bottom:14px">
-        Merging <strong id="mg-dup-name"></strong> (<span id="mg-dup-uid"></span>) as a duplicate. This can't be undone.
+        Merge means this record is treated as a duplicate of another patient, and its visits/history move to the primary record you keep. Use only after confirming both records are the same person.
+      </p>
+      <p style="font-size:13px;color:var(--navy);margin-bottom:14px">
+        Duplicate: <strong id="mg-dup-name"></strong> (<span id="mg-dup-uid"></span>)
       </p>
       <div class="form-group">
         <label class="form-label">Primary patient ID to keep (from the record's edit view)</label>
@@ -750,8 +780,9 @@
   <div class="modal-overlay" id="modal-quick-lookup">
     <div class="modal" style="max-width:480px">
       <div class="modal-header"><h2>Quick Lookup</h2><button class="modal-close" onclick="closeModal('modal-quick-lookup')">×</button></div>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input class="form-control" id="ql-query" placeholder="Phone, Patient ID, or Token" onkeydown="if(event.key==='Enter')runQuickLookup()">
+      <p class="ql-help">Search one patient across admission, pending payment, refund, and follow-up situations.</p>
+      <div class="ql-search-row">
+        <input class="form-control" id="ql-query" placeholder="Phone, Patient ID, or Token" oninput="quickLookupTyping()" onkeydown="if(event.key==='Enter')runQuickLookup()">
         <button class="btn btn-primary" onclick="runQuickLookup()">Search</button>
       </div>
       <div id="ql-results"></div>
@@ -1210,7 +1241,7 @@
 
     let currentCheckinId = null;
 
-    async function generateToken() {
+    async function generateToken(force) {
       const btn = document.getElementById('btn-generate-token');
       const doctorId = document.getElementById('doc-select').value;
       if (!doctorId) { toast('No doctor available.', 'error'); return; }
@@ -1222,7 +1253,8 @@
           issue_category: selectedCategory,
           doctor_id: parseInt(doctorId),
           send_to_nurse: document.getElementById('send-to-nurse').checked,
-          consultation_fee: billingOn ? (parseFloat(document.getElementById('consultation-fee').value) || null) : null
+          consultation_fee: billingOn ? (parseFloat(document.getElementById('consultation-fee').value) || null) : null,
+          force: !!force
         });
         document.getElementById('slip-hospital').textContent = getDoctor()?.clinic_name || '';
         document.getElementById('slip-token').textContent = result.token_number;
@@ -1247,7 +1279,15 @@
         document.getElementById('step-token').style.display = '';
         loadAllPatients();
       } catch (e) {
-        toast(e.message, "error");
+        if (e.data && e.data.admission) {
+          if (confirm(`${e.data.message}\n\nGenerate a new OPD token anyway?`)) {
+            btn.disabled = false;
+            btn.innerHTML = 'Generate Token';
+            return generateToken(true);
+          }
+        } else {
+          toast(e.message, "error");
+        }
       } finally {
         btn.disabled = false;
         btn.innerHTML = 'Generate Token';
@@ -1864,6 +1904,12 @@
       setTimeout(() => document.getElementById('ql-query').focus(), 100);
     }
 
+    let qlTimer;
+    function quickLookupTyping() {
+      clearTimeout(qlTimer);
+      qlTimer = setTimeout(runQuickLookup, 300);
+    }
+
     async function runQuickLookup() {
       const q = document.getElementById('ql-query').value.trim();
       const results = document.getElementById('ql-results');
@@ -2202,15 +2248,24 @@
       }
       tbody.innerHTML = data.map(p => `
         <tr>
-          <td data-label="Patient"><strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber">Today</span>' : ''}${p.address ? `<div style="font-size:11.5px;color:var(--slate-light);font-weight:400;margin-top:2px">${p.address}</div>` : ''}</td>
+          <td data-label="Patient">
+            <div class="patient-name-line">
+              <strong>${p.name}</strong>
+              ${p.checked_in_today ? '<span class="badge badge-amber">Today</span>' : ''}
+              ${p.currently_admitted ? '<span class="badge badge-red">Already admitted</span>' : ''}
+            </div>
+            ${p.address ? `<div style="font-size:11.5px;color:var(--slate-light);font-weight:400;margin-top:2px">${p.address}</div>` : ''}
+          </td>
           <td data-label="ID"><span class="badge badge-navy">${p.patient_uid}</span></td>
           <td data-label="Phone" style="color:var(--slate)">${p.phone}</td>
           <td data-label="Age / Gender">${p.age}y / ${capitalize(p.gender)}</td>
           <td data-label="Last Visit">${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
-          <td data-label="" style="text-align:left">
-            <button class="btn btn-outline btn-sm" onclick='openEditPatient(${JSON.stringify(p)})'>✏️ Edit</button>
-            <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>Select</button>
-            <button class="btn btn-outline btn-sm" onclick='mergeDuplicatePatient(${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.patient_uid)})'>Merge</button>
+          <td data-label="">
+            <div class="row-actions">
+              <button class="btn btn-outline btn-sm" onclick='openEditPatient(${JSON.stringify(p)})'>Edit</button>
+              <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>Select</button>
+              <button class="btn btn-outline btn-sm" onclick='mergeDuplicatePatient(${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.patient_uid)})'>Merge</button>
+            </div>
           </td>
         </tr>
       `).join('');

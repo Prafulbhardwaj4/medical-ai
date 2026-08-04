@@ -76,6 +76,41 @@
       border: 1px solid #fca5a5;
     }
 
+        .consult-context-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 14px;
+      margin-bottom: 16px;
+      align-items: stretch;
+    }
+    .context-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      background: var(--smoke);
+    }
+    .context-card.blue {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+    }
+    .context-card-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      color: var(--slate);
+    }
+    .context-card.blue .context-card-title { color: #1e40af; }
+    .refer-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    @media (max-width: 900px) {
+      .consult-context-grid { grid-template-columns: 1fr; }
+    }
+
     .success-panel {
       text-align: center;
       padding: 32px 20px;
@@ -232,12 +267,19 @@
           <div id="past-visits-list"></div>
         </div>
 
-        <div id="nurse-vitals-wrap"
-          style="display:none;margin-bottom:16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);padding:14px 16px">
-          <div style="font-size:0.75rem;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">
-            Vitals Recorded by Nurse
+        <div class="consult-context-grid">
+          <div id="nurse-vitals-wrap" class="context-card blue" style="display:none">
+            <div class="context-card-title">Vitals Recorded by Nurse</div>
+            <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)"></div>
           </div>
-          <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)"></div>
+
+          <div class="context-card">
+            <div class="context-card-title">Refer to Doctor</div>
+            <div class="refer-card-body">
+              <p style="margin:0;color:var(--slate);font-size:13px">Send this patient to another doctor after this consultation.</p>
+              <button class="btn btn-outline" onclick="openReferModal()">Refer to Doctor</button>
+            </div>
+          </div>
         </div>
 
         <div id="post-consult-wrap"
@@ -367,7 +409,6 @@
             <button class="btn btn-outline" onclick="goStep(2)">← Edit</button>
             <!-- <button class="btn btn-outline btn-lg" onclick="copyPdfLink()">🔗 Copy PDF Link</button> -->
             <button class="btn btn-outline btn-lg" onclick="viewPdf()">📄 View PDF</button>
-            <button class="btn btn-outline btn-lg" onclick="openReferModal()">↗ Refer to Doctor</button>
             <button class="btn btn-outline btn-lg" onclick="admitPatient()">🛏️ Admit Patient</button>
             <button class="btn btn-navy btn-lg" onclick="goBack()">✓ Done — Back to Patient</button>
           </div>
