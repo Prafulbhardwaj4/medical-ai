@@ -20,14 +20,26 @@
       .med-card, .bill-row { font-size: 13px; }
       .card-header { flex-wrap: wrap; gap: 8px; }
       #patient-header { padding: 16px; }
+      .ph-info-grid { grid-template-columns: 1fr !important; gap: 14px; }
+      .ph-top-row { flex-direction: column; }
     }
-    /* Desktop: for nurses the entire right column (deposit/TPA/consents/running-bill/
-       discharge — all hidden for this role) ends up empty. Collapse it away instead
-       of leaving a dead empty column, rather than just narrowing it to 0 width. */
+    /* Billing/payment/discharge is reception-only — for every other role the whole
+       right column ends up empty. Collapse it away instead of leaving a dead gap. */
     @media (min-width: 901px) {
-      #main-grid.nurse-full-width { grid-template-columns: 1fr !important; }
-      #main-grid.nurse-full-width > div:last-child { display: none; }
+      #main-grid.financial-hidden { grid-template-columns: 1fr !important; }
+      #main-grid.financial-hidden > div:last-child { display: none; }
     }
+
+    .ph-top-row { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; }
+    .ph-name { margin: 0; font-size: 1.4rem; }
+    .ph-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .ph-emergency-btn { background: #dc2626; color: #fff; border-color: #dc2626; flex-shrink: 0; }
+    .ph-info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; padding: 16px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .ph-info-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--slate-light); margin-bottom: 6px; }
+    .ph-info-value { font-size: 13.5px; color: var(--navy); line-height: 1.5; }
+    .ph-action-btn { margin-top: 10px; display: inline-block; }
+    .ph-discharge-order-note { font-size: 12.5px; color: var(--slate); margin-bottom: 6px; }
+    .ph-diagnosis-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--navy); margin-top: 4px; }
   </style>
 
 <body>
@@ -719,9 +731,9 @@
       document.getElementById("app-bottom-nav").style.display = "";
       renderAdminNav("admissions");
     }
-    function canManageClinicalOrders() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    function canManageClinicalOrders() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
     function canGiveDose() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
-    function canManageMedOrders() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    function canManageMedOrders() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
     function canReturnMed() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
     function isNurseViewer() { return ["nurse", "assistant"].includes(getDoctor()?.role); }
     if (!canManageClinicalOrders()) {
@@ -733,19 +745,19 @@
     const canRequestWardChange = ["doctor", "nurse", "assistant", "admin", "sub_admin"].includes(getDoctor()?.role);
     const canChangeWard = ["receptionist", "admin", "sub_admin"].includes(getDoctor()?.role);
     const canManageTpa = ["receptionist", "admin", "sub_admin"].includes(getDoctor()?.role);
+    // Billing/payment/discharge is reception's job alone — nobody else sees it,
+    // admin included, per current policy.
+    const canSeeBilling = getDoctor()?.role === "receptionist";
     let wardTypesForMove = [];
-    if (isAdminViewer || isDoctorViewer || isNurseViewer()) document.getElementById("discharge-card").style.display = "none";
-    if (isNurseViewer() || isDoctorViewer) {
+    if (!canSeeBilling) {
+      document.getElementById("discharge-card").style.display = "none";
       document.getElementById("running-bill-card").style.display = "none";
-    }
-    if (isNurseViewer()) {
       document.getElementById("deposit-card").style.display = "none";
       document.getElementById("tpa-card").style.display = "none";
       document.getElementById("consents-card").style.display = "none";
-      // Every card in the right column is hidden for this role — collapse the
-      // whole column via CSS (handles the desktop empty-gap case) rather than
-      // just narrowing it with an inline style.
-      document.getElementById("main-grid").classList.add("nurse-full-width");
+      // Every card in the right column is billing-only, hidden for this role —
+      // collapse the whole column via CSS rather than leaving a dead gap.
+      document.getElementById("main-grid").classList.add("financial-hidden");
     }
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
@@ -886,31 +898,48 @@
       const a = admissionData;
       const p = a.patient;
       document.getElementById("patient-header").innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px">
+        <div class="ph-top-row">
           <div>
-             <h2 style="margin:0">${sanitize(p.name)} <span class="badge ${a.status === 'admitted' ? 'badge-teal' : 'badge-grey'}" style="margin-left:8px">${a.status}</span> ${a.status === 'discharged' && a.discharge_type && a.discharge_type !== 'planned' ? `<span class="badge badge-amber" style="margin-left:6px">${a.discharge_type === 'lama_dama' ? 'LAMA/DAMA' : 'Death in Hospital' + (a.is_mlc ? ' · MLC' : '')}</span>` : ''} ${a.status === 'admitted' ? `<button class="btn btn-sm" style="margin-left:8px;background:#dc2626;color:#fff;border-color:#dc2626" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}</h2>
-            <p style="color:var(--slate);font-size:13.5px;margin-top:4px">${p.age} yrs, ${p.gender} · ${sanitize(p.phone)} ${p.patient_uid ? '· ' + sanitize(p.patient_uid) : ''}</p>
-            <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
-              ${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)} · Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} (${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'})
-              ${a.status === 'admitted' && canChangeWard ? `<button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="openChangeWardModal()">Change Ward/Bed</button>` : ''}
-              ${a.status === 'admitted' && canRequestWardChange && !canChangeWard ? `<button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="openRequestWardChangeModal()">Request Ward/Bed Change</button>` : ''}
-            </p>
-            ${a.status === 'admitted' && isDoctorViewer ? `
-            <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
-              ${a.discharge_order_at
-                ? `Discharge ordered at ${new Date(a.discharge_order_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} <button class="btn btn-outline btn-sm" style="margin-left:8px" onclick="placeDischargeOrder()">Re-confirm</button>`
-                : `<button class="btn btn-primary btn-sm" onclick="placeDischargeOrder()">Place Discharge Order</button>`}
-            </p>` : ''}
-            <p style="color:var(--slate);font-size:13.5px;margin-top:4px">
-              <strong>Diagnosis:</strong> <span id="diagnosis-display">${sanitize(a.diagnosis || '—')}</span>
-              <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="openEditDiagnosis()">Edit</button>
-            </p>
-            <div id="diagnosis-edit-row" style="display:none;margin-top:6px;gap:8px;max-width:420px">
-              <input class="form-control" id="diagnosis-edit-input" />
-              <button class="btn btn-primary btn-sm" onclick="saveDiagnosis()">Save</button>
-              <button class="btn btn-outline btn-sm" onclick="closeEditDiagnosis()">Cancel</button>
+            <h2 class="ph-name">${sanitize(p.name)}</h2>
+            <div class="ph-badges">
+              <span class="badge ${a.status === 'admitted' ? 'badge-teal' : 'badge-grey'}">${a.status}</span>
+              ${a.status === 'discharged' && a.discharge_type && a.discharge_type !== 'planned' ? `<span class="badge badge-amber">${a.discharge_type === 'lama_dama' ? 'LAMA/DAMA' : 'Death in Hospital' + (a.is_mlc ? ' · MLC' : '')}</span>` : ''}
+              <span class="badge badge-navy">${ADMISSION_TYPE_LABELS[a.admission_type] || 'Planned / Elective'}</span>
             </div>
-            <p style="color:var(--slate-light);font-size:12.5px;margin-top:4px">Admitting doctor: ${sanitize(a.admitting_doctor_name || '—')} · <span class="badge badge-navy">${ADMISSION_TYPE_LABELS[a.admission_type] || 'Planned / Elective'}</span></p>
+          </div>
+          ${a.status === 'admitted' ? `<button class="btn btn-sm ph-emergency-btn" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}
+        </div>
+
+        <div class="ph-info-grid">
+          <div>
+            <div class="ph-info-label">Patient</div>
+            <div class="ph-info-value">${p.age} yrs, ${p.gender}<br>${sanitize(p.phone)}${p.patient_uid ? ' · ' + sanitize(p.patient_uid) : ''}</div>
+          </div>
+          <div>
+            <div class="ph-info-label">Ward & Bed</div>
+            <div class="ph-info-value">${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)}<br>Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} (${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'})</div>
+            ${a.status === 'admitted' && canChangeWard ? `<button class="btn btn-primary btn-sm ph-action-btn" onclick="openChangeWardModal()">Change Ward/Bed</button>` : ''}
+            ${a.status === 'admitted' && canRequestWardChange && !canChangeWard ? `<button class="btn btn-primary btn-sm ph-action-btn" onclick="openRequestWardChangeModal()">Request Ward/Bed Change</button>` : ''}
+          </div>
+          <div>
+            <div class="ph-info-label">Admitting Doctor</div>
+            <div class="ph-info-value">${sanitize(a.admitting_doctor_name || '—')}</div>
+            ${a.status === 'admitted' && isDoctorViewer ? (a.discharge_order_at
+              ? `<div class="ph-discharge-order-note">Discharge ordered ${new Date(a.discharge_order_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div><button class="btn btn-outline btn-sm ph-action-btn" onclick="placeDischargeOrder()">Re-confirm</button>`
+              : `<button class="btn btn-primary btn-sm ph-action-btn" onclick="placeDischargeOrder()">Place Discharge Order</button>`) : ''}
+          </div>
+        </div>
+
+        <div>
+          <div class="ph-info-label">Diagnosis</div>
+          <div class="ph-diagnosis-line">
+            <span id="diagnosis-display">${sanitize(a.diagnosis || '—')}</span>
+            <button class="btn btn-primary btn-sm" onclick="openEditDiagnosis()">Edit</button>
+          </div>
+          <div id="diagnosis-edit-row" style="display:none;margin-top:8px;gap:8px;max-width:420px">
+            <input class="form-control" id="diagnosis-edit-input" />
+            <button class="btn btn-primary btn-sm" onclick="saveDiagnosis()">Save</button>
+            <button class="btn btn-outline btn-sm" onclick="closeEditDiagnosis()">Cancel</button>
           </div>
         </div>`;
     }

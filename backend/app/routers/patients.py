@@ -1419,6 +1419,7 @@ def todays_queue(
             "referred_by_name": f"{ref_doctor.title} {ref_doctor.name}" if ref_doctor else None,
             "source": c.source,
             "booked_time": c.booked_time.isoformat() if c.booked_time else None,
+            "vitals_status": c.vitals_status,
         })
 
     # Merge in paid portal appointments for today that haven't been checked
@@ -1448,7 +1449,10 @@ def todays_queue(
             "created_at": a.requested_time.isoformat(),
             "estimated_time": a.requested_time.isoformat(),
             "status": "expected",
-            "is_emergency": False
+            "is_emergency": False,
+            "is_referral": False,
+            "source": "online",
+            "vitals_status": None,
         })
 
     result.sort(key=lambda r: r.get("estimated_time") or r["created_at"])

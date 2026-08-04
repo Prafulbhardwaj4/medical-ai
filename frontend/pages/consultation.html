@@ -105,7 +105,9 @@
     .refer-card-body {
       display: flex;
       flex-direction: column;
+      justify-content: center;
       gap: 10px;
+      height: 100%;
     }
     @media (max-width: 900px) {
       .consult-context-grid { grid-template-columns: 1fr; }
@@ -262,8 +264,14 @@
 
         <div id="last-visit-wrap"
           style="display:none;margin-bottom:16px;background:var(--smoke);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px">
-          <div style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px">
-            Past Visits</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em">
+              Past Visits</div>
+            <button type="button" class="btn btn-outline btn-sm" id="past-visits-show-all-btn" style="display:none" onclick="showAllPastVisits()">Show all</button>
+          </div>
+          <div id="past-visits-search-wrap" style="display:none;margin-bottom:10px">
+            <input class="form-control" id="past-visits-search" placeholder="Search past visits by diagnosis, doctor, or date…" oninput="filterPastVisits()" />
+          </div>
           <div id="past-visits-list"></div>
         </div>
 
@@ -273,7 +281,7 @@
             <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)"></div>
           </div>
 
-          <div class="context-card">
+          <div class="context-card" id="refer-doctor-card" style="grid-column:1/-1">
             <div class="context-card-title">Refer to Doctor</div>
             <div class="refer-card-body">
               <p style="margin:0;color:var(--slate);font-size:13px">Send this patient to another doctor after this consultation.</p>
@@ -292,6 +300,7 @@
 
         <div class="recorder-wrap" id="recorder-wrap">
           <button class="record-btn idle" id="record-btn" onclick="toggleRecording()">🎙</button>
+          <button class="btn btn-outline btn-sm" id="pause-resume-btn" onclick="togglePauseResume()" style="display:none">Pause</button>
           <div class="timer" id="timer">00:00</div>
           <p id="record-hint" class="record-status">Click to start recording</p>
         </div>
@@ -531,31 +540,64 @@
       } catch (e) { }
     }
 
+    let allPastVisits = [];
+
+    function renderVisitRow(v, isLast) {
+      const meds = safeJSON(v.medicines, []);
+      const medText = meds.length ? meds.map(m => m.brand_name ? `${m.name} (${m.brand_name}) ${m.dosage}` : `${m.name} ${m.dosage}`).join(", ") : "—";
+      return `
+        <div style="border-bottom:1px solid var(--border);padding:10px 0;${isLast ? 'border-bottom:none' : ''}">
+          <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="togglePastVisit(${v.id})">
+            <span style="font-size:0.85rem;font-weight:600;color:var(--navy)">${formatDate(v.created_at)} — ${v.diagnosis || 'No diagnosis recorded'}</span>
+            <span style="font-size:0.78rem;color:var(--slate)" id="pv-toggle-${v.id}">Expand ▾</span>
+          </div>
+          <div id="pv-body-${v.id}" style="display:none;margin-top:8px;font-size:0.85rem;color:var(--navy)">
+            <div style="margin-bottom:4px"><strong>Doctor:</strong> ${v.doctor_name || '—'}</div>
+            <div style="margin-bottom:4px"><strong>Diagnosis:</strong> ${v.diagnosis || '—'}</div>
+            <div style="margin-bottom:4px"><strong>Medicines:</strong> ${medText}</div>
+            <div style="margin-bottom:4px"><strong>Advice:</strong> ${v.advice || '—'}</div>
+            <div><strong>Follow-up:</strong> ${v.followup || '—'}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPastVisitsList(list) {
+      document.getElementById("past-visits-list").innerHTML = list.length
+        ? list.map((v, i) => renderVisitRow(v, i === list.length - 1)).join('')
+        : '<p style="color:var(--slate-light);font-size:0.85rem">No visits match your search.</p>';
+    }
+
+    function filterPastVisits() {
+      const q = document.getElementById("past-visits-search").value.trim().toLowerCase();
+      const filtered = !q ? allPastVisits : allPastVisits.filter(v =>
+        (v.diagnosis || "").toLowerCase().includes(q) ||
+        (v.doctor_name || "").toLowerCase().includes(q) ||
+        formatDate(v.created_at).toLowerCase().includes(q)
+      );
+      renderPastVisitsList(filtered);
+    }
+
+    function showAllPastVisits() {
+      document.getElementById("past-visits-search-wrap").style.display = "block";
+      document.getElementById("past-visits-show-all-btn").style.display = "none";
+      renderPastVisitsList(allPastVisits);
+    }
+
     async function loadLastVisit() {
       try {
         const visits = await api("GET", `/consultations/history/${patientId}`);
         if (!visits || visits.length === 0) return;
+        allPastVisits = visits;
 
-        const recent = visits.slice(0, 5);
-        document.getElementById("past-visits-list").innerHTML = recent.map((v, i) => {
-          const meds = safeJSON(v.medicines, []);
-          const medText = meds.length ? meds.map(m => m.brand_name ? `${m.name} (${m.brand_name}) ${m.dosage}` : `${m.name} ${m.dosage}`).join(", ") : "—";
-          return `
-            <div style="border-bottom:1px solid var(--border);padding:10px 0;${i === recent.length - 1 ? 'border-bottom:none' : ''}">
-              <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="togglePastVisit(${v.id})">
-                <span style="font-size:0.85rem;font-weight:600;color:var(--navy)">${formatDate(v.created_at)} — ${v.diagnosis || 'No diagnosis recorded'}</span>
-                <span style="font-size:0.78rem;color:var(--slate)" id="pv-toggle-${v.id}">Expand ▾</span>
-              </div>
-              <div id="pv-body-${v.id}" style="display:none;margin-top:8px;font-size:0.85rem;color:var(--navy)">
-                <div style="margin-bottom:4px"><strong>Doctor:</strong> ${v.doctor_name || '—'}</div>
-                <div style="margin-bottom:4px"><strong>Diagnosis:</strong> ${v.diagnosis || '—'}</div>
-                <div style="margin-bottom:4px"><strong>Medicines:</strong> ${medText}</div>
-                <div style="margin-bottom:4px"><strong>Advice:</strong> ${v.advice || '—'}</div>
-                <div><strong>Follow-up:</strong> ${v.followup || '—'}</div>
-              </div>
-            </div>
-          `;
-        }).join('');
+        renderPastVisitsList(visits.slice(0, 2));
+        const showAllBtn = document.getElementById("past-visits-show-all-btn");
+        if (visits.length > 2) {
+          showAllBtn.style.display = "inline-block";
+          showAllBtn.textContent = `Show all ${visits.length} previous visits`;
+        } else {
+          showAllBtn.style.display = "none";
+        }
         document.getElementById("last-visit-wrap").style.display = "block";
       } catch (e) { }
     }
@@ -579,14 +621,16 @@
 
     let isPaused = false;
 
-    function pauseRecording() {
+    function pauseRecording(hintText) {
       if (!isRecording || isPaused) return;
       isPaused = true;
       if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
         wsConnection.send(JSON.stringify({ type: "pause" }));
       }
-      document.getElementById("record-hint").textContent = "Paused — waiting on recheck…";
+      document.getElementById("record-hint").textContent = hintText || "Paused — click Resume to continue";
       document.getElementById("recorder-wrap").classList.add("paused");
+      const prBtn = document.getElementById("pause-resume-btn");
+      if (prBtn) prBtn.textContent = "Resume";
     }
 
     function resumeRecording() {
@@ -597,6 +641,13 @@
       }
       document.getElementById("record-hint").textContent = "Recording… click to stop";
       document.getElementById("recorder-wrap").classList.remove("paused");
+      const prBtn = document.getElementById("pause-resume-btn");
+      if (prBtn) prBtn.textContent = "Pause";
+    }
+
+    function togglePauseResume() {
+      if (isPaused) resumeRecording();
+      else pauseRecording();
     }
 
     async function startRecording() {
@@ -615,6 +666,8 @@
           document.getElementById("record-btn").textContent = "⏹";
           document.getElementById("record-hint").textContent = "Recording… click to stop";
           document.getElementById("recorder-wrap").classList.add("recording");
+          document.getElementById("pause-resume-btn").style.display = "";
+          document.getElementById("pause-resume-btn").textContent = "Pause";
 
           timerInterval = setInterval(() => {
             seconds++;
@@ -690,6 +743,7 @@
       document.getElementById("record-hint").textContent = "Processing…";
       document.getElementById("recorder-wrap").classList.remove("recording");
       document.getElementById("record-btn").disabled = true;
+      document.getElementById("pause-resume-btn").style.display = "none";
 
       if (mediaProcessor) {
         mediaProcessor.processor.disconnect();
@@ -714,6 +768,7 @@
       document.getElementById("record-btn").className = "record-btn idle";
       document.getElementById("record-btn").textContent = "🎙";
       document.getElementById("recorder-wrap").classList.remove("recording");
+      document.getElementById("pause-resume-btn").style.display = "none";
     }
 
     async function retranscribe() {
@@ -728,7 +783,7 @@
         await api("POST", `/patients/${patientId}/send-back-vitals`, { note });
         toast("Sent back to nurse for recheck.", "success");
         document.getElementById("recheck-vital-note").value = "";
-        pauseRecording();
+        pauseRecording("Paused — waiting on recheck…");
       } catch (e) { toast(e.message, "error"); }
     }
 
@@ -738,7 +793,7 @@
       try {
         const status = await api("GET", "/doctors/attendance/my-status");
         if (status.status === "away_emergency" && lastKnownAttendanceStatus !== "away_emergency") {
-          if (isRecording && !isPaused) pauseRecording();
+          if (isRecording && !isPaused) pauseRecording("Paused — you stepped away");
         } else if (lastKnownAttendanceStatus === "away_emergency" && status.status === "present") {
           if (isRecording && isPaused) resumeRecording();
         }
@@ -1083,6 +1138,7 @@
           const summaryParts = Object.entries(c.vitals_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);
           document.getElementById('nurse-vitals-summary').innerHTML = summaryParts.join(' &nbsp;·&nbsp; ');
           document.getElementById('nurse-vitals-wrap').style.display = 'block';
+          document.getElementById('refer-doctor-card').style.gridColumn = '';
         }
         if (c.post_consult_status === 'done' && c.post_consult_data) {
           const parts = Object.entries(c.post_consult_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);

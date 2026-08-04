@@ -299,6 +299,7 @@
             <div class="patient-meta-item"><strong id="p-age">—</strong>Age</div>
             <div class="patient-meta-item"><strong id="p-gender">—</strong>Gender</div>
             <div class="patient-meta-item"><strong id="p-phone">—</strong>Phone</div>
+            <div class="patient-meta-item"><strong id="p-address">—</strong>Address</div>
           </div>
         </div>
         <div class="patient-header-actions">
@@ -348,6 +349,10 @@
       <div class="form-group">
         <label class="form-label">Full Name</label>
         <input class="form-control" id="ep-name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Address</label>
+        <input class="form-control" id="ep-address" />
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -416,6 +421,7 @@
         document.getElementById("p-age").textContent = p.age + " yrs";
         document.getElementById("p-gender").textContent = capitalize(p.gender);
         document.getElementById("p-phone").textContent = p.phone;
+        document.getElementById("p-address").textContent = p.address || "—";
       } catch (e) {
         toast(e.message, "error");
       }
@@ -682,6 +688,7 @@
         document.getElementById("ep-age").value = p.age;
         document.getElementById("ep-gender").value = p.gender;
         document.getElementById("ep-blood-group").value = p.blood_group || "";
+        document.getElementById("ep-address").value = p.address || "";
         document.getElementById("modal-edit-patient").classList.add("open");
       });
     }
@@ -709,7 +716,8 @@
           phone: phone,
           age: parseInt(document.getElementById("ep-age").value),
           gender: document.getElementById("ep-gender").value,
-          blood_group: document.getElementById("ep-blood-group").value || null
+          blood_group: document.getElementById("ep-blood-group").value || null,
+          address: document.getElementById("ep-address").value.trim() || null
         });
         toast("Patient details updated", "success");
         closeEditPatient();

@@ -217,11 +217,11 @@
             <div class="staff-att-actions" id="attendance-btns">
               <select class="form-control" id="room-select" style="display:none"
                 onchange="markAttendance(currentAttendanceStatus)"></select>
-              <div id="location-toggle" style="display:none;gap:6px">
-                <button type="button" class="btn btn-outline btn-sm" id="loc-btn-cabin"
-                  onclick="setDoctorLocation('in_cabin')">In Cabin</button>
-                <button type="button" class="btn btn-outline btn-sm" id="loc-btn-rounds"
-                  onclick="setDoctorLocation('on_rounds')">On Rounds</button>
+              <div id="location-toggle" style="display:none;gap:6px;align-items:center">
+                <button type="button" class="btn btn-outline btn-sm" id="loc-toggle-btn"
+                  onclick="toggleDoctorLocation()">In Cabin</button>
+                <button type="button" class="btn btn-outline btn-sm" id="emergency-btn"
+                  onclick="toggleEmergency()" style="color:#dc2626;border-color:#dc2626">Emergency</button>
               </div>
               <button class="btn btn-primary" id="btn-mark-present" onclick="markAttendance('present')">Mark
                 Present</button>
@@ -269,12 +269,12 @@
             </div>
           </div>
 
-          <div class="card" id="queue-card">
+          <div class="card" id="queue-card-walkin">
             <div class="card-header">
-              <h2>Today's Queue</h2>
+              <h2>Walk-ins</h2>
               <div style="display:flex;align-items:center;gap:10px">
-                <span id="queue-count" style="color:var(--slate);font-size:0.9rem"></span>
-                <select id="queue-filter" class="form-control" style="width:170px;min-width:170px;flex-shrink:0;padding:4px 8px;font-size:0.85rem"
+                <span id="queue-count-walkin" style="color:var(--slate);font-size:0.9rem"></span>
+                <select id="queue-filter-walkin" class="form-control" style="width:170px;min-width:170px;flex-shrink:0;padding:4px 8px;font-size:0.85rem"
                   onchange="renderQueueRows()">
                   <option value="all">All</option>
                   <option value="waiting">Waiting</option>
@@ -283,20 +283,61 @@
               </div>
             </div>
             <div class="table-wrap">
-              <table id="queue-table" class="responsive-cards">
+              <table id="queue-table-walkin" class="responsive-cards">
                 <thead>
                   <tr>
                     <th>Token</th>
                     <th>Patient</th>
                     <th>Reason</th>
                     <th style="text-align:center">Checked In / Est. Time</th>
+                    <th>Vitals</th>
                     <th>Status</th>
                     <th></th>
                   </tr>
                 </thead>
-                <tbody id="queue-tbody">
+                <tbody id="queue-tbody-walkin">
                   <tr>
-                    <td colspan="6">
+                    <td colspan="7">
+                      <div class="empty-state">
+                        <p>Loading queue…</p>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card" id="queue-card-online" style="margin-top:16px">
+            <div class="card-header">
+              <h2>Online Appointments</h2>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span id="queue-count-online" style="color:var(--slate);font-size:0.9rem"></span>
+                <select id="queue-filter-online" class="form-control" style="width:170px;min-width:170px;flex-shrink:0;padding:4px 8px;font-size:0.85rem"
+                  onchange="renderQueueRows()">
+                  <option value="all">All</option>
+                  <option value="waiting">Waiting</option>
+                  <option value="consulted">Consulted</option>
+                  <option value="expected">Expected</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table id="queue-table-online" class="responsive-cards">
+                <thead>
+                  <tr>
+                    <th>Token</th>
+                    <th>Patient</th>
+                    <th>Reason</th>
+                    <th style="text-align:center">Checked In / Est. Time</th>
+                    <th>Vitals</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="queue-tbody-online">
+                  <tr>
+                    <td colspan="7">
                       <div class="empty-state">
                         <p>Loading queue…</p>
                       </div>
@@ -530,8 +571,8 @@
         currentAttendanceStatus = mine ? mine.status : 'not_marked';
         renderAttendanceBadge(currentAttendanceStatus);
         await loadRoomOptions(mine ? mine.room_id : null);
-        const locSelect = document.getElementById('location-toggle');
-        if (locSelect && mine && mine.location) locSelect.value = mine.location;
+        currentDoctorLocation = (mine && mine.location) ? mine.location : 'in_cabin';
+        renderLocationToggleBtn();
       } catch (e) { }
     }
 
@@ -604,11 +645,50 @@
     }
 
     let currentDoctorLocation = 'in_cabin';
+    let preEmergencyLocation = 'in_cabin';
 
-    function setDoctorLocation(loc) {
-      currentDoctorLocation = loc;
-      document.getElementById('loc-btn-cabin').className = loc === 'in_cabin' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
-      document.getElementById('loc-btn-rounds').className = loc === 'on_rounds' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm';
+    function renderLocationToggleBtn() {
+      const btn = document.getElementById('loc-toggle-btn');
+      const emBtn = document.getElementById('emergency-btn');
+      if (!btn) return;
+      const inEmergency = currentDoctorLocation === 'emergency';
+
+      btn.disabled = inEmergency;
+      btn.style.opacity = inEmergency ? '0.5' : '';
+      if (currentDoctorLocation === 'on_rounds') {
+        btn.textContent = 'On Rounds';
+        btn.className = 'btn btn-primary btn-sm';
+      } else if (inEmergency) {
+        btn.textContent = preEmergencyLocation === 'on_rounds' ? 'On Rounds' : 'In Cabin';
+        btn.className = 'btn btn-outline btn-sm';
+      } else {
+        btn.textContent = 'In Cabin';
+        btn.className = 'btn btn-outline btn-sm';
+      }
+
+      if (emBtn) {
+        emBtn.textContent = inEmergency ? 'In Emergency' : 'Emergency';
+        emBtn.style.background = inEmergency ? '#7f1d1d' : '';
+        emBtn.style.color = inEmergency ? '#fff' : '#dc2626';
+        emBtn.style.borderColor = '#dc2626';
+      }
+    }
+
+    function toggleDoctorLocation() {
+      if (currentDoctorLocation === 'emergency') return;
+      currentDoctorLocation = currentDoctorLocation === 'in_cabin' ? 'on_rounds' : 'in_cabin';
+      renderLocationToggleBtn();
+      markAttendance(currentAttendanceStatus);
+    }
+
+    function toggleEmergency() {
+      if (currentDoctorLocation === 'emergency') {
+        currentDoctorLocation = preEmergencyLocation;
+      } else {
+        preEmergencyLocation = currentDoctorLocation;
+        currentDoctorLocation = 'emergency';
+      }
+      renderLocationToggleBtn();
       markAttendance(currentAttendanceStatus);
     }
 
@@ -859,41 +939,59 @@
       }
     }
 
-    function renderQueueRows() {
-      const tbody = document.getElementById("queue-tbody");
-      const filter = document.getElementById("queue-filter").value;
-      const waiting = _queueData.filter(q => q.status === 'waiting').length;
-      document.getElementById("queue-count").textContent = `${waiting} waiting`;
+    function vitalsCellHtml(q) {
+      if (q.status === 'expected' || !q.vitals_status || q.vitals_status === 'none') return '<span style="color:var(--slate-light)">—</span>';
+      if (q.vitals_status === 'done') return '<span class="badge badge-teal">Recorded</span>';
+      if (q.vitals_status === 'sent_back') return '<span class="badge badge-red">Recheck sent</span>';
+      return '<span class="badge badge-amber" title="Send patient to nurse for vitals">Advised — not recorded</span>';
+    }
 
-      const data = (filter === 'all' ? _queueData : _queueData.filter(q => q.status === filter)).filter(q => q.status !== 'returned');
-      renderReturnQueue();
-
-      if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No patients checked in today.</p></div></td></tr>`;
-        return;
-      }
+    function renderQueueRow(q) {
       const statusMeta = {
         waiting: { label: 'Waiting', badge: 'badge-amber' },
         done: { label: 'Consulted', badge: 'badge-teal' },
         expected: { label: 'Expected', badge: 'badge-grey' },
         returned: { label: 'Return Queue', badge: 'badge-purple' },
       };
-      tbody.innerHTML = data.map(q => {
-        const meta = statusMeta[q.status] || statusMeta.waiting;
-        const timeVal = q.status === 'expected' ? q.estimated_time : q.created_at;
-        const timeLabel = timeVal
-          ? new Date(toIST(timeVal)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })
-          : '—';
-        return `
-        <tr>
-          <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
-          <td data-label="Patient">${q.patient_name}${q.is_referral ? ` <span class="badge badge-navy" title="${(q.referral_note || '').replace(/"/g, '&quot;')}">Referred by ${q.referred_by_name || 'another doctor'}</span>` : ''}${q.source === 'online' ? ` <span class="badge badge-teal" title="${q.booked_time ? 'Booked for ' + new Date(toIST(q.booked_time)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : ''}">Online</span>` : ''}</td>
-          <td data-label="Reason">${q.issue_category}</td>
-          <td data-label="Checked In / Est. Time" style="color:var(--slate);text-align:center">${timeLabel}${q.status === 'expected' ? ' <span style="color:var(--slate-light);font-size:11px">(expected)</span>' : ''}</td>
-          <td data-label="Status"><span class="badge ${meta.badge}">${meta.label}</span></td>
-          <td data-label="" style="text-align:left">${q.status === 'expected' ? '' : `<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button>`}</td>
-        </tr>`;
-      }).join('');
+      const meta = statusMeta[q.status] || statusMeta.waiting;
+      const timeVal = q.status === 'expected' ? q.estimated_time : q.created_at;
+      const timeLabel = timeVal
+        ? new Date(toIST(timeVal)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })
+        : '—';
+      return `
+      <tr>
+        <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
+        <td data-label="Patient">${q.patient_name}${q.is_referral ? ` <span class="badge badge-navy" title="${(q.referral_note || '').replace(/"/g, '&quot;')}">Referred by ${q.referred_by_name || 'another doctor'}</span>` : ''}</td>
+        <td data-label="Reason">${q.issue_category}</td>
+        <td data-label="Checked In / Est. Time" style="color:var(--slate);text-align:center">${timeLabel}${q.status === 'expected' ? ' <span style="color:var(--slate-light);font-size:11px">(expected)</span>' : ''}</td>
+        <td data-label="Vitals">${vitalsCellHtml(q)}</td>
+        <td data-label="Status"><span class="badge ${meta.badge}">${meta.label}</span></td>
+        <td data-label="" style="text-align:left">${q.status === 'expected' ? '' : `<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button>`}</td>
+      </tr>`;
+    }
+
+    function renderQueueRows() {
+      renderReturnQueue();
+
+      const walkinFilter = document.getElementById("queue-filter-walkin").value;
+      const onlineFilter = document.getElementById("queue-filter-online").value;
+
+      const walkinData = _queueData.filter(q => q.source !== 'online' && q.status !== 'returned');
+      const onlineData = _queueData.filter(q => q.source === 'online' && q.status !== 'returned');
+
+      const walkinFiltered = walkinFilter === 'all' ? walkinData : walkinData.filter(q => q.status === walkinFilter);
+      const onlineFiltered = onlineFilter === 'all' ? onlineData : onlineData.filter(q => q.status === onlineFilter);
+
+      document.getElementById("queue-count-walkin").textContent = `${walkinData.filter(q => q.status === 'waiting').length} waiting`;
+      document.getElementById("queue-count-online").textContent = `${onlineData.filter(q => q.status === 'waiting').length} waiting`;
+
+      document.getElementById("queue-tbody-walkin").innerHTML = walkinFiltered.length
+        ? walkinFiltered.map(renderQueueRow).join('')
+        : `<tr><td colspan="7"><div class="empty-state"><p>No walk-in patients today.</p></div></td></tr>`;
+
+      document.getElementById("queue-tbody-online").innerHTML = onlineFiltered.length
+        ? onlineFiltered.map(renderQueueRow).join('')
+        : `<tr><td colspan="7"><div class="empty-state"><p>No online appointments today.</p></div></td></tr>`;
     }
 
     function renderReturnQueue() {

@@ -14,7 +14,7 @@ from app.utils.timezone import now_ist_naive, IST
 router = APIRouter(prefix="/doctors", tags=["attendance"])
 
 VALID_STATUSES = {"present", "on_break", "off_duty"}
-VALID_LOCATIONS = {"in_cabin", "on_rounds"}
+VALID_LOCATIONS = {"in_cabin", "on_rounds", "emergency"}
 # "away_emergency" is deliberately NOT in VALID_STATUSES — it's system-set only,
 # via set_away_for_emergency() below, never selectable through this endpoint.
 
