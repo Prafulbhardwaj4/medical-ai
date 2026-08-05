@@ -314,7 +314,10 @@
           <div class="card" style="margin-bottom:20px">
             <div class="card-header">
               <h2>Medications (MAR)</h2>
-              <button class="btn btn-outline btn-sm" id="btn-add-med" onclick="openAddMedModal()">+ Add Medication</button>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-outline btn-sm" id="btn-log-visit" onclick="logDoctorVisit()" style="display:none">Log Doctor Visit</button>
+                <button class="btn btn-outline btn-sm" id="btn-add-med" onclick="openAddMedModal()">+ Add Medication</button>
+              </div>
             </div>
             <div id="med-list"><p>Loading...</p></div>
           </div>
@@ -387,9 +390,14 @@
       <div id="med-not-in-catalog" style="display:none">
         <div class="form-group"><label class="form-label">Medicine Name</label><input class="form-control" id="med-name" /></div>
         <div class="form-group"><label class="form-label">Dosage</label><input class="form-control" id="med-dosage" placeholder="e.g. 500mg" /></div>
+        <div class="form-group"><label class="form-label">Price per dose (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="med-manual-price" value="0" /></div>
       </div>
       <p id="med-price-preview" style="font-size:12.5px;color:var(--slate-light);display:none;margin:-8px 0 12px"></p>
       <div class="form-group"><label class="form-label">Frequency (optional)</label><input class="form-control" id="med-freq" placeholder="e.g. Every 8 hours" /></div>
+      <div class="form-group" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="med-sourced-outside" style="width:auto" />
+        <label class="form-label" style="margin:0" for="med-sourced-outside">Family is sourcing this medicine themselves (no hospital stock use, no bill line)</label>
+      </div>
       <div class="err-msg" id="med-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitAddMed()">Add</button>
     </div>
@@ -731,13 +739,20 @@
       document.getElementById("app-bottom-nav").style.display = "";
       renderAdminNav("admissions");
     }
-    function canManageClinicalOrders() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    function canManageClinicalOrders() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
     function canGiveDose() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
     function canManageMedOrders() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
     function canReturnMed() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
     function isNurseViewer() { return ["nurse", "assistant"].includes(getDoctor()?.role); }
-    if (!canManageClinicalOrders()) {
+    function canManageAllergies() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    function canAddProgressNote() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    if (!canManageMedOrders()) {
       document.getElementById("btn-add-med").style.display = "none";
+    }
+    if (isDoctorViewer || isNurseViewer() || isAdminViewer) {
+      document.getElementById("btn-log-visit").style.display = "";
+    }
+    if (!canManageClinicalOrders()) {
       document.getElementById("btn-add-test").style.display = "none";
     }
     const isAdminViewer = ["admin", "sub_admin"].includes(getDoctor()?.role);
@@ -754,10 +769,14 @@
       document.getElementById("running-bill-card").style.display = "none";
       document.getElementById("deposit-card").style.display = "none";
       document.getElementById("tpa-card").style.display = "none";
-      document.getElementById("consents-card").style.display = "none";
       // Every card in the right column is billing-only, hidden for this role —
       // collapse the whole column via CSS rather than leaving a dead gap.
       document.getElementById("main-grid").classList.add("financial-hidden");
+    }
+    // Consents is clinical/legal, not billing — doctors and admins still need
+    // to see it. Only nurse/assistant lose it (matches original behaviour).
+    if (isNurseViewer()) {
+      document.getElementById("consents-card").style.display = "none";
     }
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
@@ -776,6 +795,7 @@
     let admissionData = null;
     let tpaData = null;
     let consentsData = [];
+    let progressNotesData = [];
 
     async function loadAdmission() {
       // Core admission data loads and renders independently — a hiccup in
@@ -795,6 +815,13 @@
         document.getElementById("patient-header").innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
         return;
       }
+
+      // Progress notes are a clinical safety record everyone on the ward
+      // should be able to read, unlike billing — loaded for every role.
+      try {
+        progressNotesData = await api("GET", `/admissions/${admissionId}/progress-notes`);
+        renderProgressNotes();
+      } catch (e) { console.error("Progress notes load failed:", e); }
 
       // Deposit/TPA/consents are billing- and legal-facing — nurses and
       // assistants don't need them and shouldn't fetch them at all.
@@ -1398,6 +1425,8 @@
       document.getElementById("med-price-preview").style.display = "none";
       document.getElementById("med-name").value = "";
       document.getElementById("med-dosage").value = "";
+      document.getElementById("med-manual-price").value = "0";
+      document.getElementById("med-sourced-outside").checked = false;
       openModal("modal-add-med");
       const routeSel = document.getElementById("med-route");
       routeSel.innerHTML = `<option value="">Loading...</option>`;
@@ -1453,13 +1482,15 @@
       const err = document.getElementById("med-err");
       const route = document.getElementById("med-route").value;
       const freq = document.getElementById("med-freq").value.trim() || null;
+      const sourcedOutside = document.getElementById("med-sourced-outside").checked;
       let payload;
 
       if (route === "Other" || !route) {
         const name = document.getElementById("med-name").value.trim();
         const dosage = document.getElementById("med-dosage").value.trim();
         if (!name || !dosage) { err.textContent = "Medicine name and dosage are required"; return; }
-        payload = { medicine_name: name, dosage, route: route || "Other", frequency_note: freq };
+        const manualPrice = parseFloat(document.getElementById("med-manual-price").value);
+        payload = { medicine_name: name, dosage, route: route || "Other", frequency_note: freq, manual_unit_price: isNaN(manualPrice) ? 0 : manualPrice, sourced_outside: sourcedOutside };
       } else {
         const catalogId = document.getElementById("med-catalog-select").value;
         if (!catalogId) { err.textContent = "Please select a medicine"; return; }
@@ -1467,6 +1498,7 @@
         payload = {
           medicine_id: m.id, medicine_name: m.display_name,
           dosage: m.strength || m.display_name, route, frequency_note: freq,
+          sourced_outside: sourcedOutside,
         };
       }
 

@@ -185,3 +185,9 @@ class MergeRequestIn(BaseModel):
 
 class MergeConfirmIn(BaseModel):
     confirmation_note: str  # what was confirmed on the phone call with the patient — required, this is the human verification step
+
+
+class PatientAllergyIn(BaseModel):
+    allergen: str
+    reaction: Optional[str] = None
+    severity: str = "moderate"  # mild / moderate / severe

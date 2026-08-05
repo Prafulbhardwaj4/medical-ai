@@ -833,6 +833,55 @@ tbody tr:hover { background: var(--smoke); }
 
 .recorder-wrap.paused .record-btn { opacity: 0.5; }
 
+.recorder-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.record-btn .record-icon-stop {
+  width: 22px;
+  height: 22px;
+  background: currentColor;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.pause-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--navy);
+  color: var(--white);
+  box-shadow: var(--shadow-md);
+  transition: all 0.2s ease;
+}
+.pause-btn:hover { transform: scale(1.06); }
+
+.pause-icon-bars { display: flex; gap: 5px; }
+.pause-icon-bars span {
+  width: 5px;
+  height: 18px;
+  background: currentColor;
+  border-radius: 1px;
+  display: inline-block;
+}
+/* Right-pointing triangle — CSS border-triangle trick, matches video-player "play" */
+.pause-icon-play {
+  width: 0;
+  height: 0;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 15px solid currentColor;
+  margin-left: 3px;
+}
+
 .record-btn {
   width: 76px;
   height: 76px;

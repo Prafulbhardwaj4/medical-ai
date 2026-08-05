@@ -70,8 +70,6 @@ def apply_gst(items: list, hospital) -> tuple:
         subtotal += line_total
         payable_here = item.get("payable_here", True)
 
-        hsn_sac = _hsn_for(item["type"], hospital, item.get("_medicine_hsn_code")) if gst_registered else None
-
         if not gst_registered or not payable_here:
             rate, taxable, tax = 0.0, 0.0, 0.0
         elif item["type"] == "room":
@@ -97,10 +95,7 @@ def apply_gst(items: list, hospital) -> tuple:
             taxable = line_total if rate else 0.0
             tax = round(taxable * rate / 100, 2) if rate else 0.0
 
-        if item["type"] == "medicine":
-            hsn_sac = item.get("_medicine_hsn_code") or ""
-        else:
-            hsn_sac = (hospital.default_service_hsn_sac if hospital else None) or ""
+        hsn_sac = (_hsn_for(item["type"], hospital, item.get("_medicine_hsn_code")) or "") if gst_registered else ""
 
         gst_total += tax
         clean_item = {k: v for k, v in item.items() if k not in ("_medicine_gst_percent", "_medicine_hsn_code", "_is_icu")}

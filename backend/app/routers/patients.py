@@ -35,7 +35,8 @@ from app.models.invoice import Invoice
 from app.models.feedback import VisitFeedback
 from app.models.patient_merge_request import PatientMergeRequest
 from app.models.portal import PatientProfileLink, InviteStatus
-from app.schemas.patient import MergeRequestIn, MergeConfirmIn
+from app.schemas.patient import MergeRequestIn, MergeConfirmIn, PatientAllergyIn
+from app.models.patient_allergy import PatientAllergy
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -2270,3 +2271,56 @@ def execute_merge_request(request_id: int, db: Session = Depends(get_db), curren
     log_action(db, current_doctor, action="patient_merge_executed", target_type="patient", target_id=primary_id,
                target_label=f"{primary.name} <- {duplicate.name}", details=unmerged_note or "")
     return _serialize_merge_request(db, req)
+
+
+VALID_ALLERGY_SEVERITIES = {"mild", "moderate", "severe"}
+
+
+@router.get("/{patient_id}/allergies")
+def list_patient_allergies(patient_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    patient = db.query(Patient).filter(Patient.id == patient_id, Patient.hospital_id == current_doctor.hospital_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    rows = db.query(PatientAllergy).filter(PatientAllergy.patient_id == patient_id).order_by(PatientAllergy.noted_at.desc()).all()
+    out = []
+    for r in rows:
+        noter = db.query(Doctor).filter(Doctor.id == r.noted_by).first()
+        out.append({
+            "id": r.id, "allergen": r.allergen, "reaction": r.reaction, "severity": r.severity,
+            "is_active": r.is_active, "noted_by_name": f"{noter.title} {noter.name}" if noter else None,
+            "noted_at": r.noted_at.isoformat() if r.noted_at else None,
+        })
+    return out
+
+
+@router.post("/{patient_id}/allergies")
+def add_patient_allergy(patient_id: int, body: PatientAllergyIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to record an allergy")
+    patient = db.query(Patient).filter(Patient.id == patient_id, Patient.hospital_id == current_doctor.hospital_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    if not (body.allergen or "").strip():
+        raise HTTPException(status_code=400, detail="Allergen is required")
+    severity = body.severity if body.severity in VALID_ALLERGY_SEVERITIES else "moderate"
+    allergy = PatientAllergy(
+        patient_id=patient_id, hospital_id=current_doctor.hospital_id,
+        allergen=body.allergen.strip(), reaction=(body.reaction or "").strip() or None,
+        severity=severity, noted_by=current_doctor.id,
+    )
+    db.add(allergy)
+    db.commit()
+    db.refresh(allergy)
+    return {"id": allergy.id, "message": "Allergy recorded"}
+
+
+@router.patch("/{patient_id}/allergies/{allergy_id}/retract")
+def retract_patient_allergy(patient_id: int, allergy_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    allergy = db.query(PatientAllergy).filter(PatientAllergy.id == allergy_id, PatientAllergy.patient_id == patient_id).first()
+    if not allergy:
+        raise HTTPException(status_code=404, detail="Allergy record not found")
+    allergy.is_active = False
+    db.commit()
+    return {"message": "Allergy retracted"}

@@ -20,6 +20,8 @@ from app.models.notification import Notification
 from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
 from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.admission_consent import AdmissionConsent
+from app.models.admission_progress_note import AdmissionProgressNote
+from app.models.patient_allergy import PatientAllergy
 from app.models.credit_debit_note import CreditDebitNote
 from app.models.refund import Refund
 from app.schemas.admission import (
@@ -27,7 +29,7 @@ from app.schemas.admission import (
     WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn,
     TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, EmergencyAlertIn,
     ProfessionalFeeIn, VALID_ADMISSION_TYPES, AdmissionConsentIn, VALID_CONSENT_TYPES, VALID_DISCHARGE_TYPES,
-    VALID_WARD_CATEGORIES, TpaSettleIn,
+    VALID_WARD_CATEGORIES, TpaSettleIn, ProgressNoteIn,
 )
 from app.models.consultation import Consultation
 from app.utils.auth import get_current_doctor, ist_today
@@ -539,7 +541,9 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         "discharge_diagnosis": a.discharge_diagnosis, "condition_at_discharge": a.condition_at_discharge,
         "medications_on_discharge": a.medications_on_discharge, "follow_up_instructions": a.follow_up_instructions,
         "discharge_invoice_id": a.discharge_invoice_id,
-        "patient": {"id": patient.id, "name": patient.name, "age": patient.age, "gender": patient.gender, "phone": patient.phone, "patient_uid": patient.patient_uid} if patient else None,
+        "patient": {"id": patient.id, "name": patient.name, "age": patient.age, "gender": patient.gender, "phone": patient.phone, "patient_uid": patient.patient_uid,
+                    "allergies": [{"id": al.id, "allergen": al.allergen, "reaction": al.reaction, "severity": al.severity}
+                                  for al in db.query(PatientAllergy).filter(PatientAllergy.patient_id == patient.id, PatientAllergy.is_active == True).all()]} if patient else None,
         "admitting_doctor_name": f"{doctor.title} {doctor.name}" if doctor else None,
         "admission_type": a.admission_type,
         "professional_fee_override": a.professional_fee_override,
@@ -666,8 +670,8 @@ def change_ward(admission_id: str, body: ChangeWardIn, current_doctor: Doctor = 
 
 @router.post("/{admission_id}/medications")
 def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only a doctor can order medications")
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor or nurse can order medications")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Cannot add medications to a discharged admission")
@@ -675,6 +679,8 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
     order = AdmissionMedicationOrder(
         admission_id=a.id, medicine_id=body.medicine_id, medicine_name=body.medicine_name,
         dosage=body.dosage, route=body.route, frequency_note=body.frequency_note,
+        manual_unit_price=(body.manual_unit_price if not body.medicine_id else None),
+        sourced_outside=body.sourced_outside,
         prescribed_by=current_doctor.id,
     )
     db.add(order)
@@ -721,6 +727,10 @@ def administer_dose(admission_id: str, order_id: int, body: AdministerDoseIn, cu
                     unit_price = (medicine.price_per_pack or 0) / medicine.pack_size
                 else:
                     unit_price = medicine.price or medicine.price_per_pack or 0
+        else:
+            # Not in the catalog — no HospitalMedicine row to price from, so
+            # use whatever price was entered when the order was placed.
+            unit_price = order.manual_unit_price or 0.0
 
         db.add(AdmissionCharge(
             admission_id=a.id, charge_type="medicine",
@@ -733,8 +743,8 @@ def administer_dose(admission_id: str, order_id: int, body: AdministerDoseIn, cu
 
 @router.patch("/{admission_id}/medications/{order_id}/stop")
 def stop_medication(admission_id: str, order_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only a doctor can stop a medication")
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor or nurse can stop a medication")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id).first()
     if not order:
@@ -746,8 +756,8 @@ def stop_medication(admission_id: str, order_id: int, current_doctor: Doctor = D
 
 @router.patch("/{admission_id}/medications/{order_id}/resume")
 def resume_medication(admission_id: str, order_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only a doctor can resume a medication")
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor or nurse can resume a medication")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Cannot resume medications on a discharged admission")
@@ -815,8 +825,8 @@ def return_medication(admission_id: str, order_id: int, body: ReturnMedicationIn
 
 @router.post("/{admission_id}/charges")
 def add_charge(admission_id: str, body: AddChargeIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["receptionist", "nurse", "assistant", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only reception, nurse, or assistant can add charges to the bill")
+    if current_doctor.role.value not in ["doctor", "receptionist", "nurse", "assistant", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to add charges")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Cannot add charges to a discharged admission")
@@ -836,7 +846,7 @@ def log_doctor_visit(admission_id: str, current_doctor: Doctor = Depends(get_cur
     unlike medicine/tests/bed-night, which accrue automatically. This is a
     one-tap action that auto-creates the charge at the doctor's own
     configured per-visit fee, closing that gap."""
-    if current_doctor.role.value not in ["doctor", "nurse", "assistant", "admin", "sub_admin"]:
+    if current_doctor.role.value not in ["doctor", "nurse", "assistant", "receptionist", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
@@ -878,6 +888,8 @@ def update_professional_fee(admission_id: str, body: ProfessionalFeeIn, current_
 
 @router.post("/{admission_id}/consents")
 def add_admission_consent(admission_id: str, body: AdmissionConsentIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to record consent")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if body.consent_type not in VALID_CONSENT_TYPES:
         raise HTTPException(status_code=400, detail="Invalid consent type")
@@ -1514,3 +1526,32 @@ def download_discharge_invoice(admission_id: str, current_doctor: Doctor = Depen
     if not invoice or not invoice.pdf_path:
         raise HTTPException(status_code=404, detail="Invoice PDF not found")
     return FileResponse(invoice.pdf_path, media_type="application/pdf", filename=f"discharge_invoice_{admission_id}.pdf")
+
+
+@router.get("/{admission_id}/progress-notes")
+def list_progress_notes(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    notes = db.query(AdmissionProgressNote).filter(AdmissionProgressNote.admission_id == a.id).order_by(AdmissionProgressNote.created_at.desc()).all()
+    out = []
+    for n in notes:
+        author = db.query(Doctor).filter(Doctor.id == n.doctor_id).first()
+        out.append({
+            "id": n.id, "note": n.note,
+            "doctor_name": f"{author.title} {author.name}" if author else "Unknown",
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+        })
+    return out
+
+
+@router.post("/{admission_id}/progress-notes")
+def add_progress_note(admission_id: str, body: ProgressNoteIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor can add a progress note")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if not (body.note or "").strip():
+        raise HTTPException(status_code=400, detail="Note cannot be empty")
+    note = AdmissionProgressNote(admission_id=a.id, doctor_id=current_doctor.id, note=body.note.strip())
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return {"id": note.id, "message": "Progress note added"}

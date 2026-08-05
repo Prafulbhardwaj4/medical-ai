@@ -401,6 +401,28 @@ async def websocket_transcribe(
                 Consultation.token_number == None
             ).first()
 
+            if not consultation:
+                # This is the real gate — a new consultation must never be
+                # created out of thin air. It has to trace back to a real,
+                # paid token for today, or a doctor could complete and
+                # confirm an entire consultation (and its own prescription
+                # token) for a patient who was never checked in or paid for.
+                todays_checkin = db.query(Checkin).filter(
+                    Checkin.patient_id == patient_id,
+                    Checkin.visit_date == ist_today(),
+                    Checkin.is_paid == True,  # noqa: E712
+                ).order_by(Checkin.created_at.desc()).first()
+                if not todays_checkin:
+                    try:
+                        await websocket.send_json({
+                            "type": "blocked",
+                            "reason": "no_paid_token",
+                            "message": "No paid token found for this patient today — a consultation can't be started without one."
+                        })
+                    except Exception:
+                        pass
+                    return
+
             transcript_text = full_transcript.strip()
 
             if consultation:

@@ -76,23 +76,26 @@
       border: 1px solid #fca5a5;
     }
 
-        .consult-context-grid {
+    .consult-context-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 340px;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 14px;
       margin-bottom: 16px;
       align-items: stretch;
     }
+
     .context-card {
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 14px 16px;
       background: var(--smoke);
     }
+
     .context-card.blue {
       background: #eff6ff;
       border-color: #bfdbfe;
     }
+
     .context-card-title {
       font-size: 0.75rem;
       font-weight: 700;
@@ -101,7 +104,11 @@
       margin-bottom: 8px;
       color: var(--slate);
     }
-    .context-card.blue .context-card-title { color: #1e40af; }
+
+    .context-card.blue .context-card-title {
+      color: #1e40af;
+    }
+
     .refer-card-body {
       display: flex;
       flex-direction: column;
@@ -109,8 +116,11 @@
       gap: 10px;
       height: 100%;
     }
+
     @media (max-width: 900px) {
-      .consult-context-grid { grid-template-columns: 1fr; }
+      .consult-context-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     .success-panel {
@@ -192,13 +202,17 @@
       </div>
       <button class="profile-menu-item" onclick="openEditDetailsModal()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
           <circle cx="12" cy="12" r="3" />
         </svg>
         Settings
       </button>
       <button class="profile-menu-item danger" onclick="logout()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
         Sign out
       </button>
     </div>
@@ -265,12 +279,15 @@
         <div id="last-visit-wrap"
           style="display:none;margin-bottom:16px;background:var(--smoke);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-            <div style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em">
+            <div
+              style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:0.05em">
               Past Visits</div>
-            <button type="button" class="btn btn-outline btn-sm" id="past-visits-show-all-btn" style="display:none" onclick="showAllPastVisits()">Show all</button>
+            <button type="button" class="btn btn-outline btn-sm" id="past-visits-show-all-btn" style="display:none"
+              onclick="showAllPastVisits()">Show all</button>
           </div>
           <div id="past-visits-search-wrap" style="display:none;margin-bottom:10px">
-            <input class="form-control" id="past-visits-search" placeholder="Search past visits by diagnosis, doctor, or date…" oninput="filterPastVisits()" />
+            <input class="form-control" id="past-visits-search"
+              placeholder="Search past visits by diagnosis, doctor, or date…" oninput="filterPastVisits()" />
           </div>
           <div id="past-visits-list"></div>
         </div>
@@ -284,7 +301,8 @@
           <div class="context-card" id="refer-doctor-card" style="grid-column:1/-1">
             <div class="context-card-title">Refer to Doctor</div>
             <div class="refer-card-body">
-              <p style="margin:0;color:var(--slate);font-size:13px">Send this patient to another doctor after this consultation.</p>
+              <p style="margin:0;color:var(--slate);font-size:13px">Send this patient to another doctor after this
+                consultation.</p>
               <button class="btn btn-outline" onclick="openReferModal()">Refer to Doctor</button>
             </div>
           </div>
@@ -292,15 +310,24 @@
 
         <div id="post-consult-wrap"
           style="display:none;margin-bottom:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius);padding:14px 16px">
-          <div style="font-size:0.75rem;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">
+          <div
+            style="font-size:0.75rem;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">
             Post-Consultation Task Completed
           </div>
           <div id="post-consult-summary" style="font-size:0.85rem;color:var(--navy)"></div>
         </div>
 
         <div class="recorder-wrap" id="recorder-wrap">
-          <button class="record-btn idle" id="record-btn" onclick="toggleRecording()">🎙</button>
-          <button class="btn btn-outline btn-sm" id="pause-resume-btn" onclick="togglePauseResume()" style="display:none">Pause</button>
+          <div class="recorder-controls">
+            <button class="record-btn idle" id="record-btn" onclick="toggleRecording()" title="Record / Stop" aria-label="Record">
+              <span class="record-icon-mic" id="record-icon-mic">🎙</span>
+              <span class="record-icon-stop" id="record-icon-stop" style="display:none"></span>
+            </button>
+            <button class="pause-btn" id="pause-resume-btn" onclick="togglePauseResume()" style="display:none" title="Pause" aria-label="Pause">
+              <span class="pause-icon-bars" id="pause-icon-bars"><span></span><span></span></span>
+              <span class="pause-icon-play" id="pause-icon-play" style="display:none"></span>
+            </button>
+          </div>
           <div class="timer" id="timer">00:00</div>
           <p id="record-hint" class="record-status">Click to start recording</p>
         </div>
@@ -332,7 +359,8 @@
           <div class="section-title">Vitals <span style="font-weight:400;color:var(--slate)">(if recorded)</span></div>
           <div class="form-row-3" id="vitals-review-fields"></div>
           <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
-            <input class="form-control" id="recheck-vital-note" placeholder="e.g. Repeat BP after 10 min rest" style="flex:1" />
+            <input class="form-control" id="recheck-vital-note" placeholder="e.g. Repeat BP after 10 min rest"
+              style="flex:1" />
             <button class="btn btn-outline btn-sm" onclick="sendBackForVitals()">Send back for recheck</button>
           </div>
         </div>
@@ -365,14 +393,16 @@
         <div class="section-block" id="test-catalog-block" style="display:none">
           <div class="section-title">Recommended Tests (Billable)</div>
           <div style="position:relative;max-width:400px">
-            <input class="form-control" id="test-catalog-search" placeholder="Search tests to order…"
-              autocomplete="off" oninput="renderTestSuggestions()" onfocus="renderTestSuggestions()" />
-            <div id="test-suggestions" style="display:none;position:absolute;z-index:20;background:#fff;border:1px solid var(--border);
+            <input class="form-control" id="test-catalog-search" placeholder="Search tests to order…" autocomplete="off"
+              oninput="renderTestSuggestions()" onfocus="renderTestSuggestions()" />
+            <div id="test-suggestions"
+              style="display:none;position:absolute;z-index:20;background:#fff;border:1px solid var(--border);
               border-radius:8px;max-height:220px;overflow-y:auto;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.08);margin-top:4px"></div>
           </div>
           <div id="test-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
           <div id="test-total-fee" style="margin-top:10px;font-size:14px;font-weight:600;display:none"></div>
-          <input class="form-control" id="test-clinical-indication" placeholder="Clinical indication / provisional diagnosis (e.g. suspected DKA) — optional"
+          <input class="form-control" id="test-clinical-indication"
+            placeholder="Clinical indication / provisional diagnosis (e.g. suspected DKA) — optional"
             style="margin-top:12px" />
         </div>
 
@@ -387,8 +417,11 @@
         </div>
 
         <div class="section-block">
-          <div class="section-title">Post-Consultation Nurse Instructions <span style="font-size:12px;color:var(--slate);font-weight:400">(optional — dressing, injection, etc.)</span></div>
-          <textarea class="form-control" id="f-nurse-instructions" rows="2" placeholder="e.g. IM Injection — Voveran 3ml, Dressing on left forearm"></textarea>
+          <div class="section-title">Post-Consultation Nurse Instructions <span
+              style="font-size:12px;color:var(--slate);font-weight:400">(optional — dressing, injection, etc.)</span>
+          </div>
+          <textarea class="form-control" id="f-nurse-instructions" rows="2"
+            placeholder="e.g. IM Injection — Voveran 3ml, Dressing on left forearm"></textarea>
         </div>
 
         <div style="display:flex;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:10px">
@@ -621,16 +654,45 @@
 
     let isPaused = false;
 
+    function setRecordButtonIcon(recording) {
+      document.getElementById("record-icon-mic").style.display = recording ? "none" : "";
+      document.getElementById("record-icon-stop").style.display = recording ? "" : "none";
+    }
+
+    function setPauseButtonIcon(paused) {
+      document.getElementById("pause-icon-bars").style.display = paused ? "none" : "";
+      document.getElementById("pause-icon-play").style.display = paused ? "" : "none";
+      const prBtn = document.getElementById("pause-resume-btn");
+      if (prBtn) {
+        prBtn.title = paused ? "Resume" : "Pause";
+        prBtn.setAttribute("aria-label", paused ? "Resume" : "Pause");
+      }
+    }
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        seconds++;
+        const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+        const s = String(seconds % 60).padStart(2, "0");
+        document.getElementById("timer").textContent = `${m}:${s}`;
+      }, 1000);
+    }
+
     function pauseRecording(hintText) {
       if (!isRecording || isPaused) return;
       isPaused = true;
       if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
         wsConnection.send(JSON.stringify({ type: "pause" }));
       }
+      // The timer must stop counting while paused — it was previously left
+      // running the whole time, so a paused recording's displayed duration
+      // kept climbing even though nothing was being recorded.
+      clearInterval(timerInterval);
+      timerInterval = null;
       document.getElementById("record-hint").textContent = hintText || "Paused — click Resume to continue";
       document.getElementById("recorder-wrap").classList.add("paused");
-      const prBtn = document.getElementById("pause-resume-btn");
-      if (prBtn) prBtn.textContent = "Resume";
+      setPauseButtonIcon(true);
     }
 
     function resumeRecording() {
@@ -639,10 +701,10 @@
       if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
         wsConnection.send(JSON.stringify({ type: "resume" }));
       }
+      startTimer();
       document.getElementById("record-hint").textContent = "Recording… click to stop";
       document.getElementById("recorder-wrap").classList.remove("paused");
-      const prBtn = document.getElementById("pause-resume-btn");
-      if (prBtn) prBtn.textContent = "Pause";
+      setPauseButtonIcon(false);
     }
 
     function togglePauseResume() {
@@ -654,6 +716,7 @@
       try {
         currentStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
         isRecording = true;
+        isPaused = false;
         seconds = 0;
         document.getElementById("transcript").value = "";
 
@@ -663,18 +726,13 @@
 
         wsConnection.onopen = () => {
           document.getElementById("record-btn").className = "record-btn active";
-          document.getElementById("record-btn").textContent = "⏹";
+          setRecordButtonIcon(true);
           document.getElementById("record-hint").textContent = "Recording… click to stop";
           document.getElementById("recorder-wrap").classList.add("recording");
           document.getElementById("pause-resume-btn").style.display = "";
-          document.getElementById("pause-resume-btn").textContent = "Pause";
+          setPauseButtonIcon(false);
 
-          timerInterval = setInterval(() => {
-            seconds++;
-            const m = String(Math.floor(seconds / 60)).padStart(2, "0");
-            const s = String(seconds % 60).padStart(2, "0");
-            document.getElementById("timer").textContent = `${m}:${s}`;
-          }, 1000);
+          startTimer();
 
           startAudioStreaming();
         };
@@ -691,6 +749,22 @@
             document.getElementById("btn-structure").disabled = false;
             document.getElementById("btn-retranscribe").style.display = "inline-flex";
             toast("Transcription complete", "success");
+            if (wsConnection) wsConnection.close();
+          } else if (data.type === "blocked") {
+            // A billing/eligibility gate, not a transcription failure — kept
+            // as its own message type so it doesn't get mislabeled as one.
+            toast(data.message, "error");
+            document.getElementById("record-hint").textContent = "Click to start recording";
+            document.getElementById("record-btn").disabled = false;
+            document.getElementById("record-btn").className = "record-btn idle";
+            setRecordButtonIcon(false);
+            document.getElementById("recorder-wrap").classList.remove("recording");
+            document.getElementById("pause-resume-btn").style.display = "none";
+            clearInterval(timerInterval);
+            timerInterval = null;
+            seconds = 0;
+            document.getElementById("timer").textContent = "00:00";
+            isRecording = false;
             if (wsConnection) wsConnection.close();
           } else if (data.type === "error") {
             toast("Transcription error: " + data.message, "error");
@@ -739,7 +813,7 @@
       isRecording = false;
 
       document.getElementById("record-btn").className = "record-btn idle";
-      document.getElementById("record-btn").textContent = "🎙";
+      setRecordButtonIcon(false);
       document.getElementById("record-hint").textContent = "Processing…";
       document.getElementById("recorder-wrap").classList.remove("recording");
       document.getElementById("record-btn").disabled = true;
@@ -766,7 +840,7 @@
       document.getElementById("record-hint").textContent = "Click to start recording";
       document.getElementById("record-btn").disabled = false;
       document.getElementById("record-btn").className = "record-btn idle";
-      document.getElementById("record-btn").textContent = "🎙";
+      setRecordButtonIcon(false);
       document.getElementById("recorder-wrap").classList.remove("recording");
       document.getElementById("pause-resume-btn").style.display = "none";
     }

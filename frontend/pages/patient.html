@@ -592,7 +592,20 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
-    function startConsultation() {
+    async function startConsultation() {
+      // A consultation must trace back to a real, paid token for today —
+      // otherwise a doctor could complete and confirm an entire consultation
+      // for a patient who was never checked in or paid for at all.
+      try {
+        const c = await api("GET", `/patients/${patientId}/checkin-today`);
+        if (!c.exists || !c.is_paid) {
+          toast("No token available for this patient today.", "info");
+          return;
+        }
+      } catch (e) {
+        toast("Couldn't verify today's token — try again.", "error");
+        return;
+      }
       window.location.href = `/pages/consultation.html?${patientToken}`;
     }
 
@@ -686,7 +699,7 @@
         document.getElementById("ep-name").value = p.name;
         document.getElementById("ep-phone").value = p.phone.replace("+91", "");
         document.getElementById("ep-age").value = p.age;
-        document.getElementById("ep-gender").value = p.gender;
+        document.getElementById("ep-gender").value = (p.gender || "").toLowerCase();
         document.getElementById("ep-blood-group").value = p.blood_group || "";
         document.getElementById("ep-address").value = p.address || "";
         document.getElementById("modal-edit-patient").classList.add("open");

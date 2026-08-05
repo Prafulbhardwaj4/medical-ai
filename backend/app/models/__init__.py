@@ -25,3 +25,5 @@ from app.models.waiver_request import WaiverRequest
 from app.models.invoice_sequence import InvoiceSequence
 from app.models.admission_consent import AdmissionConsent
 from app.models.patient_merge_request import PatientMergeRequest
+from app.models.patient_allergy import PatientAllergy
+from app.models.admission_progress_note import AdmissionProgressNote

@@ -77,6 +77,8 @@ class AddMedicationOrderIn(BaseModel):
     dosage: str
     route: str = "Oral"
     frequency_note: Optional[str] = None
+    manual_unit_price: Optional[float] = None
+    sourced_outside: bool = False
 
 
 class AdministerDoseIn(BaseModel):
@@ -191,3 +193,7 @@ class TpaCaseUpdateIn(BaseModel):
 class TpaSettleIn(BaseModel):
     settled_amount: float
     settlement_notes: Optional[str] = None
+
+
+class ProgressNoteIn(BaseModel):
+    note: str

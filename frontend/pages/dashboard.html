@@ -289,7 +289,7 @@
                     <th>Token</th>
                     <th>Patient</th>
                     <th>Reason</th>
-                    <th style="text-align:center">Checked In / Est. Time</th>
+                    <th style="text-align:center">Checked In</th>
                     <th>Vitals</th>
                     <th>Status</th>
                     <th></th>
@@ -329,7 +329,7 @@
                     <th>Token</th>
                     <th>Patient</th>
                     <th>Reason</th>
-                    <th style="text-align:center">Checked In / Est. Time</th>
+                    <th style="text-align:center">Est. Time</th>
                     <th>Vitals</th>
                     <th>Status</th>
                     <th></th>
@@ -943,7 +943,7 @@
       if (q.status === 'expected' || !q.vitals_status || q.vitals_status === 'none') return '<span style="color:var(--slate-light)">—</span>';
       if (q.vitals_status === 'done') return '<span class="badge badge-teal">Recorded</span>';
       if (q.vitals_status === 'sent_back') return '<span class="badge badge-red">Recheck sent</span>';
-      return '<span class="badge badge-amber" title="Send patient to nurse for vitals">Advised — not recorded</span>';
+      return '<span class="badge badge-amber" title="Send patient to nurse for vitals">Advised</span>';
     }
 
     function renderQueueRow(q) {
@@ -954,19 +954,26 @@
         returned: { label: 'Return Queue', badge: 'badge-purple' },
       };
       const meta = statusMeta[q.status] || statusMeta.waiting;
-      const timeVal = q.status === 'expected' ? q.estimated_time : q.created_at;
+      // Walk-ins only ever show their actual check-in time; online appointments
+      // only ever show their booked estimated time — never a mix of both, and
+      // never conditional on status (each column now header-labeled to match).
+      const timeVal = q.source === 'online' ? q.estimated_time : q.created_at;
       const timeLabel = timeVal
         ? new Date(toIST(timeVal)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })
         : '—';
+      // No Consult button once this visit is already done (they've been sent
+      // back to reception, not for another consult) or for merely-expected
+      // online patients who haven't checked in yet.
+      const showConsult = q.status !== 'expected' && q.status !== 'done';
       return `
       <tr>
         <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
         <td data-label="Patient">${q.patient_name}${q.is_referral ? ` <span class="badge badge-navy" title="${(q.referral_note || '').replace(/"/g, '&quot;')}">Referred by ${q.referred_by_name || 'another doctor'}</span>` : ''}</td>
         <td data-label="Reason">${q.issue_category}</td>
-        <td data-label="Checked In / Est. Time" style="color:var(--slate);text-align:center">${timeLabel}${q.status === 'expected' ? ' <span style="color:var(--slate-light);font-size:11px">(expected)</span>' : ''}</td>
+        <td data-label="${q.source === 'online' ? 'Est. Time' : 'Checked In'}" style="color:var(--slate);text-align:center">${timeLabel}</td>
         <td data-label="Vitals">${vitalsCellHtml(q)}</td>
         <td data-label="Status"><span class="badge ${meta.badge}">${meta.label}</span></td>
-        <td data-label="" style="text-align:left">${q.status === 'expected' ? '' : `<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button>`}</td>
+        <td data-label="" style="text-align:left">${showConsult ? `<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button>` : ''}</td>
       </tr>`;
     }
 
