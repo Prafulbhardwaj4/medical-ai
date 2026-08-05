@@ -448,7 +448,6 @@
           </div>
           <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:10px">
             <button class="btn btn-primary btn-sm" style="width:100%" onclick="generateBill()">🧾 Generate Bill</button>
-            <button class="btn btn-outline btn-sm" style="width:100%" onclick="openWaiverModal()">Waiver / Discount</button>
             <div style="display:flex;gap:10px">
               <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
               <button class="btn btn-outline" style="flex:1" onclick="goToStep('search')">New Check-In</button>
@@ -786,18 +785,6 @@
         <button class="btn btn-primary" onclick="runQuickLookup()">Search</button>
       </div>
       <div id="ql-results"></div>
-    </div>
-  </div>
-
-  <!-- Waiver / Discount Modal -->
-  <div class="modal-overlay" id="modal-waiver">
-    <div class="modal" style="max-width:400px">
-      <div class="modal-header"><h2>Waiver / Discount</h2><button class="modal-close" onclick="closeModal('modal-waiver')">×</button></div>
-      <p style="font-size:13px;color:var(--slate);margin-bottom:10px">Applies as a credit line against this visit's bill — small waivers apply immediately, larger ones go to admin for approval.</p>
-      <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="waiver-amount" /></div>
-      <div class="form-group"><label class="form-label">Reason</label><input class="form-control" id="waiver-reason" placeholder="e.g. financial hardship, service issue" /></div>
-      <div class="err-msg" id="waiver-err"></div>
-      <button class="btn btn-primary" style="width:100%" onclick="submitWaiver()">Apply / Request</button>
     </div>
   </div>
 
@@ -1350,26 +1337,6 @@
         await api("PATCH", `/patients/test-orders/${orderId}/toggle-include`, {});
         loadPendingTestFees(patientId);
       } catch (e) { toast(e.message, 'error'); }
-    }
-
-    function openWaiverModal() {
-      if (!currentCheckinId) { toast('No active visit to bill.', 'error'); return; }
-      document.getElementById('waiver-amount').value = '';
-      document.getElementById('waiver-reason').value = '';
-      document.getElementById('waiver-err').textContent = '';
-      openModal('modal-waiver');
-    }
-    async function submitWaiver() {
-      const err = document.getElementById('waiver-err');
-      const amount = parseFloat(document.getElementById('waiver-amount').value);
-      const reason = document.getElementById('waiver-reason').value.trim();
-      if (!amount || amount <= 0) { err.textContent = 'Enter a valid amount.'; return; }
-      if (!reason) { err.textContent = 'A reason is required.'; return; }
-      try {
-        const result = await api("POST", "/billing/waivers", { checkin_id: currentCheckinId, amount, reason });
-        closeModal('modal-waiver');
-        toast(result.status === 'pending_approval' ? 'Sent for admin approval.' : 'Waiver applied.', 'success');
-      } catch (e) { err.textContent = e.message; }
     }
 
     async function generateBill() {
@@ -2264,7 +2231,7 @@
             <div class="row-actions">
               <button class="btn btn-outline btn-sm" onclick='openEditPatient(${JSON.stringify(p)})'>Edit</button>
               <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>Select</button>
-              <button class="btn btn-outline btn-sm" onclick='mergeDuplicatePatient(${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.patient_uid)})'>Merge</button>
+              <button class="btn btn-outline btn-sm" onclick='openMergeModal(${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.patient_uid)})'>Merge</button>
             </div>
           </td>
         </tr>

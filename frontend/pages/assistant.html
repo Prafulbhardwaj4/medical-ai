@@ -5,34 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Assistant Station — MedScribe</title>
   <link rel="stylesheet" href="../css/style.css?v=4" />
-  <script src="../js/custom-select.js" defer></script>
   <style>
     .mobile-section { display: none; }
     .mobile-section.active { display: block; }
     @media (min-width: 901px) {
-      .mobile-section { display: block !important; margin-bottom: 20px; }
-      #section-doctors { display: none !important; }
-      #section-doctors.d-active { display: block !important; }
-    }
-    .att-top-row h2 { margin: 0; }
-    .att-top-row.card-header { border-bottom: none; padding-bottom: 0; }
-    @media (min-width: 901px) {
-      .att-top-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+      .mobile-section { display: none !important; margin-bottom: 20px; }
+      .mobile-section.d-active { display: block !important; }
     }
 
-    .ns-row {
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-      margin-bottom: 10px;
+    .doc-picker { position: relative; }
+    .doc-picker-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--white); border: 1.5px solid var(--border);
+      border-radius: 999px; padding: 7px 14px; font-size: 13.5px; font-weight: 600;
+      color: var(--navy); cursor: pointer; white-space: nowrap;
     }
-    .ns-row-sub { color: var(--slate); font-size: 13px; margin-top: 4px; }
-    @media (min-width: 901px) {
-      .ns-row {
-        display: flex; justify-content: space-between; align-items: center;
-        border: none; border-bottom: 1px solid var(--border); border-radius: 0;
-        padding: 14px 0; margin-bottom: 0;
-      }
+    .doc-picker-panel {
+      display: none; position: absolute; top: calc(100% + 6px); right: 0;
+      background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 8px; min-width: 240px; max-height: 320px;
+      overflow-y: auto; z-index: 200;
+    }
+    .doc-picker-panel.open { display: block; }
+    .doc-picker-row {
+      display: flex; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 8px;
+      cursor: pointer; font-size: 13.5px;
+    }
+    .doc-picker-row:hover { background: var(--bg-light, #f8fafc); }
+    .doc-picker-row input { pointer-events: none; }
+    .doc-picker-status { margin-left: auto; font-size: 11px; }
+    .doc-picker-empty-note {
+      font-size: 12px; color: var(--slate-light); padding: 6px 8px 2px;
+      border-top: 1px solid var(--border); margin-top: 6px;
     }
 
     .nurse-att-status { text-align: center; padding: 20px 0 16px; }
@@ -42,28 +46,11 @@
       .nurse-att-status { display: none; }
       .nurse-att-actions { flex-direction: row; flex-wrap: wrap; }
     }
-
-    .queue-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
-    .queue-tab-btn {
-      flex: 1; text-align: center; padding: 10px; border-radius: var(--radius);
-      border: 1.5px solid var(--border); background: var(--white); cursor: pointer;
-      font-weight: 600; font-size: 14px; color: var(--slate);
-    }
-    .queue-tab-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
-    .queue-panel { display: none; }
-    .queue-panel.active { display: block; }
+    .att-top-row.card-header { border-bottom: none; padding-bottom: 0; }
     @media (min-width: 901px) {
-      .queue-tabs { display: none; }
-      .queue-panel { display: block !important; margin-bottom: 24px; }
-      .queue-panel h3 { margin: 0 0 10px; font-size: 15px; color: var(--slate); }
+      .att-top-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
     }
 
-    .assigned-doctors-strip { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
-    .assigned-doctor-pill {
-      display: flex; align-items: center; gap: 8px;
-      border: 1.5px solid var(--border); border-radius: 999px;
-      padding: 6px 14px; font-size: 13.5px; font-weight: 600;
-    }
     .roster-row {
       display: flex; justify-content: space-between; align-items: center;
       border-bottom: 1px solid var(--border); padding: 12px 0;
@@ -83,8 +70,14 @@
         </button>
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
-      <div class="topbar-doctor">
-        <span><strong id="topbar-doctor-name"></strong></span>
+      <div class="topbar-doctor" style="gap:10px">
+        <div class="doc-picker">
+          <button class="doc-picker-btn" onclick="toggleDocPicker(event)" id="doc-picker-btn">
+            <span id="doc-picker-label">Assisting: none</span>
+            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="doc-picker-panel" id="doc-picker-panel"></div>
+        </div>
         <div class="topbar-divider"></div>
         <span id="topbar-clinic" style="color:var(--slate)"></span>
         <button class="btn-logout" onclick="logout()">Sign out</button>
@@ -132,10 +125,6 @@
         </svg>
         Doctors
       </div>
-      <a class="nav-item" href="admissions.html">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
-        Admissions
-      </a>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
@@ -153,15 +142,10 @@
         </svg>
         Doctors
       </button>
-      <button class="bottom-nav-item" onclick="location.href='admissions.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
-        Admissions
-      </button>
     </nav>
 
     <main class="main-content">
-      <!-- Home: Attendance + assigned-doctor status strip + two queues -->
-      <div class="mobile-section active" id="section-home">
+      <div class="mobile-section active d-active" id="section-home">
 
         <div class="card" style="margin-bottom:20px">
           <div class="att-top-row">
@@ -177,37 +161,52 @@
               <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
             </div>
           </div>
-          <div id="nurse-coverage-block" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-            <div style="font-size:13px;color:var(--slate);font-weight:600;margin-bottom:8px">Doctor(s) you're assisting today</div>
-            <div id="nurse-doctor-chips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+          <p id="doc-picker-hint" style="font-size:12.5px;color:var(--slate-light);margin:12px 0 0;display:none">
+            Mark yourself present, then use the "Assisting" dropdown in the top bar to pick which doctor(s) you're covering.
+          </p>
+        </div>
+
+        <div class="card" id="queue-card-walkin">
+          <div class="card-header">
+            <h2>Walk-ins</h2>
+            <span id="queue-count-walkin" style="color:var(--slate);font-size:0.9rem"></span>
+          </div>
+          <div class="table-wrap">
+            <table id="queue-table-walkin" class="responsive-cards">
+              <thead>
+                <tr>
+                  <th>Token</th><th>Patient</th><th>For</th><th>Reason</th>
+                  <th style="text-align:center">Checked In</th><th>Vitals</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="queue-tbody-walkin">
+                <tr><td colspan="7"><div class="empty-state"><p>Loading…</p></div></td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <div class="card" style="margin-bottom:20px">
-          <div class="card-header"><h2>Your Assigned Doctors</h2></div>
-          <div id="assigned-doctors-strip" class="assigned-doctors-strip">
-            <p style="color:var(--slate-light);font-size:13px">Mark yourself present and pick who you're assisting to see their status here.</p>
+        <div class="card" id="queue-card-online" style="margin-top:16px">
+          <div class="card-header">
+            <h2>Online Appointments</h2>
+            <span id="queue-count-online" style="color:var(--slate);font-size:0.9rem"></span>
           </div>
-        </div>
-
-        <div class="card">
-          <div class="card-header"><h2>Queue</h2></div>
-          <div class="queue-tabs">
-            <div class="queue-tab-btn active" id="qtab-walkin" onclick="showQueuePanel('walkin')">Walk-ins</div>
-            <div class="queue-tab-btn" id="qtab-online" onclick="showQueuePanel('online')">Online Appointments</div>
-          </div>
-          <div class="queue-panel active" id="qpanel-walkin">
-            <h3>Walk-ins</h3>
-            <div id="walkin-list"><p style="color:var(--slate)">Loading…</p></div>
-          </div>
-          <div class="queue-panel" id="qpanel-online">
-            <h3>Online Appointments</h3>
-            <div id="online-list"><p style="color:var(--slate)">Loading…</p></div>
+          <div class="table-wrap">
+            <table id="queue-table-online" class="responsive-cards">
+              <thead>
+                <tr>
+                  <th>Token</th><th>Patient</th><th>For</th><th>Reason</th>
+                  <th style="text-align:center">Est. Time</th><th>Vitals</th><th>Status</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="queue-tbody-online">
+                <tr><td colspan="8"><div class="empty-state"><p>Loading…</p></div></td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
 
-      <!-- Doctors tab: full roster with live status -->
       <div class="mobile-section" id="section-doctors">
         <div class="card">
           <div class="card-header"><h2>Doctor Roster</h2></div>
@@ -226,14 +225,9 @@
     if (getDoctor()?.role !== 'assistant') redirectByRole(getDoctor()?.role);
 
     function showAssistantDesktopTab(id) {
-      const groups = { home: ['home'], doctors: ['doctors'] };
-      ['home', 'doctors'].forEach(s => {
-        document.getElementById('section-' + s).classList.remove('d-active');
-      });
-      groups[id].forEach(s => document.getElementById('section-' + s).classList.add('d-active'));
-      ['home', 'doctors'].forEach(t => {
-        document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id);
-      });
+      ['home', 'doctors'].forEach(s => document.getElementById('section-' + s).classList.remove('d-active'));
+      document.getElementById('section-' + id).classList.add('d-active');
+      ['home', 'doctors'].forEach(t => document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id));
     }
     if (window.innerWidth >= 901) showAssistantDesktopTab('home');
 
@@ -244,25 +238,11 @@
       });
     }
 
-    function showQueuePanel(id) {
-      ['walkin', 'online'].forEach(s => {
-        document.getElementById('qpanel-' + s).classList.toggle('active', s === id);
-        document.getElementById('qtab-' + s).classList.toggle('active', s === id);
-      });
-    }
-
     let doctorStatusMap = {};
     let allHospitalDoctors = [];
-
-    async function loadDoctorStatuses() {
-      try {
-        allHospitalDoctors = await api("GET", "/patients/hospital-doctors");
-        doctorStatusMap = {};
-        allHospitalDoctors.forEach(d => {
-          doctorStatusMap[d.id] = { status: d.attendance_status, location: d.doctor_location, name: `${d.title} ${d.name}` };
-        });
-      } catch (e) { /* status badges are a nice-to-have, don't block the queue on this */ }
-    }
+    let nurseCurrentStatus = 'not_marked';
+    let nurseSelectedDoctorIds = [];
+    let _queueData = { walk_in: [], online: [] };
 
     function statusBadgeInfo(doctorId) {
       const info = doctorStatusMap[doctorId];
@@ -274,55 +254,185 @@
       return { label: 'Not Marked', cls: 'badge-grey' };
     }
 
-    function doctorStatusBadge(doctorId) {
-      const b = statusBadgeInfo(doctorId);
-      return `<span class="badge ${b.cls}" style="margin-left:6px">${b.label}</span>`;
-    }
-
-    function vitalsStatusBadge(v) {
-      if (v.is_returned) return '<span class="badge badge-amber">Sent Back for More Vitals</span>';
-      if (v.vitals_status === 'done') return '<span class="badge badge-green">Vitals Recorded</span>';
-      if (v.vitals_status === 'sent_back') return '<span class="badge badge-amber">Sent Back for More Vitals</span>';
-      return '<span class="badge badge-grey">Vitals Pending</span>';
-    }
-
-    function renderQueueList(elId, rows) {
-      const el = document.getElementById(elId);
-      if (!rows.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No patients waiting.</p>'; return; }
-      el.innerHTML = rows.map(v => `
-        <div class="ns-row">
-          <div>
-            <strong>${v.patient_name}</strong>
-            <span class="badge badge-navy" style="margin-left:8px">${v.patient_uid}</span>
-            ${v.is_emergency ? '<span class="badge badge-red" style="margin-left:6px">Emergency</span>' : ''}
-            <div class="ns-row-sub">Token ${v.token_number} · ${v.issue_category || ''} · For ${v.doctor_name}${doctorStatusBadge(v.doctor_id)}</div>
-          </div>
-          ${vitalsStatusBadge(v)}
-        </div>
-      `).join('');
-    }
-
-    async function loadQueues() {
-      await loadDoctorStatuses();
-      renderAssignedDoctorsStrip();
+    async function loadDoctorStatuses() {
       try {
-        const data = await api("GET", "/patients/assistant-queue");
-        renderQueueList('walkin-list', data.walk_in || []);
-        renderQueueList('online-list', data.online || []);
+        allHospitalDoctors = await api("GET", "/patients/hospital-doctors");
+        doctorStatusMap = {};
+        allHospitalDoctors.forEach(d => {
+          doctorStatusMap[d.id] = { status: d.attendance_status, location: d.doctor_location, name: `${d.title} ${d.name}` };
+        });
+      } catch (e) { }
+    }
+
+    // ---------- Header doctor picker (multi-select) ----------
+    function toggleDocPicker(e) {
+      e.stopPropagation();
+      const panel = document.getElementById('doc-picker-panel');
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open')) renderDocPicker();
+    }
+    document.addEventListener('click', (e) => {
+      const panel = document.getElementById('doc-picker-panel');
+      if (panel && !e.target.closest('.doc-picker')) panel.classList.remove('open');
+    });
+
+    function renderDocPicker() {
+      const panel = document.getElementById('doc-picker-panel');
+      const canPick = nurseCurrentStatus === 'present' || nurseCurrentStatus === 'on_break';
+      if (!canPick) {
+        panel.innerHTML = `<div class="doc-picker-empty-note" style="border-top:none;padding:6px 8px">Mark yourself present first to choose doctors.</div>`;
+        return;
+      }
+      if (!allHospitalDoctors.length) {
+        panel.innerHTML = `<div class="doc-picker-empty-note" style="border-top:none;padding:6px 8px">No doctors found.</div>`;
+        return;
+      }
+      panel.innerHTML = allHospitalDoctors.map(d => {
+        const checked = nurseSelectedDoctorIds.includes(d.id);
+        const b = statusBadgeInfo(d.id);
+        return `
+          <div class="doc-picker-row" onclick="toggleDocPickerDoctor(${d.id})">
+            <input type="checkbox" ${checked ? 'checked' : ''} />
+            <span>${d.title} ${d.name}</span>
+            <span class="doc-picker-status badge ${b.cls}">${b.label}</span>
+          </div>`;
+      }).join('');
+    }
+
+    function toggleDocPickerDoctor(id) {
+      const idx = nurseSelectedDoctorIds.indexOf(id);
+      if (idx === -1) nurseSelectedDoctorIds.push(id); else nurseSelectedDoctorIds.splice(idx, 1);
+      renderDocPicker();
+      updateDocPickerLabel();
+      saveCoverage();
+    }
+
+    function updateDocPickerLabel() {
+      const label = document.getElementById('doc-picker-label');
+      if (!nurseSelectedDoctorIds.length) { label.textContent = 'Assisting: none'; return; }
+      if (nurseSelectedDoctorIds.length === 1) {
+        const info = doctorStatusMap[nurseSelectedDoctorIds[0]];
+        label.textContent = `Assisting: ${info ? info.name : '1 doctor'}`;
+      } else {
+        label.textContent = `Assisting: ${nurseSelectedDoctorIds.length} doctors`;
+      }
+    }
+
+    async function saveCoverage() {
+      try {
+        await markAttendanceCommon(nurseCurrentStatus, null, { doctor_ids: nurseSelectedDoctorIds });
+        refreshAll();
       } catch (e) { toast(e.message, "error"); }
     }
 
-    function renderAssignedDoctorsStrip() {
-      const strip = document.getElementById('assigned-doctors-strip');
-      if (!nurseSelectedDoctorIds.length || !(nurseCurrentStatus === 'present' || nurseCurrentStatus === 'on_break')) {
-        strip.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Mark yourself present and pick who you\'re assisting to see their status here.</p>';
-        return;
+    // ---------- Attendance ----------
+    async function loadNurseAttendance() {
+      try {
+        const data = await api("GET", "/doctors/attendance/my-status");
+        nurseSelectedDoctorIds = data.coverage?.doctor_ids || [];
+        renderNurseBadge(data.status);
+        updateDocPickerLabel();
+      } catch (e) { }
+    }
+
+    function renderNurseBadge(status) {
+      nurseCurrentStatus = status;
+      const badge = document.getElementById('nurse-attendance-badge');
+      const btnPresent = document.getElementById('nurse-btn-present');
+      const btnBreak = document.getElementById('nurse-btn-break');
+      const btnOffDuty = document.getElementById('nurse-btn-offduty');
+      document.getElementById('doc-picker-hint').style.display = (status === 'present' || status === 'on_break') ? 'none' : '';
+      if (status === 'present') {
+        badge.className = 'badge badge-green'; badge.textContent = 'Present';
+        btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
+      } else if (status === 'on_break') {
+        badge.className = 'badge badge-amber'; badge.textContent = 'On Break';
+        btnPresent.textContent = 'Resume'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = '';
+      } else if (status === 'off_duty') {
+        badge.className = 'badge badge-red'; badge.textContent = 'Off Duty';
+        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
+      } else {
+        badge.className = 'badge badge-grey'; badge.textContent = 'Not marked';
+        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
       }
-      strip.innerHTML = nurseSelectedDoctorIds.map(id => {
-        const info = doctorStatusMap[id];
-        const name = info ? info.name : `Doctor #${id}`;
-        return `<div class="assigned-doctor-pill">${name}${doctorStatusBadge(id)}</div>`;
-      }).join('');
+    }
+
+    async function markNurseAttendance(status) {
+      try {
+        const coverage = status === 'present' ? { doctor_ids: nurseSelectedDoctorIds } : {};
+        await markAttendanceCommon(status, null, coverage);
+        renderNurseBadge(status);
+        const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
+        toast(labels[status] || "Status updated.", "success");
+        updateDocPickerLabel();
+        refreshAll();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    // ---------- Queues (same rendering pattern as doctor's own dashboard) ----------
+    function vitalsCellHtml(v) {
+      if (v.is_returned) return '<span class="badge badge-red">Recheck sent</span>';
+      if (v.vitals_status === 'done') return '<span class="badge badge-teal">Recorded</span>';
+      if (v.vitals_status === 'sent_back') return '<span class="badge badge-red">Recheck sent</span>';
+      if (v.vitals_status === 'pending') return '<span class="badge badge-amber">Advised — not recorded</span>';
+      return '<span class="badge badge-grey">Not queued for vitals</span>';
+    }
+
+    function timeLabel(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+    }
+
+    async function sendToVitals(patientId, btn) {
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      try {
+        await api("POST", `/patients/${patientId}/send-to-nurse`);
+        toast("Sent to vitals.", "success");
+        loadQueues();
+      } catch (e) {
+        toast(e.message, "error");
+        btn.disabled = false;
+        btn.textContent = 'Send to Vitals';
+      }
+    }
+
+    function renderQueueRow(v, timeField, showSendToVitals) {
+      const needsVitals = !v.vitals_status || v.vitals_status === 'none';
+      return `
+      <tr>
+        <td data-label="Token"><strong>${v.token_number || '—'}</strong></td>
+        <td data-label="Patient">${v.patient_name}${v.is_emergency ? ' <span class="badge badge-red">Emergency</span>' : ''}</td>
+        <td data-label="For">${v.doctor_name}</td>
+        <td data-label="Reason">${v.issue_category || ''}</td>
+        <td data-label="${timeField === 'created_at' ? 'Checked In' : 'Est. Time'}" style="text-align:center;color:var(--slate)">${timeLabel(v[timeField])}</td>
+        <td data-label="Vitals">${vitalsCellHtml(v)}</td>
+        <td data-label="Status"><span class="badge badge-amber">Waiting</span></td>
+        ${showSendToVitals ? `<td data-label="">${needsVitals ? `<button class="btn btn-outline btn-sm" onclick="sendToVitals(${v.patient_id}, this)">Send to Vitals</button>` : ''}</td>` : ''}
+      </tr>`;
+    }
+
+    function renderQueues() {
+      const walkin = _queueData.walk_in || [];
+      const online = _queueData.online || [];
+
+      document.getElementById("queue-count-walkin").textContent = `${walkin.length} waiting`;
+      document.getElementById("queue-count-online").textContent = `${online.length} waiting`;
+
+      document.getElementById("queue-tbody-walkin").innerHTML = walkin.length
+        ? walkin.map(v => renderQueueRow(v, 'created_at', false)).join('')
+        : `<tr><td colspan="7"><div class="empty-state"><p>No walk-in patients right now.</p></div></td></tr>`;
+
+      document.getElementById("queue-tbody-online").innerHTML = online.length
+        ? online.map(v => renderQueueRow(v, 'booked_time', true)).join('')
+        : `<tr><td colspan="8"><div class="empty-state"><p>No online appointments right now.</p></div></td></tr>`;
+    }
+
+    async function loadQueues() {
+      try {
+        _queueData = await api("GET", "/patients/queue/assistant");
+        renderQueues();
+      } catch (e) { toast(e.message, "error"); }
     }
 
     function renderDoctorRoster() {
@@ -341,81 +451,16 @@
             <div>
               <strong>${d.title} ${d.name}</strong>
               ${mine ? '<span class="badge badge-navy" style="margin-left:8px">Assigned to you</span>' : ''}
-              <div class="ns-row-sub">${d.specialization || ''}</div>
+              <div style="color:var(--slate);font-size:13px;margin-top:4px">${d.specialization || ''}</div>
             </div>
             <span class="badge ${b.cls}">${b.label}</span>
-          </div>
-        `;
+          </div>`;
       }).join('');
     }
 
-    let nurseCurrentStatus = 'not_marked';
-    let nurseSelectedDoctorIds = [];
-
-    function toggleNurseChip(el, list, id) {
-      const idx = list.indexOf(id);
-      if (idx === -1) { list.push(id); el.classList.add('selected'); }
-      else { list.splice(idx, 1); el.classList.remove('selected'); }
-      renderAssignedDoctorsStrip();
-    }
-
-    async function loadNurseCoverageChips(selectedDoctorIds) {
-      try {
-        const doctors = await api("GET", "/patients/hospital-doctors");
-        nurseSelectedDoctorIds = [...selectedDoctorIds];
-        document.getElementById('nurse-doctor-chips').innerHTML = doctors.map(d => `
-          <div class="day-chip ${nurseSelectedDoctorIds.includes(d.id) ? 'selected' : ''}" onclick="toggleNurseChip(this, nurseSelectedDoctorIds, ${d.id})">${d.title} ${d.name}</div>
-        `).join('') || '<div style="font-size:13px;color:var(--slate-light)">No doctors found.</div>';
-      } catch (e) { }
-    }
-
-    async function loadNurseAttendance() {
-      try {
-        const data = await api("GET", "/doctors/attendance/my-status");
-        renderNurseBadge(data.status);
-        await loadNurseCoverageChips(data.coverage?.doctor_ids || []);
-        renderAssignedDoctorsStrip();
-      } catch(e) {}
-    }
-
-    function renderNurseBadge(status) {
-      nurseCurrentStatus = status;
-      const badge = document.getElementById('nurse-attendance-badge');
-      const btnPresent = document.getElementById('nurse-btn-present');
-      const btnBreak = document.getElementById('nurse-btn-break');
-      const btnOffDuty = document.getElementById('nurse-btn-offduty');
-      document.getElementById('nurse-coverage-block').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
-      if (status === 'present') {
-        badge.className = 'badge badge-green'; badge.textContent = 'Present';
-        btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
-      } else if (status === 'on_break') {
-        badge.className = 'badge badge-amber'; badge.textContent = 'On Break';
-        btnPresent.textContent = 'Resume'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = '';
-      } else if (status === 'off_duty') {
-        badge.className = 'badge badge-red'; badge.textContent = 'Off Duty';
-        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
-      } else {
-        badge.className = 'badge badge-grey'; badge.textContent = 'Not marked';
-        btnPresent.textContent = 'Mark Present'; btnPresent.style.display = ''; btnBreak.style.display = 'none'; btnOffDuty.style.display = 'none';
-      }
-    }
-
-    async function markNurseAttendance(status) {
-      try {
-        const wasAlreadyPresent = nurseCurrentStatus === status;
-        const coverage = status === 'present' ? { doctor_ids: nurseSelectedDoctorIds } : {};
-        await markAttendanceCommon(status, null, coverage);
-        renderNurseBadge(status);
-        if (!wasAlreadyPresent) {
-          const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
-          toast(labels[status] || "Status updated.", "success");
-        }
-        loadQueues();
-        renderDoctorRoster();
-      } catch (e) { toast(e.message, "error"); }
-    }
-
     async function refreshAll() {
+      await loadDoctorStatuses();
+      updateDocPickerLabel();
       await loadQueues();
       renderDoctorRoster();
     }

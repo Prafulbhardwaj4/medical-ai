@@ -959,6 +959,13 @@ def refer_to_doctor(
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
+    # Same fee resolution as a normal check-in — a referral isn't a
+    # discounted/free consult, it's a regular visit with the receiving
+    # doctor, just arriving via referral instead of the front desk.
+    referral_fee = to_doctor.consultation_fee
+    if referral_fee is None and hospital:
+        referral_fee = hospital.default_consultation_fee
+
     referral_checkin = Checkin(
         hospital_id=current_doctor.hospital_id,
         patient_id=patient.id,
@@ -967,9 +974,9 @@ def refer_to_doctor(
         doctor_id=to_doctor.id,
         created_by=current_doctor.id,
         visit_date=ist_today(),
-        consultation_fee=0,
+        consultation_fee=referral_fee,
         test_fee=0,
-        is_paid=True
+        is_paid=False
     )
     db.add(referral_checkin)
     db.flush()

@@ -330,6 +330,22 @@
             <div id="test-list"><p>Loading...</p></div>
           </div>
 
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-header">
+              <h2>Progress Notes</h2>
+            </div>
+            <div id="progress-notes-form" style="display:none;margin-bottom:14px">
+              <textarea class="form-control" id="progress-note-input" rows="3" placeholder="Today's findings, plan, changes to treatment…"></textarea>
+              <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="submitProgressNote()">Add Note</button>
+            </div>
+            <div id="progress-notes-list"><p>Loading...</p></div>
+          </div>
+
+          <div class="card" style="margin-bottom:20px" id="consents-card">
+            <div class="card-header"><h2>Consents</h2></div>
+            <div id="consents-body"><p>Loading...</p></div>
+          </div>
+
           <div class="card">
             <div class="card-header">
               <h2>Other Charges</h2>
@@ -350,11 +366,6 @@
             <div id="tpa-body"><p>Loading...</p></div>
           </div>
 
-          <div class="card" style="margin-bottom:20px" id="consents-card">
-            <div class="card-header"><h2>Consents</h2></div>
-            <div id="consents-body"><p>Loading...</p></div>
-          </div>
-
           <div class="card" style="margin-bottom:20px" id="running-bill-card">
             <div class="card-header">
               <h2>Running Bill</h2>
@@ -373,6 +384,28 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- Manage Allergies modal -->
+  <div class="modal-overlay" id="modal-allergies">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-header"><h2>Manage Allergies</h2><button class="modal-close" onclick="closeModal('modal-allergies')">&times;</button></div>
+      <div id="allergies-modal-list" style="margin-bottom:16px"><p>Loading...</p></div>
+      <div style="border-top:1px solid var(--border);padding-top:14px">
+        <div class="form-group"><label class="form-label">Allergen</label><input class="form-control" id="allergy-name" placeholder="e.g. Penicillin" /></div>
+        <div class="form-group"><label class="form-label">Reaction (optional)</label><input class="form-control" id="allergy-reaction" placeholder="e.g. Rash, breathlessness" /></div>
+        <div class="form-group">
+          <label class="form-label">Severity</label>
+          <select class="form-control" id="allergy-severity">
+            <option value="mild">Mild</option>
+            <option value="moderate" selected>Moderate</option>
+            <option value="severe">Severe</option>
+          </select>
+        </div>
+        <p class="err-msg" id="allergy-err"></p>
+        <button class="btn btn-primary" style="width:100%" onclick="submitAddAllergy()">Add Allergy</button>
+      </div>
+    </div>
   </div>
 
   <!-- Add Medication modal -->
@@ -778,6 +811,9 @@
     if (isNurseViewer()) {
       document.getElementById("consents-card").style.display = "none";
     }
+    if (canAddProgressNote()) {
+      document.getElementById("progress-notes-form").style.display = "block";
+    }
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
 
@@ -855,6 +891,32 @@
       blood_transfusion: "Blood Transfusion Consent", high_risk: "High-risk / Complication Consent", lama_dama: "LAMA / DAMA Consent",
     };
 
+    function renderProgressNotes() {
+      const list = document.getElementById("progress-notes-list");
+      if (!progressNotesData.length) {
+        list.innerHTML = `<p style="color:var(--slate-light)">No progress notes yet.</p>`;
+        return;
+      }
+      list.innerHTML = progressNotesData.map(n => `
+        <div style="border-bottom:1px solid var(--border);padding:10px 0">
+          <div style="font-size:12.5px;color:var(--slate);margin-bottom:4px">${sanitize(n.doctor_name)} · ${new Date(n.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+          <div style="font-size:13.5px;white-space:pre-wrap">${sanitize(n.note)}</div>
+        </div>`).join('');
+    }
+
+    async function submitProgressNote() {
+      const input = document.getElementById("progress-note-input");
+      const note = input.value.trim();
+      if (!note) { toast("Note cannot be empty", "error"); return; }
+      try {
+        await api("POST", `/admissions/${admissionId}/progress-notes`, { note });
+        input.value = "";
+        progressNotesData = await api("GET", `/admissions/${admissionId}/progress-notes`);
+        renderProgressNotes();
+        toast("Progress note added", "success");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
     function renderConsents() {
       const body = document.getElementById("consents-body");
       body.innerHTML = Object.keys(CONSENT_TYPE_LABELS).map(type => {
@@ -924,7 +986,15 @@
     function renderHeader() {
       const a = admissionData;
       const p = a.patient;
+      const allergies = p.allergies || [];
+      const hasAllergies = allergies.length > 0;
       document.getElementById("patient-header").innerHTML = `
+        <div id="allergy-banner" style="background:${hasAllergies ? '#fee2e2' : 'var(--smoke)'};border:1px solid ${hasAllergies ? '#fecaca' : 'var(--border)'};border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div style="font-size:13.5px;${hasAllergies ? 'color:#991b1b;font-weight:600' : 'color:var(--slate)'}">
+            ${hasAllergies ? '⚠ Allergic to: ' + allergies.map(al => `${sanitize(al.allergen)} (${sanitize(al.severity)})`).join(', ') : 'No known drug allergies recorded'}
+          </div>
+          ${canManageAllergies() ? `<button class="btn btn-outline btn-sm" onclick="openManageAllergiesModal()">Manage Allergies</button>` : ''}
+        </div>
         <div class="ph-top-row">
           <div>
             <h2 class="ph-name">${sanitize(p.name)}</h2>
