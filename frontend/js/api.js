@@ -583,6 +583,46 @@ async function openReportsModal(patientId) {
   }
 }
 
+function openOffDutyTimeModal() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay open";
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:360px;text-align:center">
+        <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:center">
+          <h2 style="margin:0;font-size:18px">When will you go off duty today?</h2>
+        </div>
+        <p style="color:var(--slate);font-size:13.5px;margin:0 0 18px">If you forget to mark yourself off duty, we'll do it for you at this time.</p>
+        <input type="time" id="off-duty-time-input" class="form-control" style="font-size:22px;padding:16px;text-align:center;font-weight:600">
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button type="button" class="btn btn-outline" style="flex:1" id="off-duty-cancel-btn">Cancel</button>
+          <button type="button" class="btn btn-primary" style="flex:1" id="off-duty-confirm-btn" disabled>Mark Present</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector("#off-duty-time-input");
+    const confirmBtn = overlay.querySelector("#off-duty-confirm-btn");
+    input.addEventListener("input", () => { confirmBtn.disabled = !input.value; });
+    setTimeout(() => input.focus(), 50);
+
+    function cleanup(result) {
+      overlay.remove();
+      resolve(result);
+    }
+    overlay.querySelector("#off-duty-cancel-btn").addEventListener("click", () => cleanup(null));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) cleanup(null); });
+    confirmBtn.addEventListener("click", () => {
+      if (!input.value) return;
+      const [h, m] = input.value.split(":").map(Number);
+      const dt = new Date();
+      dt.setHours(h, m, 0, 0);
+      if (dt.getTime() <= Date.now()) dt.setDate(dt.getDate() + 1); // overnight shift — roll to tomorrow
+      cleanup(dt.toISOString());
+    });
+  });
+}
+
 async function markAttendanceCommon(status, room_id, extra, alreadyActive) {
   return api("POST", "/doctors/attendance", { status, room_id, ...(extra || {}) });
 }

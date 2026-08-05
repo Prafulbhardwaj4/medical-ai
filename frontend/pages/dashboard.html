@@ -691,7 +691,12 @@
         const location = status === 'present' ? currentDoctorLocation : null;
         const wasAlreadyPresent = currentAttendanceStatus === status;
         const alreadyActive = currentAttendanceStatus === "present" || currentAttendanceStatus === "on_break";
-        await markAttendanceCommon(status, room_id, { location }, alreadyActive);
+        let expected_off_duty_at;
+        if (status === 'present' && !alreadyActive) {
+          expected_off_duty_at = await openOffDutyTimeModal();
+          if (!expected_off_duty_at) return;
+        }
+        await markAttendanceCommon(status, room_id, { location, expected_off_duty_at }, alreadyActive);
         renderAttendanceBadge(status);
         document.getElementById('room-display').textContent = '';
         if (!wasAlreadyPresent) {

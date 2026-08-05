@@ -601,7 +601,12 @@
         const room_id = roomVal ? parseInt(roomVal) : null;
         const wasAlreadyPresent = nurseCurrentStatus === status;
         const alreadyActive = nurseCurrentStatus === "present" || nurseCurrentStatus === "on_break";
-        await markAttendanceCommon(status, room_id, {});
+        let expected_off_duty_at;
+        if (status === 'present' && !alreadyActive) {
+          expected_off_duty_at = await openOffDutyTimeModal();
+          if (!expected_off_duty_at) return;
+        }
+        await markAttendanceCommon(status, room_id, { expected_off_duty_at });
         renderNurseBadge(status);
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };

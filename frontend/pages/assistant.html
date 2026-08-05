@@ -370,7 +370,13 @@
 
     async function markNurseAttendance(status) {
       try {
-        const coverage = status === 'present' ? { doctor_ids: nurseSelectedDoctorIds } : {};
+        const alreadyActive = nurseCurrentStatus === "present" || nurseCurrentStatus === "on_break";
+        let expected_off_duty_at;
+        if (status === 'present' && !alreadyActive) {
+          expected_off_duty_at = await openOffDutyTimeModal();
+          if (!expected_off_duty_at) return;
+        }
+        const coverage = status === 'present' ? { doctor_ids: nurseSelectedDoctorIds, expected_off_duty_at } : {};
         await markAttendanceCommon(status, null, coverage);
         renderNurseBadge(status);
         const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
