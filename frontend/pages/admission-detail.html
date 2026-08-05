@@ -779,6 +779,8 @@
     function isNurseViewer() { return ["nurse", "assistant"].includes(getDoctor()?.role); }
     function canManageAllergies() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
     function canAddProgressNote() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    const isAdminViewer = ["admin", "sub_admin"].includes(getDoctor()?.role);
+    const isDoctorViewer = getDoctor()?.role === "doctor";
     if (!canManageMedOrders()) {
       document.getElementById("btn-add-med").style.display = "none";
     }
@@ -788,8 +790,6 @@
     if (!canManageClinicalOrders()) {
       document.getElementById("btn-add-test").style.display = "none";
     }
-    const isAdminViewer = ["admin", "sub_admin"].includes(getDoctor()?.role);
-    const isDoctorViewer = getDoctor()?.role === "doctor";
     const canRequestWardChange = ["doctor", "nurse", "assistant", "admin", "sub_admin"].includes(getDoctor()?.role);
     const canChangeWard = ["receptionist", "admin", "sub_admin"].includes(getDoctor()?.role);
     const canManageTpa = ["receptionist", "admin", "sub_admin"].includes(getDoctor()?.role);

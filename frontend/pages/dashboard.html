@@ -117,13 +117,6 @@
       </a>
       <div class="nav-divider"></div>
       <div class="sidebar-section-label">Quick Actions</div>
-      <div class="nav-item" onclick="closeSidebar(); setTimeout(() => { if(requirePresent()) openAddPatient(); }, 150)">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-        </svg>
-        Add Patient
-      </div>
       <a class="nav-item" href="doctor-slots.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -366,7 +359,6 @@
                   <input class="form-control" id="search-input" placeholder="Search name, phone, ID…"
                     oninput="searchPatients(this.value)" />
                 </div>
-                <button class="btn btn-primary" onclick="openAddPatient()">+ Add Patient</button>
               </div>
             </div>
 

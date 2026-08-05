@@ -166,6 +166,17 @@
           </p>
         </div>
 
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-header"><h2>Patient Returning for Reports?</h2></div>
+          <p style="color:var(--slate);font-size:13px;margin-bottom:10px">
+            If someone already consulted today is back with their test reports, find them here and send them
+            straight to the doctor — no new token, no reception visit needed.
+          </p>
+          <input class="form-control" id="return-search-input" placeholder="Search by name or phone…"
+            oninput="onReturnSearchInput(this.value)" autocomplete="off" />
+          <div id="return-search-results" style="margin-top:10px"></div>
+        </div>
+
         <div class="card" id="queue-card-walkin">
           <div class="card-header">
             <h2>Walk-ins</h2>
@@ -428,9 +439,62 @@
         : `<tr><td colspan="8"><div class="empty-state"><p>No online appointments right now.</p></div></td></tr>`;
     }
 
+    let returnSearchTimer;
+    function onReturnSearchInput(val) {
+      clearTimeout(returnSearchTimer);
+      const box = document.getElementById('return-search-results');
+      if (!val.trim()) { box.innerHTML = ''; return; }
+      returnSearchTimer = setTimeout(() => runReturnSearch(val), 350);
+    }
+
+    async function runReturnSearch(val) {
+      const box = document.getElementById('return-search-results');
+      try {
+        const data = await api("GET", `/patients/lookup?query=${encodeURIComponent(val)}`);
+        const matches = data.matches || data || [];
+        if (!matches.length) {
+          box.innerHTML = `<p style="color:var(--slate-light);font-size:0.9rem">No matching patient found.</p>`;
+          return;
+        }
+        box.innerHTML = (await Promise.all(matches.map(async (p) => {
+          let checkin;
+          try { checkin = await api("GET", `/patients/${p.id}/checkin-today`); } catch (e) { return ''; }
+          if (!checkin.exists) return '';
+          const canSendBack = checkin.is_consulted && !checkin.is_returned;
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:8px">
+              <div>
+                <strong>${p.name}</strong> <span style="color:var(--slate);font-size:0.82rem">${p.patient_uid} · Token ${checkin.token_number}</span>
+                <div style="font-size:0.82rem;color:var(--slate)">With ${checkin.doctor_name}${checkin.is_returned ? ' · Already sent back' : (checkin.is_consulted ? ' · Already consulted today' : ' · Not yet consulted')}</div>
+              </div>
+              ${canSendBack
+                ? `<button class="btn btn-primary btn-sm" onclick="sendPatientBack(${checkin.checkin_id}, this)">Send Back to Doctor</button>`
+                : `<span class="badge badge-amber">${checkin.is_returned ? 'Already sent back' : 'Not consulted yet'}</span>`}
+            </div>`;
+        }))).join('');
+      } catch (e) { box.innerHTML = `<p style="color:var(--slate-light);font-size:0.9rem">${e.message}</p>`; }
+    }
+
+    async function sendPatientBack(checkinId, btn) {
+      btn.disabled = true;
+      try {
+        await api("POST", `/patients/requeue/${checkinId}`);
+        toast("Sent back to the doctor — no new token needed.", "success");
+        document.getElementById('return-search-input').value = '';
+        document.getElementById('return-search-results').innerHTML = '';
+      } catch (e) {
+        toast(e.message, "error");
+        btn.disabled = false;
+      }
+    }
+
     async function loadQueues() {
       try {
-        _queueData = await api("GET", "/patients/queue/assistant");
+        const flat = await api("GET", "/nurses/vitals-queue");
+        _queueData = {
+          walk_in: flat.filter(v => v.source !== "online"),
+          online: flat.filter(v => v.source === "online"),
+        };
         renderQueues();
       } catch (e) { toast(e.message, "error"); }
     }

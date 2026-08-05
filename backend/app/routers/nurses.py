@@ -73,6 +73,8 @@ def vitals_queue(
             "recheck_request": c.vitals_recheck_request,
             "source": c.source,
             "booked_time": c.booked_time.isoformat() if c.booked_time else None,
+            "vitals_status": c.vitals_status,
+            "is_emergency": c.is_emergency,
         })
     return result
 

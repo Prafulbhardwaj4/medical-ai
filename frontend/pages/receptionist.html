@@ -994,7 +994,7 @@
         box.innerHTML = data.map(p => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:8px">
             <div>
-              <strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber" style="margin-left:6px">Checked in today</span>' : ''}
+              <strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber" style="margin-left:6px">Checked in today</span>' : ''} ${p.currently_admitted ? '<span class="badge badge-red" style="margin-left:6px">Already admitted</span>' : ''}
               <div style="font-size:0.82rem;color:var(--slate)">${p.patient_uid} · ${p.phone} · ${p.age}y</div>
             </div>
             <button class="btn btn-primary btn-sm" onclick='selectExistingPatient(${JSON.stringify(p)})'>Select</button>

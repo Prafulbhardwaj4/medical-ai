@@ -1008,6 +1008,7 @@ def update_consultation(
         raise HTTPException(status_code=404, detail="Consultation not found")
 
     was_confirmed = consultation.token_number is not None
+    old_medicines = json.loads(consultation.medicines or "[]") if was_confirmed else []
 
     new_values = {
         "chief_complaint": payload.chief_complaint,
@@ -1030,6 +1031,60 @@ def update_consultation(
 
     consultation.has_pending_tests = len(payload.tests) > 0
 
+    # A confirmed consultation's medicines can be edited after test reports
+    # come back — pharmacy only ever sees what has a real MedicineOrder row,
+    # so any newly-added/changed line needs a fresh one here. Anything
+    # already dispensed against is never touched or duplicated.
+    new_medicine_orders = []
+    if was_confirmed and "medicines" in changed_fields:
+        def _key(m):
+            return (
+                (m.get("name") or "").strip().lower(),
+                (m.get("brand_name") or "").strip().lower(),
+                (m.get("dosage") or "").strip().lower(),
+                (m.get("frequency") or "").strip().lower(),
+                (m.get("duration") or "").strip().lower(),
+            )
+        already_ordered_keys = {_key(m) for m in old_medicines}
+        newly_added = [m.dict() for m in payload.medicines if _key(m.dict()) not in already_ordered_keys]
+
+        if newly_added:
+            catalog_medicines = db.query(HospitalMedicine).filter(
+                HospitalMedicine.hospital_id == current_doctor.hospital_id,
+                HospitalMedicine.is_active == True
+            ).all()
+
+            def _match(name, brand):
+                name_l = (name or "").strip().lower()
+                brand_l = (brand or "").strip().lower()
+                for cm in catalog_medicines:
+                    if name_l and (name_l == (cm.generic_name or "").strip().lower() or name_l == (cm.brand_name or "").strip().lower()):
+                        return cm
+                    if brand_l and brand_l == (cm.brand_name or "").strip().lower():
+                        return cm
+                return None
+
+            for med in newly_added:
+                matched = _match(med.get("name", ""), med.get("brand_name", ""))
+                quantity = calculate_prescribed_quantity(matched, med.get("times_per_day"), med.get("duration_days"))
+                order = MedicineOrder(
+                    consultation_id=consultation.id,
+                    patient_id=consultation.patient_id,
+                    hospital_id=current_doctor.hospital_id,
+                    catalog_medicine_id=matched.id if matched else None,
+                    medicine_name=med.get("name", ""),
+                    brand_name=med.get("brand_name", ""),
+                    dosage=med.get("dosage", ""),
+                    frequency=med.get("frequency", ""),
+                    duration=med.get("duration", ""),
+                    unit_price=matched.price if matched else None,
+                    quantity=quantity,
+                    included=True,
+                    status="advised",
+                )
+                db.add(order)
+                new_medicine_orders.append(order)
+
     db.commit()
     db.refresh(consultation)
 
@@ -1048,7 +1103,10 @@ def update_consultation(
             })
         )
 
-    return {"message": "Consultation updated successfully"}
+    return {
+        "message": "Consultation updated successfully",
+        "new_medicine_orders_added": len(new_medicine_orders),
+    }
 
 
 @router.post("/void/{consultation_id}")

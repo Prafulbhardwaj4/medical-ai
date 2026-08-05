@@ -1029,6 +1029,69 @@ def get_test_report(
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
 
 
+@router.get("/patient-reports/{patient_id}")
+def get_patient_reports(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Read-only, date-wise test report history for one patient — used by the
+    Reports button on patient.html and consultation.html. Doesn't touch any
+    consultation/recording state; open to any staff role at the hospital,
+    same as the rest of a patient's chart."""
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    orders = db.query(TestOrder).filter(
+        TestOrder.patient_id == patient_id,
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.status == "verified_released"
+    ).order_by(TestOrder.verified_at.desc()).all()
+
+    visible_orders = []
+    for o in orders:
+        if _is_hiv_order(db, o):
+            consultation = db.query(Consultation).filter(Consultation.id == o.consultation_id).first()
+            is_ordering_doctor = consultation and consultation.doctor_id == current_doctor.id
+            if not is_ordering_doctor:
+                try:
+                    _require_hiv_access(db, o, current_doctor)
+                except HTTPException:
+                    continue
+        visible_orders.append(o)
+
+    visits = {}
+    for o in visible_orders:
+        key = o.consultation_id
+        if key not in visits:
+            consultation = db.query(Consultation).filter(Consultation.id == o.consultation_id).first()
+            visits[key] = {
+                "consultation_id": o.consultation_id,
+                "token_number": consultation.token_number if consultation else "",
+                "date": None,
+                "tests": [],
+            }
+        v = visits[key]
+        completed_iso = o.completed_at.isoformat() if o.completed_at else None
+        if completed_iso and (v["date"] is None or completed_iso > v["date"]):
+            v["date"] = completed_iso
+        v["tests"].append({
+            "order_id": o.id,
+            "test_name": o.test_name,
+            "result_data": json.loads(o.result_data) if o.result_data else None,
+            "is_critical": o.is_critical,
+            "verified_at": o.verified_at.isoformat() if o.verified_at else None,
+        })
+
+    result = list(visits.values())
+    result.sort(key=lambda v: v["date"] or "", reverse=True)
+    return result
+
+
 @router.get("/reports/history")
 def get_lab_reports_history(
     q: str = "",

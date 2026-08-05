@@ -531,6 +531,58 @@ function promptOffDutyTime() {
   });
 }
 
+async function openReportsModal(patientId) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay open";
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:520px;max-height:80vh;overflow-y:auto">
+      <div class="modal-header">
+        <h2>Reports</h2>
+        <button class="modal-close" id="reports-modal-close">&times;</button>
+      </div>
+      <div id="reports-modal-body"><p style="color:var(--slate)">Loading…</p></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#reports-modal-close").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+
+  try {
+    const visits = await api("GET", `/lab/patient-reports/${patientId}`);
+    const body = overlay.querySelector("#reports-modal-body");
+    if (!visits.length) {
+      body.innerHTML = `<p style="color:var(--slate)">No reports available yet for this patient.</p>`;
+      return;
+    }
+    body.innerHTML = visits.map((v, i) => `
+      <div style="border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:10px">
+        <button type="button" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'"
+          style="width:100%;text-align:left;background:none;border:none;padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+          <span><strong>${v.date ? new Date(v.date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) : 'Date not recorded'}</strong>
+            <span style="color:var(--slate);font-size:13px"> · Token ${v.token_number || '—'}</span></span>
+          <span style="color:var(--slate)">${v.tests.length} test${v.tests.length > 1 ? 's' : ''} ▾</span>
+        </button>
+        <div style="display:${i === 0 ? '' : 'none'};padding:0 14px 12px">
+          ${v.tests.map(t => `
+            <div style="padding:8px 0;border-top:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <strong>${t.test_name}</strong>
+                ${t.is_critical ? '<span class="badge badge-red">Critical</span>' : ''}
+              </div>
+              ${t.result_data ? `<div style="font-size:13px;color:var(--slate);margin-top:4px">
+                ${Object.entries(t.result_data).map(([k, v2]) => `${k}: <strong>${v2}</strong>`).join(' &nbsp;·&nbsp; ')}
+              </div>` : ''}
+              <a href="${API_BASE}/lab/reports/${t.order_id}.pdf" target="_blank" style="font-size:13px">View full report (PDF)</a>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    overlay.querySelector("#reports-modal-body").innerHTML = `<p style="color:var(--red)">Couldn't load reports right now.</p>`;
+  }
+}
+
 async function markAttendanceCommon(status, room_id, extra, alreadyActive) {
   return api("POST", "/doctors/attendance", { status, room_id, ...(extra || {}) });
 }
