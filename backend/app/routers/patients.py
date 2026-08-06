@@ -280,6 +280,10 @@ def emergency_intake(
         details=f"Held in Emergency Ward, nearest doctor on record: {doctor.title} {doctor.name}"
     )
 
+    from app.utils.notify import notify_emergency_ward_intake
+    notify_emergency_ward_intake(db, current_doctor.hospital_id, checkin.id, patient.name, doctor.id, token)
+    db.commit()
+
     return {
         "patient_id": patient.id,
         "url_token": patient.url_token,
@@ -368,6 +372,68 @@ def release_emergency_patient(
         details=f"Released to doctor's queue (checkin {checkin.id})"
     )
     return {"message": "Sent to doctor's queue"}
+
+
+@router.post("/emergency-ward/{checkin_id}/accept")
+def accept_emergency_patient(
+    checkin_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Doctor-facing one-tap accept from the emergency popup — sets their own
+    location to Emergency and releases the patient into their queue in a
+    single action. This is the no-physical-ward path: no receptionist step
+    required. Only the assigned doctor can accept their own emergency patient,
+    and only while they're marked present."""
+    if current_doctor.role.value not in ("doctor", "sub_admin"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    checkin = db.query(Checkin).filter(
+        Checkin.id == checkin_id,
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.doctor_id == current_doctor.id,
+        Checkin.emergency_status == "holding"
+    ).first()
+    if not checkin:
+        raise HTTPException(status_code=404, detail="No holding emergency patient found with that ID")
+
+    record = db.query(AttendanceRecord).filter(
+        AttendanceRecord.doctor_id == current_doctor.id,
+        AttendanceRecord.hospital_id == current_doctor.hospital_id,
+        AttendanceRecord.date == ist_today()
+    ).first()
+    if not record or record.status not in ("present", "on_break"):
+        raise HTTPException(status_code=400, detail="Mark yourself present first.")
+
+    record.doctor_location = "emergency"
+    checkin.emergency_status = "released"
+    db.commit()
+
+    from app.models.notification import Notification
+    db.query(Notification).filter(
+        Notification.hospital_id == current_doctor.hospital_id,
+        Notification.type == "emergency_ward_intake",
+        Notification.link_type == "checkin",
+        Notification.link_id == checkin.id,
+        Notification.is_read == False
+    ).update({"is_read": True})
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="emergency_accepted",
+        target_type="patient",
+        target_id=checkin.patient_id,
+        target_label=f"Token {checkin.token_number}",
+        details="Accepted from dashboard popup — moved to my queue"
+    )
+
+    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
+    return {
+        "patient_id": checkin.patient_id,
+        "url_token": patient.url_token if patient else None,
+        "token_number": checkin.token_number,
+    }
 
 
 @router.post("/", response_model=PatientOut, status_code=201)
@@ -1283,8 +1349,10 @@ def checkin_patient(
     nurse = None
     if payload.send_to_nurse:
         nurse = pick_random_nurse(db, current_doctor.hospital_id, doctor.id)
-        if not nurse:
-            raise HTTPException(status_code=400, detail="No nurse available at this hospital yet.")
+        # No nurse/assistant available right now — proceed without one rather
+        # than blocking the token. vitals_status stays "none" below, which
+        # already reads as "not recorded" on the doctor's and assistant's
+        # dashboards.
     elif is_doctor_covered_and_present(db, current_doctor.hospital_id, doctor.id):
         # Server-side backstop for the reception "Notify Doctor" gate — a
         # present nurse/assistant is covering this doctor, so walking the

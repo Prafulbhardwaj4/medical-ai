@@ -48,6 +48,22 @@ def notify_emergency_alert(db: Session, hospital_id: int, admission_id: int, pat
     ))
 
 
+def notify_emergency_ward_intake(db: Session, hospital_id: int, checkin_id: int, patient_name: str,
+                                  doctor_id: int, token_number: str):
+    """Emergency walk-in assigned to a doctor, held until they're ready — a
+    fresh timestamped ping every time (never deduped), targeted only at the
+    assigned doctor. The doctor's dashboard defers showing it while they're
+    mid-consultation and surfaces it the moment they're free. This is the
+    no-physical-ward path — no receptionist action required to complete it."""
+    key = f"emergency_ward_intake:{checkin_id}:{now_ist_naive().isoformat()}"
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="emergency_ward_intake", severity="critical",
+        title=f"🚨 Emergency — {patient_name}",
+        message=f"{patient_name} (Token {token_number}) came in as an emergency and has been assigned to you.",
+        link_type="checkin", link_id=checkin_id, is_read=False, target_doctor_id=doctor_id,
+    ))
+
+
 def notify_critical_result(db: Session, hospital_id: int, order_id: int, patient_name: str,
                             doctor_id: int, test_name: str, critical_note: str,
                             ward: str = None, bed_number: str = None):

@@ -29,6 +29,7 @@ def _require_nurse_only(current_doctor: Doctor):
 
 @router.get("/vitals-queue")
 def vitals_queue(
+    include_done: bool = False,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -37,16 +38,31 @@ def vitals_queue(
     from app.utils.portal_checkin import sweep_todays_online_checkins
     sweep_todays_online_checkins(db, current_doctor.hospital_id)
 
+    # include_done=true is the assistant's combined view: it also surfaces
+    # patients whose vitals are already recorded, so they don't vanish from
+    # the assistant's dashboard the moment vitals are done. Plain nurse.html
+    # never passes this, so its own working queue is unaffected.
+    statuses = ["pending", "sent_back", "done"] if include_done else ["pending", "sent_back"]
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.vitals_status.in_(["pending", "sent_back"]),
+        Checkin.vitals_status.in_(statuses),
         Checkin.visit_date == ist_today(),
-        Checkin.is_paid == True
+        Checkin.is_paid == True,
+        Checkin.is_returned == False
     ).order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
 
     # Rechecks jump the fresh-vitals-pending line — the doctor's already mid-turn
     # waiting on this, unlike a walk-in still working through the normal queue.
     checkins.sort(key=lambda c: 0 if c.vitals_status == "sent_back" else 1)
+
+    consulted_tokens = set()
+    if include_done and checkins:
+        from app.models.consultation import Consultation
+        consulted_tokens = {
+            t[0] for t in db.query(Consultation.token_number).filter(
+                Consultation.token_number.in_([c.token_number for c in checkins])
+            ).all()
+        }
 
     patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
     doctors = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_([c.doctor_id for c in checkins])).all()}
@@ -75,6 +91,7 @@ def vitals_queue(
             "booked_time": c.booked_time.isoformat() if c.booked_time else None,
             "vitals_status": c.vitals_status,
             "is_emergency": c.is_emergency,
+            "is_consulted": c.token_number in consulted_tokens,
         })
     return result
 

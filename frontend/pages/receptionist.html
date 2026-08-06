@@ -1188,7 +1188,7 @@
         const sel = document.getElementById('doc-select');
         const defaultId = ordered[0].id;
         sel.innerHTML = ordered.map(d =>
-          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}${d.status === 'on_break' ? ' (On Break)' : ''}${d.location === 'on_rounds' ? ' (On Rounds)' : ''}</option>`
+          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}${d.status === 'on_break' ? ' (On Break)' : ''}${d.location === 'on_rounds' ? ' (On Round)' : ''}</option>`
         ).join('');
         document.getElementById('doc-step-room-name').textContent = selectedRoom.display || selectedRoom.name || `Room ${selectedRoom.room_number}`;
         document.getElementById('fee-group').style.display = getDoctor()?.billing_enabled ? '' : 'none';
@@ -1231,12 +1231,6 @@
         document.getElementById('slip-date').textContent = formatDate(result.visit_date);
         document.getElementById('slip-checkin-time').textContent = formatCheckinTime(result.checked_in_at);
         document.getElementById('btn-generate-token').textContent = 'Generate Token';
-        if (result.nurse_name) {
-          document.getElementById('slip-nurse').textContent = result.nurse_name;
-          document.getElementById('slip-nurse-row').style.display = '';
-        } else {
-          document.getElementById('slip-nurse-row').style.display = 'none';
-        }
         currentCheckinId = result.checkin_id;
         renderBillingRow(billingOn, result.total_fee, result.is_paid);
         loadPendingTestFees(selectedPatient.id);
@@ -2149,18 +2143,19 @@
         const overlay = document.createElement("div");
         overlay.className = "modal-overlay open";
         overlay.innerHTML = `
-          <div class="modal" style="max-width:420px">
+          <div class="modal" style="max-width:480px">
             <div class="modal-header"><h2>Possible Duplicate</h2></div>
-            <p style="font-size:13px;color:var(--slate);margin-bottom:14px">${message}</p>
-            <div id="dup-patient-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+            <p style="font-size:13px;color:var(--slate);margin-bottom:16px">${message}</p>
+            <button class="btn btn-primary" style="width:100%;margin-bottom:18px" id="dup-create-anyway">+ Create New Patient</button>
+            <p style="font-size:12.5px;color:var(--slate-light);font-weight:600;text-transform:uppercase;letter-spacing:0.3px;margin:0 0 10px">Or use an existing patient</p>
+            <div id="dup-patient-list" style="display:flex;flex-direction:column;gap:10px">
               ${existingPatients.map((p, i) => `
-                <button class="btn btn-outline dup-pick-btn" data-idx="${i}" style="width:100%;text-align:left">
-                  <strong>${p.name}</strong> — ${p.patient_uid}
-                  <span style="display:block;font-size:12px;color:var(--slate-light)">${p.age}y / ${p.gender} · ${p.phone}</span>
+                <button class="btn btn-outline dup-pick-btn" data-idx="${i}" style="width:100%;text-align:left;padding:14px 16px;height:auto">
+                  <strong style="font-size:14px">${p.name}</strong> <span style="color:var(--slate-light);font-size:12.5px">— ${p.patient_uid}</span>
+                  <span style="display:block;font-size:12.5px;color:var(--slate-light);margin-top:4px">${p.age}y / ${p.gender} · ${p.phone}</span>
                 </button>
               `).join('')}
             </div>
-            <button class="btn btn-primary" style="width:100%" id="dup-create-anyway">None of these — Create New Patient</button>
           </div>
         `;
         document.body.appendChild(overlay);
@@ -2333,6 +2328,7 @@
     }
 
     loadRecAttendance();
+    api("GET", "/billing/day-end-summary", null, false, true).catch(() => {}); // silently sweeps up any past day nobody closed — no click required
     document.getElementById("expected-today-doctor-filter").addEventListener("change", loadExpectedToday);
 
     // ---------- Manage Availability ----------

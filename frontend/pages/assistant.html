@@ -187,11 +187,11 @@
               <thead>
                 <tr>
                   <th>Token</th><th>Patient</th><th>Reason</th>
-                  <th style="text-align:center">Checked In</th><th>Vitals</th><th>Status</th>
+                  <th style="text-align:center">Checked In</th><th>Vitals</th><th>Status</th><th></th>
                 </tr>
               </thead>
               <tbody id="queue-tbody-walkin">
-                <tr><td colspan="6"><div class="empty-state"><p>Loading…</p></div></td></tr>
+                <tr><td colspan="7"><div class="empty-state"><p>Loading…</p></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -258,7 +258,10 @@
     function statusBadgeInfo(doctorId) {
       const info = doctorStatusMap[doctorId];
       if (!info) return { label: 'Unknown', cls: 'badge-grey' };
-      if (info.status === 'present') return info.location === 'on_rounds' ? { label: 'On Rounds', cls: 'badge-amber' } : { label: 'In Cabin', cls: 'badge-green' };
+      if (info.status === 'present') {
+        if (info.location === 'emergency') return { label: 'In Emergency', cls: 'badge-red' };
+        return info.location === 'on_rounds' ? { label: 'On Round', cls: 'badge-amber' } : { label: 'In Cabin', cls: 'badge-green' };
+      }
       if (info.status === 'on_break') return { label: 'On Break', cls: 'badge-amber' };
       if (info.status === 'off_duty') return { label: 'On Leave / Off Duty', cls: 'badge-red' };
       if (info.status === 'away_emergency') return { label: 'Away — Emergency', cls: 'badge-red' };
@@ -411,8 +414,17 @@
       }
     }
 
-    function renderQueueRow(v, timeField, showSendToVitals) {
+    function renderQueueRow(v, timeField, allowSendToVitals) {
       const needsVitals = !v.vitals_status || v.vitals_status === 'none';
+      const statusCell = v.is_consulted
+        ? '<span class="badge badge-teal">Consulted</span>'
+        : '<span class="badge badge-amber">Waiting</span>';
+      let actionCell = '';
+      if (v.is_consulted) {
+        actionCell = `<button class="btn btn-primary btn-sm" onclick="sendAgain(${v.checkin_id}, this)">Send Again</button>`;
+      } else if (allowSendToVitals && needsVitals) {
+        actionCell = `<button class="btn btn-outline btn-sm" onclick="sendToVitals(${v.patient_id}, this)">Send to Vitals</button>`;
+      }
       return `
       <tr>
         <td data-label="Token"><strong>${v.token_number || '—'}</strong></td>
@@ -420,9 +432,23 @@
         <td data-label="Reason">${v.issue_category || ''}</td>
         <td data-label="${timeField === 'created_at' ? 'Checked In' : 'Est. Time'}" style="text-align:center;color:var(--slate)">${timeLabel(v[timeField])}</td>
         <td data-label="Vitals">${vitalsCellHtml(v)}</td>
-        <td data-label="Status"><span class="badge badge-amber">Waiting</span></td>
-        ${showSendToVitals ? `<td data-label="">${needsVitals ? `<button class="btn btn-outline btn-sm" onclick="sendToVitals(${v.patient_id}, this)">Send to Vitals</button>` : ''}</td>` : ''}
+        <td data-label="Status">${statusCell}</td>
+        <td data-label="">${actionCell}</td>
       </tr>`;
+    }
+
+    async function sendAgain(checkinId, btn) {
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      try {
+        await api("POST", `/patients/requeue/${checkinId}`);
+        toast("Sent back to the doctor — no new token needed.", "success");
+        loadQueues();
+      } catch (e) {
+        toast(e.message, "error");
+        btn.disabled = false;
+        btn.textContent = 'Send Again';
+      }
     }
 
     function renderQueues() {
@@ -434,7 +460,7 @@
 
       document.getElementById("queue-tbody-walkin").innerHTML = walkin.length
         ? walkin.map(v => renderQueueRow(v, 'created_at', false)).join('')
-        : `<tr><td colspan="6"><div class="empty-state"><p>No walk-in patients right now.</p></div></td></tr>`;
+        : `<tr><td colspan="7"><div class="empty-state"><p>No walk-in patients right now.</p></div></td></tr>`;
 
       document.getElementById("queue-tbody-online").innerHTML = online.length
         ? online.map(v => renderQueueRow(v, 'booked_time', true)).join('')
@@ -492,7 +518,7 @@
 
     async function loadQueues() {
       try {
-        const flat = await api("GET", "/nurses/vitals-queue");
+        const flat = await api("GET", "/nurses/vitals-queue?include_done=true");
         const mine = flat.filter(v => nurseSelectedDoctorIds.includes(v.doctor_id));
         _queueData = {
           walk_in: mine.filter(v => v.source !== "online"),

@@ -545,6 +545,7 @@
     }
 
     let currentAttendanceStatus = 'not_marked';
+    let currentHasActiveDraft = false;
 
     async function loadRoomOptions(selectedId) {
       try {
@@ -560,6 +561,7 @@
         const list = await api("GET", "/doctors/attendance/today");
         const mine = list.find(d => d.doctor_id === doc.id);
         currentAttendanceStatus = mine ? mine.status : 'not_marked';
+        currentHasActiveDraft = mine ? !!mine.has_interrupted_draft : false;
         renderAttendanceBadge(currentAttendanceStatus);
         await loadRoomOptions(mine ? mine.room_id : null);
         currentDoctorLocation = (mine && mine.location) ? mine.location : 'in_cabin';
@@ -683,10 +685,46 @@
       markAttendance(currentAttendanceStatus);
     }
 
+    function openRoomSelectModal() {
+      return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "modal-overlay open";
+        overlay.innerHTML = `
+          <div class="modal" style="max-width:360px;text-align:center">
+            <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:center">
+              <h2 style="margin:0;font-size:18px">Which room are you in today?</h2>
+            </div>
+            <p style="color:var(--slate);font-size:13.5px;margin:0 0 18px">Patients and staff will see this as your location.</p>
+            <select class="form-control" id="present-room-select" style="font-size:16px;padding:12px">
+              <option value="">Loading rooms…</option>
+            </select>
+            <button type="button" class="btn btn-primary" style="width:100%;margin-top:20px" id="present-room-confirm-btn" disabled>Confirm & Mark Present</button>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+        const select = overlay.querySelector("#present-room-select");
+        const confirmBtn = overlay.querySelector("#present-room-confirm-btn");
+        api("GET", "/admin/rooms?for_picker=doctor").then(rooms => {
+          select.innerHTML = '<option value="">Select a room…</option>' +
+            rooms.map(r => `<option value="${r.id}">${r.display || r.name || r.room_number}</option>`).join('');
+        }).catch(() => {
+          select.innerHTML = '<option value="">Could not load rooms</option>';
+        });
+        select.addEventListener("change", () => { confirmBtn.disabled = !select.value; });
+        function doConfirm() {
+          if (!select.value) return;
+          overlay.remove();
+          resolve(parseInt(select.value));
+        }
+        confirmBtn.addEventListener("click", doConfirm);
+        select.addEventListener("keydown", (e) => { if (e.key === "Enter" && select.value) { e.preventDefault(); doConfirm(); } });
+      });
+    }
+
     async function markAttendance(status) {
       try {
-        const roomVal = document.getElementById('room-select').value;
-        const room_id = roomVal ? parseInt(roomVal) : null;
+        let roomVal = document.getElementById('room-select').value;
+        let room_id = roomVal ? parseInt(roomVal) : null;
         const location = status === 'present' ? currentDoctorLocation : null;
         const wasAlreadyPresent = currentAttendanceStatus === status;
         const alreadyActive = currentAttendanceStatus === "present" || currentAttendanceStatus === "on_break";
@@ -694,10 +732,12 @@
         if (status === 'present' && !alreadyActive) {
           expected_off_duty_at = await openOffDutyTimeModal();
           if (!expected_off_duty_at) return;
+          room_id = await openRoomSelectModal();
         }
         await markAttendanceCommon(status, room_id, { location, expected_off_duty_at }, alreadyActive);
         renderAttendanceBadge(status);
         document.getElementById('room-display').textContent = '';
+        if (status === 'present' && !alreadyActive) await loadRoomOptions(room_id);
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty.", away_emergency: "Back in cabin." };
           toast(labels[status] || "Status updated.", "success");
@@ -1034,10 +1074,18 @@
 
         const staffAlerts = notifs.filter(n => n.type === 'no_assistant_alert' && !n.is_read);
         const staffBanner = document.getElementById('staff-alert-banner');
-        if (!staffAlerts.length) { staffBanner.style.display = 'none'; return; }
-        const s = staffAlerts[0];
-        staffBanner.style.display = 'flex';
-        staffBanner.innerHTML = `<span>${s.title}: ${s.message}</span><button class="btn btn-sm" style="background:#fff;color:#d97706" onclick="dismissEmergencyAlert(${s.id})">Got it</button>`;
+        if (!staffAlerts.length) { staffBanner.style.display = 'none'; }
+        else {
+          const s = staffAlerts[0];
+          staffBanner.style.display = 'flex';
+          staffBanner.innerHTML = `<span>${s.title}: ${s.message}</span><button class="btn btn-sm" style="background:#fff;color:#d97706" onclick="dismissEmergencyAlert(${s.id})">Got it</button>`;
+        }
+
+        // Emergency Ward intake — deferred while mid-consultation, and only ever one popup at a time.
+        const wardIntakes = notifs.filter(n => n.type === 'emergency_ward_intake' && !n.is_read);
+        if (wardIntakes.length && !currentHasActiveDraft && !document.getElementById('modal-emergency-ward-intake')) {
+          openEmergencyWardIntakeModal(wardIntakes[0]);
+        }
       } catch (e) { }
     }
     async function dismissEmergencyAlert(id) {
@@ -1045,6 +1093,46 @@
         await api("PATCH", `/notifications/${id}/read`);
         loadEmergencyAlerts();
       } catch (e) { }
+    }
+
+    function openEmergencyWardIntakeModal(n) {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay open";
+      overlay.id = "modal-emergency-ward-intake";
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:400px;text-align:center">
+          <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:center">
+            <h2 style="margin:0;font-size:18px;color:#dc2626">🚨 Emergency Patient</h2>
+          </div>
+          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${n.message}</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button type="button" class="btn btn-primary" id="ewi-accept-btn" style="background:#dc2626;border-color:#dc2626">See Patient Now</button>
+            <button type="button" class="btn btn-outline" id="ewi-dismiss-btn">Not Right Now</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      overlay.querySelector("#ewi-accept-btn").addEventListener("click", () => acceptEmergencyWardIntake(n));
+      overlay.querySelector("#ewi-dismiss-btn").addEventListener("click", () => dismissEmergencyWardIntake(n.id, overlay));
+    }
+
+    async function acceptEmergencyWardIntake(n) {
+      const btn = document.getElementById('ewi-accept-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+      try {
+        const result = await api("POST", `/patients/emergency-ward/${n.link_id}/accept`);
+        document.getElementById('modal-emergency-ward-intake')?.remove();
+        loadAttendance();
+        goToPatient(result.patient_id, result.url_token);
+      } catch (e) {
+        toast(e.message, "error");
+        if (btn) { btn.disabled = false; btn.textContent = 'See Patient Now'; }
+      }
+    }
+
+    async function dismissEmergencyWardIntake(id, overlay) {
+      try { await api("PATCH", `/notifications/${id}/read`, {}); } catch (e) { }
+      overlay.remove();
     }
 
     const urlParams = new URLSearchParams(window.location.search);
