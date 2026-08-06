@@ -186,12 +186,12 @@
             <table id="queue-table-walkin" class="responsive-cards">
               <thead>
                 <tr>
-                  <th>Token</th><th>Patient</th><th>For</th><th>Reason</th>
+                  <th>Token</th><th>Patient</th><th>Reason</th>
                   <th style="text-align:center">Checked In</th><th>Vitals</th><th>Status</th>
                 </tr>
               </thead>
               <tbody id="queue-tbody-walkin">
-                <tr><td colspan="7"><div class="empty-state"><p>Loading…</p></div></td></tr>
+                <tr><td colspan="6"><div class="empty-state"><p>Loading…</p></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -206,12 +206,12 @@
             <table id="queue-table-online" class="responsive-cards">
               <thead>
                 <tr>
-                  <th>Token</th><th>Patient</th><th>For</th><th>Reason</th>
+                  <th>Token</th><th>Patient</th><th>Reason</th>
                   <th style="text-align:center">Est. Time</th><th>Vitals</th><th>Status</th><th></th>
                 </tr>
               </thead>
               <tbody id="queue-tbody-online">
-                <tr><td colspan="8"><div class="empty-state"><p>Loading…</p></div></td></tr>
+                <tr><td colspan="7"><div class="empty-state"><p>Loading…</p></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -388,11 +388,8 @@
 
     // ---------- Queues (same rendering pattern as doctor's own dashboard) ----------
     function vitalsCellHtml(v) {
-      if (v.is_returned) return '<span class="badge badge-red">Recheck sent</span>';
       if (v.vitals_status === 'done') return '<span class="badge badge-teal">Recorded</span>';
-      if (v.vitals_status === 'sent_back') return '<span class="badge badge-red">Recheck sent</span>';
-      if (v.vitals_status === 'pending') return '<span class="badge badge-amber">Advised — not recorded</span>';
-      return '<span class="badge badge-grey">Not queued for vitals</span>';
+      return '<span class="badge badge-grey">Not recorded</span>';
     }
 
     function timeLabel(iso) {
@@ -420,7 +417,6 @@
       <tr>
         <td data-label="Token"><strong>${v.token_number || '—'}</strong></td>
         <td data-label="Patient">${v.patient_name}${v.is_emergency ? ' <span class="badge badge-red">Emergency</span>' : ''}</td>
-        <td data-label="For">${v.doctor_name}</td>
         <td data-label="Reason">${v.issue_category || ''}</td>
         <td data-label="${timeField === 'created_at' ? 'Checked In' : 'Est. Time'}" style="text-align:center;color:var(--slate)">${timeLabel(v[timeField])}</td>
         <td data-label="Vitals">${vitalsCellHtml(v)}</td>
@@ -438,11 +434,11 @@
 
       document.getElementById("queue-tbody-walkin").innerHTML = walkin.length
         ? walkin.map(v => renderQueueRow(v, 'created_at', false)).join('')
-        : `<tr><td colspan="7"><div class="empty-state"><p>No walk-in patients right now.</p></div></td></tr>`;
+        : `<tr><td colspan="6"><div class="empty-state"><p>No walk-in patients right now.</p></div></td></tr>`;
 
       document.getElementById("queue-tbody-online").innerHTML = online.length
         ? online.map(v => renderQueueRow(v, 'booked_time', true)).join('')
-        : `<tr><td colspan="8"><div class="empty-state"><p>No online appointments right now.</p></div></td></tr>`;
+        : `<tr><td colspan="7"><div class="empty-state"><p>No online appointments right now.</p></div></td></tr>`;
     }
 
     let returnSearchTimer;
@@ -497,9 +493,10 @@
     async function loadQueues() {
       try {
         const flat = await api("GET", "/nurses/vitals-queue");
+        const mine = flat.filter(v => nurseSelectedDoctorIds.includes(v.doctor_id));
         _queueData = {
-          walk_in: flat.filter(v => v.source !== "online"),
-          online: flat.filter(v => v.source === "online"),
+          walk_in: mine.filter(v => v.source !== "online"),
+          online: mine.filter(v => v.source === "online"),
         };
         renderQueues();
       } catch (e) { toast(e.message, "error"); }
@@ -520,7 +517,7 @@
           <div class="roster-row ${mine ? 'assigned-to-me' : ''}">
             <div>
               <strong>${d.title} ${d.name}</strong>
-              ${mine ? '<span class="badge badge-navy" style="margin-left:8px">Assigned to you</span>' : ''}
+              ${mine ? '<span class="badge badge-navy" style="margin-left:8px">Assisting</span>' : ''}
               <div style="color:var(--slate);font-size:13px;margin-top:4px">${d.specialization || ''}</div>
             </div>
             <span class="badge ${b.cls}">${b.label}</span>

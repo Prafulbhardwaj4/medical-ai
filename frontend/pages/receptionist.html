@@ -404,11 +404,6 @@
             <label class="form-label">Doctor</label>
             <select class="form-control" id="doc-select" onchange="updateFeeForSelectedDoctor()"></select>
           </div>
-          <div class="form-group" style="display:flex;align-items:center;gap:8px">
-            <input type="checkbox" id="send-to-nurse" style="width:auto" />
-            <label for="send-to-nurse" style="font-size:14px;color:var(--slate);margin:0">Also send for vitals check (nurse room)</label>
-          </div>
-          <p id="doc-coverage-note" style="font-size:13px;color:var(--slate);margin:-8px 0 12px"></p>
           <div id="fee-group" style="display:none">
             <div class="form-group">
               <label class="form-label">Consultation Fee (Rs.)</label>
@@ -431,7 +426,7 @@
               <p><strong>Doctor:</strong> <span id="slip-doctor"></span></p>
               <p><strong>Room:</strong> <span id="slip-room"></span></p>
               <p><strong>Date:</strong> <span id="slip-date"></span></p>
-              <p id="slip-nurse-row" style="display:none"><strong>Vitals Room:</strong> <span id="slip-nurse"></span></p>
+              <p><strong>Checked in:</strong> <span id="slip-checkin-time"></span></p>
             </div>
           </div>
           <div id="slip-billing-row" class="no-print" style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
@@ -455,9 +450,25 @@
           </div>
         </div>
 
-        <button id="btn-requeue" class="btn btn-outline" style="display:none;margin-top:8px" onclick="">Send back to doctor's queue (same-day return)</button>
-        <button id="btn-new-token-today" class="btn btn-outline" style="display:none;margin-top:8px" onclick="">Generate a new token for today instead</button>
+        <button id="btn-same-day-options" class="btn btn-outline" style="display:none;margin-top:8px" onclick="openSameDayOptionsModal()">Same-Day Return Options</button>
 
+      </div>
+
+      <!-- Same-Day Return Options Modal -->
+      <div class="modal-overlay" id="modal-same-day-options">
+        <div class="modal" style="max-width:440px">
+          <div class="modal-header"><h2>Already Consulted Today</h2><button class="modal-close" onclick="closeModal('modal-same-day-options')">×</button></div>
+          <div id="sd-option-return" style="display:none;border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px">
+            <p style="font-weight:600;margin-bottom:4px">Send back to the same doctor</p>
+            <p style="font-size:13px;color:var(--slate);margin-bottom:10px">No new token, no new fee. Use this when the doctor asked to see this patient again later today (e.g. after a test result) — same visit, same doctor.</p>
+            <button class="btn btn-primary btn-sm" style="width:100%" onclick="requeueCheckinFromModal()">Send Back to Queue</button>
+          </div>
+          <div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+            <p style="font-weight:600;margin-bottom:4px">Start a new token today</p>
+            <p style="font-size:13px;color:var(--slate);margin-bottom:10px">A brand-new token with its own fee. Use this for a second, separate visit today — including seeing a <strong>different doctor</strong> (e.g. one for fever, another for a plaster). Both queues run independently.</p>
+            <button class="btn btn-outline btn-sm" style="width:100%" onclick="startFreshTokenTodayFromModal()">Start New Token</button>
+          </div>
+        </div>
       </div>
 
       <div class="card" id="pending-payments-card" style="margin-top:20px">
@@ -495,6 +506,16 @@
           <div id="pending-review-list">
             <p style="color:var(--slate-light);font-size:13px">Loading...</p>
           </div>
+        </div>
+
+        <div class="card" style="margin-top:20px" id="emergency-ward-card">
+          <div class="card-header">
+            <h2>🚨 Emergency Ward <span class="badge badge-red" id="emergency-ward-count" style="margin-left:8px">0</span></h2>
+          </div>
+          <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
+            Held here until the assigned doctor marks their location as "Emergency" — they won't appear in any doctor's regular queue until then.
+          </p>
+          <div id="emergency-ward-list"></div>
         </div>
 
         <div class="card" style="margin-top:20px">
@@ -722,7 +743,7 @@
           <p><strong>Doctor:</strong> <span id="pslip-doctor"></span></p>
           <p><strong>Room:</strong> <span id="pslip-room"></span></p>
           <p><strong>Date:</strong> <span id="pslip-date"></span></p>
-          <p id="pslip-nurse-row" style="display:none"><strong>Vitals Room:</strong> <span id="pslip-nurse"></span></p>
+          <p><strong>Checked in:</strong> <span id="pslip-checkin-time"></span></p>
         </div>
       </div>
       <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px">
@@ -936,7 +957,7 @@
         if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
       });
       if (id === 'home') loadPendingPayments();
-      if (id === 'portal') { loadExpectedToday(); loadPendingReview(); }
+      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); }
       if (id === 'availability') loadAvailabilityDoctorList();
     }
 
@@ -947,7 +968,7 @@
       ['home', 'patients', 'portal', 'availability'].forEach(t => {
         document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id);
       });
-      if (id === 'portal') loadExpectedToday();
+      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); }
       if (id === 'availability') loadAvailabilityDoctorList();
     }
 
@@ -960,7 +981,8 @@
     } else {
       showRecSection(__startTab);
     }
-    if (__startTab === 'portal') loadPendingReview();
+    if (__startTab === 'portal') { loadEmergencyWard(); loadPendingReview(); }
+    setInterval(() => { if (document.getElementById('section-portal')?.classList.contains('active') || document.getElementById('section-portal')?.classList.contains('d-active')) loadEmergencyWard(); }, 15000);
 
     function goToStep(step) {
       ['search', 'room', 'doctor', 'token'].forEach(s => {
@@ -1036,31 +1058,17 @@
       document.getElementById('slip-doctor').textContent = t.doctor_name;
       document.getElementById('slip-room').textContent = t.issue_category;
       document.getElementById('slip-date').textContent = formatDate(t.visit_date);
-      document.getElementById('slip-nurse-row').style.display = t.nurse_name ? '' : 'none';
-      if (t.nurse_name) document.getElementById('slip-nurse').textContent = t.nurse_name;
+      document.getElementById('slip-checkin-time').textContent = formatCheckinTime(t.checked_in_at);
       currentCheckinId = t.checkin_id;
       renderBillingRow(getDoctor()?.billing_enabled, t.total_fee, t.is_paid);
       ['search', 'room', 'doctor'].forEach(s => document.getElementById(`step-${s}`).style.display = 'none');
       document.getElementById('step-token').style.display = '';
 
-      const returnBtn = document.getElementById('btn-requeue');
-      if (returnBtn) {
-        if (t.is_consulted && !t.is_returned) {
-          returnBtn.style.display = '';
-          returnBtn.onclick = () => requeueCheckin(t.checkin_id);
-        } else {
-          returnBtn.style.display = 'none';
-        }
-      }
-
-      const newTokenBtn = document.getElementById('btn-new-token-today');
-      if (newTokenBtn) {
-        if (t.is_consulted) {
-          newTokenBtn.style.display = '';
-          newTokenBtn.onclick = () => startFreshTokenToday();
-        } else {
-          newTokenBtn.style.display = 'none';
-        }
+      const sameDayBtn = document.getElementById('btn-same-day-options');
+      if (sameDayBtn) {
+        sameDayBtn.style.display = t.is_consulted ? '' : 'none';
+        sameDayBtn.dataset.checkinId = t.checkin_id;
+        sameDayBtn.dataset.canReturn = (t.is_consulted && !t.is_returned) ? '1' : '0';
       }
 
       if (t.is_returned) {
@@ -1072,21 +1080,25 @@
       }
     }
 
-    async function startFreshTokenToday() {
-      const ok = await confirmDialog(
-        `${selectedPatient.name} already has a token today. Generate a brand new token for a separate visit anyway?`,
-        "Generate New Token"
-      );
-      if (!ok) return;
+    function openSameDayOptionsModal() {
+      const btn = document.getElementById('btn-same-day-options');
+      document.getElementById('sd-option-return').style.display = btn.dataset.canReturn === '1' ? '' : 'none';
+      openModal('modal-same-day-options');
+    }
+
+    async function startFreshTokenTodayFromModal() {
+      closeModal('modal-same-day-options');
       document.getElementById('cat-patient-name').textContent = `${selectedPatient.name} (${selectedPatient.patient_uid})`;
       goToStepRoom();
     }
 
-    async function requeueCheckin(checkinId) {
+    async function requeueCheckinFromModal() {
+      const checkinId = document.getElementById('btn-same-day-options').dataset.checkinId;
       try {
         await api('POST', `/patients/requeue/${checkinId}`);
-        toast('Patient sent back to the doctor\'s Return Queue — no new token needed.', 'success');
-        document.getElementById('btn-requeue').style.display = 'none';
+        toast('Patient sent back to the doctor\'s queue — no new token needed.', 'success');
+        closeModal('modal-same-day-options');
+        document.getElementById('btn-same-day-options').style.display = 'none';
       } catch (e) { toast(e.message, 'error'); }
     }
 
@@ -1181,49 +1193,17 @@
         document.getElementById('doc-step-room-name').textContent = selectedRoom.display || selectedRoom.name || `Room ${selectedRoom.room_number}`;
         document.getElementById('fee-group').style.display = getDoctor()?.billing_enabled ? '' : 'none';
         updateFeeForSelectedDoctor();
-        // Hide nurse checkbox if no nurses available
-        try {
-          const nurses = await api("GET", "/patients/hospital-nurses");
-          document.getElementById('send-to-nurse').parentElement.style.display = nurses.length > 0 ? '' : 'none';
-        } catch(e) {
-          document.getElementById('send-to-nurse').parentElement.style.display = 'none';
-        }
         document.getElementById('step-room').style.display = 'none';
         document.getElementById('step-doctor').style.display = '';
       } catch (e) { toast(e.message, "error"); }
     }
 
     function updateFeeForSelectedDoctor() {
-      updateNurseGateForSelectedDoctor();
       if (!getDoctor()?.billing_enabled) return;
       const selectedId = parseInt(document.getElementById('doc-select').value);
       const doc = hospitalDoctors.find(d => d.id === selectedId);
       const fee = (doc && doc.consultation_fee != null) ? doc.consultation_fee : (getDoctor()?.default_consultation_fee ?? '');
       document.getElementById('consultation-fee').value = fee;
-    }
-
-    async function updateNurseGateForSelectedDoctor() {
-      const selectedId = parseInt(document.getElementById('doc-select').value);
-      const checkbox = document.getElementById('send-to-nurse');
-      const note = document.getElementById('doc-coverage-note');
-      const btn = document.getElementById('btn-generate-token');
-      if (!selectedId) return;
-      let covered = true; // fail safe — assume covered, don't allow bypass on a failed check
-      try {
-        const res = await api("GET", `/patients/doctor-coverage-status/${selectedId}`);
-        covered = res.covered;
-      } catch (e) { }
-      if (covered) {
-        checkbox.checked = true;
-        checkbox.disabled = true;
-        note.textContent = 'A nurse/assistant is covering this doctor — the patient will be sent to them for vitals first.';
-        btn.textContent = 'Generate Token';
-      } else {
-        checkbox.checked = false;
-        checkbox.disabled = false;
-        note.textContent = 'No nurse/assistant is currently covering this doctor — you can Notify Doctor to check the patient straight in.';
-        btn.textContent = 'Notify Doctor';
-      }
     }
 
     let currentCheckinId = null;
@@ -1239,7 +1219,7 @@
         const result = await api("POST", `/patients/${selectedPatient.id}/checkin`, {
           issue_category: selectedCategory,
           doctor_id: parseInt(doctorId),
-          send_to_nurse: document.getElementById('send-to-nurse').checked,
+          send_to_nurse: true,
           consultation_fee: billingOn ? (parseFloat(document.getElementById('consultation-fee').value) || null) : null,
           force: !!force
         });
@@ -1249,10 +1229,8 @@
         document.getElementById('slip-doctor').textContent = result.doctor_name;
         document.getElementById('slip-room').textContent = result.issue_category;
         document.getElementById('slip-date').textContent = formatDate(result.visit_date);
-        document.getElementById('send-to-nurse').checked = false;
-        document.getElementById('send-to-nurse').disabled = false;
+        document.getElementById('slip-checkin-time').textContent = formatCheckinTime(result.checked_in_at);
         document.getElementById('btn-generate-token').textContent = 'Generate Token';
-        document.getElementById('doc-coverage-note').textContent = '';
         if (result.nurse_name) {
           document.getElementById('slip-nurse').textContent = result.nurse_name;
           document.getElementById('slip-nurse-row').style.display = '';
@@ -1475,8 +1453,7 @@
         document.getElementById('pslip-doctor').textContent = t.doctor_name;
         document.getElementById('pslip-room').textContent = t.issue_category;
         document.getElementById('pslip-date').textContent = formatDate(t.visit_date);
-        document.getElementById('pslip-nurse-row').style.display = t.nurse_name ? '' : 'none';
-        if (t.nurse_name) document.getElementById('pslip-nurse').textContent = t.nurse_name;
+        document.getElementById('pslip-checkin-time').textContent = formatCheckinTime(t.checked_in_at);
         document.getElementById('modal-past-slip').classList.add('open');
       } catch (e) { toast(e.message, 'error'); }
     }
@@ -2156,41 +2133,60 @@
       try {
         return await api("POST", "/patients/", payload);
       } catch (e) {
-        if (e.status !== 409 || !e.data?.existing_patient) throw e;
-        const choice = await promptDuplicatePatient(e.data.existing_patient, e.data.message);
-        if (choice === "existing") {
-          return e.data.existing_patient;
-        } else if (choice === "create") {
+        if (e.status !== 409 || !e.data?.existing_patients) throw e;
+        const choice = await promptDuplicatePatient(e.data.existing_patients, e.data.message);
+        if (choice === "create") {
           return await api("POST", "/patients/", { ...payload, force: true });
+        } else if (choice) {
+          return choice; // the chosen existing patient object
         }
         return null;
       }
     }
 
-    function promptDuplicatePatient(existing, message) {
+    function promptDuplicatePatient(existingPatients, message) {
       return new Promise((resolve) => {
         const overlay = document.createElement("div");
         overlay.className = "modal-overlay open";
         overlay.innerHTML = `
-          <div class="modal" style="max-width:400px">
+          <div class="modal" style="max-width:420px">
             <div class="modal-header"><h2>Possible Duplicate</h2></div>
             <p style="font-size:13px;color:var(--slate);margin-bottom:14px">${message}</p>
-            <div style="display:flex;gap:10px;margin-top:10px">
-              <button class="btn btn-outline" style="flex:1" id="dup-create-anyway">Create New Anyway</button>
-              <button class="btn btn-primary" style="flex:1" id="dup-use-existing">Use Existing Patient</button>
+            <div id="dup-patient-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+              ${existingPatients.map((p, i) => `
+                <button class="btn btn-outline dup-pick-btn" data-idx="${i}" style="width:100%;text-align:left">
+                  <strong>${p.name}</strong> — ${p.patient_uid}
+                  <span style="display:block;font-size:12px;color:var(--slate-light)">${p.age}y / ${p.gender} · ${p.phone}</span>
+                </button>
+              `).join('')}
             </div>
+            <button class="btn btn-primary" style="width:100%" id="dup-create-anyway">None of these — Create New Patient</button>
           </div>
         `;
         document.body.appendChild(overlay);
         const cleanup = (value) => { overlay.remove(); resolve(value); };
+        overlay.querySelectorAll(".dup-pick-btn").forEach(btn => {
+          btn.addEventListener("click", () => cleanup(existingPatients[parseInt(btn.dataset.idx)]));
+        });
         overlay.querySelector("#dup-create-anyway").addEventListener("click", () => cleanup("create"));
-        overlay.querySelector("#dup-use-existing").addEventListener("click", () => cleanup("existing"));
       });
     }
 
     function formatDate(iso) {
+      if (!iso) return '—';
+      // Date-only strings (YYYY-MM-DD) have no time component, so appending
+      // an offset produces an unparseable string — parse the calendar date directly.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+        const [y, m, d] = iso.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
       const d = new Date(/[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30");
       return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+    }
+    function formatCheckinTime(iso) {
+      if (!iso) return '—';
+      const d = new Date(/[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30");
+      return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
     }
     function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
@@ -2496,6 +2492,34 @@
       catch (e) { toast(e.message, "error"); }
     }
 
+    async function loadEmergencyWard() {
+      const el = document.getElementById('emergency-ward-list');
+      try {
+        const patients = await api("GET", "/patients/emergency-ward");
+        document.getElementById('emergency-ward-count').textContent = patients.length;
+        document.getElementById('emergency-ward-card').style.display = patients.length ? '' : 'none';
+        if (!patients.length) { el.innerHTML = ''; return; }
+        el.innerHTML = patients.map(p => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-weight:600">${sanitize(p.patient_name)} <span style="font-weight:400;color:var(--slate-light);font-size:12px">Token ${sanitize(p.token_number)}</span></div>
+              <div style="font-size:12px;color:var(--slate-light)">Nearest doctor on record: ${sanitize(p.doctor_name)}</div>
+            </div>
+            ${p.doctor_ready
+              ? `<button class="btn btn-primary btn-sm" onclick="releaseEmergencyPatient(${p.checkin_id})">Send to Doctor's Queue</button>`
+              : `<span class="badge badge-amber" title="Doctor hasn't marked their location as Emergency yet">Waiting for doctor</span>`}
+          </div>`).join('');
+      } catch (e) { el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`; }
+    }
+
+    async function releaseEmergencyPatient(checkinId) {
+      try {
+        await api("POST", `/patients/emergency-ward/${checkinId}/release`);
+        toast("Sent to doctor's queue", "success");
+        loadEmergencyWard();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
     let expectedTodayFilterLoaded = false;
     async function loadExpectedTodayDoctorFilter() {
       if (expectedTodayFilterLoaded) return;
@@ -2527,6 +2551,15 @@
           el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No portal bookings for today.</p>`;
           return;
         }
+
+        // Check coverage once per doctor appearing in the list, not once per row.
+        const uniqueDoctorIds = [...new Set(data.appointments.map(a => a.doctor_id).filter(Boolean))];
+        const coverageByDoctor = {};
+        await Promise.all(uniqueDoctorIds.map(async id => {
+          try { coverageByDoctor[id] = (await api("GET", `/patients/doctor-coverage-status/${id}`)).covered; }
+          catch (e) { coverageByDoctor[id] = true; } // fail safe — don't show Notify Doctor on a failed check
+        }));
+
         el.innerHTML = data.appointments.map(a => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
             <div>
@@ -2540,10 +2573,24 @@
               <span class="badge badge-teal">${a.status}</span>
               ${(a.status === 'confirmed' && !a.arrived_at) ? `<button class="btn btn-outline btn-sm" onclick="markArrived(${a.id})">Mark Arrived</button>` : ''}
               ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
+              ${(a.arrived_at && a.doctor_id && coverageByDoctor[a.doctor_id] === false) ? `<button class="btn btn-outline btn-sm" onclick="notifyDoctorNoAssistant(${a.doctor_id}, this)">Notify Doctor</button>` : ''}
             </div>
           </div>`).join('');
       } catch (e) {
         el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    async function notifyDoctorNoAssistant(doctorId, btn) {
+      btn.disabled = true;
+      const original = btn.textContent;
+      try {
+        await api("POST", `/portal-appointments-staff/notify-doctor/${doctorId}`);
+        btn.textContent = "Notified ✓";
+      } catch (e) {
+        toast(e.message, "error");
+        btn.disabled = false;
+        btn.textContent = original;
       }
     }
 

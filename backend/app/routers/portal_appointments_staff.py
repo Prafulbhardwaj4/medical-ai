@@ -20,6 +20,48 @@ router = APIRouter(prefix="/portal-appointments-staff", tags=["portal-appointmen
 _STAFF_ROLES = ["admin", "sub_admin", "receptionist"]
 
 
+@router.post("/notify-doctor/{doctor_id}")
+def notify_doctor_no_assistant(
+    doctor_id: int,
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Reception's 'Notify Doctor' action from Expected Today, for an online
+    patient whose doctor has no nurse/assistant currently covering them."""
+    if current_doctor.role.value not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    doctor = db.query(Doctor).filter(
+        Doctor.id == doctor_id,
+        Doctor.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+
+    existing = db.query(Notification).filter(
+        Notification.hospital_id == current_doctor.hospital_id,
+        Notification.source_key == f"no_assistant:{doctor_id}",
+        Notification.is_read == False
+    ).first()
+    if existing:
+        existing.updated_at = now_ist_naive()
+        db.commit()
+        return {"message": "Doctor already notified"}
+
+    notif = Notification(
+        hospital_id=current_doctor.hospital_id,
+        source_key=f"no_assistant:{doctor_id}",
+        type="no_assistant_alert",
+        severity="warning",
+        title="No assistant available",
+        message="A patient is expected and no one is covering your queue for vitals — check them in directly when you're ready.",
+        target_doctor_id=doctor_id,
+    )
+    db.add(notif)
+    db.commit()
+    return {"message": "Doctor notified"}
+
+
 def _expire_stale_pending_reviews(db: Session, hospital_id: int) -> None:
     """No background scheduler in this codebase — same lazy-sweep pattern as
     _release_abandoned_holds in portal_appointments.py. Runs whenever staff

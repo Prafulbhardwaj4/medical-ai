@@ -294,12 +294,12 @@
         </div>
 
         <div class="consult-context-grid">
-          <div id="nurse-vitals-wrap" class="context-card blue" style="display:none">
+          <div id="nurse-vitals-wrap" class="context-card blue">
             <div class="context-card-title">Vitals Recorded by Nurse</div>
-            <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)"></div>
+            <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)">No vitals recorded for this visit.</div>
           </div>
 
-          <div class="context-card" id="refer-doctor-card" style="grid-column:1/-1">
+          <div class="context-card" id="refer-doctor-card">
             <div class="context-card-title">Refer to Doctor</div>
             <div class="refer-card-body">
               <p style="margin:0;color:var(--slate);font-size:13px">Send this patient to another doctor after this
@@ -379,20 +379,18 @@
 
         <div class="section-block">
           <div class="section-title">Medicines</div>
-          <div id="med-rows"></div>
-          <button class="btn btn-outline btn-sm" onclick="addMedRow()">+ Add Medicine</button>
-        </div>
-
-        <div class="section-block">
-          <div class="section-title">Tests / Investigations</div>
-          <div class="tests-wrap" id="tests-wrap">
-            <input class="form-control" id="test-input" placeholder="Type test name and press Enter"
-              style="max-width:280px" onkeydown="addTest(event)" />
+          <div style="position:relative;max-width:400px">
+            <input class="form-control" id="med-catalog-search" placeholder="Search medicines to add…" autocomplete="off"
+              oninput="renderMedSuggestions()" onfocus="renderMedSuggestions()" />
+            <div id="med-suggestions"
+              style="display:none;position:absolute;z-index:20;background:#fff;border:1px solid var(--border);
+              border-radius:8px;max-height:220px;overflow-y:auto;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.08);margin-top:4px"></div>
           </div>
+          <div id="med-rows" style="margin-top:12px"></div>
         </div>
 
-        <div class="section-block" id="test-catalog-block" style="display:none">
-          <div class="section-title">Recommended Tests (Billable)</div>
+        <div class="section-block" id="test-catalog-block">
+          <div class="section-title">Tests / Investigations</div>
           <div style="position:relative;max-width:400px">
             <input class="form-control" id="test-catalog-search" placeholder="Search tests to order…" autocomplete="off"
               oninput="renderTestSuggestions()" onfocus="renderTestSuggestions()" />
@@ -513,8 +511,7 @@
           patient_id: patientId,
           reason: document.getElementById("f-diagnosis").value.trim() || null,
         });
-        toast("Sent for admission — opening the admission form...", "success");
-        setTimeout(() => { location.href = `admissions.html?admit_patient_id=${patientId}`; }, 500);
+        toast("Sent to reception for admission.", "success");
       } catch (e) { toast(e.message, "error"); }
     }
 
@@ -527,7 +524,6 @@
     let timerInterval = null;
     let seconds = 0;
     let isRecording = false;
-    let tests = [];
     let matchedTestsFromAI = [];
     let currentStream = null;
 
@@ -900,9 +896,7 @@
         Object.entries(s.vitals || {}).forEach(([k, val]) => setVital(k, val, false));
 
         renderMedRows(s.medicines || []);
-        tests = s.tests || [];
         matchedTestsFromAI = data.matched_tests || [];
-        renderTests();
         autoMatchTests();
 
         await loadNurseVitals();
@@ -921,7 +915,7 @@
     function renderMedRows(meds) {
       const wrap = document.getElementById("med-rows");
       wrap.innerHTML = "";
-      (meds.length ? meds : [{}]).forEach(m => addMedRow(m));
+      (meds || []).forEach(m => addMedRow(m));
     }
 
     function addMedRow(m = {}) {
@@ -982,64 +976,57 @@
       })).filter(m => m.name);
     }
 
+    // ── Medicine catalog search ─────────────────────────
+    let hospitalMedicines = [];
+
+    async function loadMedicineCatalog() {
+      try {
+        hospitalMedicines = await api("GET", "/patients/hospital-medicines");
+      } catch (e) { }
+    }
+
+    function renderMedSuggestions() {
+      const box = document.getElementById('med-suggestions');
+      const query = document.getElementById('med-catalog-search').value.trim().toLowerCase();
+      const existingNames = new Set([...document.querySelectorAll('.med-name input')].map(i => i.value.trim().toLowerCase()));
+      const matches = hospitalMedicines
+        .filter(m => !existingNames.has((m.name || '').trim().toLowerCase()))
+        .filter(m => !query
+          || m.name.toLowerCase().includes(query)
+          || (m.brand_name || '').toLowerCase().includes(query))
+        .slice(0, 20);
+
+      if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+
+      box.innerHTML = matches.map(m => `
+        <div onclick="selectMedicine(${m.id})" style="padding:8px 12px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between"
+          onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">
+          <span>${m.name}${m.brand_name ? ' — ' + m.brand_name : ''}${m.strength ? ' (' + m.strength + ')' : ''}</span>
+          <span style="color:var(--slate)">${m.price != null ? 'Rs.' + m.price + ' · ' : ''}${m.schedule === 'otc' ? 'OTC' : 'Controlled'}</span>
+        </div>
+      `).join('');
+      box.style.display = 'block';
+    }
+
+    function selectMedicine(id) {
+      const med = hospitalMedicines.find(m => m.id === id);
+      if (!med) return;
+      addMedRow({ name: med.name, brand_name: med.brand_name || '', dosage: med.strength || '', schedule: med.schedule || 'controlled' });
+      document.getElementById('med-catalog-search').value = '';
+      document.getElementById('med-suggestions').style.display = 'none';
+    }
+
     // ── Tests ───────────────────────────────────────────
-    function addTest(e) {
-      if (e.key !== "Enter" || e.isComposing) return;
-      e.preventDefault();
-      const val = document.getElementById("test-input").value.trim();
-      if (!val) return;
-      if (!/[a-zA-Z]/.test(val) || val.length < 2 || val.length > 100) {
-        toast("Enter a valid test name (2-100 chars, letters required)", "error");
-        return;
-      }
-      tests.push(val);
-      document.getElementById("test-input").value = "";
-      renderTests();
-    }
-
-    // Was a dictated/typed test term matched to this hospital's catalog? Matching itself now
-    // happens server-side (consultations.py calls Groq with this hospital's own catalog names
-    // right after structuring) — this just reads that answer back for the ⚠ badge.
-    function isTestMatched(term) {
-      const t = (term || "").trim().toLowerCase();
-      if (!t) return false;
-      if (matchedTestsFromAI.some(m => m.test_id && (m.raw_term || "").trim().toLowerCase() === t)) return true;
-      return hospitalTests.some(ct => {
-        const name = (ct.test_name || "").trim().toLowerCase();
-        return name === t || name.includes(t) || t.includes(name);
-      });
-    }
-
-    // Auto-fills the billable "Recommended Tests" chip list from the server's catalog match,
+     // Auto-fills the "Tests / Investigations" chip list from the server's catalog match,
     // so ordering a test doesn't require saying it and then separately re-searching/re-clicking
-    // it in a second widget. Reuses selectTest(), which already no-ops on duplicates, so safe
-    // to call more than once. If hospitalTests hasn't loaded yet, this is also re-run from
+    // it in the search box below. Reuses selectTest(), which already no-ops on duplicates, so
+    // safe to call more than once. If hospitalTests hasn't loaded yet, this is also re-run from
     // loadTestCatalog() once it does.
     function autoMatchTests() {
       if (!hospitalTests.length) return;
       matchedTestsFromAI.forEach(m => {
         if (m.test_id) selectTest(m.test_id);
       });
-      renderTests();
-    }
-
-    function renderTests() {
-      const wrap = document.getElementById("tests-wrap");
-      const input = document.getElementById("test-input");
-      wrap.innerHTML = "";
-      tests.forEach((t, i) => {
-        const tag = document.createElement("div");
-        tag.className = "test-tag";
-        const flag = isTestMatched(t) ? "" : ` <span title="No catalog match — won't be billed automatically. Add it via the billable tests search below if needed." style="color:var(--danger, #c0392b)">⚠</span>`;
-        tag.innerHTML = `${t}${flag} <button onclick="removeFreeTextTest(${i})">×</button>`;
-        wrap.appendChild(tag);
-      });
-      wrap.appendChild(input);
-    }
-
-    function removeFreeTextTest(i) {
-      tests.splice(i, 1);
-      renderTests();
     }
 
     // // ── Helpers ───────────────────────────────────────────
@@ -1061,7 +1048,7 @@
         diagnosis: document.getElementById("f-diagnosis").value.trim(),
         vitals: collectVitalsPayload(),
         medicines: getMedicines(),
-        tests: tests,
+        tests: selectedTests.map(t => t.test_name),
         advice: document.getElementById("f-advice").value.trim(),
         followup: document.getElementById("f-followup").value.trim(),
         nurse_instructions: document.getElementById("f-nurse-instructions").value.trim()
@@ -1148,8 +1135,6 @@
         document.getElementById("f-followup").value = d.followup || "";
         document.getElementById("f-nurse-instructions").value = d.nurse_instructions || "";
         renderMedRows(d.medicines || []);
-        tests = d.tests || [];
-        renderTests();
         currentVitals = { ...(d.vitals || {}) };
         renderVitalsReview();
       }
@@ -1212,8 +1197,6 @@
 
           const summaryParts = Object.entries(c.vitals_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);
           document.getElementById('nurse-vitals-summary').innerHTML = summaryParts.join(' &nbsp;·&nbsp; ');
-          document.getElementById('nurse-vitals-wrap').style.display = 'block';
-          document.getElementById('refer-doctor-card').style.gridColumn = '';
         }
         if (c.post_consult_status === 'done' && c.post_consult_data) {
           const parts = Object.entries(c.post_consult_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);
@@ -1230,12 +1213,9 @@
     let selectedTests = [];
 
     async function loadTestCatalog() {
-      if (!getDoctor()?.billing_enabled) return;
       try {
         const items = await api("GET", "/patients/hospital-tests");
-        if (!items.length) return;
         hospitalTests = items;
-        document.getElementById('test-catalog-block').style.display = '';
         autoMatchTests();
       } catch (e) { }
     }
@@ -1274,21 +1254,11 @@
       renderTestChips();
     }
 
-    function setTestPriority(id, priority) {
-      const t = selectedTests.find(t => t.id === id);
-      if (t) t.priority = priority;
-    }
-
     function renderTestChips() {
       const chipsEl = document.getElementById('test-chips');
       chipsEl.innerHTML = selectedTests.map(t => `
         <span class="badge badge-teal" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
           ${t.test_name} — Rs.${t.price}
-          <select class="form-control" style="width:auto;padding:2px 4px;font-size:12px" onchange="setTestPriority(${t.id}, this.value)">
-            <option value="routine" ${t.priority === 'routine' ? 'selected' : ''}>Routine</option>
-            <option value="urgent" ${t.priority === 'urgent' ? 'selected' : ''}>Urgent</option>
-            <option value="stat" ${t.priority === 'stat' ? 'selected' : ''}>STAT</option>
-          </select>
           <span onclick="removeTest(${t.id})" style="cursor:pointer;font-weight:700">×</span>
         </span>
       `).join('');
@@ -1310,6 +1280,14 @@
       }
     });
 
+    document.addEventListener('click', (e) => {
+      const searchBox = document.getElementById('med-catalog-search');
+      const suggestBox = document.getElementById('med-suggestions');
+      if (searchBox && suggestBox && e.target !== searchBox && !suggestBox.contains(e.target)) {
+        suggestBox.style.display = 'none';
+      }
+    });
+
     (async () => {
       try {
         const r = await api("GET", `/patients/resolve/${patientToken}`);
@@ -1317,6 +1295,7 @@
         loadPatient();
         loadLastVisit();
         loadTestCatalog();
+        loadMedicineCatalog();
         loadNurseVitals();
       } catch (e) {
         window.location.href = "/pages/dashboard.html";

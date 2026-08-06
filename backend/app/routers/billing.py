@@ -729,6 +729,42 @@ def revenue_history_monthly(
     }
 
 
+def auto_close_past_days(db: Session, current_doctor: Doctor):
+    """Any day before today that reception never manually closed gets closed
+    automatically, using system totals as the counted totals (i.e. assuming
+    no variance was ever reported). Runs lazily whenever day-end data is
+    read, the same self-healing pattern as auto_close_stale_shifts for
+    attendance — no background job/cron needed. Capped at 14 days back so a
+    brand-new hospital with no history doesn't walk further than it needs to."""
+    today = ist_today()
+    for days_back in range(1, 15):
+        d = today - timedelta(days=days_back)
+        existing = db.query(DayEndClose).filter(
+            DayEndClose.hospital_id == current_doctor.hospital_id, DayEndClose.close_date == d
+        ).first()
+        if existing:
+            break  # everything older than this was already caught by a previous run
+
+        day_start, day_end = ist_day_bounds(d)
+        has_activity = db.query(Checkin.id).filter(
+            Checkin.hospital_id == current_doctor.hospital_id, Checkin.visit_date == d
+        ).first()
+        if not has_activity:
+            continue  # nothing happened that day (e.g. before the hospital onboarded) — nothing to close
+
+        summary = day_end_summary(date=d.isoformat(), db=db, current_doctor=current_doctor)
+        totals = summary["system_totals"]
+        db.add(DayEndClose(
+            hospital_id=current_doctor.hospital_id,
+            close_date=d,
+            system_cash=totals.get("cash", 0), system_card=totals.get("card", 0), system_upi=totals.get("upi", 0),
+            counted_cash=totals.get("cash", 0), counted_card=totals.get("card", 0), counted_upi=totals.get("upi", 0),
+            notes="Auto-closed by system — no manual count was entered before day rollover.",
+            closed_by=current_doctor.id,
+        ))
+        db.commit()
+
+
 @router.get("/day-end-summary")
 def day_end_summary(
     date: str = None,
@@ -740,6 +776,9 @@ def day_end_summary(
     against. Cash refunds issued that day are netted out of the cash total."""
     if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    if date is None:  # only auto-catch-up when viewing "today" — avoid recursion when auto-closing past days calls this same function
+        auto_close_past_days(db, current_doctor)
 
     target_date = datetime.fromisoformat(date).date() if date else ist_today()
     day_start, day_end = ist_day_bounds(target_date)

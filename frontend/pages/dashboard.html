@@ -190,6 +190,7 @@
     <main class="main-content">
 
       <div id="emergency-banner" style="display:none;background:#dc2626;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
+      <div id="staff-alert-banner" style="display:none;background:#d97706;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
 
       <div id="resume-draft-banner" style="display:none;background:var(--slate-light,#475569);color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <span data-role="resume-text"></span>
@@ -256,7 +257,7 @@
             </div>
             <div class="table-wrap">
               <table class="responsive-cards">
-                <thead><tr><th>Token</th><th>Patient</th><th>Reason</th><th></th></tr></thead>
+                <thead><tr><th>Token</th><th>Patient</th><th></th></tr></thead>
                 <tbody id="return-queue-tbody"></tbody>
               </table>
             </div>
@@ -281,7 +282,6 @@
                   <tr>
                     <th>Token</th>
                     <th>Patient</th>
-                    <th>Reason</th>
                     <th style="text-align:center">Checked In</th>
                     <th>Vitals</th>
                     <th>Status</th>
@@ -290,7 +290,7 @@
                 </thead>
                 <tbody id="queue-tbody-walkin">
                   <tr>
-                    <td colspan="7">
+                    <td colspan="6">
                       <div class="empty-state">
                         <p>Loading queue…</p>
                       </div>
@@ -321,7 +321,6 @@
                   <tr>
                     <th>Token</th>
                     <th>Patient</th>
-                    <th>Reason</th>
                     <th style="text-align:center">Est. Time</th>
                     <th>Vitals</th>
                     <th>Status</th>
@@ -330,7 +329,7 @@
                 </thead>
                 <tbody id="queue-tbody-online">
                   <tr>
-                    <td colspan="7">
+                    <td colspan="6">
                       <div class="empty-state">
                         <p>Loading queue…</p>
                       </div>
@@ -966,7 +965,6 @@
       <tr>
         <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
         <td data-label="Patient">${q.patient_name}${q.is_referral ? ` <span class="badge badge-navy" title="${(q.referral_note || '').replace(/"/g, '&quot;')}">Referred by ${q.referred_by_name || 'another doctor'}</span>` : ''}</td>
-        <td data-label="Reason">${q.issue_category}</td>
         <td data-label="${q.source === 'online' ? 'Est. Time' : 'Checked In'}" style="color:var(--slate);text-align:center">${timeLabel}</td>
         <td data-label="Vitals">${vitalsCellHtml(q)}</td>
         <td data-label="Status"><span class="badge ${meta.badge}">${meta.label}</span></td>
@@ -1009,7 +1007,6 @@
         <tr>
           <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
           <td data-label="Patient">${q.patient_name}</td>
-          <td data-label="Reason">${q.issue_category}</td>
           <td data-label="">${`<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button>`}</td>
         </tr>`).join('');
     }
@@ -1024,12 +1021,23 @@
     async function loadEmergencyAlerts() {
       try {
         const data = await api("GET", "/notifications");
-        const alerts = (data.notifications || []).filter(n => n.type === 'emergency_alert' && !n.is_read);
+        const notifs = data.notifications || [];
+
+        const alerts = notifs.filter(n => n.type === 'emergency_alert' && !n.is_read);
         const banner = document.getElementById('emergency-banner');
-        if (!alerts.length) { banner.style.display = 'none'; return; }
-        const n = alerts[0];
-        banner.style.display = 'flex';
-        banner.innerHTML = `<span>${n.message}</span><button class="btn btn-sm" style="background:#fff;color:#dc2626" onclick="dismissEmergencyAlert(${n.id})">Acknowledge</button>`;
+        if (!alerts.length) { banner.style.display = 'none'; }
+        else {
+          const n = alerts[0];
+          banner.style.display = 'flex';
+          banner.innerHTML = `<span>${n.message}</span><button class="btn btn-sm" style="background:#fff;color:#dc2626" onclick="dismissEmergencyAlert(${n.id})">Acknowledge</button>`;
+        }
+
+        const staffAlerts = notifs.filter(n => n.type === 'no_assistant_alert' && !n.is_read);
+        const staffBanner = document.getElementById('staff-alert-banner');
+        if (!staffAlerts.length) { staffBanner.style.display = 'none'; return; }
+        const s = staffAlerts[0];
+        staffBanner.style.display = 'flex';
+        staffBanner.innerHTML = `<span>${s.title}: ${s.message}</span><button class="btn btn-sm" style="background:#fff;color:#d97706" onclick="dismissEmergencyAlert(${s.id})">Got it</button>`;
       } catch (e) { }
     }
     async function dismissEmergencyAlert(id) {

@@ -116,7 +116,7 @@ class PatientSummary(BaseModel):
 class CheckinCreate(BaseModel):
     issue_category: str
     doctor_id: int
-    send_to_nurse: Optional[bool] = False
+    send_to_nurse: Optional[bool] = True
     consultation_fee: Optional[float] = None
     test_fee: Optional[float] = None
     force: Optional[bool] = False  # bypass the already-admitted warning once reception has confirmed
@@ -128,6 +128,7 @@ class CheckinOut(BaseModel):
     doctor_name: str
     issue_category: str
     visit_date: date
+    checked_in_at: Optional[datetime] = None
     nurse_name: Optional[str] = None
     consultation_fee: Optional[float] = None
     test_fee: Optional[float] = None

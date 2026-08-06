@@ -265,6 +265,7 @@ def emergency_intake(
         visit_date=ist_today(),
         is_paid=True,  # no payment gate — billed retroactively once stabilized
         is_emergency=True,
+        emergency_status="holding",  # held in the Emergency Ward until the doctor marks themselves ready
     )
     db.add(checkin)
     db.commit()
@@ -276,7 +277,7 @@ def emergency_intake(
         target_type="patient",
         target_id=patient.id,
         target_label=f"{patient.name} ({patient.patient_uid})",
-        details=f"Token {token} → {doctor.title} {doctor.name}"
+        details=f"Held in Emergency Ward, nearest doctor on record: {doctor.title} {doctor.name}"
     )
 
     return {
@@ -286,6 +287,87 @@ def emergency_intake(
         "token_number": token,
         "doctor_name": f"{doctor.title} {doctor.name}",
     }
+
+
+def _doctor_ready_for_emergency(db: Session, hospital_id: int, doctor_id: int) -> bool:
+    """True only if the doctor is Present AND has explicitly set their
+    location to 'emergency' today — the only way an Emergency Ward patient
+    can be released into a doctor's queue."""
+    from app.models.attendance import AttendanceRecord
+    rec = db.query(AttendanceRecord).filter(
+        AttendanceRecord.doctor_id == doctor_id,
+        AttendanceRecord.hospital_id == hospital_id,
+        AttendanceRecord.date == ist_today()
+    ).first()
+    return bool(rec and rec.status == "present" and rec.doctor_location == "emergency")
+
+
+@router.get("/emergency-ward")
+def list_emergency_ward(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Patients held in the Emergency Ward — not yet in any doctor's queue."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    checkins = db.query(Checkin).filter(
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == ist_today(),
+        Checkin.emergency_status == "holding"
+    ).order_by(Checkin.created_at.asc()).all()
+
+    result = []
+    for c in checkins:
+        patient = db.query(Patient).filter(Patient.id == c.patient_id).first()
+        doctor = db.query(Doctor).filter(Doctor.id == c.doctor_id).first()
+        result.append({
+            "checkin_id": c.id,
+            "patient_id": patient.id if patient else None,
+            "patient_name": patient.name if patient else "Unknown",
+            "token_number": c.token_number,
+            "doctor_id": c.doctor_id,
+            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
+            "doctor_ready": _doctor_ready_for_emergency(db, current_doctor.hospital_id, c.doctor_id) if doctor else False,
+            "held_since": c.created_at.isoformat() if c.created_at else None,
+        })
+    return result
+
+
+@router.post("/emergency-ward/{checkin_id}/release")
+def release_emergency_patient(
+    checkin_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Moves a held Emergency Ward patient into their doctor's live queue —
+    only allowed once that doctor has marked themselves ready for emergencies."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    checkin = db.query(Checkin).filter(
+        Checkin.id == checkin_id,
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.emergency_status == "holding"
+    ).first()
+    if not checkin:
+        raise HTTPException(status_code=404, detail="No holding emergency patient found with that ID")
+
+    if not _doctor_ready_for_emergency(db, current_doctor.hospital_id, checkin.doctor_id):
+        raise HTTPException(status_code=400, detail="This doctor hasn't marked themselves ready for emergencies yet.")
+
+    checkin.emergency_status = "released"
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="emergency_released_to_queue",
+        target_type="patient",
+        target_id=checkin.patient_id,
+        target_label=f"Token {checkin.token_number}",
+        details=f"Released to doctor's queue (checkin {checkin.id})"
+    )
+    return {"message": "Sent to doctor's queue"}
 
 
 @router.post("/", response_model=PatientOut, status_code=201)
@@ -298,21 +380,28 @@ def create_patient(
     hospital_code = hospital.hospital_code if hospital else "GEN"
 
     if not payload.force:
-        existing = db.query(Patient).filter(
+        existing_matches = db.query(Patient).filter(
             Patient.hospital_id == current_doctor.hospital_id,
             Patient.phone == payload.phone
-        ).first()
-        if existing:
+        ).all()
+        if existing_matches:
+            count = len(existing_matches)
             raise HTTPException(status_code=409, detail={
-                "message": f"{existing.name} ({existing.patient_uid}) is already registered with this phone number.",
-                "existing_patient": {
-                    "id": existing.id,
-                    "name": existing.name,
-                    "patient_uid": existing.patient_uid,
-                    "age": existing.age,
-                    "gender": existing.gender,
-                    "phone": existing.phone
-                }
+                "message": (
+                    f"{existing_matches[0].name} ({existing_matches[0].patient_uid}) is already registered with this phone number."
+                    if count == 1 else
+                    f"{count} patients are already registered with this phone number — pick the right one, or create a new record."
+                ),
+                "existing_patients": [
+                    {
+                        "id": p.id,
+                        "name": p.name,
+                        "patient_uid": p.patient_uid,
+                        "age": p.age,
+                        "gender": p.gender,
+                        "phone": p.phone
+                    } for p in existing_matches
+                ]
             })
 
     patient = Patient(
@@ -742,6 +831,7 @@ def checkin_today(
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "issue_category": checkin.issue_category,
         "visit_date": checkin.visit_date.isoformat(),
+        "checked_in_at": checkin.created_at.isoformat() if checkin.created_at else None,
         "vitals_status": checkin.vitals_status,
         "vitals_data": json.loads(checkin.vitals_data) if checkin.vitals_data else None,
         "nurse_name": f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
@@ -823,6 +913,7 @@ def get_checkin_slip(
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "issue_category": checkin.issue_category,
         "visit_date": checkin.visit_date.isoformat(),
+        "checked_in_at": checkin.created_at.isoformat() if checkin.created_at else None,
         "nurse_name": f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
         "checkin_id": checkin.id,
         "total_fee": (checkin.consultation_fee or 0) + (checkin.test_fee or 0),
@@ -1067,6 +1158,28 @@ def get_hospital_tests(
         for t in items
     ]
 
+@router.get("/hospital-medicines")
+def get_hospital_medicines(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    from app.models.hospital_medicine import HospitalMedicine
+    items = db.query(HospitalMedicine).filter(
+        HospitalMedicine.hospital_id == current_doctor.hospital_id,
+        HospitalMedicine.is_active == True
+    ).order_by(HospitalMedicine.generic_name).all()
+    return [
+        {
+            "id": m.id,
+            "name": m.generic_name,
+            "brand_name": m.brand_name,
+            "strength": m.strength,
+            "schedule": m.schedule,
+            "price": m.price,
+        }
+        for m in items
+    ]
+
 @router.get("/{patient_id}", response_model=PatientOut)
 def get_patient(
     patient_id: int,
@@ -1234,6 +1347,7 @@ def checkin_patient(
         doctor_name=f"{doctor.title} {doctor.name}",
         issue_category=payload.issue_category,
         visit_date=ist_today(),
+        checked_in_at=checkin.created_at,
         nurse_name=f"{nurse.title} {nurse.name}" if nurse else None,
         consultation_fee=consultation_fee,
         test_fee=payload.test_fee,
@@ -1380,7 +1494,8 @@ def todays_queue(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.doctor_id == current_doctor.id,
         Checkin.visit_date == ist_today(),
-        Checkin.is_paid == True
+        Checkin.is_paid == True,
+        or_(Checkin.emergency_status.is_(None), Checkin.emergency_status != "holding")
     ).order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
 
     patient_ids = [c.patient_id for c in checkins]
