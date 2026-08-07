@@ -185,52 +185,46 @@ def is_doctor_covered_and_present(db: Session, hospital_id: int, doctor_id: int)
     ]
     return len(covering_staff_ids) > 0
 
-def _pick_doctor_for_emergency(db: Session, hospital_id: int):
-    """Nearest available doctor = present today and least busy right now.
-    Falls back to any active doctor at the hospital if nobody's marked present
-    (an emergency should never come back empty)."""
-    present_ids = [
-        r[0] for r in db.query(AttendanceRecord.doctor_id).filter(
-            AttendanceRecord.hospital_id == hospital_id,
-            AttendanceRecord.date == ist_today(),
-            AttendanceRecord.status == "present"
-        ).all()
-    ]
-    base_query = db.query(Doctor).filter(
-        Doctor.hospital_id == hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
-        Doctor.is_active == True,
-    )
-    candidates = base_query.filter(Doctor.id.in_(present_ids)).all() if present_ids else []
-    if not candidates:
-        candidates = base_query.all()
-    if not candidates:
-        return None
-    today_counts = dict(
-        db.query(Checkin.doctor_id, func.count(Checkin.id))
-        .filter(Checkin.hospital_id == hospital_id, Checkin.visit_date == ist_today())
-        .group_by(Checkin.doctor_id).all()
-    )
-    candidates.sort(key=lambda d: today_counts.get(d.id, 0))
-    return candidates[0]
-
-
 @router.post("/emergency-intake", status_code=201)
 def emergency_intake(
     payload: EmergencyIntakeIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    """Minimal, instant record for an emergency walk-in — no payment or full
-    registration gate, ever. Goes straight to the nearest available doctor.
-    Full registration/billing is completed retroactively via the normal
-    PUT /patients/{id} once the patient is identified/stabilized."""
+    """Minimal-friction record for an emergency walk-in — no full registration
+    gate, but reception now explicitly picks the doctor, the reason, and
+    where the patient goes, and the visit is billed like any other (just
+    collected after the fact instead of upfront). Full registration is
+    completed retroactively via the normal PUT /patients/{id} once the
+    patient is identified/stabilized."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if payload.destination not in ("ward", "cabin"):
+        raise HTTPException(status_code=400, detail="destination must be 'ward' or 'cabin'")
+    if not payload.reason or not payload.reason.strip():
+        raise HTTPException(status_code=400, detail="Reason is required")
+
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     hospital_code = hospital.hospital_code if hospital else "GEN"
 
-    doctor = _pick_doctor_for_emergency(db, current_doctor.hospital_id)
+    doctor = db.query(Doctor).filter(
+        Doctor.id == payload.doctor_id,
+        Doctor.hospital_id == current_doctor.hospital_id,
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
+        Doctor.is_active == True,
+    ).first()
     if not doctor:
-        raise HTTPException(status_code=400, detail="No doctor available at this hospital right now")
+        raise HTTPException(status_code=404, detail="Doctor not found")
+
+    is_present = db.query(AttendanceRecord).filter(
+        AttendanceRecord.doctor_id == doctor.id,
+        AttendanceRecord.hospital_id == current_doctor.hospital_id,
+        AttendanceRecord.date == ist_today(),
+        AttendanceRecord.status == "present"
+    ).first()
+    if not is_present:
+        raise HTTPException(status_code=400, detail="That doctor isn't marked present right now")
 
     label = payload.name.strip() if payload.name and payload.name.strip() else (
         f"Unidentified — approx {payload.approx_age or '?'}y, {payload.approx_gender or 'unknown'}"
@@ -254,6 +248,8 @@ def emergency_intake(
     db.commit()
     db.refresh(patient)
 
+    fee = payload.consultation_fee if payload.consultation_fee and payload.consultation_fee > 0 else doctor.default_consultation_fee
+
     token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
     checkin = Checkin(
         hospital_id=current_doctor.hospital_id,
@@ -263,9 +259,12 @@ def emergency_intake(
         doctor_id=doctor.id,
         created_by=current_doctor.id,
         visit_date=ist_today(),
-        is_paid=True,  # no payment gate — billed retroactively once stabilized
+        consultation_fee=fee,
+        is_paid=False,  # emergency patients still owe — collected after via pending-payments, not upfront
         is_emergency=True,
-        emergency_status="holding",  # held in the Emergency Ward until the doctor marks themselves ready
+        emergency_status="holding",  # both destinations start "holding" — a Doctor's Cabin patient just isn't shown in the reception Emergency Ward list (see list_emergency_ward)
+        emergency_reason=payload.reason.strip(),
+        emergency_destination=payload.destination,
     )
     db.add(checkin)
     db.commit()
@@ -277,11 +276,26 @@ def emergency_intake(
         target_type="patient",
         target_id=patient.id,
         target_label=f"{patient.name} ({patient.patient_uid})",
-        details=f"Held in Emergency Ward, nearest doctor on record: {doctor.title} {doctor.name}"
+        details=f"Sent to {doctor.title} {doctor.name} ({payload.destination}) — {payload.reason.strip()}"
     )
 
-    from app.utils.notify import notify_emergency_ward_intake
-    notify_emergency_ward_intake(db, current_doctor.hospital_id, checkin.id, patient.name, doctor.id, token)
+    from app.utils.notify import notify_emergency_ward_intake, notify_emergency_assistant_hold
+    notify_emergency_ward_intake(db, current_doctor.hospital_id, checkin.id, patient.name, doctor.id, token,
+                                  reason=payload.reason.strip(), destination=payload.destination)
+
+    covering_assistant_ids = [
+        r[0] for r in db.query(AttendanceRecord.doctor_id).join(
+            AttendanceCoverage, AttendanceCoverage.attendance_record_id == AttendanceRecord.id
+        ).filter(
+            AttendanceRecord.hospital_id == current_doctor.hospital_id,
+            AttendanceRecord.date == ist_today(),
+            AttendanceRecord.status.in_(["present", "on_break"]),
+            AttendanceCoverage.doctor_id == doctor.id
+        ).all()
+    ]
+    for assistant_id in covering_assistant_ids:
+        notify_emergency_assistant_hold(db, current_doctor.hospital_id, checkin.id, patient.name, doctor.id, assistant_id, token)
+
     db.commit()
 
     return {
@@ -318,7 +332,8 @@ def list_emergency_ward(
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.visit_date == ist_today(),
-        Checkin.emergency_status == "holding"
+        Checkin.emergency_status == "holding",
+        Checkin.emergency_destination == "ward"
     ).order_by(Checkin.created_at.asc()).all()
 
     result = []
@@ -725,6 +740,7 @@ def hospital_doctors(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     from app.models.attendance import AttendanceRecord
+    from app.models.attendance_coverage import AttendanceCoverage
     doctors = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
         Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
@@ -1408,6 +1424,68 @@ def checkin_patient(
         details=f"Token {token} → {doctor.title} {doctor.name} ({payload.issue_category})" + (f" · sent to {nurse.title} {nurse.name} for vitals" if nurse else "")
     )
 
+    additional_tokens_out = []
+    if payload.additional_doctors:
+        checkin.visit_group_id = checkin.id
+        for extra in payload.additional_doctors:
+            extra_doctor = db.query(Doctor).filter(
+                Doctor.id == extra.doctor_id,
+                Doctor.hospital_id == current_doctor.hospital_id,
+                Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
+            ).first()
+            if not extra_doctor or extra_doctor.id == doctor.id:
+                continue  # skip silently rather than failing the whole visit over one bad row
+
+            extra_fee = extra.consultation_fee
+            if extra_fee is None:
+                extra_fee = extra_doctor.consultation_fee
+            if extra_fee is None and hospital:
+                extra_fee = hospital.default_consultation_fee
+
+            extra_nurse = None
+            if payload.send_to_nurse:
+                extra_nurse = pick_random_nurse(db, current_doctor.hospital_id, extra_doctor.id)
+
+            extra_token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+            for attempt in range(max_token_attempts):
+                extra_checkin = Checkin(
+                    hospital_id=current_doctor.hospital_id,
+                    patient_id=patient.id,
+                    token_number=extra_token,
+                    issue_category=payload.issue_category,
+                    doctor_id=extra_doctor.id,
+                    created_by=current_doctor.id,
+                    visit_date=ist_today(),
+                    nurse_id=extra_nurse.id if extra_nurse else None,
+                    vitals_status="pending" if extra_nurse else "none",
+                    consultation_fee=extra_fee,
+                    visit_group_id=checkin.id,
+                )
+                db.add(extra_checkin)
+                try:
+                    db.commit()
+                    break
+                except IntegrityError:
+                    db.rollback()
+                    if attempt == max_token_attempts - 1:
+                        continue
+                    extra_token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+            db.refresh(extra_checkin)
+            log_action(
+                db, current_doctor, action="patient_checked_in", target_type="patient", target_id=patient.id,
+                target_label=f"{patient.name} ({patient.patient_uid})",
+                details=f"Token {extra_token} → {extra_doctor.title} {extra_doctor.name} (same visit as {token})"
+            )
+            additional_tokens_out.append({
+                "checkin_id": extra_checkin.id,
+                "token_number": extra_token,
+                "doctor_name": f"{extra_doctor.title} {extra_doctor.name}",
+                "consultation_fee": extra_fee,
+            })
+        db.commit()
+
+    combined_fee = (consultation_fee or 0) + (payload.test_fee or 0) + sum(t["consultation_fee"] or 0 for t in additional_tokens_out)
+
     return CheckinOut(
         checkin_id=checkin.id,
         token_number=token,
@@ -1419,9 +1497,39 @@ def checkin_patient(
         nurse_name=f"{nurse.title} {nurse.name}" if nurse else None,
         consultation_fee=consultation_fee,
         test_fee=payload.test_fee,
-        total_fee=(consultation_fee or 0) + (payload.test_fee or 0),
-        is_paid=False
+        total_fee=combined_fee,
+        is_paid=False,
+        visit_group_id=checkin.visit_group_id,
+        additional_tokens=additional_tokens_out or None,
     )
+
+@router.patch("/visit-group/{visit_group_id}/mark-paid")
+def mark_visit_group_paid(
+    visit_group_id: int,
+    body: PaymentMethodIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Pay for every checkin in a multi-doctor visit in one action (item 7) —
+    reception collects one combined amount instead of paying each doctor's
+    checkin separately."""
+    members = db.query(Checkin).filter(
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_group_id == visit_group_id,
+    ).all()
+    if not members:
+        raise HTTPException(status_code=404, detail="Visit group not found")
+
+    total = 0.0
+    for c in members:
+        if not c.is_paid:
+            c.is_paid = True
+            c.paid_at = now_ist_naive()
+            c.payment_method = body.payment_method
+        total += (c.consultation_fee or 0) + (c.test_fee or 0)
+    db.commit()
+    return {"paid_checkins": len(members), "total_collected": total}
+
 
 @router.patch("/checkin/{checkin_id}/mark-paid")
 def mark_checkin_paid(

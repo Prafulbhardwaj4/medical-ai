@@ -86,12 +86,17 @@
           <div class="form-group">
             <label class="form-label">New Password</label>
             <div style="position:relative">
-              <input class="form-control" id="reg-password" type="password" placeholder="At least 6 characters"
-                style="padding-right:40px" />
+              <input class="form-control" id="reg-password" type="password" placeholder="At least 8 characters"
+                style="padding-right:40px" oninput="renderPasswordStrength(this.value)" />
               <span onclick="toggleRegPasswordVisibility()"
                 style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px"
                 id="reg-eye-icon">👁</span>
             </div>
+            <ul id="pw-strength-list" style="list-style:none;padding:0;margin:8px 0 0;font-size:12.5px">
+              <li id="pw-check-length" style="color:var(--slate-light)">○ At least 8 characters</li>
+              <li id="pw-check-number" style="color:var(--slate-light)">○ At least 1 number</li>
+              <li id="pw-check-upper" style="color:var(--slate-light)">○ At least 1 capital letter</li>
+            </ul>
           </div>
           <div class="form-group">
             <label class="form-label">Confirm Password</label>
@@ -108,6 +113,19 @@
 
   <script src="../js/api.js"></script>
   <script>
+    function renderPasswordStrength(pw) {
+      const checks = [
+        ['pw-check-length', pw.length >= 8],
+        ['pw-check-number', /\d/.test(pw)],
+        ['pw-check-upper', /[A-Z]/.test(pw)],
+      ];
+      checks.forEach(([id, ok]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.color = ok ? 'var(--green, #16a34a)' : 'var(--slate-light)';
+        el.textContent = (ok ? '✓ ' : '○ ') + el.textContent.slice(2);
+      });
+    }
     // Redirect if already logged in
     if (getToken()) redirectByRole(getDoctor()?.role);
 

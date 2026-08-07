@@ -1457,6 +1457,7 @@
         }
 
         loadDashboard();
+        api("GET", "/billing/day-end-summary", null, false, true).catch(() => {}); // silently sweeps up any past day nobody closed — no click required
 
         // ── Revenue History (admin) ─────────────────────────────
         let revenueHistoryMode = 'daily';

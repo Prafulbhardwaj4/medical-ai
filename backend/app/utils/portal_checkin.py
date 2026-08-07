@@ -70,6 +70,7 @@ def convert_appointment_to_checkin(db: Session, appt, patient):
             created_by=None,  # system handoff, no staff actor
             visit_date=now_ist_naive().date(),
             consultation_fee=appt.fee_amount,
+            is_paid=True,  # already paid on the portal — this function only ever runs for payment_status == "paid" appointments. Leaving this unset defaulted to False, which silently hid every online patient from the doctor/assistant queue (both filter on is_paid) until reception re-marked them paid a second time.
             source="online",
             portal_appointment_id=appt.id,
             booked_time=appt.requested_time,

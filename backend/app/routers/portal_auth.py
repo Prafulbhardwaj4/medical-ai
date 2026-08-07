@@ -77,8 +77,8 @@ def complete_registration(body: CompleteRegisterIn, db: Session = Depends(get_db
     if db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first():
         raise HTTPException(status_code=400, detail="An account already exists for this number. Please log in.")
 
-    if len(body.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if len(body.new_password) < 8 or not any(c.isdigit() for c in body.new_password) or not any(c.isupper() for c in body.new_password):
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters, with 1 number and 1 capital letter")
     if body.new_password == settings.PORTAL_DEFAULT_TEMP_PASSWORD:
         raise HTTPException(status_code=400, detail="Please choose a password different from the temporary one")
 
@@ -150,8 +150,8 @@ def change_password(
 ):
     if not verify_password(body.old_password, account.password_hash):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
-    if len(body.new_password) < 6:
-        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    if len(body.new_password) < 8 or not any(c.isdigit() for c in body.new_password) or not any(c.isupper() for c in body.new_password):
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters, with 1 number and 1 capital letter")
     if body.new_password == body.old_password:
         raise HTTPException(status_code=400, detail="New password must be different from current password")
 

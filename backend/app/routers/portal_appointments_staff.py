@@ -216,7 +216,14 @@ def list_expected_today(
 
     q = db.query(Appointment).filter(
         Appointment.hospital_id == current_doctor.hospital_id,
-        Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed]),
+        # "completed" is included here deliberately: convert_appointment_to_checkin
+        # (called by the sweep two lines above, on every load of this same
+        # endpoint) flips status to "completed" the instant a token is
+        # generated for a paid appointment — which, since token generation no
+        # longer waits on arrival, is almost immediately. Without "completed"
+        # here, every appointment that had just been correctly converted
+        # vanished from its own "Expected Today" list on the very next line.
+        Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed, AppointmentStatus.completed]),
         Appointment.payment_status == "paid",  # only paid appointments show up in the queue view
         Appointment.requested_time >= today_start,
         Appointment.requested_time < today_end,
@@ -228,8 +235,12 @@ def list_expected_today(
 
     result = []
     for a in appts:
+        patient_id = None
+        patient_uid = None
         patient_name = None
         if a.profile_link_id and a.profile_link and a.profile_link.patient:
+            patient_id = a.profile_link.patient.id
+            patient_uid = a.profile_link.patient.patient_uid
             patient_name = a.profile_link.patient.name
         doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
         result.append({
@@ -238,6 +249,8 @@ def list_expected_today(
             "requested_time": a.requested_time.isoformat(),
             "status": a.status.value,
             "notes": a.notes,
+            "patient_id": patient_id,
+            "patient_uid": patient_uid,
             "patient_name": patient_name,
             "doctor_id": a.doctor_id,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",

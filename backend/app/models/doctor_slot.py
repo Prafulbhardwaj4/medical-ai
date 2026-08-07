@@ -15,4 +15,5 @@ class DoctorSlot(Base):
     period = Column(String, nullable=False)
     capacity = Column(Integer, nullable=False, default=1)
     booked_count = Column(Integer, nullable=False, default=0)
+    window_minutes = Column(Integer, nullable=False, default=60)  # this slot's total capacity is spread evenly across this many minutes
     created_at = Column(DateTime, default=now_ist_naive)

@@ -16,6 +16,7 @@ class DoctorAvailabilityTemplate(Base):
     morning_times = Column(String, nullable=False, default="[]")             # JSON list of "HH:MM"
     afternoon_times = Column(String, nullable=False, default="[]")
     evening_times = Column(String, nullable=False, default="[]")
+    custom_windows = Column(String, nullable=False, default="{}")            # JSON dict {"HH:MM": duration_minutes} — explicit durations for times added via "Add Custom Time", overriding the inferred gap
     capacity_mode = Column(String, nullable=False, default="same")           # "same" | "per_period"
     capacity_same = Column(Integer, nullable=False, default=1)
     capacity_morning = Column(Integer, nullable=False, default=1)

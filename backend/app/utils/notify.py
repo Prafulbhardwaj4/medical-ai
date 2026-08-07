@@ -49,18 +49,38 @@ def notify_emergency_alert(db: Session, hospital_id: int, admission_id: int, pat
 
 
 def notify_emergency_ward_intake(db: Session, hospital_id: int, checkin_id: int, patient_name: str,
-                                  doctor_id: int, token_number: str):
-    """Emergency walk-in assigned to a doctor, held until they're ready — a
-    fresh timestamped ping every time (never deduped), targeted only at the
-    assigned doctor. The doctor's dashboard defers showing it while they're
-    mid-consultation and surfaces it the moment they're free. This is the
-    no-physical-ward path — no receptionist action required to complete it."""
+                                  doctor_id: int, token_number: str, reason: str = None, destination: str = "ward"):
+    """Emergency walk-in assigned to a doctor — a fresh timestamped ping every
+    time (never deduped), targeted only at the assigned doctor. The doctor's
+    dashboard defers showing it while they're mid-consultation and surfaces
+    it the moment they're free. destination="ward" means the patient is
+    holding in the Emergency Ward until accepted; destination="cabin" means
+    they've already been placed at the front of the doctor's queue."""
     key = f"emergency_ward_intake:{checkin_id}:{now_ist_naive().isoformat()}"
+    reason_part = f" Reason: {reason}." if reason else ""
+    if destination == "cabin":
+        message = f"{patient_name} (Token {token_number}) came in as an emergency and is on their way to your cabin.{reason_part}"
+    else:
+        message = f"{patient_name} (Token {token_number}) came in as an emergency and has been assigned to you.{reason_part}"
     db.add(Notification(
         hospital_id=hospital_id, source_key=key, type="emergency_ward_intake", severity="critical",
         title=f"🚨 Emergency — {patient_name}",
-        message=f"{patient_name} (Token {token_number}) came in as an emergency and has been assigned to you.",
+        message=message,
         link_type="checkin", link_id=checkin_id, is_read=False, target_doctor_id=doctor_id,
+    ))
+
+
+def notify_emergency_assistant_hold(db: Session, hospital_id: int, checkin_id: int, patient_name: str,
+                                     doctor_id: int, assistant_id: int, token_number: str):
+    """Tells an assistant covering this doctor to hold off sending the
+    doctor's regular queue patients in until this emergency patient has
+    been consulted. One row per covering assistant, targeted."""
+    key = f"emergency_assistant_hold:{checkin_id}:{assistant_id}:{now_ist_naive().isoformat()}"
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="emergency_assistant_hold", severity="critical",
+        title=f"🚨 Emergency — hold the queue",
+        message=f"{patient_name} (Token {token_number}) is an emergency patient for their doctor. Hold off sending regular queue patients in until this one's been consulted.",
+        link_type="checkin", link_id=checkin_id, is_read=False, target_doctor_id=assistant_id,
     ))
 
 

@@ -20,6 +20,19 @@ from app.utils.phone import normalize_phone
 router = APIRouter(prefix="/portal/appointments", tags=["portal-appointments"])
 
 
+def _estimated_slot_datetime(slot: DoctorSlot, position: int) -> datetime:
+    """position is 1-indexed — this booking is the Nth person into this slot.
+    Spreads bookings evenly across the slot's window (e.g. capacity 10 over a
+    120-minute window = 12 minutes apart) instead of giving everyone the exact
+    same slot start time."""
+    base = datetime.combine(slot.slot_date, datetime.strptime(slot.slot_time, "%H:%M").time())
+    if slot.capacity <= 1 or not slot.window_minutes:
+        return base
+    per_patient = slot.window_minutes / slot.capacity
+    offset_minutes = round(per_patient * (position - 1))
+    return base + timedelta(minutes=offset_minutes)
+
+
 def _to_out(a: Appointment, db: Session) -> AppointmentOut:
     hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
     doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
@@ -146,7 +159,7 @@ def book_appointment(
 
         slot.booked_count += 1
         doctor_id = slot.doctor_id
-        requested_time = datetime.combine(slot.slot_date, datetime.strptime(slot.slot_time, "%H:%M").time())
+        requested_time = _estimated_slot_datetime(slot, slot.booked_count)
         slot_id = slot.id
     else:
         requested_time = now_ist_naive()
@@ -574,7 +587,7 @@ def confirm_family_booking_request(
         _check_no_duplicate_active_booking(db, account, profile_link_id, body.new_patient_name, slot.doctor_id)
         slot.booked_count += 1
         doctor_id = slot.doctor_id
-        requested_time = datetime.combine(slot.slot_date, datetime.strptime(slot.slot_time, "%H:%M").time())
+        requested_time = _estimated_slot_datetime(slot, slot.booked_count)
         slot_id = slot.id
     elif req.doctor_id:
         _check_no_duplicate_active_booking(db, account, profile_link_id, body.new_patient_name, req.doctor_id)
@@ -631,7 +644,7 @@ def self_serve_mass_reschedule(
 
     new_slot.booked_count += 1
     appt.slot_id = new_slot.id
-    appt.requested_time = datetime.combine(new_slot.slot_date, datetime.strptime(new_slot.slot_time, "%H:%M").time())
+    appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
     # Already-paid fee carries over automatically — no refund-then-repay cycle.
     appt.mass_reschedule_notice = False
     appt.arrived_at = None

@@ -47,3 +47,7 @@ class Checkin(Base):
     returned_at = Column(DateTime, nullable=True)
 
     emergency_status = Column(String, nullable=True)  # "holding" = in the Emergency Ward, not yet in the doctor's queue; "released" = sent to queue; null = not an emergency
+    emergency_reason = Column(Text, nullable=True)  # what reception typed/picked, shown to the assigned doctor
+    emergency_destination = Column(String, nullable=True)  # "ward" | "cabin" — where reception sent the patient
+
+    visit_group_id = Column(Integer, nullable=True)  # set to the primary checkin's own id when a visit covers 2+ doctors in one go (item 7) — links siblings for combined billing/display, never used to change queue/consult behavior, each doctor's queue entry works exactly like any normal checkin

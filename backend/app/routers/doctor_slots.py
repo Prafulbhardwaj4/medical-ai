@@ -40,12 +40,13 @@ def get_template(doctor_id: int = None, current_doctor: Doctor = Depends(get_cur
     if not t:
         return TemplateOut(
             exists=False, weekdays=[0, 1, 2, 3, 4, 5],
-            morning_times=[], afternoon_times=[], evening_times=[],
+            morning_times=[], afternoon_times=[], evening_times=[], custom_windows={},
             capacity_mode="same", capacity_same=1, capacity_morning=1, capacity_afternoon=1, capacity_evening=1,
         )
     return TemplateOut(
         exists=True, weekdays=json.loads(t.weekdays),
         morning_times=json.loads(t.morning_times), afternoon_times=json.loads(t.afternoon_times), evening_times=json.loads(t.evening_times),
+        custom_windows=json.loads(t.custom_windows or "{}"),
         capacity_mode=t.capacity_mode, capacity_same=t.capacity_same,
         capacity_morning=t.capacity_morning, capacity_afternoon=t.capacity_afternoon, capacity_evening=t.capacity_evening,
     )
@@ -69,6 +70,7 @@ def save_template(body: SaveTemplateIn, current_doctor: Doctor = Depends(get_cur
     t.morning_times = json.dumps(body.morning_times)
     t.afternoon_times = json.dumps(body.afternoon_times)
     t.evening_times = json.dumps(body.evening_times)
+    t.custom_windows = json.dumps(body.custom_windows or {})
     t.capacity_mode = body.capacity_mode
     t.capacity_same = body.capacity_same
     t.capacity_morning = body.capacity_morning
@@ -106,6 +108,13 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
             return {"morning": body.capacity_morning, "afternoon": body.capacity_afternoon, "evening": body.capacity_evening}[period]
         return body.capacity_same
 
+    DEFAULT_WINDOW_MINUTES = 60
+
+    def _minutes_between(t1: str, t2: str) -> int:
+        d1 = dt.strptime(t1, "%H:%M")
+        d2 = dt.strptime(t2, "%H:%M")
+        return int((d2 - d1).total_seconds() // 60)
+
     periods = {"morning": body.morning_times, "afternoon": body.afternoon_times, "evening": body.evening_times}
     created = []
     for offset in range(REGEN_WINDOW_DAYS + 1):
@@ -114,10 +123,20 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
             continue
         for period, times in periods.items():
             cap = capacity_for(period)
-            for t in times:
+            sorted_times = sorted(times)
+            for idx, t in enumerate(sorted_times):
+                if t in (body.custom_windows or {}) and body.custom_windows[t]:
+                    window = int(body.custom_windows[t])  # explicit From/To duration wins over any inferred gap
+                elif idx + 1 < len(sorted_times):
+                    window = _minutes_between(t, sorted_times[idx + 1])
+                    if window <= 0:
+                        window = DEFAULT_WINDOW_MINUTES
+                else:
+                    window = DEFAULT_WINDOW_MINUTES
                 slot = DoctorSlot(
                     doctor_id=target.id, hospital_id=target.hospital_id,
-                    slot_date=current_date, slot_time=t, period=period, capacity=cap
+                    slot_date=current_date, slot_time=t, period=period, capacity=cap,
+                    window_minutes=window,
                 )
                 db.add(slot)
                 created.append(slot)

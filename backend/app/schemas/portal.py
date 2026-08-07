@@ -179,6 +179,7 @@ class SaveTemplateIn(BaseModel):
     morning_times: List[str] = []
     afternoon_times: List[str] = []
     evening_times: List[str] = []
+    custom_windows: dict = {}        # {"HH:MM": duration_minutes} for times added via "Add Custom Time"
     capacity_mode: str = "same"      # "same" | "per_period"
     capacity_same: int = 1
     capacity_morning: int = 1
@@ -192,6 +193,7 @@ class TemplateOut(BaseModel):
     morning_times: List[str]
     afternoon_times: List[str]
     evening_times: List[str]
+    custom_windows: dict = {}
     capacity_mode: str
     capacity_same: int
     capacity_morning: int

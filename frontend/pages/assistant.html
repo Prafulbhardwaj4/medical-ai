@@ -145,6 +145,8 @@
     </nav>
 
     <main class="main-content">
+      <div id="emergency-hold-banner" style="display:none;background:#dc2626;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
+
       <div class="mobile-section active d-active" id="section-home">
 
         <div class="card" style="margin-bottom:20px">
@@ -186,12 +188,12 @@
             <table id="queue-table-walkin" class="responsive-cards">
               <thead>
                 <tr>
-                  <th>Token</th><th>Patient</th><th>Reason</th>
+                  <th>Token</th><th>Patient</th>
                   <th style="text-align:center">Checked In</th><th>Vitals</th><th>Status</th><th></th>
                 </tr>
               </thead>
               <tbody id="queue-tbody-walkin">
-                <tr><td colspan="7"><div class="empty-state"><p>Loading…</p></div></td></tr>
+                <tr><td colspan="6"><div class="empty-state"><p>Loading…</p></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -206,12 +208,12 @@
             <table id="queue-table-online" class="responsive-cards">
               <thead>
                 <tr>
-                  <th>Token</th><th>Patient</th><th>Reason</th>
+                  <th>Token</th><th>Patient</th>
                   <th style="text-align:center">Est. Time</th><th>Vitals</th><th>Status</th><th></th>
                 </tr>
               </thead>
               <tbody id="queue-tbody-online">
-                <tr><td colspan="7"><div class="empty-state"><p>Loading…</p></div></td></tr>
+                <tr><td colspan="6"><div class="empty-state"><p>Loading…</p></div></td></tr>
               </tbody>
             </table>
           </div>
@@ -386,7 +388,47 @@
         toast(labels[status] || "Status updated.", "success");
         updateDocPickerLabel();
         refreshAll();
+        if (status === 'present' && !alreadyActive) {
+          await loadDoctorStatuses();
+          openCoverageSelectModal();
+        }
       } catch (e) { toast(e.message, "error"); }
+    }
+
+    function openCoverageSelectModal() {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay open";
+      overlay.id = "modal-coverage-select";
+      const rowsHtml = allHospitalDoctors.length ? allHospitalDoctors.map(d => {
+        const b = statusBadgeInfo(d.id);
+        return `
+          <div class="doc-picker-row" style="padding:10px 8px" onclick="toggleCoverageModalDoctor(${d.id})">
+            <input type="checkbox" id="cov-chk-${d.id}" ${nurseSelectedDoctorIds.includes(d.id) ? 'checked' : ''} />
+            <span>${d.title} ${d.name}</span>
+            <span class="doc-picker-status badge ${b.cls}">${b.label}</span>
+          </div>`;
+      }).join('') : `<p style="color:var(--slate-light);font-size:13px;padding:8px">No doctors found.</p>`;
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:420px">
+          <div class="modal-header" style="border-bottom:none;margin-bottom:6px">
+            <h2 style="margin:0;font-size:18px">Which doctor(s) are you covering today?</h2>
+          </div>
+          <p style="color:var(--slate);font-size:13.5px;margin:0 0 14px">You can change this anytime from the header.</p>
+          <div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:4px;margin-bottom:16px">${rowsHtml}</div>
+          <button type="button" class="btn btn-primary" style="width:100%" id="coverage-modal-save-btn">Done</button>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      overlay.querySelector("#coverage-modal-save-btn").addEventListener("click", () => {
+        overlay.remove();
+        saveCoverage();
+      });
+    }
+
+    function toggleCoverageModalDoctor(id) {
+      toggleDocPickerDoctor(id);
+      const chk = document.getElementById(`cov-chk-${id}`);
+      if (chk) chk.checked = nurseSelectedDoctorIds.includes(id);
     }
 
     // ---------- Queues (same rendering pattern as doctor's own dashboard) ----------
@@ -414,7 +456,7 @@
       }
     }
 
-    function renderQueueRow(v, timeField, allowSendToVitals) {
+    function renderQueueRow(v, timeField, allowSendToVitals, isReturningToday) {
       const needsVitals = !v.vitals_status || v.vitals_status === 'none';
       const statusCell = v.is_consulted
         ? '<span class="badge badge-teal">Consulted</span>'
@@ -428,8 +470,7 @@
       return `
       <tr>
         <td data-label="Token"><strong>${v.token_number || '—'}</strong></td>
-        <td data-label="Patient">${v.patient_name}${v.is_emergency ? ' <span class="badge badge-red">Emergency</span>' : ''}</td>
-        <td data-label="Reason">${v.issue_category || ''}</td>
+        <td data-label="Patient">${v.patient_name}${v.is_emergency ? ' <span class="badge badge-red">Emergency</span>' : ''}${isReturningToday ? ' <span class="badge badge-teal" title="This patient also has another visit today — this is a separate return visit, treat normally">Returning today</span>' : ''}</td>
         <td data-label="${timeField === 'created_at' ? 'Checked In' : 'Est. Time'}" style="text-align:center;color:var(--slate)">${timeLabel(v[timeField])}</td>
         <td data-label="Vitals">${vitalsCellHtml(v)}</td>
         <td data-label="Status">${statusCell}</td>
@@ -455,16 +496,22 @@
       const walkin = _queueData.walk_in || [];
       const online = _queueData.online || [];
 
+      // A patient appearing more than once today (e.g. an earlier walk-in
+      // plus a separate evening online booking) is a genuine return visit,
+      // not a duplicate — flag it so the assistant doesn't second-guess it.
+      const patientIdCounts = {};
+      [...walkin, ...online].forEach(v => { patientIdCounts[v.patient_id] = (patientIdCounts[v.patient_id] || 0) + 1; });
+
       document.getElementById("queue-count-walkin").textContent = `${walkin.length} waiting`;
       document.getElementById("queue-count-online").textContent = `${online.length} waiting`;
 
       document.getElementById("queue-tbody-walkin").innerHTML = walkin.length
-        ? walkin.map(v => renderQueueRow(v, 'created_at', false)).join('')
-        : `<tr><td colspan="7"><div class="empty-state"><p>No walk-in patients right now.</p></div></td></tr>`;
+        ? walkin.map(v => renderQueueRow(v, 'created_at', false, patientIdCounts[v.patient_id] > 1)).join('')
+        : `<tr><td colspan="6"><div class="empty-state"><p>No walk-in patients right now.</p></div></td></tr>`;
 
       document.getElementById("queue-tbody-online").innerHTML = online.length
-        ? online.map(v => renderQueueRow(v, 'booked_time', true)).join('')
-        : `<tr><td colspan="7"><div class="empty-state"><p>No online appointments right now.</p></div></td></tr>`;
+        ? online.map(v => renderQueueRow(v, 'booked_time', true, patientIdCounts[v.patient_id] > 1)).join('')
+        : `<tr><td colspan="6"><div class="empty-state"><p>No online appointments right now.</p></div></td></tr>`;
     }
 
     let returnSearchTimer;
@@ -556,6 +603,27 @@
       updateDocPickerLabel();
       await loadQueues();
       renderDoctorRoster();
+      loadEmergencyHoldAlerts();
+    }
+
+    async function loadEmergencyHoldAlerts() {
+      try {
+        const data = await api("GET", "/notifications");
+        const notifs = data.notifications || [];
+        const holds = notifs.filter(n => n.type === 'emergency_assistant_hold' && !n.is_read);
+        const banner = document.getElementById('emergency-hold-banner');
+        if (!holds.length) { banner.style.display = 'none'; return; }
+        const n = holds[0];
+        banner.style.display = 'flex';
+        banner.innerHTML = `<span>🚨 ${n.message}</span><button class="btn btn-sm" style="background:#fff;color:#dc2626" onclick="dismissEmergencyHold(${n.id})">Got it</button>`;
+      } catch (e) { }
+    }
+
+    async function dismissEmergencyHold(id) {
+      try {
+        await api("PATCH", `/notifications/${id}/read`);
+        loadEmergencyHoldAlerts();
+      } catch (e) { }
     }
 
     loadNurseAttendance().then(refreshAll);

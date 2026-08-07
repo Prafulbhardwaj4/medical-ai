@@ -449,7 +449,14 @@
             api("GET", "/portal/auth/addresses").catch(() => []),
           ]);
           state.bookingAddresses = addresses;
-          const linkedHere = myProfiles.filter(p => p.hospital_id === state.hospitalId);
+          const pendingHere = myProfiles.filter(p => p.hospital_id === state.hospitalId && p.relation === "pending_confirmation");
+          const linkedHere = myProfiles.filter(p => p.hospital_id === state.hospitalId && p.relation !== "pending_confirmation");
+          const pendingNotice = pendingHere.length
+            ? `<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-bottom:12px">
+                 ${pendingHere.length} profile${pendingHere.length > 1 ? 's' : ''} here need${pendingHere.length > 1 ? '' : 's'} confirmation before you can book for them —
+                 go to your profile menu → <strong>Confirm Your Profiles</strong>.
+               </div>`
+            : '';
 
           const addressBlockHtml = `
             <div class="card" style="margin-top:16px" id="address-block">
@@ -504,7 +511,7 @@
             </div>`;
 
           if (!linkedHere.length) {
-            area.innerHTML = (myProfiles.length
+            area.innerHTML = pendingNotice + (myProfiles.length
               ? `<p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">You have linked profiles at other hospitals, but none here yet.</p>`
               : '') + newPatientCard + addressBlockHtml;
             document.getElementById("new-patient-card").addEventListener("click", () => {
@@ -517,10 +524,11 @@
             return;
           }
 
+          area.innerHTML = pendingNotice;
           searchableFullWidthList(
             area, linkedHere,
             (p) => `<div class="select-row-card" data-id="${p.id}" data-name="${sanitize(p.display_name)}">
-                      <div><div class="src-name">${sanitize(p.display_name)}</div><div class="src-sub">${p.relation}</div></div>
+                      <div><div class="src-name">${sanitize(p.display_name)}</div><div class="src-sub">${p.relation === 'pending_confirmation' ? '<span style="color:var(--red,#dc2626)">Needs confirmation — go to your profile menu</span>' : (p.relation === 'self' ? 'You' : 'Family member')}</div></div>
                     </div>`,
             (p, q) => p.display_name.toLowerCase().includes(q),
             "Search profiles..."

@@ -113,7 +113,17 @@
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
         Saved Address
       </button>
-      <button class="profile-menu-item" onclick="openSuggestionModal()">
+      <button class="profile-menu-item" onclick="openConfirmProfilesModal()" id="confirm-profiles-menu-item" style="display:none">
+        Confirm Your Profiles <span id="pending-profile-count" class="badge badge-red" style="margin-left:6px"></span>
+      </button>
+      <div class="modal-overlay" id="modal-confirm-profiles">
+        <div class="modal" style="max-width:460px">
+          <div class="modal-header"><h2>Confirm Your Profiles</h2><button class="modal-close" onclick="closeConfirmProfilesModal()">&times;</button></div>
+          <p style="font-size:13px;color:var(--slate);margin-bottom:14px">We found these records under your phone number — tell us who each one is before they show up in your history.</p>
+          <div id="pending-profiles-list"></div>
+        </div>
+      </div>
+      <button class="profile-menu-item" onclick="openSuggestionModal()" style="display:none">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
         Suggestions
       </button>
@@ -446,6 +456,58 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
+    async function loadPendingProfiles() {
+      try {
+        const profiles = await api("GET", "/portal/dashboard/profiles");
+        const pending = profiles.filter(p => p.relation === "pending_confirmation");
+        const menuItem = document.getElementById("confirm-profiles-menu-item");
+        if (!pending.length) { menuItem.style.display = "none"; return; }
+        menuItem.style.display = "";
+        document.getElementById("pending-profile-count").textContent = pending.length;
+        window._pendingProfiles = pending;
+      } catch (e) { /* non-critical on page load */ }
+    }
+
+    function openConfirmProfilesModal() {
+      const list = window._pendingProfiles || [];
+      document.getElementById("pending-profiles-list").innerHTML = list.map(p => `
+        <div style="border:1.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px">
+          <strong>${p.display_name}</strong>
+          <div style="font-size:12.5px;color:var(--slate);margin:2px 0 10px">${p.hospital_name}</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" style="flex:1" onclick="confirmPendingProfile(${p.id}, 'self', this)">This is me</button>
+            <button class="btn btn-outline btn-sm" style="flex:1" onclick="confirmPendingProfile(${p.id}, 'family', this)">Family member</button>
+            <button class="btn btn-outline btn-sm" style="flex:1;color:var(--red,#dc2626)" onclick="rejectPendingProfile(${p.id}, this)">Not mine</button>
+          </div>
+        </div>
+      `).join('');
+      document.getElementById("modal-confirm-profiles").classList.add("open");
+    }
+
+    function closeConfirmProfilesModal() {
+      document.getElementById("modal-confirm-profiles").classList.remove("open");
+    }
+
+    async function confirmPendingProfile(linkId, relation, btn) {
+      btn.closest("div[style*='border']").style.opacity = "0.5";
+      try {
+        await api("PATCH", `/portal/auth/profiles/${linkId}/confirm`, { relation });
+        toast("Confirmed.", "success");
+        loadPendingProfiles();
+        openConfirmProfilesModal();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function rejectPendingProfile(linkId, btn) {
+      btn.closest("div[style*='border']").style.opacity = "0.5";
+      try {
+        await api("DELETE", `/portal/auth/profiles/${linkId}`);
+        toast("Removed.", "success");
+        loadPendingProfiles();
+        openConfirmProfilesModal();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
     function openSuggestionModal() {
       closeProfileMenu();
       document.getElementById("suggestion-text").value = "";
@@ -595,6 +657,7 @@
     loadStats();
     loadRecords();
     loadAdmissions();
+    loadPendingProfiles();
   </script>
 </body>
 

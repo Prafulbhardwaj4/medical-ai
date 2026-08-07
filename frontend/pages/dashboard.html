@@ -648,15 +648,15 @@
 
       btn.disabled = inEmergency;
       btn.style.opacity = inEmergency ? '0.5' : '';
-      if (currentDoctorLocation === 'on_rounds') {
-        btn.textContent = 'On Rounds';
-        btn.className = 'btn btn-primary btn-sm';
-      } else if (inEmergency) {
-        btn.textContent = preEmergencyLocation === 'on_rounds' ? 'On Rounds' : 'In Cabin';
+      if (inEmergency) {
+        btn.textContent = preEmergencyLocation === 'on_rounds' ? 'On Round' : 'In Cabin';
         btn.className = 'btn btn-outline btn-sm';
+      } else if (currentDoctorLocation === 'on_rounds') {
+        btn.textContent = 'On Round';
+        btn.className = 'btn btn-primary btn-sm';
       } else {
         btn.textContent = 'In Cabin';
-        btn.className = 'btn btn-outline btn-sm';
+        btn.className = 'btn btn-primary btn-sm';
       }
 
       if (emBtn) {
@@ -690,12 +690,12 @@
         const overlay = document.createElement("div");
         overlay.className = "modal-overlay open";
         overlay.innerHTML = `
-          <div class="modal" style="max-width:360px;text-align:center">
+          <div class="modal" style="max-width:440px;text-align:center">
             <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:center">
               <h2 style="margin:0;font-size:18px">Which room are you in today?</h2>
             </div>
             <p style="color:var(--slate);font-size:13.5px;margin:0 0 18px">Patients and staff will see this as your location.</p>
-            <select class="form-control" id="present-room-select" style="font-size:16px;padding:12px">
+            <select class="form-control" id="present-room-select" style="font-size:16px;padding:14px">
               <option value="">Loading rooms…</option>
             </select>
             <button type="button" class="btn btn-primary" style="width:100%;margin-top:20px" id="present-room-confirm-btn" disabled>Confirm & Mark Present</button>
@@ -846,8 +846,12 @@
     let pendingPatientId = null;
     let pendingPatientToken = null;
 
-    async function goToPatient(id, token) {
+    async function goToPatient(id, token, isReturnVisit) {
       if (!requirePresent()) return;
+      if (!isReturnVisit && (currentDoctorLocation === 'emergency' || currentDoctorLocation === 'on_rounds')) {
+        toast("You're marked Emergency/On Round — switch to In Cabin to see general OPD patients.", "error");
+        return;
+      }
       try {
         const status = await api("GET", `/patients/${id}/checkin-today`);
         if (status.exists && !status.is_paid) {
@@ -979,7 +983,7 @@
       if (q.status === 'expected' || !q.vitals_status || q.vitals_status === 'none') return '<span style="color:var(--slate-light)">—</span>';
       if (q.vitals_status === 'done') return '<span class="badge badge-teal">Recorded</span>';
       if (q.vitals_status === 'sent_back') return '<span class="badge badge-red">Recheck sent</span>';
-      return '<span class="badge badge-amber" title="Send patient to nurse for vitals">Advised</span>';
+      return '<span class="badge badge-amber" title="Send patient to nurse for vitals">Not Recorded</span>';
     }
 
     function renderQueueRow(q) {
@@ -1047,7 +1051,7 @@
         <tr>
           <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
           <td data-label="Patient">${q.patient_name}</td>
-          <td data-label="">${`<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button>`}</td>
+          <td data-label="">${`<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}', true)">Consult</button>`}</td>
         </tr>`).join('');
     }
 

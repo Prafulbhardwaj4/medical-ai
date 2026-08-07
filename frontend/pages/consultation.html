@@ -504,6 +504,13 @@
     if (!patientToken) window.location.href = "/pages/dashboard.html";
     let patientId = null;
 
+    function markAdmitButtonSent() {
+      const btn = document.querySelector('button[onclick="admitPatient()"]');
+      if (!btn) return;
+      btn.textContent = "🛏️ Sent to Admit";
+      btn.disabled = true;
+    }
+
     async function admitPatient() {
       if (!patientId) { toast("No patient context available.", "error"); return; }
       try {
@@ -512,7 +519,15 @@
           reason: document.getElementById("f-diagnosis").value.trim() || null,
         });
         toast("Sent to reception for admission.", "success");
+        markAdmitButtonSent();
       } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function checkExistingAdmitReferral() {
+      try {
+        const referrals = await api("GET", "/admissions/referrals");
+        if (referrals.some(r => r.patient_id === patientId)) markAdmitButtonSent();
+      } catch (e) { /* non-critical, leave button in default state */ }
     }
 
     document.getElementById("sidebar-patient-link").href = `patient.html?${patientToken}`;
@@ -1297,6 +1312,7 @@
         loadTestCatalog();
         loadMedicineCatalog();
         loadNurseVitals();
+        checkExistingAdmitReferral();
       } catch (e) {
         window.location.href = "/pages/dashboard.html";
       }

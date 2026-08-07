@@ -107,7 +107,6 @@
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
         </svg>
-        Add Patient
       </div>
       <a class="nav-item active" href="doctor-slots.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -172,9 +171,11 @@
           <h4>Morning</h4>
           <div id="preset-morning"></div>
           <div class="form-group" style="margin-top:12px">
-            <label class="form-label">Add custom time (24h, e.g. 09:15)</label>
-            <div style="display:flex;gap:8px">
-              <input class="form-control" id="custom-morning" placeholder="09:15" style="max-width:140px" />
+            <label class="form-label">Add custom time (24h)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="form-control" id="custom-morning-from" placeholder="From, e.g. 09:15" style="max-width:140px" />
+              <span style="color:var(--slate)">to</span>
+              <input class="form-control" id="custom-morning-to" placeholder="To, e.g. 10:00" style="max-width:140px" />
               <button class="btn btn-outline btn-sm" onclick="addCustomTime('morning')">Add</button>
             </div>
           </div>
@@ -184,9 +185,11 @@
           <h4>Afternoon</h4>
           <div id="preset-afternoon"></div>
           <div class="form-group" style="margin-top:12px">
-            <label class="form-label">Add custom time (24h, e.g. 14:15)</label>
-            <div style="display:flex;gap:8px">
-              <input class="form-control" id="custom-afternoon" placeholder="14:15" style="max-width:140px" />
+            <label class="form-label">Add custom time (24h)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="form-control" id="custom-afternoon-from" placeholder="From, e.g. 14:15" style="max-width:140px" />
+              <span style="color:var(--slate)">to</span>
+              <input class="form-control" id="custom-afternoon-to" placeholder="To, e.g. 15:00" style="max-width:140px" />
               <button class="btn btn-outline btn-sm" onclick="addCustomTime('afternoon')">Add</button>
             </div>
           </div>
@@ -196,9 +199,11 @@
           <h4>Evening</h4>
           <div id="preset-evening"></div>
           <div class="form-group" style="margin-top:12px">
-            <label class="form-label">Add custom time (24h, e.g. 18:15)</label>
-            <div style="display:flex;gap:8px">
-              <input class="form-control" id="custom-evening" placeholder="18:15" style="max-width:140px" />
+            <label class="form-label">Add custom time (24h)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="form-control" id="custom-evening-from" placeholder="From, e.g. 18:15" style="max-width:140px" />
+              <span style="color:var(--slate)">to</span>
+              <input class="form-control" id="custom-evening-to" placeholder="To, e.g. 19:00" style="max-width:140px" />
               <button class="btn btn-outline btn-sm" onclick="addCustomTime('evening')">Add</button>
             </div>
           </div>
@@ -373,12 +378,22 @@
     }
     const selectedTimes = { morning: new Set(), afternoon: new Set(), evening: new Set() };
     const customTimes = { morning: [], afternoon: [], evening: [] };
+    const customWindows = { morning: {}, afternoon: {}, evening: {} };  // {"HH:MM": duration_minutes} for custom-added times only
+
+    function rangeLabelFor(t, period) {
+      if (customWindows[period] && customWindows[period][t]) {
+        const [h, m] = t.split(':').map(Number);
+        const endTotal = (h * 60 + m + customWindows[period][t]) % (24 * 60);
+        return `${t} - ${String(Math.floor(endTotal / 60)).padStart(2, '0')}:${String(endTotal % 60).padStart(2, '0')}`;
+      }
+      return rangeLabel(t);
+    }
 
     function renderPresets() {
       ['morning', 'afternoon', 'evening'].forEach(period => {
         const wrap = document.getElementById(`preset-${period}`);
         const all = [...PRESETS[period], ...customTimes[period]];
-        wrap.innerHTML = all.map(t => `<div class="preset-chip ${selectedTimes[period].has(t) ? 'selected' : ''}" data-time="${t}" data-period="${period}">${rangeLabel(t)}</div>`).join('');
+        wrap.innerHTML = all.map(t => `<div class="preset-chip ${selectedTimes[period].has(t) ? 'selected' : ''}" data-time="${t}" data-period="${period}">${rangeLabelFor(t, period)}</div>`).join('');
         wrap.querySelectorAll('.preset-chip').forEach(chip => chip.addEventListener('click', () => {
           const p = chip.dataset.period, t = chip.dataset.time;
           if (selectedTimes[p].has(t)) selectedTimes[p].delete(t); else selectedTimes[p].add(t);
@@ -389,12 +404,20 @@
     }
 
     function addCustomTime(period) {
-      const input = document.getElementById(`custom-${period}`);
-      const t = input.value.trim();
-      if (!/^\d{2}:\d{2}$/.test(t)) { toast("Enter time as HH:MM, e.g. 09:15", "error"); return; }
-      if (!customTimes[period].includes(t)) customTimes[period].push(t);
-      selectedTimes[period].add(t);
-      input.value = "";
+      const fromInput = document.getElementById(`custom-${period}-from`);
+      const toInput = document.getElementById(`custom-${period}-to`);
+      const from = fromInput.value.trim();
+      const to = toInput.value.trim();
+      if (!/^\d{2}:\d{2}$/.test(from) || !/^\d{2}:\d{2}$/.test(to)) { toast("Enter both times as HH:MM, e.g. 09:15", "error"); return; }
+      const [fh, fm] = from.split(':').map(Number);
+      const [th, tm] = to.split(':').map(Number);
+      const duration = (th * 60 + tm) - (fh * 60 + fm);
+      if (duration <= 0) { toast("'To' must be after 'From'", "error"); return; }
+      if (!customTimes[period].includes(from)) customTimes[period].push(from);
+      customWindows[period][from] = duration;
+      selectedTimes[period].add(from);
+      fromInput.value = "";
+      toInput.value = "";
       renderPresets();
       markDirty();
     }
@@ -442,6 +465,12 @@
         customTimes.morning = t.morning_times.filter(x => !PRESETS.morning.includes(x));
         customTimes.afternoon = t.afternoon_times.filter(x => !PRESETS.afternoon.includes(x));
         customTimes.evening = t.evening_times.filter(x => !PRESETS.evening.includes(x));
+        customWindows.morning = {}; customWindows.afternoon = {}; customWindows.evening = {};
+        ['morning', 'afternoon', 'evening'].forEach(period => {
+          customTimes[period].forEach(ct => {
+            if (t.custom_windows && t.custom_windows[ct]) customWindows[period][ct] = t.custom_windows[ct];
+          });
+        });
         renderPresets();
 
         const wd = t.weekdays.slice().sort((a,b)=>a-b);
@@ -471,6 +500,7 @@
         doctor_id: targetDoctorId,
         weekdays: patternWeekdays(),
         morning_times: morning, afternoon_times: afternoon, evening_times: evening,
+        custom_windows: { ...customWindows.morning, ...customWindows.afternoon, ...customWindows.evening },
         capacity_mode: capacityMode,
         capacity_same: parseInt(document.getElementById("cap-same").value) || 1,
         capacity_morning: parseInt(document.getElementById("cap-morning").value) || 1,

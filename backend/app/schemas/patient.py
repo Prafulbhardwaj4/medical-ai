@@ -75,6 +75,10 @@ class EmergencyIntakeIn(BaseModel):
     name: Optional[str] = None
     approx_age: Optional[int] = None
     approx_gender: Optional[str] = None
+    doctor_id: int
+    reason: str
+    destination: str  # "ward" | "cabin"
+    consultation_fee: Optional[float] = None
 
 
 class PatientOut(BaseModel):
@@ -113,6 +117,10 @@ class PatientSummary(BaseModel):
     class Config:
         from_attributes = True
 
+class AdditionalDoctorIn(BaseModel):
+    doctor_id: int
+    consultation_fee: Optional[float] = None  # reception can override per doctor; falls back to that doctor's own default, same as the primary
+
 class CheckinCreate(BaseModel):
     issue_category: str
     doctor_id: int
@@ -120,10 +128,13 @@ class CheckinCreate(BaseModel):
     consultation_fee: Optional[float] = None
     test_fee: Optional[float] = None
     force: Optional[bool] = False  # bypass the already-admitted warning once reception has confirmed
+    additional_doctors: Optional[List[AdditionalDoctorIn]] = None  # item 7 — one visit, multiple doctors, one Add Doctor step before Generate Token
 
 class CheckinOut(BaseModel):
     checkin_id: int
     token_number: str
+    visit_group_id: Optional[int] = None
+    additional_tokens: Optional[List[dict]] = None
     patient_name: str
     doctor_name: str
     issue_category: str
