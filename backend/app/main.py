@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import logging
 import traceback
+import re
 import time
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
@@ -200,13 +201,36 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+_CORS_ALLOWED_ORIGINS = {
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:5501",
+    "http://127.0.0.1:5501",
+    "https://medical-s-ai.vercel.app",
+    "https://medical-ai-mvv1.onrender.com",
+}
+_CORS_ORIGIN_REGEX = re.compile(r"https://.*\.(vercel\.app|netlify\.app|onrender\.com)$")
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error("UNHANDLED %s %s\n%s", request.method, request.url.path, traceback.format_exc())
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={"detail": "Internal server error. Check Render logs for traceback."},
     )
+    # This handler is attached to Exception (not HTTPException), so Starlette
+    # runs it from ServerErrorMiddleware, which wraps OUTSIDE CORSMiddleware.
+    # That means CORSMiddleware never touches this response and the browser
+    # reports it as a CORS failure ("No Access-Control-Allow-Origin header"),
+    # masking the real 500 as what looks like a network/CORS error. Add the
+    # header here by hand so real crashes surface as crashes, not phantom CORS.
+    origin = request.headers.get("origin")
+    if origin and (origin in _CORS_ALLOWED_ORIGINS or _CORS_ORIGIN_REGEX.match(origin)):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
 
 app.include_router(auth_router.router)
 app.include_router(patients_router.router)

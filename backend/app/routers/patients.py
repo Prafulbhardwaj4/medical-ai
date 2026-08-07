@@ -283,6 +283,7 @@ def emergency_intake(
     notify_emergency_ward_intake(db, current_doctor.hospital_id, checkin.id, patient.name, doctor.id, token,
                                   reason=payload.reason.strip(), destination=payload.destination)
 
+    from app.models.attendance_coverage import AttendanceCoverage
     covering_assistant_ids = [
         r[0] for r in db.query(AttendanceRecord.doctor_id).join(
             AttendanceCoverage, AttendanceCoverage.attendance_record_id == AttendanceRecord.id
