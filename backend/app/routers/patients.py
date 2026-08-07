@@ -1927,7 +1927,8 @@ def reception_pending_payments(
             "patient_name": patient.name,
             "patient_uid": patient.patient_uid,
             "patient_phone": patient.phone,
-            "buckets": buckets
+            "buckets": buckets,
+            "is_finalized": c.is_finalized,
         })
 
     return result

@@ -83,7 +83,8 @@ async function api(method, path, body = null, isFormData = false, silent = false
     try {
       res = await fetch(BASE + path, opts);
     } catch (networkErr) {
-      throw new Error("Backend request failed. Please try again once; if it repeats, contact admin.");
+      console.error("Network-level request failure:", networkErr);
+      throw new Error(`Backend request failed (${networkErr.message || 'network error'}). Please try again once; if it repeats, contact admin.`);
     }
 
     if (res.status === 401) {

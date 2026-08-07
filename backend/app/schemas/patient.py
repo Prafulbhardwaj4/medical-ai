@@ -1,6 +1,6 @@
 from pydantic import BaseModel, validator
 from datetime import datetime, date
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 VALID_GENDERS = {"Male", "Female", "Other"}
 VALID_BLOOD_GROUPS = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
