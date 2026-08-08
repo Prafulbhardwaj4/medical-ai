@@ -70,17 +70,38 @@ def notify_emergency_ward_intake(db: Session, hospital_id: int, checkin_id: int,
     ))
 
 
-def notify_emergency_assistant_hold(db: Session, hospital_id: int, checkin_id: int, patient_name: str,
-                                     doctor_id: int, assistant_id: int, token_number: str):
+def notify_emergency_admission(db: Session, hospital_id: int, admission_id: int, patient_name: str,
+                                doctor_id: int, bed_number: str, is_overflow: bool = False):
+    """Emergency Ward admission created — targets only the admitting doctor.
+    link_id carries the admission's internal id (Notification.link_id is an
+    Integer column); the frontend resolves id→public_token via the existing
+    GET /admissions/token-for/{admission_id} before navigating, same pattern
+    already used elsewhere for this link_type. Never deduped, same as the
+    walk-in version this replaces."""
+    key = f"emergency_admission:{admission_id}:{now_ist_naive().isoformat()}"
+    overflow_part = " (overflow bed — ward is at capacity)" if is_overflow else ""
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="emergency_admission", severity="critical",
+        title="🚨 Emergency admission",
+        message=f"{patient_name} has been admitted to the Emergency Ward, bed {bed_number}{overflow_part}. See them now.",
+        link_type="admission", link_id=admission_id, is_read=False, target_doctor_id=doctor_id,
+    ))
+
+
+def notify_emergency_assistant_hold(db: Session, hospital_id: int, admission_id: int, patient_name: str,
+                                     doctor_id: int, assistant_id: int, bed_number: str):
     """Tells an assistant covering this doctor to hold off sending the
-    doctor's regular queue patients in until this emergency patient has
-    been consulted. One row per covering assistant, targeted."""
-    key = f"emergency_assistant_hold:{checkin_id}:{assistant_id}:{now_ist_naive().isoformat()}"
+    doctor's regular queue patients in until this emergency admission has
+    been seen. One row per covering assistant, targeted. link_id carries the
+    admission's internal id (Notification.link_id is an Integer column); the
+    frontend resolves id->public token the same way notify_emergency_admission
+    already does before navigating."""
+    key = f"emergency_assistant_hold:{admission_id}:{assistant_id}:{now_ist_naive().isoformat()}"
     db.add(Notification(
         hospital_id=hospital_id, source_key=key, type="emergency_assistant_hold", severity="critical",
         title=f"🚨 Emergency — hold the queue",
-        message=f"{patient_name} (Token {token_number}) is an emergency patient for their doctor. Hold off sending regular queue patients in until this one's been consulted.",
-        link_type="checkin", link_id=checkin_id, is_read=False, target_doctor_id=assistant_id,
+        message=f"{patient_name} (Bed {bed_number}) is an emergency admission for their doctor. Hold off sending regular queue patients in until this one's been seen.",
+        link_type="admission", link_id=admission_id, is_read=False, target_doctor_id=assistant_id,
     ))
 
 

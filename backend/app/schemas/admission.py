@@ -23,6 +23,16 @@ class UpdateDiagnosisIn(BaseModel):
     diagnosis: str
 
 
+class EmergencyAdmitIn(BaseModel):
+    name: Optional[str] = None
+    approx_age: Optional[int] = None
+    approx_gender: Optional[str] = None
+    reason: str
+    doctor_id: Optional[int] = None  # nullable — reception can submit with no doctor present yet (see admit_emergency)
+    deposit_amount: float = 0
+    deposit_payment_method: Optional[str] = None
+
+
 class SendToAdmissionIn(BaseModel):
     patient_id: int
     reason: Optional[str] = None
@@ -40,6 +50,7 @@ class WardTypeCreateIn(BaseModel):
     is_ot: bool = False
     ot_charge: Optional[float] = None
     category: str = "general"
+    is_emergency_ward: bool = False
 
 
 class WardTypeOut(BaseModel):
@@ -52,6 +63,7 @@ class WardTypeOut(BaseModel):
     is_ot: bool = False
     ot_charge: Optional[float] = None
     category: str = "general"
+    is_emergency_ward: bool = False
     occupied: int = 0
     vacant: int = 0
 

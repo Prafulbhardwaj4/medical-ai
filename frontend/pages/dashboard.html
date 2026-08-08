@@ -1085,10 +1085,10 @@
           staffBanner.innerHTML = `<span>${s.title}: ${s.message}</span><button class="btn btn-sm" style="background:#fff;color:#d97706" onclick="dismissEmergencyAlert(${s.id})">Got it</button>`;
         }
 
-        // Emergency Ward intake — deferred while mid-consultation, and only ever one popup at a time.
-        const wardIntakes = notifs.filter(n => n.type === 'emergency_ward_intake' && !n.is_read);
-        if (wardIntakes.length && !currentHasActiveDraft && !document.getElementById('modal-emergency-ward-intake')) {
-          openEmergencyWardIntakeModal(wardIntakes[0]);
+        // Emergency Ward admission — deferred while mid-consultation, and only ever one popup at a time.
+        const emergencyAdmissions = notifs.filter(n => n.type === 'emergency_admission' && !n.is_read);
+        if (emergencyAdmissions.length && !currentHasActiveDraft && !document.getElementById('modal-emergency-admission')) {
+          openEmergencyAdmissionModal(emergencyAdmissions[0]);
         }
       } catch (e) { }
     }
@@ -1099,42 +1099,47 @@
       } catch (e) { }
     }
 
-    function openEmergencyWardIntakeModal(n) {
+    function openEmergencyAdmissionModal(n) {
       const overlay = document.createElement("div");
       overlay.className = "modal-overlay open";
-      overlay.id = "modal-emergency-ward-intake";
+      overlay.id = "modal-emergency-admission";
       overlay.innerHTML = `
         <div class="modal" style="max-width:400px;text-align:center">
           <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:center">
-            <h2 style="margin:0;font-size:18px;color:#dc2626">🚨 Emergency Patient</h2>
+            <h2 style="margin:0;font-size:18px;color:#dc2626">🚨 Emergency Admission</h2>
           </div>
           <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${n.message}</p>
           <div style="display:flex;flex-direction:column;gap:10px">
-            <button type="button" class="btn btn-primary" id="ewi-accept-btn" style="background:#dc2626;border-color:#dc2626">See Patient Now</button>
-            <button type="button" class="btn btn-outline" id="ewi-dismiss-btn">Not Right Now</button>
+            <button type="button" class="btn btn-primary" id="ea-accept-btn" style="background:#dc2626;border-color:#dc2626">See Patient Now</button>
+            <button type="button" class="btn btn-outline" id="ea-dismiss-btn">Not Right Now</button>
           </div>
         </div>
       `;
       document.body.appendChild(overlay);
-      overlay.querySelector("#ewi-accept-btn").addEventListener("click", () => acceptEmergencyWardIntake(n));
-      overlay.querySelector("#ewi-dismiss-btn").addEventListener("click", () => dismissEmergencyWardIntake(n.id, overlay));
+      overlay.querySelector("#ea-accept-btn").addEventListener("click", () => acceptEmergencyAdmission(n));
+      overlay.querySelector("#ea-dismiss-btn").addEventListener("click", () => dismissEmergencyAdmission(n.id, overlay));
     }
 
-    async function acceptEmergencyWardIntake(n) {
-      const btn = document.getElementById('ewi-accept-btn');
+    async function acceptEmergencyAdmission(n) {
+      // There's no OPD queue involved for an admitted emergency patient —
+      // this just marks the notification read and takes the doctor straight
+      // to the admission. admission-detail.html is addressed by public_token,
+      // not the internal id carried on the notification (same id->token
+      // resolution already used for ward_change_request notifications).
+      const btn = document.getElementById('ea-accept-btn');
       if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
       try {
-        const result = await api("POST", `/patients/emergency-ward/${n.link_id}/accept`);
-        document.getElementById('modal-emergency-ward-intake')?.remove();
-        loadAttendance();
-        goToPatient(result.patient_id, result.url_token);
+        await api("PATCH", `/notifications/${n.id}/read`, {});
+        const { token } = await api("GET", `/admissions/token-for/${n.link_id}`);
+        document.getElementById('modal-emergency-admission')?.remove();
+        location.href = `admission-detail.html?id=${token}`;
       } catch (e) {
         toast(e.message, "error");
         if (btn) { btn.disabled = false; btn.textContent = 'See Patient Now'; }
       }
     }
 
-    async function dismissEmergencyWardIntake(id, overlay) {
+    async function dismissEmergencyAdmission(id, overlay) {
       try { await api("PATCH", `/notifications/${id}/read`, {}); } catch (e) { }
       overlay.remove();
     }

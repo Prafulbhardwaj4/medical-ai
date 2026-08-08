@@ -18,4 +18,5 @@ class AdmissionWardType(Base):
     is_ot = Column(Boolean, nullable=False, default=False)  # Operation Theatre segment — moving an admission into this ward type auto-bills ot_charge (see change_ward)
     ot_charge = Column(Float, nullable=True)  # flat per-use OT fee, billed once on entry into an is_ot ward type — not a daily rate like daily_charge
     category = Column(String, nullable=False, default="general")  # "general" | "icu" | "private" | "maternity" | "nicu" | "isolation" | "day_care" | "other" — structural label, seeded as presets on new hospital setup; admin can rename/add/remove freely
+    is_emergency_ward = Column(Boolean, nullable=False, default=False)  # exactly one ward type per hospital can be flagged as this — setting it clears the flag from any other ward type at the same hospital (see update_ward_type/create_ward_type)
     created_at = Column(DateTime, default=now_ist_naive)

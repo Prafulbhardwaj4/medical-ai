@@ -16,7 +16,7 @@ from app.models.test_catalog import TestCatalogItem
 from app.models.test_order import TestOrder
 from app.models.checkin import Checkin
 import os
-from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate, PaymentMethodIn, EmergencyIntakeIn, PatientMergeIn
+from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate, PaymentMethodIn, PatientMergeIn
 from sqlalchemy import or_
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
 from app.utils.timezone import now_ist_naive

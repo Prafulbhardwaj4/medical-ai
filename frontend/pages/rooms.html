@@ -167,14 +167,13 @@
             <option value="Doctor">Doctor</option>
             <option value="Nurse">Nurse</option>
             <option value="General" selected>General</option>
-            <option value="Emergency">Emergency</option>
             <option value="Other">Other</option>
           </select>
           <input class="form-control" id="room-sequence" type="number" min="1" placeholder="Seq #" title="Optional shortcut number receptionist can type to jump to this room" />
           <button class="btn btn-primary" onclick="addRoom()">Add</button>
         </div>
         <input class="form-control" id="room-type-other" placeholder="Enter custom room type" style="display:none;max-width:720px;margin-top:10px" />
-        <p style="color:var(--slate);font-size:13px;margin:12px 0 20px">Name/Number are both optional — fill whichever applies. Room Type controls which room shows up in the doctor's or nurse's room picker: only Doctor-type rooms appear for doctors, only Nurse-type for nurses. General/Emergency/Other don't appear in either staff picker. Seq # is an optional shortcut number the receptionist can type at check-in to jump straight to this room — must be unique across active rooms.</p>
+        <p style="color:var(--slate);font-size:13px;margin:12px 0 20px">Name/Number are both optional — fill whichever applies. Room Type controls which room shows up in the doctor's or nurse's room picker: only Doctor-type rooms appear for doctors, only Nurse-type for nurses. General/Other don't appear in either staff picker. Seq # is an optional shortcut number the receptionist can type at check-in to jump straight to this room — must be unique across active rooms. Emergency patients are no longer routed through Rooms — see Admissions → Manage Rooms &amp; Ward Types for the Emergency Ward.</p>
         <div class="room-filter-wrap">
           <span class="room-filter-label">Filter by type</span>
           <div class="room-filter-mobile">
@@ -183,7 +182,6 @@
               <option value="Doctor">Doctor</option>
               <option value="Nurse">Nurse</option>
               <option value="General">General</option>
-              <option value="Emergency">Emergency</option>
               <option value="Other">Other</option>
             </select>
           </div>
@@ -192,7 +190,6 @@
             <button class="room-filter-chip" data-type="Doctor" onclick="setRoomFilter('Doctor')">Doctor</button>
             <button class="room-filter-chip" data-type="Nurse" onclick="setRoomFilter('Nurse')">Nurse</button>
             <button class="room-filter-chip" data-type="General" onclick="setRoomFilter('General')">General</button>
-            <button class="room-filter-chip" data-type="Emergency" onclick="setRoomFilter('Emergency')">Emergency</button>
             <button class="room-filter-chip" data-type="Other" onclick="setRoomFilter('Other')">Other</button>
           </div>
         </div>
@@ -294,7 +291,7 @@
 
     renderAdminNav('rooms');
 
-    const ROOM_TYPE_PRESETS = ['Doctor', 'Nurse', 'General', 'Emergency'];
+    const ROOM_TYPE_PRESETS = ['Doctor', 'Nurse', 'General'];
 
     function onRoomTypeChange() {
       const val = document.getElementById('room-type-select').value;

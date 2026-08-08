@@ -573,8 +573,8 @@
             </div>
             <div id="search-results" style="margin-bottom:14px"></div>
             <button class="btn btn-outline" style="width:100%" onclick="openNewPatient()">+ Add as New Patient</button>
-            <button class="btn btn-sm"
-              style="width:100%;margin-top:8px;background:#dc2626;color:#fff;border-color:#dc2626"
+            <button class="btn btn-sm" id="btn-emergency-intake"
+              style="width:100%;margin-top:8px;background:#dc2626;color:#fff;border-color:#dc2626;display:none"
               onclick="openEmergencyIntakeModal()">🚨 Emergency Intake</button>
           </div>
 
@@ -796,8 +796,8 @@
                 style="margin-left:8px">0</span></h2>
           </div>
           <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
-            Held here until the assigned doctor marks their location as "Emergency" — they won't appear in any doctor's
-            regular queue until then.
+            Currently admitted patients in the Emergency Ward. Full IPD tools — progress notes, orders, transfer,
+            discharge — are on each patient's admission page.
           </p>
           <div id="emergency-ward-list"></div>
         </div>
@@ -936,15 +936,15 @@
     </div>
   </div>
 
-  <!-- Emergency Intake Modal -->
+  <!-- Emergency Intake Modal (admits directly into the Emergency Ward) -->
   <div class="modal-overlay" id="modal-emergency-intake">
-    <div class="modal" style="max-width:400px">
+    <div class="modal" style="max-width:400px" id="em-modal-form">
       <div class="modal-header">
         <h2>🚨 Emergency Intake</h2>
         <button class="modal-close" onclick="closeEmergencyIntakeModal()">×</button>
       </div>
-      <p style="font-size:13px;color:var(--slate);margin-bottom:12px">No registration needed — full details can be
-        filled in later. Payment is collected after, from Pending Payments.</p>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:12px">Admits straight into the Emergency Ward. Full
+        registration and payment can be completed after — Deposit is the only payment step here.</p>
       <div class="form-group">
         <label class="form-label">Name (if known)</label>
         <input class="form-control" id="em-name" placeholder="Leave blank if unknown" />
@@ -965,10 +965,14 @@
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Doctor *</label>
+        <label class="form-label">Directed Doctor</label>
         <select class="form-control" id="em-doctor">
-          <option value="">Select present doctor...</option>
+          <option value="">No doctor present yet — assign later</option>
         </select>
+        <p id="em-doctor-hint" style="font-size:12px;color:var(--slate-light);margin-top:4px;display:none">
+          No doctor is marked present right now — that's fine, the patient will still be admitted and you can assign
+          a doctor once someone's available.
+        </p>
       </div>
       <div class="form-group">
         <label class="form-label">Reason *</label>
@@ -987,18 +991,33 @@
           style="display:none;margin-top:8px" />
       </div>
       <div class="form-group">
-        <label class="form-label">Send To *</label>
-        <select class="form-control" id="em-destination">
-          <option value="ward">Emergency Ward</option>
-          <option value="cabin">Doctor's Cabin</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Consultation Fee</label>
-        <input class="form-control" id="em-fee" type="number" min="0" placeholder="Leave blank for doctor's default" />
+        <label class="form-label">Deposit (optional)</label>
+        <div class="form-row">
+          <input class="form-control" id="em-deposit-amount" type="number" min="0" placeholder="Amount" />
+          <select class="form-control" id="em-deposit-method">
+            <option value="">Payment method...</option>
+            <option value="cash">Cash</option>
+            <option value="card">Card</option>
+            <option value="upi">UPI</option>
+          </select>
+        </div>
       </div>
       <div class="err-msg" id="em-err"></div>
-      <button class="btn btn-primary" style="width:100%" onclick="submitEmergencyIntake()">Send to Doctor Now</button>
+      <button class="btn btn-primary" style="width:100%" onclick="submitEmergencyIntake()">Admit to Emergency Ward</button>
+    </div>
+
+    <!-- Success screen — shown in place of the form after a successful admit -->
+    <div class="modal" style="max-width:400px;display:none;text-align:center" id="em-modal-success">
+      <div class="modal-header" style="border-bottom:none;justify-content:center">
+        <h2 style="margin:0">Patient Admitted</h2>
+      </div>
+      <div id="em-overflow-warning" style="display:none;background:#fef2f2;color:#dc2626;border-radius:var(--radius);padding:10px;font-size:13px;margin-bottom:14px;font-weight:600">
+        ⚠️ Emergency Ward is at capacity — admitted to an overflow bed
+      </div>
+      <div style="font-size:1.4rem;font-weight:700;color:var(--navy);margin-bottom:6px" id="em-success-ward"></div>
+      <div style="font-size:2rem;font-weight:700;color:var(--navy);margin-bottom:14px" id="em-success-bed"></div>
+      <div style="font-size:14px;color:var(--slate);margin-bottom:20px">Assigned to <strong id="em-success-doctor"></strong></div>
+      <button class="btn btn-primary" style="width:100%" onclick="closeEmergencyIntakeModal()">Done</button>
     </div>
   </div>
 
@@ -1333,6 +1352,7 @@
     } else {
       showRecSection(__startTab);
     }
+    checkEmergencyWardAvailable();
     if (__startTab === 'portal') { loadEmergencyWard(); loadPendingReview(); }
     setInterval(() => { if (document.getElementById('section-portal')?.classList.contains('active') || document.getElementById('section-portal')?.classList.contains('d-active')) loadEmergencyWard(); }, 15000);
 
@@ -2547,56 +2567,81 @@
       document.getElementById('modal-add').classList.add('open');
     }
 
+    async function checkEmergencyWardAvailable() {
+      const btn = document.getElementById('btn-emergency-intake');
+      try {
+        const status = await api("GET", "/admissions/emergency-ward-status", null, false, true);
+        btn.style.display = status.available ? '' : 'none';
+      } catch (e) {
+        btn.style.display = 'none';  // fail closed — never show the option if the check itself failed
+      }
+    }
+
     async function openEmergencyIntakeModal() {
+      document.getElementById('em-modal-form').style.display = '';
+      document.getElementById('em-modal-success').style.display = 'none';
       document.getElementById('em-name').value = '';
       document.getElementById('em-age').value = '';
       document.getElementById('em-gender').value = '';
       document.getElementById('em-reason-select').value = '';
       document.getElementById('em-reason-other').value = '';
       document.getElementById('em-reason-other').style.display = 'none';
-      document.getElementById('em-destination').value = 'ward';
-      document.getElementById('em-fee').value = '';
+      document.getElementById('em-deposit-amount').value = '';
+      document.getElementById('em-deposit-method').value = '';
       document.getElementById('em-err').textContent = '';
 
       const doctorSel = document.getElementById('em-doctor');
+      const hint = document.getElementById('em-doctor-hint');
       doctorSel.innerHTML = '<option value="">Loading doctors...</option>';
       try {
         const doctors = await api("GET", "/patients/hospital-doctors");
         const present = doctors.filter(d => d.on_duty_today);
-        doctorSel.innerHTML = '<option value="">Select present doctor...</option>' +
+        doctorSel.innerHTML = '<option value="">No doctor present yet — assign later</option>' +
           present.map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
-        if (!present.length) doctorSel.innerHTML = '<option value="">No doctors currently present</option>';
+        hint.style.display = present.length ? 'none' : '';
       } catch (e) {
-        doctorSel.innerHTML = '<option value="">Could not load doctors</option>';
+        doctorSel.innerHTML = '<option value="">No doctor present yet — assign later</option>';
+        hint.style.display = '';
       }
 
       document.getElementById('modal-emergency-intake').classList.add('open');
     }
-    function closeEmergencyIntakeModal() { document.getElementById('modal-emergency-intake').classList.remove('open'); }
+    function closeEmergencyIntakeModal() {
+      document.getElementById('modal-emergency-intake').classList.remove('open');
+      loadEmergencyWard();
+      loadPendingPayments();
+    }
     async function submitEmergencyIntake() {
       const err = document.getElementById('em-err');
-      const doctorId = document.getElementById('em-doctor').value;
       const reasonSel = document.getElementById('em-reason-select').value;
       const reason = reasonSel === '__other' ? document.getElementById('em-reason-other').value.trim() : reasonSel;
-      const destination = document.getElementById('em-destination').value;
-      const fee = document.getElementById('em-fee').value;
+      const doctorId = document.getElementById('em-doctor').value;
+      const depositAmount = document.getElementById('em-deposit-amount').value;
+      const depositMethod = document.getElementById('em-deposit-method').value;
 
-      if (!doctorId) { err.textContent = "Select a doctor"; return; }
       if (!reason) { err.textContent = "Enter or select a reason"; return; }
+      if (depositAmount && parseFloat(depositAmount) > 0 && !depositMethod) {
+        err.textContent = "Select how the deposit was collected"; return;
+      }
+      err.textContent = '';
 
       try {
-        const result = await api("POST", "/patients/emergency-intake", {
+        const result = await api("POST", "/admissions/emergency", {
           name: document.getElementById('em-name').value.trim() || null,
           approx_age: parseInt(document.getElementById('em-age').value) || null,
           approx_gender: document.getElementById('em-gender').value || null,
-          doctor_id: parseInt(doctorId, 10),
+          doctor_id: doctorId ? parseInt(doctorId, 10) : null,
           reason: reason,
-          destination: destination,
-          consultation_fee: fee ? parseFloat(fee) : null,
+          deposit_amount: depositAmount ? parseFloat(depositAmount) : 0,
+          deposit_payment_method: depositMethod || null,
         });
-        closeEmergencyIntakeModal();
-        toast(`Sent to ${result.doctor_name} — Token ${result.token_number}`, "success");
-        loadPendingPayments();
+
+        document.getElementById('em-modal-form').style.display = 'none';
+        document.getElementById('em-modal-success').style.display = '';
+        document.getElementById('em-overflow-warning').style.display = result.is_overflow ? '' : 'none';
+        document.getElementById('em-success-ward').textContent = result.ward_name;
+        document.getElementById('em-success-bed').textContent = `Bed ${result.bed_number}`;
+        document.getElementById('em-success-doctor').textContent = result.doctor_name;
       } catch (e) { err.textContent = e.message; }
     }
 
@@ -3048,29 +3093,23 @@
     async function loadEmergencyWard() {
       const el = document.getElementById('emergency-ward-list');
       try {
-        const patients = await api("GET", "/patients/emergency-ward");
+        const status = await api("GET", "/admissions/emergency-ward-status", null, false, true);
+        if (!status.available) { document.getElementById('emergency-ward-card').style.display = 'none'; return; }
+        const patients = await api("GET", `/admissions/active?ward_type_id=${status.ward_type_id}`, null, false, true);
         document.getElementById('emergency-ward-count').textContent = patients.length;
-        document.getElementById('emergency-ward-card').style.display = patients.length ? '' : 'none';
-        if (!patients.length) { el.innerHTML = ''; return; }
-        el.innerHTML = patients.map(p => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-            <div>
-              <div style="font-weight:600">${sanitize(p.patient_name)} <span style="font-weight:400;color:var(--slate-light);font-size:12px">Token ${sanitize(p.token_number)}</span></div>
-              <div style="font-size:12px;color:var(--slate-light)">Nearest doctor on record: ${sanitize(p.doctor_name)}</div>
-            </div>
-            ${p.doctor_ready
-            ? `<button class="btn btn-primary btn-sm" onclick="releaseEmergencyPatient(${p.checkin_id})">Send to Doctor's Queue</button>`
-            : `<span class="badge badge-amber" title="Doctor hasn't marked their location as Emergency yet">Waiting for doctor</span>`}
-          </div>`).join('');
+        document.getElementById('emergency-ward-card').style.display = '';
+        el.innerHTML = patients.length
+          ? patients.map(p => `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+                <div>
+                  <strong>${p.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${p.patient_uid || ''}</span>
+                  <div style="font-size:12px;color:var(--slate)">Bed ${p.bed_number} · ${p.diagnosis || ''} · Day ${p.days_admitted}</div>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="window.location.href='admission-detail.html?id=${p.id}'">Open</button>
+              </div>
+            `).join('')
+          : '<p style="color:var(--slate-light);padding:8px 0">No one in the Emergency Ward right now.</p>';
       } catch (e) { el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`; }
-    }
-
-    async function releaseEmergencyPatient(checkinId) {
-      try {
-        await api("POST", `/patients/emergency-ward/${checkinId}/release`);
-        toast("Sent to doctor's queue", "success");
-        loadEmergencyWard();
-      } catch (e) { toast(e.message, "error"); }
     }
 
     let expectedTodayFilterLoaded = false;

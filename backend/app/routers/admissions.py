@@ -29,11 +29,15 @@ from app.schemas.admission import (
     WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn,
     TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, EmergencyAlertIn,
     ProfessionalFeeIn, VALID_ADMISSION_TYPES, AdmissionConsentIn, VALID_CONSENT_TYPES, VALID_DISCHARGE_TYPES,
-    VALID_WARD_CATEGORIES, TpaSettleIn, ProgressNoteIn,
+    VALID_WARD_CATEGORIES, TpaSettleIn, ProgressNoteIn, EmergencyAdmitIn,
 )
 from app.models.consultation import Consultation
+from app.models.doctor import UserRole
 from app.utils.auth import get_current_doctor, ist_today
-from app.utils.timezone import now_ist_naive
+from app.utils.timezone import now_ist_naive, ist_day_bounds
+from app.utils.audit import log_action
+from app.routers.patients import generate_patient_uid, generate_url_token
+from sqlalchemy.exc import IntegrityError
 from app.utils.inventory import deduct_stock_fefo
 from app.utils.notify import notify_ward_change_request, notify_emergency_alert
 from app.utils.receipts import next_receipt_number, next_note_number
@@ -266,6 +270,206 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
     return {"id": admission.public_token, "message": "Patient admitted"}
 
 
+@router.get("/emergency-ward-status")
+def emergency_ward_status(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Gate check reception must call on every page load — Emergency Intake
+    only appears if a ward type is currently flagged as the Emergency Ward.
+    Checked against live data on purpose, never assumed/cached client-side."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    wt = db.query(AdmissionWardType).filter(
+        AdmissionWardType.hospital_id == current_doctor.hospital_id,
+        AdmissionWardType.is_emergency_ward == True,
+    ).first()
+    if not wt:
+        return {"available": False}
+    occupied = db.query(Admission).filter(Admission.ward_type_id == wt.id, Admission.status == "admitted").count()
+    return {
+        "available": True,
+        "ward_type_id": wt.id,
+        "ward_name": wt.name,
+        "total_beds": wt.total_beds,
+        "occupied": occupied,
+        "vacant": max(wt.total_beds - occupied, 0),
+    }
+
+
+@router.post("/emergency", status_code=201)
+def admit_emergency(body: EmergencyAdmitIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Fast front door into real IPD Admissions for emergency patients —
+    deliberately its own code path, skipping the same-day-checkin and
+    prior-referral gates that admit_patient enforces for planned admissions.
+    Bed assignment is re-checked at the moment of commit (not earlier in the
+    request) so two emergencies arriving seconds apart can never collide on
+    the same bed — see the retry loop below."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not (body.reason or "").strip():
+        raise HTTPException(status_code=400, detail="Reason is required")
+
+    ward_type = db.query(AdmissionWardType).filter(
+        AdmissionWardType.hospital_id == current_doctor.hospital_id,
+        AdmissionWardType.is_emergency_ward == True,
+    ).first()
+    if not ward_type:
+        raise HTTPException(status_code=400, detail="No Emergency Ward is configured for this hospital — set one up under Admin first")
+
+    doctor = None
+    if body.doctor_id:
+        doctor = db.query(Doctor).filter(
+            Doctor.id == body.doctor_id,
+            Doctor.hospital_id == current_doctor.hospital_id,
+            Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
+            Doctor.is_active == True,
+        ).first()
+        if not doctor:
+            raise HTTPException(status_code=404, detail="Doctor not found")
+    # No doctor selected at all is allowed — reception can complete the
+    # admission and assign/reassign a doctor once someone's actually
+    # present (very common overnight). Falls back to any active doctor at
+    # the hospital as a real, reassignable placeholder rather than leaving
+    # admitting_doctor_id null, since the column is non-nullable.
+    if not doctor:
+        doctor = db.query(Doctor).filter(
+            Doctor.hospital_id == current_doctor.hospital_id,
+            Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
+            Doctor.is_active == True,
+        ).order_by(Doctor.id.asc()).first()
+        if not doctor:
+            raise HTTPException(status_code=400, detail="No doctor exists at this hospital to assign — add one before using Emergency Intake")
+
+    if body.deposit_amount < 0:
+        raise HTTPException(status_code=400, detail="Deposit cannot be negative")
+    if body.deposit_amount > 0 and not body.deposit_payment_method:
+        raise HTTPException(status_code=400, detail="Please select how the deposit was collected")
+
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    hospital_code = hospital.hospital_code if hospital else "GEN"
+
+    label = (body.name or "").strip() or f"Unidentified — approx {body.approx_age or '?'}y, {body.approx_gender or 'unknown'}"
+    gender = (body.approx_gender or "Other").capitalize()
+    if gender not in ["Male", "Female", "Other"]:
+        gender = "Other"
+
+    patient = Patient(
+        patient_uid=generate_patient_uid(db, current_doctor.hospital_id, hospital_code),
+        url_token=generate_url_token(db),
+        name=label,
+        phone=f"EMRG-{int(now_ist_naive().timestamp())}",
+        age=body.approx_age or 0,
+        gender=gender,
+        hospital_id=current_doctor.hospital_id,
+        created_by=current_doctor.id,
+        is_emergency_unverified=True,
+    )
+    db.add(patient)
+    db.flush()  # get patient.id without committing yet — a half-failed request must never leave an orphan patient with no admission (see retry loop: patient row only truly commits alongside the admission below)
+
+    valid_labels = _bed_labels_for_ward_type(ward_type)
+    admission = None
+    is_overflow = False
+    max_attempts = 8
+    for attempt in range(max_attempts):
+        occupied_labels = {
+            a.bed_number for a in db.query(Admission).filter(
+                Admission.ward_type_id == ward_type.id, Admission.status == "admitted"
+            ).all()
+        }
+        free_bed = next((b for b in valid_labels if b not in occupied_labels), None)
+        if free_bed:
+            bed_number = free_bed
+            is_overflow = False
+        else:
+            # At capacity — assign a clearly labeled, never-reused overflow
+            # bed instead of turning the patient away. Suffix by count of
+            # overflow beds already used today so labels can't collide or
+            # get silently reused later the same day.
+            overflow_count_today = db.query(Admission).filter(
+                Admission.ward_type_id == ward_type.id,
+                Admission.bed_number.like(f"{ward_type.name}-OF-%"),
+                Admission.admission_date >= ist_day_bounds(ist_today())[0],
+            ).count()
+            bed_number = f"{ward_type.name}-OF-{overflow_count_today + 1}"
+            is_overflow = True
+
+        candidate = Admission(
+            patient_id=patient.id, hospital_id=current_doctor.hospital_id,
+            admitting_doctor_id=doctor.id, ward=ward_type.name, ward_type_id=ward_type.id,
+            bed_number=bed_number, diagnosis=body.reason.strip(),
+            daily_room_charge=ward_type.daily_charge,
+            status="admitted", admission_date=now_ist_naive(),
+            public_token=secrets.token_urlsafe(16),
+            admission_type="emergency",
+        )
+        db.add(candidate)
+        try:
+            db.commit()
+            admission = candidate
+            break
+        except IntegrityError:
+            db.rollback()
+            db.add(patient)  # patient row was rolled back with the failed attempt — re-stage it for the next try
+            db.flush()
+            continue
+
+    if not admission:
+        raise HTTPException(status_code=409, detail="Couldn't assign a bed right now — please try again")
+
+    db.refresh(admission)
+
+    db.add(AdmissionWardStay(
+        admission_id=admission.id, ward_type_id=ward_type.id, ward_name=ward_type.name,
+        bed_number=admission.bed_number, daily_charge=ward_type.daily_charge, start_date=admission.admission_date,
+        changed_by=current_doctor.id,
+    ))
+
+    if body.deposit_amount > 0:
+        db.add(AdmissionDeposit(
+            admission_id=admission.id, amount=body.deposit_amount, payment_method=body.deposit_payment_method,
+            note="Initial deposit at emergency intake", collected_by=current_doctor.id,
+        ))
+
+    log_action(
+        db, current_doctor,
+        action="emergency_admission",
+        target_type="patient",
+        target_id=patient.id,
+        target_label=f"{patient.name} ({patient.patient_uid})",
+        details=f"Admitted to {ward_type.name} bed {admission.bed_number}, assigned to {doctor.title} {doctor.name}" + (" [OVERFLOW]" if is_overflow else "") + f" — {body.reason.strip()}"
+    )
+
+    from app.utils.notify import notify_emergency_admission, notify_emergency_assistant_hold
+    notify_emergency_admission(db, current_doctor.hospital_id, admission.id, patient.name, doctor.id, admission.bed_number, is_overflow=is_overflow)
+
+    from app.models.attendance_coverage import AttendanceCoverage
+    from app.models.attendance import AttendanceRecord
+    covering_assistant_ids = [
+        r[0] for r in db.query(AttendanceRecord.doctor_id).join(
+            AttendanceCoverage, AttendanceCoverage.attendance_record_id == AttendanceRecord.id
+        ).filter(
+            AttendanceRecord.hospital_id == current_doctor.hospital_id,
+            AttendanceRecord.date == ist_today(),
+            AttendanceRecord.status.in_(["present", "on_break"]),
+            AttendanceCoverage.doctor_id == doctor.id
+        ).distinct().all()
+    ]
+    for assistant_id in covering_assistant_ids:
+        notify_emergency_assistant_hold(db, current_doctor.hospital_id, admission.id, patient.name, doctor.id, assistant_id, admission.bed_number)
+
+    db.commit()
+
+    return {
+        "admission_id": admission.public_token,
+        "patient_id": patient.id,
+        "patient_uid": patient.patient_uid,
+        "ward_name": ward_type.name,
+        "bed_number": admission.bed_number,
+        "doctor_name": f"{doctor.title} {doctor.name}",
+        "is_overflow": is_overflow,
+    }
+
+
 @router.post("/referrals")
 def send_to_admission(body: SendToAdmissionIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
@@ -403,6 +607,18 @@ def list_ward_types(current_doctor: Doctor = Depends(get_current_doctor), db: Se
     return out
 
 
+def _clear_other_emergency_ward_flags(db: Session, hospital_id: int, keep_id: int = None):
+    """Only one ward type per hospital can be the Emergency Ward — clear the
+    flag everywhere else before/when setting it on a new one."""
+    q = db.query(AdmissionWardType).filter(
+        AdmissionWardType.hospital_id == hospital_id,
+        AdmissionWardType.is_emergency_ward == True,
+    )
+    if keep_id is not None:
+        q = q.filter(AdmissionWardType.id != keep_id)
+    q.update({"is_emergency_ward": False})
+
+
 @router.post("/ward-types", response_model=WardTypeOut)
 def create_ward_type(body: WardTypeCreateIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     if current_doctor.role.value not in ["admin", "sub_admin"]:
@@ -412,11 +628,14 @@ def create_ward_type(body: WardTypeCreateIn, current_doctor: Doctor = Depends(ge
     category = (body.category or "general").strip().lower()
     if category not in VALID_WARD_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid ward category")
-    wt = AdmissionWardType(hospital_id=current_doctor.hospital_id, name=body.name.strip(), total_beds=body.total_beds, daily_charge=body.daily_charge, default_deposit=body.default_deposit, is_icu=body.is_icu, is_ot=body.is_ot, ot_charge=body.ot_charge, category=category)
+    wt = AdmissionWardType(hospital_id=current_doctor.hospital_id, name=body.name.strip(), total_beds=body.total_beds, daily_charge=body.daily_charge, default_deposit=body.default_deposit, is_icu=body.is_icu, is_ot=body.is_ot, ot_charge=body.ot_charge, category=category, is_emergency_ward=body.is_emergency_ward)
     db.add(wt)
+    db.flush()
+    if body.is_emergency_ward:
+        _clear_other_emergency_ward_flags(db, current_doctor.hospital_id, keep_id=wt.id)
     db.commit()
     db.refresh(wt)
-    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, is_ot=wt.is_ot, ot_charge=wt.ot_charge, category=wt.category, occupied=0, vacant=wt.total_beds)
+    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, is_ot=wt.is_ot, ot_charge=wt.ot_charge, category=wt.category, is_emergency_ward=wt.is_emergency_ward, occupied=0, vacant=wt.total_beds)
 
 
 @router.put("/ward-types/{ward_type_id}", response_model=WardTypeOut)
@@ -442,8 +661,11 @@ def update_ward_type(ward_type_id: int, body: WardTypeCreateIn, current_doctor: 
     wt.is_ot = body.is_ot
     wt.ot_charge = body.ot_charge
     wt.category = category
+    wt.is_emergency_ward = body.is_emergency_ward
+    if body.is_emergency_ward:
+        _clear_other_emergency_ward_flags(db, current_doctor.hospital_id, keep_id=wt.id)
     db.commit()
-    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, is_ot=wt.is_ot, ot_charge=wt.ot_charge, category=wt.category, occupied=occupied, vacant=max(wt.total_beds - occupied, 0))
+    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, is_ot=wt.is_ot, ot_charge=wt.ot_charge, category=wt.category, is_emergency_ward=wt.is_emergency_ward, occupied=occupied, vacant=max(wt.total_beds - occupied, 0))
 
 
 @router.delete("/ward-types/{ward_type_id}")
