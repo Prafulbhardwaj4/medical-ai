@@ -1574,6 +1574,7 @@
       errEl.textContent = '';
       const review = [];
       const payloads = [];
+      const skipped = [];
       const NUM_RE = /^-?\d+(\.\d+)?$/;
 
       for (const test of bulkResultOrders) {
@@ -1582,30 +1583,40 @@
           let anyFilled = false;
           for (const p of test.params) {
             const val = document.getElementById(`bulk-val-${test.orderId}-${p.id}`).value.trim();
-            if (!val) { review.push({ test: test.testName, param: p.name, value: null, unit: p.unit }); continue; } // not tested — skipped, not blocked
+            if (!val) continue; // not tested / not ready — skipped, doesn't block anything
             if (p.unit && !NUM_RE.test(val)) { errEl.textContent = `${test.testName} — ${p.name} must be a number.`; return null; }
             results[p.name] = val;
             anyFilled = true;
-            review.push({ test: test.testName, param: p.name, value: val, unit: p.unit });
           }
-          if (!anyFilled) { errEl.textContent = `Enter at least one result for ${test.testName}.`; return null; }
+          if (!anyFilled) {
+            skipped.push(test.testName);  // whole test left blank — comes back next time, not an error
+            continue;
+          }
+          for (const p of test.params) {
+            const val = document.getElementById(`bulk-val-${test.orderId}-${p.id}`).value.trim();
+            review.push({ test: test.testName, param: p.name, value: val || null, unit: p.unit });
+          }
           payloads.push({ orderId: test.orderId, results });
         } else {
           const val = document.getElementById(`bulk-val-${test.orderId}-single`).value.trim();
-          if (!val) { errEl.textContent = `Enter a result value for ${test.testName}.`; return null; }
+          if (!val) { skipped.push(test.testName); continue; }  // not ready yet — comes back next time
           if (test.unit && !NUM_RE.test(val)) { errEl.textContent = `${test.testName} must be a number.`; return null; }
           payloads.push({ orderId: test.orderId, results: { value: val } });
           review.push({ test: test.testName, param: null, value: val, unit: test.unit });
         }
       }
-      return { payloads, review };
+      if (!payloads.length) { errEl.textContent = "Enter at least one test's result before saving."; return null; }
+      return { payloads, review, skipped };
     }
 
     function saveAllResults() {
       const validated = validateBulkResults();
       if (!validated) return;
       bulkResultsDraft = validated;
-      document.getElementById('results-confirm-body').innerHTML = bulkResultsDraft.review.map(r => `
+      const skippedNote = validated.skipped.length
+        ? `<p style="color:var(--slate);font-size:13px;margin-bottom:10px">Not saving yet — still pending: <strong>${validated.skipped.map(sanitize).join(', ')}</strong>. These stay in the queue for later.</p>`
+        : '';
+      document.getElementById('results-confirm-body').innerHTML = skippedNote + bulkResultsDraft.review.map(r => `
         <div class="bulk-param-row">
           <div class="bulk-param-meta"><strong>${sanitize(r.test)}${r.param ? ' — ' + sanitize(r.param) : ''}</strong></div>
           <div>${r.value !== null ? sanitize(r.value) + (r.unit ? ' ' + sanitize(r.unit) : '') : '<span style="color:var(--slate-light)">- (not tested)</span>'}</div>

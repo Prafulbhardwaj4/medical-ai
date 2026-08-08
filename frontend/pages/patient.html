@@ -520,9 +520,15 @@
               <div class="detail-label">Lab Reports</div>
               <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
                 ${(testOrdersByConsultation[v.id] || []).map(o => `<span class="test-pill">${o.test_name}${o.status !== 'verified_released' ? ` <span class="badge badge-grey" style="font-size:10px">${o.status.replace('_',' ')}</span>` : ''}</span>`).join("")}
-                ${(testOrdersByConsultation[v.id] || []).every(o => o.status === 'verified_released')
-                  ? `<button class="btn btn-outline btn-sm" onclick="downloadTestReport([${(testOrdersByConsultation[v.id] || []).map(o => o.id).join(',')}])">View Combined Report</button>`
-                  : ''}
+                ${(() => {
+                  const allOrders = testOrdersByConsultation[v.id] || [];
+                  const readyOrders = allOrders.filter(o => o.status === 'verified_released');
+                  if (!readyOrders.length) return '';
+                  const pendingCount = allOrders.length - readyOrders.length;
+                  return `<button class="btn btn-outline btn-sm" onclick="downloadTestReport([${readyOrders.map(o => o.id).join(',')}])">
+                    View Report${pendingCount ? ` (${readyOrders.length} of ${allOrders.length} ready)` : ' (Combined)'}
+                  </button>`;
+                })()}
               </div>
             </div>` : ""}
             ${v.advice ? `<div class="detail-section"><div class="detail-label">Advice</div><div class="detail-value">${v.advice}</div></div>` : ""}
