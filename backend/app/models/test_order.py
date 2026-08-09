@@ -61,7 +61,8 @@ class TestOrder(Base):
     # payment_pending -> paid -> sample_collected -> processing ->
     # result_entered -> verified_released. No result is visible to the
     # doctor or patient portal until verified_released.
-    verified_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # must differ from completed_by — independent review
+    verified_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    self_verified_sole_staff = Column(Boolean, default=False, nullable=False)  # True when the same person entered and verified — only ever allowed when they're the only active lab-role account at the hospital; flagged so it's traceable, never silent
     verified_at = Column(DateTime, nullable=True)
     # Critical-value flagging (Phase 1, NABL-mandatory).
     is_critical = Column(Boolean, default=False, nullable=False)

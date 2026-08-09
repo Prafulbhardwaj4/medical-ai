@@ -259,6 +259,48 @@ def list_expected_today(
     return {"count": len(result), "appointments": result}
 
 
+@router.get("/upcoming")
+def list_upcoming_bookings(
+    doctor_id: int = Query(None),
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Next 15 days of paid online bookings, hospital-wide — the piece
+    reception previously had no visibility into at all (only ever saw
+    today)."""
+    today_start = datetime.combine(now_ist_naive().date(), datetime.min.time())
+    window_end = today_start + timedelta(days=15)
+
+    q = db.query(Appointment).filter(
+        Appointment.hospital_id == current_doctor.hospital_id,
+        Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed]),
+        Appointment.payment_status == "paid",
+        Appointment.requested_time >= today_start + timedelta(days=1),  # today itself stays on the Expected Today card
+        Appointment.requested_time < window_end,
+    )
+    if doctor_id:
+        q = q.filter(Appointment.doctor_id == doctor_id)
+
+    appts = q.order_by(Appointment.requested_time).all()
+
+    result = []
+    for a in appts:
+        patient_name = None
+        if a.profile_link_id and a.profile_link and a.profile_link.patient:
+            patient_name = a.profile_link.patient.name
+        elif a.new_patient_name:
+            patient_name = a.new_patient_name
+        doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
+        result.append({
+            "id": a.id,
+            "requested_time": a.requested_time.isoformat(),
+            "patient_name": patient_name,
+            "doctor_id": a.doctor_id,
+            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
+        })
+    return {"count": len(result), "appointments": result}
+
+
 @router.get("/pending-review")
 def list_pending_review(
     current_doctor=Depends(get_current_doctor),

@@ -407,8 +407,14 @@ async def websocket_transcribe(
                 # paid token for today, or a doctor could complete and
                 # confirm an entire consultation (and its own prescription
                 # token) for a patient who was never checked in or paid for.
+                # Scoped to THIS doctor's own checkin, not just any paid
+                # checkin for the patient today — on a multi-doctor visit,
+                # each doctor is a separate checkin with its own payment
+                # line, and one doctor's fee being paid must never unlock
+                # another doctor's consultation.
                 todays_checkin = db.query(Checkin).filter(
                     Checkin.patient_id == patient_id,
+                    Checkin.doctor_id == doctor.id,
                     Checkin.visit_date == ist_today(),
                     Checkin.is_paid == True,  # noqa: E712
                 ).order_by(Checkin.created_at.desc()).first()
@@ -417,7 +423,7 @@ async def websocket_transcribe(
                         await websocket.send_json({
                             "type": "blocked",
                             "reason": "no_paid_token",
-                            "message": "No paid token found for this patient today — a consultation can't be started without one."
+                            "message": "No paid token found for this patient with you today — a consultation can't be started without one."
                         })
                     except Exception:
                         pass

@@ -323,5 +323,24 @@ def my_attendance_status(
         "room_id": record.room_id,
         "location": record.doctor_location,
         "coverage": coverage,
-        "active_consultation_id": current_doctor.active_consultation_id
+        "active_consultation_id": current_doctor.active_consultation_id,
+        "expected_off_duty_at": record.expected_off_duty_at.isoformat() if record.expected_off_duty_at else None,
     }
+
+
+@router.patch("/attendance/off-duty-time")
+def update_off_duty_time(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Lets someone fix a wrong off-duty time without a full mark-off-duty
+    then mark-present round trip — only makes sense while actually on an
+    active shift."""
+    record = get_today_attendance(db, current_doctor.id)
+    if not record or record.status not in ("present", "on_break"):
+        raise HTTPException(status_code=400, detail="You're not on an active shift right now")
+    new_time = parse_client_datetime(body.get("expected_off_duty_at"))
+    record.expected_off_duty_at = new_time
+    db.commit()
+    return {"expected_off_duty_at": record.expected_off_duty_at.isoformat() if record.expected_off_duty_at else None}

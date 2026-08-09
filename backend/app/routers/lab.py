@@ -6,7 +6,7 @@ from typing import Optional
 import json
 
 from app.database import get_db
-from app.models.doctor import Doctor
+from app.models.doctor import Doctor, UserRole
 from app.models.test_order import TestOrder
 from app.models.consultation import Consultation
 from app.models.patient import Patient
@@ -905,12 +905,22 @@ def verify_and_release_result(
     _require_hiv_access(db, order, current_doctor)
     if order.status != "result_entered":
         raise HTTPException(status_code=400, detail="This order isn't awaiting verification")
+    self_verified_sole_staff = False
     if order.completed_by and order.completed_by == current_doctor.id:
-        raise HTTPException(status_code=403, detail="The person who entered the result can't also verify it — needs independent review")
+        other_lab_staff_exists = db.query(Doctor).filter(
+            Doctor.hospital_id == current_doctor.hospital_id,
+            Doctor.role == UserRole.lab,
+            Doctor.is_active == True,
+            Doctor.id != current_doctor.id,
+        ).first() is not None
+        if other_lab_staff_exists:
+            raise HTTPException(status_code=403, detail="The person who entered the result can't also verify it — needs independent review")
+        self_verified_sole_staff = True  # only one lab-role account exists at this hospital — allowed through, but flagged
 
     order.status = "verified_released"
     order.verified_by = current_doctor.id
     order.verified_at = now_ist_naive()
+    order.self_verified_sole_staff = self_verified_sole_staff
     if body and body.is_idsp_notifiable:
         order.is_idsp_notifiable = True
     db.commit()

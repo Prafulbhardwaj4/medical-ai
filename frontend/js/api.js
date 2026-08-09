@@ -677,6 +677,25 @@ function openOffDutyTimeModal() {
   });
 }
 
+function renderOffDutyTimeLine(containerId, isoTime) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!isoTime) { el.innerHTML = ''; return; }
+  const t = new Date(isoTime);
+  const timeStr = t.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+  el.innerHTML = `Off duty by <strong>${timeStr}</strong> <a href="javascript:void(0)" onclick="editOffDutyTime('${containerId}')" style="margin-left:6px">Edit</a>`;
+}
+
+async function editOffDutyTime(containerId) {
+  const newTime = await promptOffDutyTime();
+  if (!newTime) return;
+  try {
+    await api("PATCH", "/doctors/attendance/off-duty-time", { expected_off_duty_at: newTime });
+    renderOffDutyTimeLine(containerId, newTime);
+    toast("Off-duty time updated.", "success");
+  } catch (e) { toast(e.message, "error"); }
+}
+
 async function markAttendanceCommon(status, room_id, extra, alreadyActive) {
   return api("POST", "/doctors/attendance", { status, room_id, ...(extra || {}) });
 }

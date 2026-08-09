@@ -185,273 +185,6 @@ def is_doctor_covered_and_present(db: Session, hospital_id: int, doctor_id: int)
     ]
     return len(covering_staff_ids) > 0
 
-@router.post("/emergency-intake", status_code=201)
-def emergency_intake(
-    payload: EmergencyIntakeIn,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """Minimal-friction record for an emergency walk-in — no full registration
-    gate, but reception now explicitly picks the doctor, the reason, and
-    where the patient goes, and the visit is billed like any other (just
-    collected after the fact instead of upfront). Full registration is
-    completed retroactively via the normal PUT /patients/{id} once the
-    patient is identified/stabilized."""
-    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    if payload.destination not in ("ward", "cabin"):
-        raise HTTPException(status_code=400, detail="destination must be 'ward' or 'cabin'")
-    if not payload.reason or not payload.reason.strip():
-        raise HTTPException(status_code=400, detail="Reason is required")
-
-    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
-    hospital_code = hospital.hospital_code if hospital else "GEN"
-
-    doctor = db.query(Doctor).filter(
-        Doctor.id == payload.doctor_id,
-        Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
-        Doctor.is_active == True,
-    ).first()
-    if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
-
-    is_present = db.query(AttendanceRecord).filter(
-        AttendanceRecord.doctor_id == doctor.id,
-        AttendanceRecord.hospital_id == current_doctor.hospital_id,
-        AttendanceRecord.date == ist_today(),
-        AttendanceRecord.status == "present"
-    ).first()
-    if not is_present:
-        raise HTTPException(status_code=400, detail="That doctor isn't marked present right now")
-
-    label = payload.name.strip() if payload.name and payload.name.strip() else (
-        f"Unidentified — approx {payload.approx_age or '?'}y, {payload.approx_gender or 'unknown'}"
-    )
-    gender = (payload.approx_gender or "Other").capitalize()
-    if gender not in ["Male", "Female", "Other"]:
-        gender = "Other"
-
-    patient = Patient(
-        patient_uid=generate_patient_uid(db, current_doctor.hospital_id, hospital_code),
-        url_token=generate_url_token(db),
-        name=label,
-        phone=f"EMRG-{int(now_ist_naive().timestamp())}",
-        age=payload.approx_age or 0,
-        gender=gender,
-        hospital_id=current_doctor.hospital_id,
-        created_by=current_doctor.id,
-        is_emergency_unverified=True,
-    )
-    db.add(patient)
-    db.commit()
-    db.refresh(patient)
-
-    fee = payload.consultation_fee if payload.consultation_fee and payload.consultation_fee > 0 else doctor.default_consultation_fee
-
-    token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
-    checkin = Checkin(
-        hospital_id=current_doctor.hospital_id,
-        patient_id=patient.id,
-        token_number=token,
-        issue_category="Emergency intake",
-        doctor_id=doctor.id,
-        created_by=current_doctor.id,
-        visit_date=ist_today(),
-        consultation_fee=fee,
-        is_paid=False,  # emergency patients still owe — collected after via pending-payments, not upfront
-        is_emergency=True,
-        emergency_status="holding",  # both destinations start "holding" — a Doctor's Cabin patient just isn't shown in the reception Emergency Ward list (see list_emergency_ward)
-        emergency_reason=payload.reason.strip(),
-        emergency_destination=payload.destination,
-    )
-    db.add(checkin)
-    db.commit()
-    db.refresh(checkin)
-
-    log_action(
-        db, current_doctor,
-        action="emergency_intake",
-        target_type="patient",
-        target_id=patient.id,
-        target_label=f"{patient.name} ({patient.patient_uid})",
-        details=f"Sent to {doctor.title} {doctor.name} ({payload.destination}) — {payload.reason.strip()}"
-    )
-
-    from app.utils.notify import notify_emergency_ward_intake, notify_emergency_assistant_hold
-    notify_emergency_ward_intake(db, current_doctor.hospital_id, checkin.id, patient.name, doctor.id, token,
-                                  reason=payload.reason.strip(), destination=payload.destination)
-
-    from app.models.attendance_coverage import AttendanceCoverage
-    covering_assistant_ids = [
-        r[0] for r in db.query(AttendanceRecord.doctor_id).join(
-            AttendanceCoverage, AttendanceCoverage.attendance_record_id == AttendanceRecord.id
-        ).filter(
-            AttendanceRecord.hospital_id == current_doctor.hospital_id,
-            AttendanceRecord.date == ist_today(),
-            AttendanceRecord.status.in_(["present", "on_break"]),
-            AttendanceCoverage.doctor_id == doctor.id
-        ).all()
-    ]
-    for assistant_id in covering_assistant_ids:
-        notify_emergency_assistant_hold(db, current_doctor.hospital_id, checkin.id, patient.name, doctor.id, assistant_id, token)
-
-    db.commit()
-
-    return {
-        "patient_id": patient.id,
-        "url_token": patient.url_token,
-        "checkin_id": checkin.id,
-        "token_number": token,
-        "doctor_name": f"{doctor.title} {doctor.name}",
-    }
-
-
-def _doctor_ready_for_emergency(db: Session, hospital_id: int, doctor_id: int) -> bool:
-    """True only if the doctor is Present AND has explicitly set their
-    location to 'emergency' today — the only way an Emergency Ward patient
-    can be released into a doctor's queue."""
-    from app.models.attendance import AttendanceRecord
-    rec = db.query(AttendanceRecord).filter(
-        AttendanceRecord.doctor_id == doctor_id,
-        AttendanceRecord.hospital_id == hospital_id,
-        AttendanceRecord.date == ist_today()
-    ).first()
-    return bool(rec and rec.status == "present" and rec.doctor_location == "emergency")
-
-
-@router.get("/emergency-ward")
-def list_emergency_ward(
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """Patients held in the Emergency Ward — not yet in any doctor's queue."""
-    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    checkins = db.query(Checkin).filter(
-        Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.visit_date == ist_today(),
-        Checkin.emergency_status == "holding",
-        Checkin.emergency_destination == "ward"
-    ).order_by(Checkin.created_at.asc()).all()
-
-    result = []
-    for c in checkins:
-        patient = db.query(Patient).filter(Patient.id == c.patient_id).first()
-        doctor = db.query(Doctor).filter(Doctor.id == c.doctor_id).first()
-        result.append({
-            "checkin_id": c.id,
-            "patient_id": patient.id if patient else None,
-            "patient_name": patient.name if patient else "Unknown",
-            "token_number": c.token_number,
-            "doctor_id": c.doctor_id,
-            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
-            "doctor_ready": _doctor_ready_for_emergency(db, current_doctor.hospital_id, c.doctor_id) if doctor else False,
-            "held_since": c.created_at.isoformat() if c.created_at else None,
-        })
-    return result
-
-
-@router.post("/emergency-ward/{checkin_id}/release")
-def release_emergency_patient(
-    checkin_id: int,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """Moves a held Emergency Ward patient into their doctor's live queue —
-    only allowed once that doctor has marked themselves ready for emergencies."""
-    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    checkin = db.query(Checkin).filter(
-        Checkin.id == checkin_id,
-        Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.emergency_status == "holding"
-    ).first()
-    if not checkin:
-        raise HTTPException(status_code=404, detail="No holding emergency patient found with that ID")
-
-    if not _doctor_ready_for_emergency(db, current_doctor.hospital_id, checkin.doctor_id):
-        raise HTTPException(status_code=400, detail="This doctor hasn't marked themselves ready for emergencies yet.")
-
-    checkin.emergency_status = "released"
-    db.commit()
-
-    log_action(
-        db, current_doctor,
-        action="emergency_released_to_queue",
-        target_type="patient",
-        target_id=checkin.patient_id,
-        target_label=f"Token {checkin.token_number}",
-        details=f"Released to doctor's queue (checkin {checkin.id})"
-    )
-    return {"message": "Sent to doctor's queue"}
-
-
-@router.post("/emergency-ward/{checkin_id}/accept")
-def accept_emergency_patient(
-    checkin_id: int,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """Doctor-facing one-tap accept from the emergency popup — sets their own
-    location to Emergency and releases the patient into their queue in a
-    single action. This is the no-physical-ward path: no receptionist step
-    required. Only the assigned doctor can accept their own emergency patient,
-    and only while they're marked present."""
-    if current_doctor.role.value not in ("doctor", "sub_admin"):
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    checkin = db.query(Checkin).filter(
-        Checkin.id == checkin_id,
-        Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.doctor_id == current_doctor.id,
-        Checkin.emergency_status == "holding"
-    ).first()
-    if not checkin:
-        raise HTTPException(status_code=404, detail="No holding emergency patient found with that ID")
-
-    record = db.query(AttendanceRecord).filter(
-        AttendanceRecord.doctor_id == current_doctor.id,
-        AttendanceRecord.hospital_id == current_doctor.hospital_id,
-        AttendanceRecord.date == ist_today()
-    ).first()
-    if not record or record.status not in ("present", "on_break"):
-        raise HTTPException(status_code=400, detail="Mark yourself present first.")
-
-    record.doctor_location = "emergency"
-    checkin.emergency_status = "released"
-    db.commit()
-
-    from app.models.notification import Notification
-    db.query(Notification).filter(
-        Notification.hospital_id == current_doctor.hospital_id,
-        Notification.type == "emergency_ward_intake",
-        Notification.link_type == "checkin",
-        Notification.link_id == checkin.id,
-        Notification.is_read == False
-    ).update({"is_read": True})
-    db.commit()
-
-    log_action(
-        db, current_doctor,
-        action="emergency_accepted",
-        target_type="patient",
-        target_id=checkin.patient_id,
-        target_label=f"Token {checkin.token_number}",
-        details="Accepted from dashboard popup — moved to my queue"
-    )
-
-    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
-    return {
-        "patient_id": checkin.patient_id,
-        "url_token": patient.url_token if patient else None,
-        "token_number": checkin.token_number,
-    }
-
-
 @router.post("/", response_model=PatientOut, status_code=201)
 def create_patient(
     payload: PatientCreate,
@@ -907,12 +640,29 @@ def checkin_today(
     else:
         post_consult_nurse = db.query(Doctor).filter(Doctor.id == checkin.nurse_id).first() if checkin.nurse_id else None
 
+    additional_checkins = []
+    if checkin.visit_group_id:
+        additional_checkins = db.query(Checkin).filter(
+            Checkin.visit_group_id == checkin.visit_group_id,
+            Checkin.id != checkin.id,
+        ).all()
+    additional_tokens_out = []
+    for ac in additional_checkins:
+        ac_doctor = db.query(Doctor).filter(Doctor.id == ac.doctor_id).first()
+        additional_tokens_out.append({
+            "checkin_id": ac.id,
+            "token_number": ac.token_number,
+            "doctor_name": f"{ac_doctor.title} {ac_doctor.name}" if ac_doctor else "—",
+            "consultation_fee": ac.consultation_fee,
+        })
+
     return {
         "exists": True,
         "token_number": checkin.token_number,
         "patient_name": patient.name,
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "issue_category": checkin.issue_category,
+        "additional_tokens": additional_tokens_out or None,
         "visit_date": checkin.visit_date.isoformat(),
         "checked_in_at": checkin.created_at.isoformat() if checkin.created_at else None,
         "vitals_status": checkin.vitals_status,
@@ -1871,8 +1621,14 @@ def reception_pending_payments(
         if not patient:
             continue
 
+        # Scoped to THIS checkin's own doctor, not just the patient — on a
+        # multi-doctor visit day (see Checkin.visit_group_id), each doctor
+        # gets their own sibling checkin, and without the doctor_id filter
+        # here, one doctor's line item could silently pick up another
+        # doctor's tests/medicines for the same patient on the same day.
         consultations = db.query(Consultation).filter(
             Consultation.patient_id == c.patient_id,
+            Consultation.doctor_id == c.doctor_id,
             Consultation.created_at >= day_start,
             Consultation.created_at <= day_end
         ).all()

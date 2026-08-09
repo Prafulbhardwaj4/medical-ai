@@ -168,6 +168,7 @@
             <div class="staff-att-status">
               <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
               <div id="nurse-room-display" style="margin-top:6px;font-size:13px;color:var(--slate)"></div>
+              <div id="nurse-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
             </div>
             <div class="staff-att-actions" id="nurse-attendance-btns">
               <select class="form-control" id="nurse-room-select" style="display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
@@ -271,6 +272,7 @@
   <div id="toast"></div>
   <script src="../js/api.js?v=4"></script>
   <script src="../js/chat-widget.js?v=1"></script>
+  <script src="../js/suggestion-widget.js?v=1"></script>
   <script>
     requireAuth();
     fillTopbar();
@@ -570,6 +572,7 @@
         renderNurseBadge(data.status);
         await loadNurseRoomOptions(data.room_id);
         await loadNurseCoverageChips(data.coverage?.ward_ids || [], data.coverage?.doctor_ids || []);
+        renderOffDutyTimeLine('nurse-off-duty-time-line', data.expected_off_duty_at);
       } catch(e) {}
     }
 
@@ -580,6 +583,7 @@
       const btnBreak = document.getElementById('nurse-btn-break');
       const btnOffDuty = document.getElementById('nurse-btn-offduty');
       document.getElementById('nurse-room-select').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
+      document.getElementById('nurse-off-duty-time-line').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';
         btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
@@ -608,6 +612,12 @@
         }
         await markAttendanceCommon(status, room_id, { expected_off_duty_at });
         renderNurseBadge(status);
+        if (status === 'present' || status === 'on_break') {
+          try {
+            const s = await api("GET", "/doctors/attendance/my-status", null, false, true);
+            renderOffDutyTimeLine('nurse-off-duty-time-line', s.expected_off_duty_at);
+          } catch (e) { }
+        }
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
           toast(labels[status] || "Status updated.", "success");

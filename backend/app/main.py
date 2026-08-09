@@ -35,6 +35,7 @@ from app.routers import admissions as admissions_router
 from app.routers import refunds as refunds_router
 from app.routers import doctor_slots as doctor_slots_router
 from app.routers import chat as chat_router
+from app.routers import suggestions as suggestions_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 from app.models.audit_log import AuditLog
@@ -255,6 +256,7 @@ app.include_router(admissions_router.router)
 app.include_router(refunds_router.router)
 app.include_router(doctor_slots_router.router)
 app.include_router(chat_router.router)
+app.include_router(suggestions_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
 

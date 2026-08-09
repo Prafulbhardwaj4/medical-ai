@@ -720,48 +720,23 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
         elements.append(Paragraph(f"<b>Invoice #:</b> INV-{invoice_hash} &nbsp;&nbsp; <b>Date:</b> {now_ist().strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     if doctor:
         elements.append(Paragraph(f"<b>Consulting Doctor:</b> {doctor.title} {doctor.name}", styles["Normal"]))
-    if place_of_supply:
-        elements.append(Paragraph(f"<b>Place of Supply:</b> {place_of_supply}", styles["Normal"]))
     elements.append(Spacer(1, 5*mm))
 
-    # GST breakdown only appears once a hospital actually has rates configured — until then
-    # every item's tax_amount is 0 and the PDF renders exactly as it did before GST existed.
-    gst_total = sum(item.get("tax_amount", 0) or 0 for item in items)
-
-    if gst_total > 0:
-        table_data = [["Description", "HSN/SAC", "Qty", "Unit Price", "Taxable Amt", "GST", "Amount"]]
-        for item in items:
-            tax = item.get("tax_amount", 0) or 0
-            rate = item.get("gst_rate", 0) or 0
-            taxable = item.get("taxable_amount", item.get("line_total", 0))
-            table_data.append([
-                item["name"],
-                item.get("hsn_sac") or "—",
-                str(item.get("qty", 1)),
-                f"Rs.{item['unit_price']:.2f}",
-                f"Rs.{taxable:.2f}",
-                f"{rate:.0f}% (Rs.{tax:.2f})" if rate else "Exempt",
-                f"Rs.{item.get('total_with_tax', item['line_total']):.2f}"
-            ])
-        subtotal = sum(item.get("line_total", 0) for item in items)
-        table_data.append(["", "", "", "", "", "Subtotal", f"Rs.{subtotal:.2f}"])
-        table_data.append(["", "", "", "", "", "CGST", f"Rs.{gst_total/2:.2f}"])
-        table_data.append(["", "", "", "", "", "SGST", f"Rs.{gst_total/2:.2f}"])
-        table_data.append(["", "", "", "", "", "Grand Total", f"Rs.{grand_total:.2f}"])
-        col_widths = [46*mm, 18*mm, 10*mm, 20*mm, 20*mm, 24*mm, 27*mm]
-        footer_rows = 4
-    else:
-        table_data = [["Description", "Qty", "Unit Price", "Amount"]]
-        for item in items:
-            table_data.append([
-                item["name"],
-                str(item.get("qty", 1)),
-                f"Rs.{item['unit_price']:.2f}",
-                f"Rs.{item['line_total']:.2f}"
-            ])
-        table_data.append(["", "", "Grand Total", f"Rs.{grand_total:.2f}"])
-        col_widths = [85*mm, 20*mm, 30*mm, 30*mm]
-        footer_rows = 1
+    # By design, the printed invoice never shows GST/HSN-SAC/tax breakdown —
+    # description, qty, unit price, amount only. Any tax_amount/gst_rate/
+    # hsn_sac fields the caller still passes on `items` (e.g. for internal
+    # reporting) are simply ignored here, not rendered.
+    table_data = [["Description", "Qty", "Unit Price", "Amount"]]
+    for item in items:
+        table_data.append([
+            item["name"],
+            str(item.get("qty", 1)),
+            f"Rs.{item['unit_price']:.2f}",
+            f"Rs.{item['line_total']:.2f}"
+        ])
+    table_data.append(["", "", "Grand Total", f"Rs.{grand_total:.2f}"])
+    col_widths = [85*mm, 20*mm, 30*mm, 30*mm]
+    footer_rows = 1
 
     t = Table(table_data, colWidths=col_widths)
     t.setStyle(TableStyle([

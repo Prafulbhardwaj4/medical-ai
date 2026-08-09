@@ -207,6 +207,7 @@
             <div class="staff-att-status">
               <span class="badge badge-grey" id="attendance-badge">Not marked</span>
               <div id="room-display" style="margin-top:8px;font-size:13px;color:var(--slate)"></div>
+              <div id="off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
             </div>
             <div class="staff-att-actions" id="attendance-btns">
               <select class="form-control" id="room-select" style="display:none"
@@ -510,6 +511,7 @@
 
   <script src="../js/api.js?v=4"></script>
   <script src="../js/chat-widget.js?v=1"></script>
+  <script src="../js/suggestion-widget.js?v=1"></script>
   <script>
 
     function showMobileSection(id) {
@@ -566,6 +568,12 @@
         await loadRoomOptions(mine ? mine.room_id : null);
         currentDoctorLocation = (mine && mine.location) ? mine.location : 'in_cabin';
         renderLocationToggleBtn();
+        if (currentAttendanceStatus === 'present' || currentAttendanceStatus === 'on_break') {
+          try {
+            const s = await api("GET", "/doctors/attendance/my-status", null, false, true);
+            renderOffDutyTimeLine('off-duty-time-line', s.expected_off_duty_at);
+          } catch (e) { }
+        }
       } catch (e) { }
     }
 
@@ -595,6 +603,7 @@
       const locSelect = document.getElementById('location-toggle');
       roomSelect.style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       locSelect.style.display = (status === 'present') ? '' : 'none';
+      document.getElementById('off-duty-time-line').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
 
       if (status === 'present') {
         badge.className = 'badge badge-green';
@@ -736,6 +745,12 @@
         }
         await markAttendanceCommon(status, room_id, { location, expected_off_duty_at }, alreadyActive);
         renderAttendanceBadge(status);
+        if (status === 'present' || status === 'on_break') {
+          try {
+            const s = await api("GET", "/doctors/attendance/my-status", null, false, true);
+            renderOffDutyTimeLine('off-duty-time-line', s.expected_off_duty_at);
+          } catch (e) { }
+        }
         document.getElementById('room-display').textContent = '';
         if (status === 'present' && !alreadyActive) await loadRoomOptions(room_id);
         if (!wasAlreadyPresent) {
@@ -983,7 +998,7 @@
       if (q.status === 'expected' || !q.vitals_status || q.vitals_status === 'none') return '<span style="color:var(--slate-light)">—</span>';
       if (q.vitals_status === 'done') return '<span class="badge badge-teal">Recorded</span>';
       if (q.vitals_status === 'sent_back') return '<span class="badge badge-red">Recheck sent</span>';
-      return '<span class="badge badge-amber" title="Send patient to nurse for vitals">Not Recorded</span>';
+      return '<span class="badge badge-grey" title="Send patient to nurse for vitals">Not recorded</span>';
     }
 
     function renderQueueRow(q) {

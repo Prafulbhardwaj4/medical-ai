@@ -225,6 +225,7 @@
           </div>
           <div class="staff-att-status">
             <span class="badge badge-grey" id="pharm-attendance-badge">Not marked</span>
+            <div id="pharm-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
           <div class="staff-att-actions">
             <button class="btn btn-primary" id="pharm-btn-present" onclick="markPharmAttendance('present')">Mark
@@ -666,6 +667,7 @@
   <div id="toast"></div>
   <script src="../js/api.js?v=4"></script>
   <script src="../js/chat-widget.js?v=1"></script>
+  <script src="../js/suggestion-widget.js?v=1"></script>
   <script>
     if (!requireAuth()) throw new Error("Not authenticated");
     if (getDoctor()?.role !== 'pharmacy') window.location.href = 'login.html';
@@ -758,6 +760,7 @@
       try {
         const data = await api("GET", "/doctors/attendance/my-status");
         renderPharmBadge(data.status);
+        renderOffDutyTimeLine('pharm-off-duty-time-line', data.expected_off_duty_at);
       } catch (e) { }
     }
 
@@ -767,6 +770,7 @@
       const btnPresent = document.getElementById('pharm-btn-present');
       const btnBreak = document.getElementById('pharm-btn-break');
       const btnOffDuty = document.getElementById('pharm-btn-offduty');
+      document.getElementById('pharm-off-duty-time-line').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';
         btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
@@ -798,6 +802,12 @@
         }
         await markAttendanceCommon(status, null, { expected_off_duty_at }, alreadyActive);
         renderPharmBadge(status);
+        if (status === 'present' || status === 'on_break') {
+          try {
+            const s = await api("GET", "/doctors/attendance/my-status", null, false, true);
+            renderOffDutyTimeLine('pharm-off-duty-time-line', s.expected_off_duty_at);
+          } catch (e) { }
+        }
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
           toast(labels[status] || "Status updated.", "success");

@@ -269,13 +269,11 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
+        <button class="btn btn-outline btn-sm" id="bills-header-btn" onclick="openBillsModal()">
+          🧾 Bills
+        </button>
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
-
-      <!-- Bills button moved before doctor info -->
-      <button class="btn btn-outline btn-sm" id="bills-header-btn" onclick="openBillsModal()">
-        🧾 Bills
-      </button>
 
       <div class="topbar-doctor">
         <span><strong id="topbar-doctor-name"></strong></span>
@@ -426,7 +424,7 @@
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-        Expected Today
+        Online Appointments
       </div>
       <a class="nav-item" href="admissions.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -541,6 +539,7 @@
           </div>
           <div class="staff-att-status">
             <span class="badge badge-grey" id="rec-attendance-badge">Not marked</span>
+            <div id="rec-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
           <div class="staff-att-actions">
             <button class="btn btn-primary" id="rec-btn-present" onclick="markRecAttendance('present')">Mark
@@ -604,7 +603,10 @@
           <div id="step-doctor" style="display:none">
             <div class="card-header">
               <h2>Assign Doctor</h2>
-              <button class="btn btn-outline btn-sm" onclick="goToStep('room')">← Back</button>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-sm" style="background:#0d9488;color:#fff" onclick="openAddDoctorModal()">+ Add Doctor</button>
+                <button class="btn btn-outline btn-sm" onclick="goToStep('room')">← Back</button>
+              </div>
             </div>
             <p style="color:var(--slate);margin-bottom:16px">Room: <strong id="doc-step-room-name"></strong></p>
             <div class="form-group">
@@ -618,8 +620,6 @@
               </div>
             </div>
 
-            <button class="btn" style="width:100%;background:#0d9488;color:#fff;margin-bottom:10px"
-              onclick="openAddDoctorModal()">+ Add Doctor (seeing more than one today?)</button>
             <div id="additional-doctors-list"></div>
             <div id="visit-total-row"
               style="display:none;font-size:14px;color:var(--slate);margin-bottom:10px;text-align:right">
@@ -800,6 +800,27 @@
             discharge — are on each patient's admission page.
           </p>
           <div id="emergency-ward-list"></div>
+        </div>
+
+        <div class="card" style="margin-top:20px">
+          <div class="card-header" style="flex-wrap:wrap;gap:10px">
+            <h2>Next 15 Days <span class="badge badge-teal" id="upcoming-count" style="margin-left:8px">0</span></h2>
+            <select class="form-control" id="upcoming-doctor-filter" style="max-width:220px" onchange="loadUpcomingBookings()">
+              <option value="">All doctors</option>
+            </select>
+          </div>
+          <div id="upcoming-list"><p style="color:var(--slate-light);font-size:13px">Loading...</p></div>
+        </div>
+
+        <div class="card" style="margin-top:20px">
+          <div class="card-header" style="flex-wrap:wrap;gap:10px">
+            <h2>Slot Preview</h2>
+            <div style="display:flex;gap:8px">
+              <select class="form-control" id="slot-preview-doctor" style="max-width:200px"></select>
+              <input type="date" class="form-control" id="slot-preview-date" style="max-width:160px" onchange="loadSlotPreview()" />
+            </div>
+          </div>
+          <div id="slot-preview-list"><p style="color:var(--slate-light);font-size:13px">Pick a doctor to see their slots.</p></div>
         </div>
 
         <div class="card" style="margin-top:20px">
@@ -1229,6 +1250,7 @@
 
   <script src="../js/api.js?v=4"></script>
   <script src="../js/chat-widget.js?v=1"></script>
+  <script src="../js/suggestion-widget.js?v=1"></script>
   <script>
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
@@ -1328,7 +1350,7 @@
         if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
       });
       if (id === 'home') loadPendingPayments();
-      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); }
+      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); }
       if (id === 'availability') loadAvailabilityDoctorList();
     }
 
@@ -1339,7 +1361,7 @@
       ['home', 'patients', 'portal', 'availability'].forEach(t => {
         document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id);
       });
-      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); }
+      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); }
       if (id === 'availability') loadAvailabilityDoctorList();
     }
 
@@ -1353,7 +1375,11 @@
       showRecSection(__startTab);
     }
     checkEmergencyWardAvailable();
-    if (__startTab === 'portal') { loadEmergencyWard(); loadPendingReview(); }
+    if (__startTab === 'portal') {
+      loadEmergencyWard(); loadPendingReview();
+      loadUpcomingBookings(); loadSlotPreviewDoctorFilter();
+      document.getElementById('slot-preview-date').valueAsDate = new Date();
+    }
     setInterval(() => { if (document.getElementById('section-portal')?.classList.contains('active') || document.getElementById('section-portal')?.classList.contains('d-active')) loadEmergencyWard(); }, 15000);
 
     function goToStep(step) {
@@ -1432,6 +1458,19 @@
       document.getElementById('slip-date').textContent = formatDate(t.visit_date);
       document.getElementById('slip-checkin-time').textContent = formatCheckinTime(t.checked_in_at);
       currentCheckinId = t.checkin_id;
+
+      const extraWrap = document.getElementById('slip-additional-doctors');
+      if (t.additional_tokens && t.additional_tokens.length) {
+        extraWrap.style.display = '';
+        extraWrap.innerHTML = '<p style="font-size:13px;color:var(--slate);margin:10px 0 4px">Also queued today:</p>' +
+          t.additional_tokens.map(at => `
+            <div style="font-size:13px;display:flex;justify-content:space-between;padding:2px 0">
+              <span>${at.doctor_name} (${t.issue_category}) — Token <strong>${at.token_number}</strong></span><span>₹${at.consultation_fee || 0}</span>
+            </div>`).join('');
+      } else {
+        extraWrap.style.display = 'none';
+        extraWrap.innerHTML = '';
+      }
       renderBillingRow(getDoctor()?.billing_enabled, t.total_fee, t.is_paid);
       ['search', 'room', 'doctor'].forEach(s => document.getElementById(`step-${s}`).style.display = 'none');
       document.getElementById('step-token').style.display = '';
@@ -1612,6 +1651,7 @@
       try {
         const invoice = await api("POST", `/billing/checkins/${checkinId}/finalize-invoice`, {});
         toast(`Bill generated — Rs.${invoice.grand_total}`, 'success');
+        window.open(`${API_BASE}/billing/invoices/${invoice.id}/pdf`, '_blank');
         openBillsModal(); // refresh — patient stays listed if any bucket is still pending
       } catch (e) {
         toast(e.message, 'error');
@@ -1721,12 +1761,17 @@
       btn.innerHTML = '<span class="spinner"></span>';
       try {
         const billingOn = getDoctor()?.billing_enabled;
+        const additionalDoctorsPayload = Object.keys(selectedAdditionalDoctors).map(id => ({
+          doctor_id: parseInt(id),
+          consultation_fee: billingOn ? (selectedAdditionalDoctors[id] || null) : null,
+        }));
         const result = await api("POST", `/patients/${selectedPatient.id}/checkin`, {
           issue_category: selectedCategory,
           doctor_id: parseInt(doctorId),
           send_to_nurse: true,
           consultation_fee: billingOn ? (parseFloat(document.getElementById('consultation-fee').value) || null) : null,
-          force: !!force
+          force: !!force,
+          additional_doctors: additionalDoctorsPayload.length ? additionalDoctorsPayload : null,
         });
         currentCheckinId = result.checkin_id;
         currentVisitGroupId = result.visit_group_id || null;
@@ -1747,7 +1792,7 @@
           extraWrap.innerHTML = '<p style="font-size:13px;color:var(--slate);margin:10px 0 4px">Also queued today:</p>' +
             result.additional_tokens.map(t => `
               <div style="font-size:13px;display:flex;justify-content:space-between;padding:2px 0">
-                <span>${t.doctor_name} — Token <strong>${t.token_number}</strong></span><span>₹${t.consultation_fee || 0}</span>
+                <span>${t.doctor_name} (${result.issue_category}) — Token <strong>${t.token_number}</strong></span><span>₹${t.consultation_fee || 0}</span>
               </div>`).join('');
         } else {
           extraWrap.style.display = 'none';
@@ -2870,6 +2915,7 @@
       try {
         const data = await api("GET", "/doctors/attendance/my-status");
         renderRecBadge(data.status);
+        renderOffDutyTimeLine('rec-off-duty-time-line', data.expected_off_duty_at);
       } catch (e) { }
     }
 
@@ -2879,6 +2925,7 @@
       const btnPresent = document.getElementById('rec-btn-present');
       const btnBreak = document.getElementById('rec-btn-break');
       const btnOffDuty = document.getElementById('rec-btn-offduty');
+      document.getElementById('rec-off-duty-time-line').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';
         btnPresent.style.display = 'none'; btnBreak.style.display = ''; btnOffDuty.style.display = '';
@@ -2905,6 +2952,12 @@
         }
         await markAttendanceCommon(status, null, { expected_off_duty_at }, alreadyActive);
         renderRecBadge(status);
+        if (status === 'present' || status === 'on_break') {
+          try {
+            const s = await api("GET", "/doctors/attendance/my-status", null, false, true);
+            renderOffDutyTimeLine('rec-off-duty-time-line', s.expected_off_duty_at);
+          } catch (e) { }
+        }
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
           toast(labels[status] || "Status updated.", "success");
@@ -3113,6 +3166,49 @@
     }
 
     let expectedTodayFilterLoaded = false;
+    async function loadUpcomingBookings() {
+      const el = document.getElementById("upcoming-list");
+      const doctorId = document.getElementById("upcoming-doctor-filter").value;
+      try {
+        const data = await api("GET", `/portal-appointments-staff/upcoming${doctorId ? '?doctor_id=' + doctorId : ''}`, null, false, true);
+        document.getElementById("upcoming-count").textContent = data.count;
+        if (!data.appointments.length) { el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Nothing booked in the next 15 days.</p>'; return; }
+        el.innerHTML = data.appointments.map(a => {
+          const d = new Date(a.requested_time);
+          return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <span><strong>${sanitize(a.patient_name || 'New Patient')}</strong> — ${sanitize(a.doctor_name)}</span>
+            <span style="color:var(--slate)">${d.toLocaleDateString('en-IN', {day:'numeric', month:'short'})}, ${d.toLocaleTimeString('en-IN', {hour:'numeric', minute:'2-digit', hour12:true})}</span>
+          </div>`;
+        }).join('');
+      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+    }
+
+    async function loadSlotPreviewDoctorFilter() {
+      const sel = document.getElementById("slot-preview-doctor");
+      if (sel.dataset.loaded) return;
+      try {
+        const doctors = await api("GET", "/patients/hospital-doctors");
+        sel.innerHTML = '<option value="">Select doctor...</option>' + doctors.map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
+        sel.dataset.loaded = "1";
+      } catch (e) { }
+    }
+
+    async function loadSlotPreview() {
+      const doctorId = document.getElementById("slot-preview-doctor").value;
+      const date = document.getElementById("slot-preview-date").value;
+      const el = document.getElementById("slot-preview-list");
+      if (!doctorId || !date) { el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Pick a doctor and date to see their slots.</p>'; return; }
+      try {
+        const slots = await api("GET", `/doctor-slots/mine?date=${date}&doctor_id=${doctorId}`, null, false, true);
+        if (!slots.length) { el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No slots set up for this date.</p>'; return; }
+        el.innerHTML = slots.map(s => `
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <span>${sanitize(s.slot_time)}</span>
+            <span>${s.booked_count} / ${s.capacity} filled</span>
+          </div>`).join('');
+      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+    }
+
     async function loadExpectedTodayDoctorFilter() {
       if (expectedTodayFilterLoaded) return;
       const filterSel = document.getElementById("expected-today-doctor-filter");
