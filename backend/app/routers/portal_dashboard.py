@@ -186,9 +186,9 @@ def list_visits(
     account: PatientAccount = Depends(get_current_patient_account),
     db: Session = Depends(get_db),
 ):
-    link = next((p for p in account.profiles if p.id == profile_link_id), None)
+    link = next((p for p in account.profiles if p.id == profile_link_id and p.relation != "pending_confirmation"), None)
     if not link or not link.patient:
-        raise HTTPException(status_code=404, detail="Profile not found")
+        raise HTTPException(status_code=404, detail="Profile not found — confirm it under your profile menu first if it's a recently linked record")
 
     patient = link.patient
     checkins = (

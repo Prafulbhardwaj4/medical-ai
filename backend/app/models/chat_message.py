@@ -7,8 +7,9 @@ class ChatMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
-    staff_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)   # identifies the thread
+    staff_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)   # identifies the admin<->staff thread
     sender_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)  # who actually wrote this message
+    recipient_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # set only for peer-to-peer (staff<->staff) messages; NULL means this is an admin-thread message
     body = Column(Text, nullable=False)
     is_read_by_staff = Column(Boolean, default=False, nullable=False)
     is_read_by_admin = Column(Boolean, default=False, nullable=False)

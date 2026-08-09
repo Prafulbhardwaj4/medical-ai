@@ -154,8 +154,7 @@
     <main class="main-content">
       <div id="emergency-hold-banner" style="display:none;background:#dc2626;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
 
-      <div class="mobile-section active d-active" id="section-home">
-
+      <div class="mobile-section d-active" id="section-attendance">
         <div class="card" style="margin-bottom:20px">
           <div class="att-top-row">
             <div class="card-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
@@ -175,10 +174,14 @@
             Mark yourself present, then use the "Assisting" dropdown in the top bar to pick which doctor(s) you're covering.
           </p>
         </div>
+      </div>
+
+      <div class="mobile-section active d-active" id="section-home">
 
         <div class="card" id="up-next-card" style="display:none;margin-bottom:16px;background:var(--smoke)">
           <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px">UP NEXT</div>
           <div style="font-size:15px"><strong id="up-next-name"></strong> <span style="color:var(--slate)" id="up-next-uid"></span></div>
+          <div style="font-size:13px;color:var(--slate);margin-top:2px" id="up-next-phone"></div>
         </div>
 
         <div class="card" id="queue-card-walkin">
@@ -264,7 +267,7 @@
     if (window.innerWidth >= 901) showAssistantDesktopTab('home');
 
     function showAssistantSection(id) {
-      ['home', 'doctors'].forEach(s => {
+      ['home', 'doctors', 'attendance'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         document.getElementById('tab-btn-' + s).classList.toggle('active', s === id);
       });
@@ -377,7 +380,7 @@
       const btnPresent = document.getElementById('nurse-btn-present');
       const btnBreak = document.getElementById('nurse-btn-break');
       const btnOffDuty = document.getElementById('nurse-btn-offduty');
-      document.getElementById('doc-picker-hint').style.display = (status === 'present' || status === 'on_break') ? 'none' : '';
+      document.getElementById('doc-picker-hint').style.display = (status === 'present' || status === 'on_break' || status === 'off_duty') ? 'none' : '';
       document.getElementById('nurse-off-duty-time-line').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';
@@ -519,26 +522,50 @@
       }
     }
 
+    function applyQueueFilter(list, filterValue) {
+      if (filterValue === 'waiting') return list.filter(v => !v.is_consulted);
+      if (filterValue === 'consulted') return list.filter(v => v.is_consulted);
+      return list;
+    }
+
     function renderQueues() {
-      const walkin = _queueData.walk_in || [];
-      const online = _queueData.online || [];
+      const walkinAll = _queueData.walk_in || [];
+      const onlineAll = _queueData.online || [];
 
       // A patient appearing more than once today (e.g. an earlier walk-in
       // plus a separate evening online booking) is a genuine return visit,
       // not a duplicate — flag it so the assistant doesn't second-guess it.
       const patientIdCounts = {};
-      [...walkin, ...online].forEach(v => { patientIdCounts[v.patient_id] = (patientIdCounts[v.patient_id] || 0) + 1; });
+      [...walkinAll, ...onlineAll].forEach(v => { patientIdCounts[v.patient_id] = (patientIdCounts[v.patient_id] || 0) + 1; });
+
+      const walkinFilter = document.getElementById("queue-filter-walkin").value;
+      const onlineFilter = document.getElementById("queue-filter-online").value;
+      const walkin = applyQueueFilter(walkinAll, walkinFilter);
+      const online = applyQueueFilter(onlineAll, onlineFilter);
 
       document.getElementById("queue-count-walkin").textContent = `${walkin.length} waiting`;
       document.getElementById("queue-count-online").textContent = `${online.length} waiting`;
 
       document.getElementById("queue-tbody-walkin").innerHTML = walkin.length
         ? walkin.map(v => renderQueueRow(v, 'created_at', false, patientIdCounts[v.patient_id] > 1)).join('')
-        : `<tr><td colspan="6"><div class="empty-state"><p>No walk-in patients right now.</p></div></td></tr>`;
+        : `<tr><td colspan="6"><div class="empty-state"><p>No patients match this filter.</p></div></td></tr>`;
 
       document.getElementById("queue-tbody-online").innerHTML = online.length
         ? online.map(v => renderQueueRow(v, 'booked_time', true, patientIdCounts[v.patient_id] > 1)).join('')
-        : `<tr><td colspan="6"><div class="empty-state"><p>No online appointments right now.</p></div></td></tr>`;
+        : `<tr><td colspan="6"><div class="empty-state"><p>No patients match this filter.</p></div></td></tr>`;
+
+      const upNextCard = document.getElementById('up-next-card');
+      const nextPatient = [...walkinAll, ...onlineAll]
+        .filter(v => !v.is_consulted)
+        .sort((a, b) => new Date(a.created_at || a.booked_time) - new Date(b.created_at || b.booked_time))[0];
+      if (nextPatient) {
+        upNextCard.style.display = '';
+        document.getElementById('up-next-name').textContent = nextPatient.patient_name;
+        document.getElementById('up-next-uid').textContent = nextPatient.patient_uid ? `(${nextPatient.patient_uid})` : '';
+        document.getElementById('up-next-phone').textContent = nextPatient.phone || '';
+      } else {
+        upNextCard.style.display = 'none';
+      }
     }
 
     async function loadQueues() {

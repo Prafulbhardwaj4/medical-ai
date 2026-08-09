@@ -210,7 +210,7 @@
               <div id="off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
             </div>
             <div class="staff-att-actions" id="attendance-btns">
-              <select class="form-control" id="room-select" style="display:none"
+              <select class="form-control" id="room-select" data-no-search style="display:none"
                 onchange="markAttendance(currentAttendanceStatus)"></select>
               <div id="location-toggle" style="display:none;gap:6px;align-items:center">
                 <button type="button" class="btn btn-outline btn-sm" id="loc-toggle-btn"
@@ -704,7 +704,7 @@
               <h2 style="margin:0;font-size:18px">Which room are you in today?</h2>
             </div>
             <p style="color:var(--slate);font-size:13.5px;margin:0 0 24px">Patients and staff will see this as your location.</p>
-            <select class="form-control" id="present-room-select" style="font-size:16px;padding:16px;margin-bottom:8px">
+            <select class="form-control" id="present-room-select" data-no-search style="font-size:16px;padding:16px;margin-bottom:8px">
               <option value="">Loading rooms…</option>
             </select>
             <button type="button" class="btn btn-primary" style="width:100%;margin-top:20px" id="present-room-confirm-btn" disabled>Confirm & Mark Present</button>

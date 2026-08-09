@@ -1842,7 +1842,16 @@ tbody tr:hover {
 
 @media (min-width: 901px) {
   .staff-att-status {
-    display: none;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    text-align: left;
+    padding: 4px 0 16px;
+  }
+
+  .staff-att-status #room-display,
+  .staff-att-status [id$="-off-duty-time-line"] {
+    margin-top: 0 !important;
   }
 
   .staff-att-actions {
@@ -2343,6 +2352,19 @@ tbody tr:hover {
     padding-left: 0;
     text-align: left;
   }
+
+  /* The checked-in/est-time column is centered on desktop (see
+     .col-checkin-time below) but must right-align once the table
+     collapses into cards on mobile — this specific override wins over
+     that desktop rule at this viewport since it's declared here with
+     matching specificity but appears later in the cascade. */
+  table.responsive-cards td.col-checkin-time {
+    text-align: right;
+  }
+}
+
+.col-checkin-time {
+  text-align: center;
 }
 
 /* ── Mobile profile button + dropdown ── */

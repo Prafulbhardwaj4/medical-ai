@@ -19,5 +19,6 @@ class Suggestion(Base):
     status = Column(String, nullable=False, default="sent")  # "sent" | "seen" | "in_progress" | "rejected" | "completed"
     rejection_reason = Column(Text, nullable=True)  # only set when status == "rejected"
     resolved_by = Column(Integer, nullable=True)  # super admin's own id (not a doctors.id — separate auth), stored loosely
+    follow_up_requested_at = Column(DateTime, nullable=True)  # staff tapped "Follow Up" — cleared whenever status changes or the message is edited
     created_at = Column(DateTime, default=now_ist_naive)
     updated_at = Column(DateTime, default=now_ist_naive, onupdate=now_ist_naive)

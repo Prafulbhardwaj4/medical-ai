@@ -452,9 +452,14 @@
           const pendingHere = myProfiles.filter(p => p.hospital_id === state.hospitalId && p.relation === "pending_confirmation");
           const linkedHere = myProfiles.filter(p => p.hospital_id === state.hospitalId && p.relation !== "pending_confirmation");
           const pendingNotice = pendingHere.length
-            ? `<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-bottom:12px">
-                 ${pendingHere.length} profile${pendingHere.length > 1 ? 's' : ''} here need${pendingHere.length > 1 ? '' : 's'} confirmation before you can book for them —
-                 go to your profile menu → <strong>Confirm Your Profiles</strong>.
+            ? `<div style="display:flex;align-items:center;gap:12px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--radius);padding:12px 14px;margin-bottom:12px">
+                 <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#dc2626" stroke-width="2" style="flex-shrink:0">
+                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                 </svg>
+                 <div style="flex:1;font-size:13px">
+                   <strong>${pendingHere.length} profile${pendingHere.length > 1 ? 's' : ''}</strong> here need${pendingHere.length > 1 ? '' : 's'} confirmation before you can book for them.
+                 </div>
+                 <button class="btn btn-primary btn-sm" onclick="window.location.href='my-health.html'">Confirm</button>
                </div>`
             : '';
 

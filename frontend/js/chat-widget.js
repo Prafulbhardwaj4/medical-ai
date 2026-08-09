@@ -7,9 +7,11 @@
 
 (function () {
   const ADMIN_ROLES = ["admin", "sub_admin"];
-  const STAFF_ROLES = ["doctor", "receptionist", "nurse", "lab", "pharmacy"];
+  const STAFF_ROLES = ["doctor", "receptionist", "nurse", "assistant", "lab", "pharmacy"];
 
   let currentThreadStaffId = null; // admin-side: which staff thread is open
+  let staffChatTab = "admin"; // staff-side: "admin" or "colleagues"
+  let currentPeerId = null;   // staff-side: which colleague thread is open
 
   function mount() {
     const doctor = getDoctor();
@@ -50,7 +52,7 @@
       <div class="chat-panel-header">
         <div style="display:flex;align-items:center;gap:6px">
           <button class="chat-back-btn" id="chat-back-btn" style="display:none">&larr;</button>
-          <strong id="chat-panel-title">${ADMIN_ROLES.includes(doctor.role) ? "Staff Chats" : "Chat with Admin"}</strong>
+          <strong id="chat-panel-title">${ADMIN_ROLES.includes(doctor.role) ? "Staff Chats" : "Chat"}</strong>
         </div>
         <button class="chat-back-btn" onclick="window.__chatWidget.close()">&times;</button>
       </div>
@@ -66,6 +68,11 @@
       if (ADMIN_ROLES.includes(doctor.role) && currentThreadStaffId !== null) {
         currentThreadStaffId = null;
         renderAdminThreadList();
+      } else if (STAFF_ROLES.includes(doctor.role) && currentPeerId !== null) {
+        currentPeerId = null;
+        document.getElementById("chat-back-btn").style.display = "none";
+        document.getElementById("chat-panel-title").textContent = "Chat";
+        renderStaffColleaguesList();
       }
     });
 
@@ -156,11 +163,37 @@
     } catch (e) { /* silent */ }
   }
 
-  // ---------- Staff side: single thread with Admin ----------
-  async function renderStaffThread() {
+  // ---------- Staff side: "Admin" tab + "Colleagues" tab ----------
+  function renderStaffThread() {
+    currentPeerId = null;
     document.getElementById("chat-back-btn").style.display = "none";
+    document.getElementById("chat-panel-title").textContent = "Chat";
     const body = document.getElementById("chat-panel-body");
     body.innerHTML = `
+      <div class="chat-filter-tabs">
+        <button class="chat-filter-tab ${staffChatTab === 'admin' ? 'active' : ''}" data-tab="admin">Admin</button>
+        <button class="chat-filter-tab ${staffChatTab === 'colleagues' ? 'active' : ''}" data-tab="colleagues">Colleagues</button>
+      </div>
+      <div id="chat-staff-tab-body"></div>
+    `;
+    body.querySelectorAll(".chat-filter-tab").forEach(btn => {
+      btn.addEventListener("click", () => {
+        staffChatTab = btn.dataset.tab;
+        body.querySelectorAll(".chat-filter-tab").forEach(b => b.classList.toggle("active", b === btn));
+        renderStaffTabBody();
+      });
+    });
+    renderStaffTabBody();
+  }
+
+  function renderStaffTabBody() {
+    if (staffChatTab === "admin") renderStaffAdminSubTab();
+    else renderStaffColleaguesList();
+  }
+
+  async function renderStaffAdminSubTab() {
+    const tabBody = document.getElementById("chat-staff-tab-body");
+    tabBody.innerHTML = `
       <div class="chat-messages-wrap" id="chat-messages-wrap"><p style="padding:20px;text-align:center;color:var(--slate);font-size:13px">Loading…</p></div>
       <div class="chat-compose">
         <button class="chat-compose-file-btn" id="chat-file-btn" type="button" title="Attach file">${iconAttach()}</button>
@@ -178,6 +211,85 @@
       refreshUnreadBadge();
     } catch (e) {
       document.getElementById("chat-messages-wrap").innerHTML = `<p style="color:var(--danger);text-align:center;font-size:13px">Could not load chat.</p>`;
+    }
+  }
+
+  async function renderStaffColleaguesList() {
+    const tabBody = document.getElementById("chat-staff-tab-body");
+    tabBody.innerHTML = `<div class="chat-thread-list" id="chat-thread-list"><p style="padding:20px;text-align:center;color:var(--slate);font-size:13px">Loading…</p></div>`;
+    try {
+      threadsCache = await api("GET", "/chat/staff-directory");
+      const list = document.getElementById("chat-thread-list");
+      if (!threadsCache.length) {
+        list.innerHTML = `<p style="padding:20px;text-align:center;color:var(--slate);font-size:13px">No other staff to chat with yet.</p>`;
+        return;
+      }
+      list.innerHTML = threadsCache.map(t => `
+        <div class="chat-thread-item ${t.unread_count > 0 ? 'unread' : ''}" onclick="window.__chatWidgetOpenPeer(${t.staff_id})">
+          <div class="chat-thread-avatar">${threadInitials(t.name)}</div>
+          <div class="chat-thread-info">
+            <div class="chat-thread-name">${sanitize(t.name)} <span class="chat-thread-role">${sanitize(t.role)}</span></div>
+            ${t.last_message ? `<div class="chat-thread-preview">${sanitize(t.last_message)}</div>` : ''}
+          </div>
+          <div class="chat-thread-side">
+            ${t.last_message_at ? `<span class="chat-thread-time">${fmtThreadTime(t.last_message_at)}</span>` : ''}
+            ${t.unread_count > 0 ? `<span class="chat-thread-unread-dot">${t.unread_count}</span>` : ''}
+          </div>
+        </div>
+      `).join("");
+      refreshUnreadBadge();
+    } catch (e) {
+      document.getElementById("chat-thread-list").innerHTML = `<p style="color:var(--danger);text-align:center;font-size:13px;padding:20px">Could not load colleagues.</p>`;
+    }
+  }
+
+  window.__chatWidgetOpenPeer = async function (peerId) {
+    currentPeerId = peerId;
+    document.getElementById("chat-back-btn").style.display = "";
+    const tabBody = document.getElementById("chat-staff-tab-body");
+    tabBody.innerHTML = `
+      <div class="chat-messages-wrap" id="chat-messages-wrap"><p style="padding:20px;text-align:center;color:var(--slate);font-size:13px">Loading…</p></div>
+      <div class="chat-compose">
+        <button class="chat-compose-file-btn" id="chat-file-btn" type="button" title="Attach file">${iconAttach()}</button>
+        <input type="text" id="chat-input" placeholder="Type a message..." maxlength="2000" />
+        <button id="chat-send-btn">Send</button>
+      </div>
+    `;
+    document.getElementById("chat-send-btn").addEventListener("click", sendPeerMessage);
+    document.getElementById("chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendPeerMessage(); });
+    document.getElementById("chat-file-btn").addEventListener("click", () => pickAndSendAttachment(sendPeerAttachment));
+    try {
+      const data = await api("GET", `/chat/peer/${peerId}/messages`);
+      document.getElementById("chat-panel-title").textContent = data.staff_name;
+      renderMessages(data.messages);
+      refreshUnreadBadge();
+    } catch (e) {
+      document.getElementById("chat-messages-wrap").innerHTML = `<p style="color:var(--danger);text-align:center;font-size:13px">Could not load chat.</p>`;
+    }
+  };
+
+  async function sendPeerMessage() {
+    const input = document.getElementById("chat-input");
+    const msg = input.value.trim();
+    if (!msg || currentPeerId === null) return;
+    input.value = "";
+    try {
+      await api("POST", `/chat/peer/${currentPeerId}/messages`, { message: msg });
+      const data = await api("GET", `/chat/peer/${currentPeerId}/messages`);
+      renderMessages(data.messages);
+    } catch (e) {
+      toast(e.message || "Could not send message.", "error");
+    }
+  }
+
+  async function sendPeerAttachment(uploaded) {
+    if (currentPeerId === null) return;
+    try {
+      await api("POST", `/chat/peer/${currentPeerId}/messages`, { message: "", attachment_filename: uploaded.attachment_filename, attachment_name: uploaded.attachment_name, attachment_type: uploaded.attachment_type });
+      const data = await api("GET", `/chat/peer/${currentPeerId}/messages`);
+      renderMessages(data.messages);
+    } catch (e) {
+      toast(e.message || "Could not send file.", "error");
     }
   }
 

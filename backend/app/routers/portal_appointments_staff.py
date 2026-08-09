@@ -286,15 +286,28 @@ def list_upcoming_bookings(
     result = []
     for a in appts:
         patient_name = None
+        patient_phone = None
+        patient_age = None
+        patient_gender = None
         if a.profile_link_id and a.profile_link and a.profile_link.patient:
-            patient_name = a.profile_link.patient.name
+            p = a.profile_link.patient
+            patient_name = p.name
+            patient_phone = p.phone
+            patient_age = p.age
+            patient_gender = p.gender
         elif a.new_patient_name:
             patient_name = a.new_patient_name
+            patient_age = a.new_patient_age
+            patient_gender = a.new_patient_gender
+            patient_phone = a.account.phone if a.account else None
         doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
         result.append({
             "id": a.id,
             "requested_time": a.requested_time.isoformat(),
             "patient_name": patient_name,
+            "patient_phone": patient_phone,
+            "patient_age": patient_age,
+            "patient_gender": patient_gender,
             "doctor_id": a.doctor_id,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
         })

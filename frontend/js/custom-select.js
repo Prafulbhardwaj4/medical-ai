@@ -51,7 +51,9 @@
     // Every enhanced select gets a type-to-filter box now — not just long
     // lists — so typing "i" always jumps the list to matching items,
     // regardless of how many options a given dropdown happens to have.
-    const searchable = true;
+    // Opt out per-select with data-no-search when a plain list is wanted
+    // instead (e.g. a short, physical-location picker like room selection).
+    const searchable = !select.hasAttribute("data-no-search");
     let searchInput = null;
     if (searchable) {
       const searchWrap = document.createElement("div");

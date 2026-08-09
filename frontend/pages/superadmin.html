@@ -251,7 +251,7 @@
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px" id="suggestions-filter-row">
           <button class="chat-filter-tab active" data-status="" onclick="filterSuggestions('')">All</button>
-          <button class="chat-filter-tab" data-status="sent" onclick="filterSuggestions('sent')">Sent</button>
+          <button class="chat-filter-tab" data-status="sent" onclick="filterSuggestions('sent')">Received</button>
           <button class="chat-filter-tab" data-status="seen" onclick="filterSuggestions('seen')">Seen</button>
           <button class="chat-filter-tab" data-status="in_progress" onclick="filterSuggestions('in_progress')">In Progress</button>
           <button class="chat-filter-tab" data-status="rejected" onclick="filterSuggestions('rejected')">Rejected</button>
@@ -262,6 +262,30 @@
       </div>
 
     </main>
+  </div>
+
+  <!-- Suggestion Detail Modal -->
+  <div class="modal-overlay" id="suggestion-detail-modal">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <h2>Suggestion</h2>
+        <button class="modal-close" onclick="closeSuggestionModal()">×</button>
+      </div>
+      <div id="sugg-modal-meta" style="font-size:12px;color:var(--slate-light);margin-bottom:10px"></div>
+      <p id="sugg-modal-message" style="font-size:14.5px;margin:0 0 16px;white-space:pre-wrap"></p>
+
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-control" id="sugg-modal-status" onchange="onSuggModalStatusChange()"></select>
+      </div>
+
+      <div style="font-size:12px;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:.03em;margin:18px 0 8px">Questions to staff</div>
+      <div id="sugg-modal-replies" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px">
+        <input class="form-control" id="sugg-modal-reply-text" placeholder="Ask the staff member something…" />
+        <button class="btn btn-primary btn-sm" onclick="sendSuggModalReply()">Ask</button>
+      </div>
+    </div>
   </div>
 
   <!-- Add Hospital Modal -->
@@ -838,20 +862,14 @@
 
     // ── SUGGESTIONS ──
     let suggestionsStatusFilter = '';
+    let suggModalCurrent = null;
     const SUGG_STATUS_LABEL = {
-      sent: 'Sent', seen: 'Seen', in_progress: 'In Progress',
+      sent: 'Received', seen: 'Seen', in_progress: 'In Progress',
       rejected: 'Rejected', completed: 'Completed',
     };
     const SUGG_STATUS_CLASS = {
       sent: 'badge-grey', seen: 'badge-teal', in_progress: 'badge-amber',
       rejected: 'badge-red', completed: 'badge-green',
-    };
-    const SUGG_NEXT_ACTIONS = {
-      sent: [['seen', 'Mark Seen']],
-      seen: [['in_progress', 'Start Work'], ['rejected', 'Reject']],
-      in_progress: [['completed', 'Mark Completed'], ['rejected', 'Reject']],
-      rejected: [],
-      completed: [],
     };
 
     function filterSuggestions(status) {
@@ -873,21 +891,16 @@
           return;
         }
         el.innerHTML = rows.map(s => `
-          <div class="card" style="margin-bottom:12px">
+          <div class="card" style="margin-bottom:12px;cursor:pointer" onclick="openSuggestionModal(${s.id})">
             <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap">
               <div>
-                <div style="font-weight:600">${sanitize(s.hospital_name)}</div>
+                <div style="font-weight:600">${sanitize(s.hospital_name)}${s.follow_up_requested_at ? ' <span style="color:#dc2626;font-weight:700">· Follow-up requested</span>' : ''}</div>
                 <div style="font-size:12px;color:var(--slate-light)">${sanitize(s.submitted_by_name)} · ${sanitize(s.submitted_by_role)} · ${new Date(s.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
               </div>
               <span class="badge ${SUGG_STATUS_CLASS[s.status] || 'badge-grey'}">${SUGG_STATUS_LABEL[s.status] || s.status}</span>
             </div>
             <p style="margin:10px 0 0;font-size:14px">${sanitize(s.message)}</p>
             ${s.status === 'rejected' && s.rejection_reason ? `<p style="margin:6px 0 0;font-size:13px;color:var(--slate-light)"><strong>Reason:</strong> ${sanitize(s.rejection_reason)}</p>` : ''}
-            <div style="display:flex;gap:8px;margin-top:12px">
-              ${(SUGG_NEXT_ACTIONS[s.status] || []).map(([status, label]) =>
-                `<button class="btn btn-outline btn-sm" onclick="handleSuggestionAction(${s.id}, '${status}')">${label}</button>`
-              ).join('')}
-            </div>
           </div>
         `).join('');
       } catch (e) {
@@ -895,16 +908,86 @@
       }
     }
 
-    async function handleSuggestionAction(id, status) {
+    async function openSuggestionModal(id) {
+      try {
+        const s = await api('GET', `/suggestions/${id}`); // auto-marks "sent" -> "seen"
+        suggModalCurrent = s;
+        document.getElementById('sugg-modal-meta').textContent =
+          `${s.hospital_name} · ${s.submitted_by_name} (${s.submitted_by_role}) · ${new Date(s.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+        document.getElementById('sugg-modal-message').textContent = s.message;
+        const statusSel = document.getElementById('sugg-modal-status');
+        statusSel.innerHTML = Object.entries(SUGG_STATUS_LABEL).map(([v, label]) =>
+          `<option value="${v}" ${v === s.status ? 'selected' : ''}>${label}</option>`).join('');
+        document.getElementById('sugg-modal-reply-text').value = '';
+        await loadSuggModalReplies(id);
+        document.getElementById('suggestion-detail-modal').classList.add('open');
+        loadSuggestions();       // refresh list behind it (status may have just flipped to seen)
+        refreshSuggestionsBadge();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    function closeSuggestionModal() {
+      document.getElementById('suggestion-detail-modal').classList.remove('open');
+      suggModalCurrent = null;
+    }
+
+    async function onSuggModalStatusChange() {
+      if (!suggModalCurrent) return;
+      const status = document.getElementById('sugg-modal-status').value;
       let rejection_reason = null;
       if (status === 'rejected') {
         rejection_reason = prompt('Reason for rejecting this suggestion:');
-        if (!rejection_reason || !rejection_reason.trim()) return;
+        if (!rejection_reason || !rejection_reason.trim()) {
+          document.getElementById('sugg-modal-status').value = suggModalCurrent.status; // revert
+          return;
+        }
       }
       try {
-        await api('PATCH', `/suggestions/${id}/status`, { status, rejection_reason });
+        await api('PATCH', `/suggestions/${suggModalCurrent.id}/status`, { status, rejection_reason });
+        suggModalCurrent.status = status;
+        toast('Status updated', 'success');
         loadSuggestions();
         refreshSuggestionsBadge();
+      } catch (e) {
+        toast(e.message, 'error');
+        document.getElementById('sugg-modal-status').value = suggModalCurrent.status;
+      }
+    }
+
+    async function loadSuggModalReplies(id) {
+      const el = document.getElementById('sugg-modal-replies');
+      el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Loading…</p>';
+      try {
+        const rows = await api('GET', `/suggestions/${id}/replies`);
+        if (!rows.length) {
+          el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No questions asked yet.</p>';
+          return;
+        }
+        el.innerHTML = rows.map(r => `
+          <div style="margin-bottom:8px;text-align:${r.sender === 'super_admin' ? 'right' : 'left'}">
+            <div style="display:inline-block;max-width:85%;padding:6px 10px;border-radius:8px;font-size:13px;background:${r.sender === 'super_admin' ? 'var(--primary,#0f766e)' : 'var(--bg-light,#f1f5f9)'};color:${r.sender === 'super_admin' ? '#fff' : 'inherit'}">
+              ${sanitize(r.message)}
+            </div>
+            <div style="font-size:10px;color:var(--slate-light)">${r.sender === 'super_admin' ? 'You' : 'Staff'}</div>
+          </div>
+        `).join('');
+        el.scrollTop = el.scrollHeight;
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`;
+      }
+    }
+
+    async function sendSuggModalReply() {
+      if (!suggModalCurrent) return;
+      const input = document.getElementById('sugg-modal-reply-text');
+      const message = input.value.trim();
+      if (!message) return;
+      try {
+        await api('POST', `/suggestions/${suggModalCurrent.id}/replies`, { message });
+        input.value = '';
+        loadSuggModalReplies(suggModalCurrent.id);
       } catch (e) {
         toast(e.message, 'error');
       }
@@ -912,7 +995,7 @@
 
     async function refreshSuggestionsBadge() {
       try {
-        const rows = await api('GET', '/suggestions?status=sent');
+        const rows = await api('GET', '/suggestions?status=sent'); // "sent" = Received/unopened, on the superadmin side
         const badge = document.getElementById('suggestions-nav-badge');
         if (!badge) return;
         if (rows.length > 0) {

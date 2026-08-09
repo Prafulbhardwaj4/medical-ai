@@ -1350,7 +1350,7 @@
         if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
       });
       if (id === 'home') loadPendingPayments();
-      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); }
+      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter(); }
       if (id === 'availability') loadAvailabilityDoctorList();
     }
 
@@ -1361,7 +1361,7 @@
       ['home', 'patients', 'portal', 'availability'].forEach(t => {
         document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id);
       });
-      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); }
+      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter(); }
       if (id === 'availability') loadAvailabilityDoctorList();
     }
 
@@ -1377,7 +1377,7 @@
     checkEmergencyWardAvailable();
     if (__startTab === 'portal') {
       loadEmergencyWard(); loadPendingReview();
-      loadUpcomingBookings(); loadSlotPreviewDoctorFilter();
+      loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter();
       document.getElementById('slot-preview-date').valueAsDate = new Date();
     }
     setInterval(() => { if (document.getElementById('section-portal')?.classList.contains('active') || document.getElementById('section-portal')?.classList.contains('d-active')) loadEmergencyWard(); }, 15000);
@@ -1659,22 +1659,35 @@
       }
     }
 
-    function openAddDoctorModal() {
+    async function openAddDoctorModal() {
       const primaryId = parseInt(document.getElementById('doc-select').value);
       const list = document.getElementById('add-doctor-checklist');
-      list.innerHTML = hospitalDoctors.filter(d => d.id !== primaryId).map(d => `
+      list.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Loading doctors…</p>';
+      document.getElementById('modal-add-doctor').classList.add('open');
+
+      let allDoctors;
+      try {
+        // hospitalDoctors is scoped to whichever room the primary doctor was picked from —
+        // too narrow here, since the second doctor is very likely in a different room/specialty.
+        // This modal needs the full hospital roster, independent of that room filter.
+        allDoctors = await api("GET", "/patients/hospital-doctors");
+      } catch (e) {
+        list.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`;
+        return;
+      }
+
+      list.innerHTML = allDoctors.filter(d => d.id !== primaryId).map(d => `
         <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
           <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer">
             <input type="checkbox" id="add-doc-chk-${d.id}" ${selectedAdditionalDoctors[d.id] !== undefined ? 'checked' : ''}
               onchange="toggleAdditionalDoctor(${d.id}, ${d.consultation_fee ?? 'null'})" />
-            <span>${d.title} ${d.name}</span>
+            <span>${d.title} ${d.name}${d.on_duty_today ? '' : ' (not marked present today)'}</span>
           </label>
           <input type="number" class="form-control" id="add-doc-fee-${d.id}" style="width:90px;display:${selectedAdditionalDoctors[d.id] !== undefined ? '' : 'none'}"
             value="${selectedAdditionalDoctors[d.id] ?? d.consultation_fee ?? ''}"
             oninput="selectedAdditionalDoctors[${d.id}] = parseFloat(this.value) || 0; renderAdditionalDoctorsList();" />
         </div>
       `).join('');
-      document.getElementById('modal-add-doctor').classList.add('open');
     }
 
     function toggleAdditionalDoctor(doctorId, defaultFee) {
@@ -3175,9 +3188,16 @@
         if (!data.appointments.length) { el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Nothing booked in the next 15 days.</p>'; return; }
         el.innerHTML = data.appointments.map(a => {
           const d = new Date(a.requested_time);
-          return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
-            <span><strong>${sanitize(a.patient_name || 'New Patient')}</strong> — ${sanitize(a.doctor_name)}</span>
-            <span style="color:var(--slate)">${d.toLocaleDateString('en-IN', {day:'numeric', month:'short'})}, ${d.toLocaleTimeString('en-IN', {hour:'numeric', minute:'2-digit', hour12:true})}</span>
+          const details = [
+            a.patient_age != null && a.patient_gender ? `${a.patient_age}${sanitize(a.patient_gender).charAt(0).toUpperCase()}` : (a.patient_age != null ? `${a.patient_age}y` : (a.patient_gender || '')),
+            a.patient_phone
+          ].filter(Boolean).join(' · ');
+          return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;gap:10px">
+            <span>
+              <strong>${sanitize(a.patient_name || 'New Patient')}</strong> — ${sanitize(a.doctor_name)}
+              ${details ? `<br><span style="color:var(--slate-light);font-size:12px">${sanitize(details)}</span>` : ''}
+            </span>
+            <span style="color:var(--slate);white-space:nowrap">${d.toLocaleDateString('en-IN', {day:'numeric', month:'short'})}, ${d.toLocaleTimeString('en-IN', {hour:'numeric', minute:'2-digit', hour12:true})}</span>
           </div>`;
         }).join('');
       } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
@@ -3191,6 +3211,21 @@
         sel.innerHTML = '<option value="">Select doctor...</option>' + doctors.map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
         sel.dataset.loaded = "1";
       } catch (e) { }
+    }
+
+    async function loadUpcomingDoctorFilter() {
+      const sel = document.getElementById("upcoming-doctor-filter");
+      if (sel.dataset.loaded) return;
+      try {
+        const doctors = await api("GET", "/patients/hospital-doctors");
+        doctors.forEach(d => {
+          const opt = document.createElement("option");
+          opt.value = d.id;
+          opt.textContent = `${d.title} ${d.name}`;
+          sel.appendChild(opt);
+        });
+        sel.dataset.loaded = "1";
+      } catch (e) { /* filter just stays at "All doctors" if this fails */ }
     }
 
     async function loadSlotPreview() {

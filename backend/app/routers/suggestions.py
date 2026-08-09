@@ -4,8 +4,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.doctor import Doctor
 from app.models.suggestion import Suggestion
-from app.schemas.suggestion import SuggestionIn, SuggestionStatusIn, VALID_SUGGESTION_STATUSES
+from app.models.suggestion_reply import SuggestionReply
+from app.schemas.suggestion import SuggestionIn, SuggestionEditIn, SuggestionStatusIn, SuggestionReplyIn, VALID_SUGGESTION_STATUSES
 from app.utils.auth import get_current_doctor
+from app.utils.timezone import now_ist_naive
+from datetime import timedelta
 
 router = APIRouter(prefix="/suggestions", tags=["suggestions"])
 
@@ -58,9 +61,64 @@ def list_my_suggestions(
             "rejection_reason": s.rejection_reason,
             "created_at": s.created_at.isoformat() if s.created_at else None,
             "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            "can_edit": s.status in ("sent", "seen"),
+            "can_follow_up": s.status not in ("completed", "rejected") and (now_ist_naive() - s.updated_at) >= timedelta(days=3),
+            "follow_up_requested_at": s.follow_up_requested_at.isoformat() if s.follow_up_requested_at else None,
         }
         for s in rows
     ]
+
+
+@router.patch("/{suggestion_id}")
+def edit_suggestion(
+    suggestion_id: int,
+    body: SuggestionEditIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Staff can edit their own suggestion's text, but only while it's still
+    sitting in "sent" or "seen" — once Super Admin has started acting on it
+    ("in_progress" or beyond), the text is locked and they're told to send a
+    fresh suggestion instead."""
+    suggestion = db.query(Suggestion).filter(
+        Suggestion.id == suggestion_id, Suggestion.submitted_by == current_doctor.id
+    ).first()
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    if suggestion.status not in ("sent", "seen"):
+        raise HTTPException(status_code=400, detail="This one is already in progress and cannot be changed — you can send another suggestion.")
+    if not body.message or not body.message.strip():
+        raise HTTPException(status_code=400, detail="Please enter a suggestion")
+
+    suggestion.message = body.message.strip()
+    suggestion.follow_up_requested_at = None
+    db.commit()
+    return {"message": "Suggestion updated", "id": suggestion.id}
+
+
+@router.post("/{suggestion_id}/follow-up")
+def follow_up_suggestion(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Staff nudge when a suggestion has sat unchanged for 3+ days. Flags it
+    for Super Admin — surfaced prominently in their suggestions tab rather
+    than through the Doctor-scoped notification bell, since Super Admin
+    isn't on that system."""
+    suggestion = db.query(Suggestion).filter(
+        Suggestion.id == suggestion_id, Suggestion.submitted_by == current_doctor.id
+    ).first()
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    if suggestion.status in ("completed", "rejected"):
+        raise HTTPException(status_code=400, detail="This suggestion has already been resolved")
+    if (now_ist_naive() - suggestion.updated_at) < timedelta(days=3):
+        raise HTTPException(status_code=400, detail="Follow-up is only available once a suggestion has sat unchanged for 3 days")
+
+    suggestion.follow_up_requested_at = now_ist_naive()
+    db.commit()
+    return {"message": "Follow-up sent"}
 
 
 @router.get("")
@@ -80,7 +138,7 @@ def list_all_suggestions(
             raise HTTPException(status_code=400, detail=f"status must be one of {sorted(VALID_SUGGESTION_STATUSES)}")
         query = query.filter(Suggestion.status == status)
 
-    rows = query.order_by(Suggestion.created_at.desc()).all()
+    rows = query.order_by(Suggestion.follow_up_requested_at.isnot(None).desc(), Suggestion.created_at.desc()).all()
     return [
         {
             "id": s.id,
@@ -92,9 +150,91 @@ def list_all_suggestions(
             "rejection_reason": s.rejection_reason,
             "created_at": s.created_at.isoformat() if s.created_at else None,
             "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            "follow_up_requested_at": s.follow_up_requested_at.isoformat() if s.follow_up_requested_at else None,
         }
         for s in rows
     ]
+
+
+@router.get("/{suggestion_id}")
+def get_suggestion(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Super Admin's detail modal fetches through here — opening it is what
+    auto-transitions a fresh "sent" suggestion to "seen"; staff also use this
+    to load their own suggestion when opening its reply thread."""
+    is_super_admin = current_doctor.role.value == "super_admin"
+    suggestion = db.query(Suggestion).filter(Suggestion.id == suggestion_id).first()
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    if not is_super_admin and suggestion.submitted_by != current_doctor.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if is_super_admin and suggestion.status == "sent":
+        suggestion.status = "seen"
+        suggestion.follow_up_requested_at = None
+        db.commit()
+        db.refresh(suggestion)
+
+    return {
+        "id": suggestion.id,
+        "hospital_name": suggestion.hospital_name,
+        "submitted_by_name": suggestion.submitted_by_name,
+        "submitted_by_role": suggestion.submitted_by_role,
+        "message": suggestion.message,
+        "status": suggestion.status,
+        "rejection_reason": suggestion.rejection_reason,
+        "created_at": suggestion.created_at.isoformat() if suggestion.created_at else None,
+        "updated_at": suggestion.updated_at.isoformat() if suggestion.updated_at else None,
+        "follow_up_requested_at": suggestion.follow_up_requested_at.isoformat() if suggestion.follow_up_requested_at else None,
+    }
+
+
+@router.get("/{suggestion_id}/replies")
+def list_suggestion_replies(
+    suggestion_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    is_super_admin = current_doctor.role.value == "super_admin"
+    suggestion = db.query(Suggestion).filter(Suggestion.id == suggestion_id).first()
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    if not is_super_admin and suggestion.submitted_by != current_doctor.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    rows = db.query(SuggestionReply).filter(
+        SuggestionReply.suggestion_id == suggestion_id
+    ).order_by(SuggestionReply.created_at.asc()).all()
+    return [{"id": r.id, "sender": r.sender, "message": r.message, "created_at": r.created_at.isoformat()} for r in rows]
+
+
+@router.post("/{suggestion_id}/replies", status_code=201)
+def add_suggestion_reply(
+    suggestion_id: int,
+    body: SuggestionReplyIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    is_super_admin = current_doctor.role.value == "super_admin"
+    suggestion = db.query(Suggestion).filter(Suggestion.id == suggestion_id).first()
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    if not is_super_admin and suggestion.submitted_by != current_doctor.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if not body.message or not body.message.strip():
+        raise HTTPException(status_code=400, detail="Message can't be empty")
+
+    reply = SuggestionReply(
+        suggestion_id=suggestion_id,
+        sender="super_admin" if is_super_admin else "staff",
+        message=body.message.strip(),
+    )
+    db.add(reply)
+    db.commit()
+    return {"message": "Reply sent"}
 
 
 @router.patch("/{suggestion_id}/status")
@@ -123,6 +263,7 @@ def update_suggestion_status(
     # get_current_doctor path as every other role (see app/utils/auth.py).
     suggestion.resolved_by = current_doctor.id
     suggestion.rejection_reason = body.rejection_reason.strip() if body.status == "rejected" and body.rejection_reason else None
+    suggestion.follow_up_requested_at = None
     db.commit()
     db.refresh(suggestion)
     return {"message": "Status updated", "id": suggestion.id, "status": suggestion.status}

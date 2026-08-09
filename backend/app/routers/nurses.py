@@ -78,6 +78,7 @@ def vitals_queue(
             "patient_id": p.id,
             "patient_name": p.name,
             "patient_uid": p.patient_uid,
+            "phone": p.phone,
             "age": p.age,
             "gender": p.gender,
             "token_number": c.token_number,

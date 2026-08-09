@@ -9,6 +9,14 @@ class SuggestionIn(BaseModel):
     message: str
 
 
+class SuggestionEditIn(BaseModel):
+    message: str
+
+
 class SuggestionStatusIn(BaseModel):
     status: str
     rejection_reason: Optional[str] = None
+
+
+class SuggestionReplyIn(BaseModel):
+    message: str
