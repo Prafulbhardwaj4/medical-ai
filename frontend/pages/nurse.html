@@ -158,7 +158,6 @@
             <div id="nurse-room-display" style="margin-top:6px;font-size:13px;color:var(--slate)"></div>
             <div id="nurse-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
-          <script>syncStatusHeading('nurse-attendance-badge', 'todays-status-heading');</script>
           <div class="staff-att-actions" id="nurse-attendance-btns">
             <select class="form-control" id="nurse-room-select" style="display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
             <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
@@ -623,6 +622,7 @@
     loadNurseAttendance();
     loadQueues();
     loadHistory();
+    syncStatusHeading('nurse-attendance-badge', 'todays-status-heading');
     setInterval(() => { loadQueues(); loadHistory(); }, 15000);
   </script>
 </body>

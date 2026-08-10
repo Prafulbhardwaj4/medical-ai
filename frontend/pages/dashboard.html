@@ -209,7 +209,6 @@
               <div id="room-display" style="margin-top:8px;font-size:13px;color:var(--slate)"></div>
               <div id="off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
             </div>
-            <script>syncStatusHeading('attendance-badge', 'todays-status-heading');</script>
             <div class="staff-att-actions" id="attendance-btns">
               <select class="form-control" id="room-select" data-no-search style="display:none"
                 onchange="markAttendance(currentAttendanceStatus)"></select>
@@ -976,10 +975,6 @@
         year: "numeric"
       });
     }
-    function toIST(iso) {
-      return /[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30";
-    }
-
     document.getElementById("modal-add").addEventListener("click", function (e) {
       if (e.target === this) closeAddPatient();
     });
@@ -1168,6 +1163,7 @@
       switchDesktopTab('patients');
       window.history.replaceState({}, '', window.location.pathname);
     }
+    syncStatusHeading('attendance-badge', 'todays-status-heading');
 
   </script>
 </body>

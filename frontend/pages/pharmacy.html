@@ -227,7 +227,6 @@
             <span class="badge badge-grey" id="pharm-attendance-badge">Not marked</span>
             <div id="pharm-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
-          <script>syncStatusHeading('pharm-attendance-badge', 'todays-status-heading');</script>
           <div class="staff-att-actions">
             <button class="btn btn-primary" id="pharm-btn-present" onclick="markPharmAttendance('present')">Mark
               Present</button>
@@ -2103,6 +2102,7 @@
 
     loadPharmAttendance();
     loadQueue();
+    syncStatusHeading('pharm-attendance-badge', 'todays-status-heading');
     setInterval(loadQueue, 15000);
     if (window.innerWidth >= 901) showPharmDesktopTab('home');
   </script>

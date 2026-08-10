@@ -179,7 +179,6 @@
               <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
               <div id="nurse-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
             </div>
-            <script>syncStatusHeading('nurse-attendance-badge', 'todays-status-heading');</script>
             <div class="staff-att-actions" id="nurse-attendance-btns">
               <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
               <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
@@ -652,6 +651,7 @@
     }
 
     loadNurseAttendance().then(refreshAll);
+    syncStatusHeading('nurse-attendance-badge', 'todays-status-heading');
     setInterval(refreshAll, 15000);
   </script>
 </body>

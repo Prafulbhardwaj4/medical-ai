@@ -679,6 +679,10 @@ function openOffDutyTimeModal(confirmLabel) {
   });
 }
 
+function toIST(iso) {
+  return /[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30";
+}
+
 function syncStatusHeading(badgeId, headingSpanId) {
   const badge = document.getElementById(badgeId);
   const span = document.getElementById(headingSpanId);

@@ -497,7 +497,6 @@
             <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
             <div id="lab-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
-          <script>syncStatusHeading('lab-attendance-badge', 'todays-status-heading');</script>
           <div class="staff-att-actions">
             <select class="form-control" id="lab-room-select" style="display:none"
               onchange="markLabAttendance(labCurrentStatus)"></select>
@@ -1676,6 +1675,7 @@
 
     loadLabAttendance();
     loadQueue();
+    syncStatusHeading('lab-attendance-badge', 'todays-status-heading');
     setInterval(loadQueue, 15000);
   </script>
 </body>

@@ -541,7 +541,6 @@
             <span class="badge badge-grey" id="rec-attendance-badge">Not marked</span>
             <div id="rec-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
-          <script>syncStatusHeading('rec-attendance-badge', 'todays-status-heading');</script>
           <div class="staff-att-actions">
             <button class="btn btn-primary" id="rec-btn-present" onclick="markRecAttendance('present')">Mark
               Present</button>
@@ -3449,6 +3448,7 @@
 
     loadAllPatients();
     loadPendingPayments();
+    syncStatusHeading('rec-attendance-badge', 'todays-status-heading');
     setInterval(() => loadPendingPayments(true), 15000);
   </script>
 </body>
