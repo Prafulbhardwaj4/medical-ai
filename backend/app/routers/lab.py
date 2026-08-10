@@ -1244,9 +1244,9 @@ def get_combined_test_report(
             "fasting_confirmed": order.fasting_confirmed,
             "drawn_from_iv_line": order.drawn_from_iv_line,
             "sample_condition_caveat": order.sample_condition_caveat,
-            "collected_at": order.collected_at.isoformat() if order.collected_at else None,
+            "collected_at": order.collected_at,
             "accession_number": order.accession_number,
-            "accessioned_at": order.accessioned_at.isoformat() if order.accessioned_at else None,
+            "accessioned_at": order.accessioned_at,
             "verified_at": order.verified_at,
             "is_nabl_accredited": catalog_item.is_nabl_accredited if catalog_item else False,
         })

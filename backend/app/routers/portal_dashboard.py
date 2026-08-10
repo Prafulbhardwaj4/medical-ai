@@ -20,6 +20,7 @@ from app.utils.auth import get_current_doctor
 from app.utils.timezone import now_ist_naive
 from app.services.pdf_service import generate_prescription_pdf, generate_invoice_pdf, generate_combined_test_report_pdf
 import json
+import os
 
 router = APIRouter(prefix="/portal/dashboard", tags=["portal-dashboard"])
 
@@ -233,7 +234,6 @@ def admission_medications(admission_id: int, account: PatientAccount = Depends(g
         "is_active": o.is_active, "sourced_outside": o.sourced_outside,
         "started_at": o.created_at.isoformat() if o.created_at else None,
     } for o in orders]
-
 
 @router.patch("/admissions/{admission_id}/medications/{order_id}/sourced-outside")
 def set_sourced_outside(admission_id: int, order_id: int, body: dict, account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):

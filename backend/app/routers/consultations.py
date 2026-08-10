@@ -1042,6 +1042,8 @@ def update_consultation(
     # so any newly-added/changed line needs a fresh one here. Anything
     # already dispensed against is never touched or duplicated.
     new_medicine_orders = []
+    cancelled_order_ids = []
+    refunds_created = []
     if was_confirmed and "medicines" in changed_fields:
         def _key(m):
             return (
@@ -1051,8 +1053,54 @@ def update_consultation(
                 (m.get("frequency") or "").strip().lower(),
                 (m.get("duration") or "").strip().lower(),
             )
+        new_keys = {_key(m.dict()) for m in payload.medicines}
         already_ordered_keys = {_key(m) for m in old_medicines}
         newly_added = [m.dict() for m in payload.medicines if _key(m.dict()) not in already_ordered_keys]
+
+        # Anything the doctor dropped or changed enough to no longer match a
+        # prior line: cancel the real order row IF pharmacy hasn't dispensed
+        # it yet (advised or paid-but-not-collected) — that's the "replace"
+        # case. If it's already been physically handed over, it's legally
+        # irreversible: leave it exactly as-is, and whatever the doctor
+        # prescribes instead becomes a brand-new, separately-payable order
+        # (already handled by newly_added below).
+        superseded = [m for m in old_medicines if _key(m) not in new_keys]
+        if superseded:
+            existing_orders = db.query(MedicineOrder).filter(
+                MedicineOrder.consultation_id == consultation.id,
+                MedicineOrder.status.in_(["advised", "paid"])
+            ).all()
+            for old_m in superseded:
+                for order in existing_orders:
+                    if order.id in cancelled_order_ids:
+                        continue
+                    order_key = (
+                        (order.medicine_name or "").strip().lower(),
+                        (order.brand_name or "").strip().lower(),
+                        (order.dosage or "").strip().lower(),
+                        (order.frequency or "").strip().lower(),
+                        (order.duration or "").strip().lower(),
+                    )
+                    if order_key == _key(old_m):
+                        was_paid = order.status == "paid"
+                        order.status = "cancelled"
+                        cancelled_order_ids.append(order.id)
+                        if was_paid:
+                            refund_amount = (order.unit_price or 0) * (order.billed_quantity or order.quantity or 0)
+                            if refund_amount > 0:
+                                refund = Refund(
+                                    patient_id=consultation.patient_id,
+                                    hospital_id=current_doctor.hospital_id,
+                                    source_type="pharmacy",
+                                    source_id=order.id,
+                                    amount=refund_amount,
+                                    channel="cash",  # placeholder — reception confirms actual channel when they process it
+                                    status="pending",
+                                    reason=f"Prescription changed after payment, before dispensing: {order.medicine_name} was already paid for but never handed over — confirm refund channel with patient.",
+                                )
+                                db.add(refund)
+                                refunds_created.append(refund)
+                        break
 
         if newly_added:
             catalog_medicines = db.query(HospitalMedicine).filter(
@@ -1105,13 +1153,17 @@ def update_consultation(
             details=json.dumps({
                 "patient": f"{patient.name} ({patient.patient_uid})" if patient else None,
                 "changed_fields": changed_fields,
-                "diff": field_diff
+                "diff": field_diff,
+                "medicine_orders_cancelled": cancelled_order_ids,
+                "refunds_created": [r.id for r in refunds_created],
             })
         )
 
     return {
         "message": "Consultation updated successfully",
         "new_medicine_orders_added": len(new_medicine_orders),
+        "medicine_orders_cancelled": len(cancelled_order_ids),
+        "pending_refunds_created": len(refunds_created),
     }
 
 
@@ -1123,6 +1175,7 @@ def void_consultation(
 ):
     from app.models.test_order import TestOrder
     from app.models.medicine_order import MedicineOrder
+    from app.models.refund import Refund
     consultation = db.query(Consultation).filter(
         Consultation.id == consultation_id,
         Consultation.doctor_id == current_doctor.id

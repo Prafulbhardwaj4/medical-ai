@@ -131,6 +131,26 @@ def submit_vitals(
     checkin.vitals_recorded_by = current_doctor.id
     checkin.vitals_recorded_at = now_ist_naive()
     checkin.vitals_recheck_request = None
+
+    # One physical patient seeing multiple doctors on one visit (visit_group_id)
+    # is one set of vitals, not one per doctor — mirror the same reading onto
+    # every sibling checkin still waiting on vitals so it drops off their
+    # queue entries too, instead of making the nurse record it twice.
+    siblings_updated = 0
+    if checkin.visit_group_id:
+        siblings = db.query(Checkin).filter(
+            Checkin.visit_group_id == checkin.visit_group_id,
+            Checkin.id != checkin.id,
+            Checkin.vitals_status.in_(["pending", "sent_back"])
+        ).all()
+        for sib in siblings:
+            sib.vitals_data = checkin.vitals_data
+            sib.vitals_status = "done"
+            sib.vitals_recorded_by = current_doctor.id
+            sib.vitals_recorded_at = checkin.vitals_recorded_at
+            sib.vitals_recheck_request = None
+            siblings_updated += 1
+
     db.commit()
 
     patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
@@ -140,9 +160,9 @@ def submit_vitals(
         target_type="patient",
         target_id=checkin.patient_id,
         target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),
-        details=f"Token {checkin.token_number}"
+        details=f"Token {checkin.token_number}" + (f" (+{siblings_updated} other doctor(s) same visit)" if siblings_updated else "")
     )
-    return {"status": "done"}
+    return {"status": "done", "siblings_updated": siblings_updated}
 
 @router.get("/history")
 def nurse_history(
