@@ -171,19 +171,17 @@
 
       <div class="mobile-section d-active" id="section-attendance">
         <div class="card att-card" style="margin-bottom:20px">
-          <div>
-            <div class="card-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
-              <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
-            </div>
-            <div class="staff-att-status">
-              <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
-              <div id="nurse-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
-            </div>
-            <div class="staff-att-actions" id="nurse-attendance-btns">
-              <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
-              <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
-              <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
-            </div>
+          <div class="card-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
+            <h2>Today's Status</h2>
+          </div>
+          <div class="staff-att-status">
+            <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
+          </div>
+          <div class="staff-att-actions" id="nurse-attendance-btns">
+            <div id="nurse-off-duty-time-line" style="display:none;font-size:13px;color:var(--slate)"></div>
+            <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
+            <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
+            <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
           </div>
         </div>
       </div>
@@ -651,7 +649,6 @@
     }
 
     loadNurseAttendance().then(refreshAll);
-    syncStatusHeading('nurse-attendance-badge', 'todays-status-heading');
     setInterval(refreshAll, 15000);
   </script>
 </body>

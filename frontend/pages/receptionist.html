@@ -535,13 +535,13 @@
       <div class="mobile-section" id="section-attendance">
         <div class="card att-card" id="rec-attendance-card">
           <div class="card-header">
-            <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
+            <h2>Today's Status</h2>
           </div>
           <div class="staff-att-status">
             <span class="badge badge-grey" id="rec-attendance-badge">Not marked</span>
-            <div id="rec-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
           <div class="staff-att-actions">
+            <div id="rec-off-duty-time-line" style="display:none;font-size:13px;color:var(--slate)"></div>
             <button class="btn btn-primary" id="rec-btn-present" onclick="markRecAttendance('present')">Mark
               Present</button>
             <button class="btn btn-outline" id="rec-btn-break" onclick="markRecAttendance('on_break')"
@@ -3448,7 +3448,6 @@
 
     loadAllPatients();
     loadPendingPayments();
-    syncStatusHeading('rec-attendance-badge', 'todays-status-heading');
     setInterval(() => loadPendingPayments(true), 15000);
   </script>
 </body>

@@ -491,13 +491,13 @@
       <div class="mobile-section" id="section-attendance">
         <div class="card att-card" id="lab-attendance-card">
           <div class="card-header">
-            <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
+            <h2>Today's Status</h2>
           </div>
           <div class="staff-att-status">
             <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
-            <div id="lab-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
           <div class="staff-att-actions">
+            <div id="lab-off-duty-time-line" style="display:none;font-size:13px;color:var(--slate)"></div>
             <select class="form-control" id="lab-room-select" style="display:none"
               onchange="markLabAttendance(labCurrentStatus)"></select>
             <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
@@ -1675,7 +1675,6 @@
 
     loadLabAttendance();
     loadQueue();
-    syncStatusHeading('lab-attendance-badge', 'todays-status-heading');
     setInterval(loadQueue, 15000);
   </script>
 </body>

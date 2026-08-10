@@ -221,13 +221,13 @@
       <div class="mobile-section" id="section-attendance">
         <div class="card att-card" id="pharm-attendance-card">
           <div class="card-header" style="margin-bottom:0">
-            <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
+            <h2>Today's Status</h2>
           </div>
           <div class="staff-att-status">
             <span class="badge badge-grey" id="pharm-attendance-badge">Not marked</span>
-            <div id="pharm-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
           <div class="staff-att-actions">
+            <div id="pharm-off-duty-time-line" style="display:none;font-size:13px;color:var(--slate)"></div>
             <button class="btn btn-primary" id="pharm-btn-present" onclick="markPharmAttendance('present')">Mark
               Present</button>
             <button class="btn btn-outline" id="pharm-btn-break" onclick="markPharmAttendance('on_break')"
@@ -2102,7 +2102,6 @@
 
     loadPharmAttendance();
     loadQueue();
-    syncStatusHeading('pharm-attendance-badge', 'todays-status-heading');
     setInterval(loadQueue, 15000);
     if (window.innerWidth >= 901) showPharmDesktopTab('home');
   </script>
