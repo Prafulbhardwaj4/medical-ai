@@ -200,15 +200,16 @@
       <div class="desktop-tab active" id="desktop-tab-home">
         <!-- Attendance tab: status only, matching lab.html -->
         <div class="mobile-section" id="section-attendance">
-          <div class="card" id="attendance-card">
+          <div class="card att-card" id="attendance-card">
             <div class="card-header" style="margin-bottom:0">
-              <h2>Today's Status</h2>
+              <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
             </div>
             <div class="staff-att-status">
               <span class="badge badge-grey" id="attendance-badge">Not marked</span>
               <div id="room-display" style="margin-top:8px;font-size:13px;color:var(--slate)"></div>
               <div id="off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
             </div>
+            <script>syncStatusHeading('attendance-badge', 'todays-status-heading');</script>
             <div class="staff-att-actions" id="attendance-btns">
               <select class="form-control" id="room-select" data-no-search style="display:none"
                 onchange="markAttendance(currentAttendanceStatus)"></select>

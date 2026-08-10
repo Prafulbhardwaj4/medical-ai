@@ -533,14 +533,15 @@
 
     <main class="main-content">
       <div class="mobile-section" id="section-attendance">
-        <div class="card" id="rec-attendance-card">
+        <div class="card att-card" id="rec-attendance-card">
           <div class="card-header">
-            <h2>Today's Status</h2>
+            <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
           </div>
           <div class="staff-att-status">
             <span class="badge badge-grey" id="rec-attendance-badge">Not marked</span>
             <div id="rec-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
+          <script>syncStatusHeading('rec-attendance-badge', 'todays-status-heading');</script>
           <div class="staff-att-actions">
             <button class="btn btn-primary" id="rec-btn-present" onclick="markRecAttendance('present')">Mark
               Present</button>
@@ -650,16 +651,18 @@
 
           <!-- Add Doctor Modal (item 7) -->
           <div class="modal-overlay" id="modal-add-doctor">
-            <div class="modal" style="max-width:440px">
-              <div class="modal-header">
-                <h2>Add Doctor(s) to This Visit</h2><button class="modal-close"
-                  onclick="closeModal('modal-add-doctor')">×</button>
+            <div class="modal" style="max-width:460px;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:85vh">
+              <div style="background:var(--navy);color:#fff;padding:18px 22px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+                  <h2 style="margin:0;font-size:17px">Add Doctor(s) to This Visit</h2>
+                  <button onclick="closeModal('modal-add-doctor')" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:26px;height:26px;border-radius:50%;font-size:16px;line-height:1;cursor:pointer;flex-shrink:0">×</button>
+                </div>
+                <p style="font-size:12.5px;color:rgba(255,255,255,0.75);margin:6px 0 0">Check every doctor this patient is seeing today. Fee is pre-filled from each doctor's default — edit if needed.</p>
               </div>
-              <p style="font-size:13px;color:var(--slate);margin-bottom:12px">Check every doctor this patient is seeing
-                today. Fee is pre-filled from each doctor's default — edit if needed.</p>
-              <div id="add-doctor-checklist"></div>
-              <button class="btn btn-primary" style="width:100%;margin-top:14px"
-                onclick="closeModal('modal-add-doctor')">Done</button>
+              <div id="add-doctor-checklist" style="padding:8px 22px;overflow-y:auto;flex:1"></div>
+              <div style="padding:14px 22px;border-top:1px solid var(--border)">
+                <button class="btn btn-primary" style="width:100%" onclick="closeModal('modal-add-doctor')">Done</button>
+              </div>
             </div>
           </div>
 
@@ -1676,29 +1679,38 @@
         return;
       }
 
-      list.innerHTML = allDoctors.filter(d => d.id !== primaryId).map(d => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer">
-            <input type="checkbox" id="add-doc-chk-${d.id}" ${selectedAdditionalDoctors[d.id] !== undefined ? 'checked' : ''}
+      list.innerHTML = allDoctors.filter(d => d.id !== primaryId).map(d => {
+        const checked = selectedAdditionalDoctors[d.id] !== undefined;
+        const initial = (d.name || '?').trim().charAt(0).toUpperCase();
+        return `
+        <div id="add-doc-row-${d.id}" style="display:flex;align-items:center;gap:12px;padding:10px 8px;margin:6px 0;border-radius:var(--radius);border:1px solid ${checked ? 'var(--teal)' : 'var(--border)'};background:${checked ? 'var(--teal-subtle)' : 'transparent'};transition:background .15s,border-color .15s">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0">${initial}</div>
+          <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;min-width:0">
+            <input type="checkbox" id="add-doc-chk-${d.id}" ${checked ? 'checked' : ''}
               onchange="toggleAdditionalDoctor(${d.id}, ${d.consultation_fee ?? 'null'})" />
-            <span>${d.title} ${d.name}${d.on_duty_today ? '' : ' (not marked present today)'}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              ${d.title} ${d.name}${d.on_duty_today ? '' : ' <span style="color:var(--slate-light);font-size:12px">(not present today)</span>'}
+            </span>
           </label>
-          <input type="number" class="form-control" id="add-doc-fee-${d.id}" style="width:90px;display:${selectedAdditionalDoctors[d.id] !== undefined ? '' : 'none'}"
+          <input type="number" class="form-control" id="add-doc-fee-${d.id}" style="width:88px;flex-shrink:0;display:${checked ? '' : 'none'}"
             value="${selectedAdditionalDoctors[d.id] ?? d.consultation_fee ?? ''}"
             oninput="selectedAdditionalDoctors[${d.id}] = parseFloat(this.value) || 0; renderAdditionalDoctorsList();" />
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
     }
 
     function toggleAdditionalDoctor(doctorId, defaultFee) {
       const feeInput = document.getElementById(`add-doc-fee-${doctorId}`);
+      const row = document.getElementById(`add-doc-row-${doctorId}`);
       if (selectedAdditionalDoctors[doctorId] !== undefined) {
         delete selectedAdditionalDoctors[doctorId];
         feeInput.style.display = 'none';
+        if (row) { row.style.borderColor = 'var(--border)'; row.style.background = 'transparent'; }
       } else {
         selectedAdditionalDoctors[doctorId] = defaultFee || 0;
         feeInput.style.display = '';
         feeInput.value = defaultFee || '';
+        if (row) { row.style.borderColor = 'var(--teal)'; row.style.background = 'var(--teal-subtle)'; }
       }
       renderAdditionalDoctorsList();
     }

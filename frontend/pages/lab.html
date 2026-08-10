@@ -34,26 +34,6 @@
       }
     }
 
-    /* Attendance tab - custom desktop layout: title left, controls right, one row */
-    @media (min-width: 901px) {
-      #lab-attendance-card {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 16px;
-      }
-      #lab-attendance-card .card-header {
-        margin-bottom: 0;
-        padding-bottom: 0;
-        border-bottom: none;
-        flex: 0 0 auto;
-      }
-      #lab-attendance-card .staff-att-actions {
-        flex: 0 0 auto;
-      }
-    }
-
     .bulk-test-block {
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
@@ -509,14 +489,15 @@
 
       <!-- Attendance: mobile tab (3rd bottom-nav tab) / always-visible block on desktop -->
       <div class="mobile-section" id="section-attendance">
-        <div class="card" id="lab-attendance-card">
+        <div class="card att-card" id="lab-attendance-card">
           <div class="card-header">
-            <h2>Today's Status</h2>
+            <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
           </div>
           <div class="staff-att-status">
             <span class="badge badge-grey" id="lab-attendance-badge">Not marked</span>
             <div id="lab-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
+          <script>syncStatusHeading('lab-attendance-badge', 'todays-status-heading');</script>
           <div class="staff-att-actions">
             <select class="form-control" id="lab-room-select" style="display:none"
               onchange="markLabAttendance(labCurrentStatus)"></select>

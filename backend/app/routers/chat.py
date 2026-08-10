@@ -98,7 +98,7 @@ def list_threads(
 
     staff = db.query(Doctor).filter(
         Doctor.hospital_id == scoped_hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.receptionist, UserRole.nurse, UserRole.lab, UserRole.pharmacy])
+        Doctor.role.in_([UserRole.doctor, UserRole.receptionist, UserRole.nurse, UserRole.assistant, UserRole.lab, UserRole.pharmacy])
     ).all()
 
     result = []
@@ -250,16 +250,11 @@ def unread_count(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     if current_doctor.role.value in STAFF_ROLES:
-        admin_thread_count = db.query(ChatMessage).filter(
+        count = db.query(ChatMessage).filter(
             ChatMessage.staff_id == current_doctor.id,
             ChatMessage.recipient_id.is_(None),
             ChatMessage.is_read_by_staff == False
         ).count()
-        peer_count = db.query(ChatMessage).filter(
-            ChatMessage.recipient_id == current_doctor.id,
-            ChatMessage.is_read_by_staff == False
-        ).count()
-        count = admin_thread_count + peer_count
     elif current_doctor.role.value in ADMIN_ROLES:
         count = db.query(ChatMessage).filter(
             ChatMessage.is_read_by_admin == False,
@@ -269,115 +264,3 @@ def unread_count(
     else:
         count = 0
     return {"unread_count": count}
-
-
-@router.get("/staff-directory")
-def staff_directory(
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """Other staff in the same hospital the current staff member can start
-    a peer-to-peer chat with (colleagues — not the admin thread, which has
-    its own dedicated tab)."""
-    if current_doctor.role.value not in STAFF_ROLES:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    peers = db.query(Doctor).filter(
-        Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.receptionist, UserRole.nurse,
-                         UserRole.assistant, UserRole.lab, UserRole.pharmacy]),
-        Doctor.id != current_doctor.id,
-    ).all()
-
-    result = []
-    for p in peers:
-        last = db.query(ChatMessage).filter(
-            ChatMessage.recipient_id.isnot(None),
-            ((ChatMessage.sender_id == current_doctor.id) & (ChatMessage.recipient_id == p.id)) |
-            ((ChatMessage.sender_id == p.id) & (ChatMessage.recipient_id == current_doctor.id))
-        ).order_by(ChatMessage.created_at.desc()).first()
-        unread = db.query(ChatMessage).filter(
-            ChatMessage.sender_id == p.id,
-            ChatMessage.recipient_id == current_doctor.id,
-            ChatMessage.is_read_by_staff == False
-        ).count()
-        result.append({
-            "staff_id": p.id,
-            "name": p.name,
-            "role": p.role.value,
-            "last_message": last.body if last else None,
-            "last_message_at": last.created_at.isoformat() if last else None,
-            "unread_count": unread
-        })
-    result.sort(key=lambda r: r["last_message_at"] or "", reverse=True)
-    return result
-
-
-@router.get("/peer/{peer_id}/messages")
-def get_peer_thread(
-    peer_id: int,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    if current_doctor.role.value not in STAFF_ROLES:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    peer = db.query(Doctor).filter(Doctor.id == peer_id).first()
-    if not peer or peer.role.value not in STAFF_ROLES:
-        raise HTTPException(status_code=404, detail="Staff member not found")
-    if peer.hospital_id != current_doctor.hospital_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    msgs = db.query(ChatMessage).filter(
-        ChatMessage.recipient_id.isnot(None),
-        ((ChatMessage.sender_id == current_doctor.id) & (ChatMessage.recipient_id == peer_id)) |
-        ((ChatMessage.sender_id == peer_id) & (ChatMessage.recipient_id == current_doctor.id))
-    ).order_by(ChatMessage.created_at.asc()).all()
-
-    db.query(ChatMessage).filter(
-        ChatMessage.sender_id == peer_id,
-        ChatMessage.recipient_id == current_doctor.id,
-        ChatMessage.is_read_by_staff == False
-    ).update({"is_read_by_staff": True})
-    db.commit()
-    return {"staff_name": peer.name, "messages": [_serialize(m, current_doctor) for m in msgs]}
-
-
-@router.post("/peer/{peer_id}/messages")
-def send_peer_message(
-    peer_id: int,
-    payload: dict,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    if current_doctor.role.value not in STAFF_ROLES:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    body = (payload.get("message") or "").strip()
-    attachment_filename = payload.get("attachment_filename")
-    if not body and not attachment_filename:
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
-
-    peer = db.query(Doctor).filter(Doctor.id == peer_id).first()
-    if not peer or peer.role.value not in STAFF_ROLES:
-        raise HTTPException(status_code=404, detail="Staff member not found")
-    if peer.hospital_id != current_doctor.hospital_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    m = ChatMessage(
-        hospital_id=current_doctor.hospital_id,
-        staff_id=peer_id,
-        recipient_id=peer_id,
-        sender_id=current_doctor.id,
-        body=body,
-        attachment_filename=attachment_filename,
-        attachment_name=payload.get("attachment_name"),
-        attachment_type=payload.get("attachment_type"),
-        is_read_by_staff=False,
-        is_read_by_admin=True,
-        created_at=now_ist_naive()
-    )
-    db.add(m)
-    db.commit()
-    db.refresh(m)
-    return _serialize(m, current_doctor)

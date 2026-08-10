@@ -290,6 +290,7 @@
     }
 
     let allVisits = [];
+    let dischargedAdmissions = [];
 
     async function loadStats() {
       try {
@@ -305,11 +306,14 @@
       const list = document.getElementById("records-list");
       try {
         allVisits = await api("GET", "/portal/dashboard/visits");
-        const hospitals = [...new Set(allVisits.map(v => v.hospital_name))].sort();
-        const patients = [...new Set(allVisits.map(v => v.patient_name))].sort();
+        const hospitalSet = new Set(allVisits.map(v => v.hospital_name));
+        const patientSet = new Set(allVisits.map(v => v.patient_name));
+        dischargedAdmissions.forEach(a => { hospitalSet.add(a.hospital_name); patientSet.add(a.patient_name); });
+        const hospitals = [...hospitalSet].sort();
+        const patients = [...patientSet].sort();
         document.getElementById("filter-hospital").innerHTML = `<option value="">All hospitals</option>` + hospitals.map(h => `<option value="${sanitize(h)}">${sanitize(h)}</option>`).join('');
         document.getElementById("filter-patient").innerHTML = `<option value="">All profiles</option>` + patients.map(p => `<option value="${sanitize(p)}">${sanitize(p)}</option>`).join('');
-        renderVisits(allVisits);
+        applyFilters();
       } catch (e) {
         list.innerHTML = `<div class="card"><p class="err-msg" style="display:block">${e.message}</p></div>`;
       }
@@ -319,25 +323,46 @@
       const q = document.getElementById("search-input").value.trim().toLowerCase();
       const hospital = document.getElementById("filter-hospital").value;
       const patient = document.getElementById("filter-patient").value;
-      let filtered = allVisits;
-      if (hospital) filtered = filtered.filter(v => v.hospital_name === hospital);
-      if (patient) filtered = filtered.filter(v => v.patient_name === patient);
-      if (q) filtered = filtered.filter(v =>
+
+      let filteredVisits = allVisits;
+      if (hospital) filteredVisits = filteredVisits.filter(v => v.hospital_name === hospital);
+      if (patient) filteredVisits = filteredVisits.filter(v => v.patient_name === patient);
+      if (q) filteredVisits = filteredVisits.filter(v =>
         (v.hospital_name || '').toLowerCase().includes(q) ||
         (v.doctor_name || '').toLowerCase().includes(q) ||
         (v.token_number || '').toLowerCase().includes(q) ||
         (v.patient_name || '').toLowerCase().includes(q)
       );
-      renderVisits(filtered);
+
+      let filteredAdmissions = dischargedAdmissions;
+      if (hospital) filteredAdmissions = filteredAdmissions.filter(a => a.hospital_name === hospital);
+      if (patient) filteredAdmissions = filteredAdmissions.filter(a => a.patient_name === patient);
+      if (q) filteredAdmissions = filteredAdmissions.filter(a =>
+        (a.hospital_name || '').toLowerCase().includes(q) ||
+        (a.admitting_doctor_name || '').toLowerCase().includes(q) ||
+        (a.patient_name || '').toLowerCase().includes(q)
+      );
+
+      // merge and sort by date, most recent first — discharged stays sit alongside OPD visits in one timeline
+      const combined = [
+        ...filteredVisits.map(v => ({ _type: 'opd', sort_date: v.visit_date, data: v })),
+        ...filteredAdmissions.map(a => ({ _type: 'admission', sort_date: a.discharge_date || a.admission_date, data: a })),
+      ].sort((x, y) => new Date(y.sort_date) - new Date(x.sort_date));
+
+      renderRecords(combined);
     }
 
-    function renderVisits(visits) {
+    function renderRecords(items) {
       const list = document.getElementById("records-list");
-      if (!visits.length) {
+      if (!items.length) {
         list.innerHTML = `<div class="card"><p style="color:var(--slate-light)">No visit records match your search.</p></div>`;
         return;
       }
-      list.innerHTML = visits.map(v => `
+      list.innerHTML = items.map(item => item._type === 'admission' ? renderDischargedAdmissionCard(item.data) : renderVisitCard(item.data)).join('');
+    }
+
+    function renderVisitCard(v) {
+      return `
         <div class="visit-card" onclick="openVisit(${v.checkin_id})">
           <div class="avatar-circle">${initials(v.patient_name)}</div>
           <div style="flex:1;min-width:0">
@@ -357,7 +382,33 @@
               </div>
             </div>
           </div>
-        </div>`).join('');
+        </div>`;
+    }
+
+    function renderDischargedAdmissionCard(a) {
+      return `
+        <div class="card" style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+            <div>
+              <div style="font-weight:600;color:var(--navy)">${sanitize(a.patient_name)} · ${sanitize(a.hospital_name)}</div>
+              <div style="font-size:12.5px;color:var(--slate)">Ward ${sanitize(a.ward)}, Bed ${sanitize(a.bed_number)}${a.admitting_doctor_name ? ' · ' + sanitize(a.admitting_doctor_name) : ''}</div>
+              ${a.diagnosis ? `<div style="font-size:12.5px;color:var(--slate);margin-top:4px">${sanitize(a.diagnosis)}</div>` : ''}
+            </div>
+            <span class="badge badge-slate">Discharged</span>
+          </div>
+          <div style="font-size:12px;color:var(--slate-light);margin-top:8px">
+            Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
+            ${a.discharge_date ? ' · Discharged ' + new Date(a.discharge_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : ''}
+          </div>
+          ${a.discharge_invoice_id ? `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;margin-top:8px;border-top:1px solid var(--border)">
+              <div style="font-weight:500;font-size:13px">Invoice — ₹${a.discharge_invoice_total}</div>
+              <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();downloadFile('/portal/dashboard/invoices/${a.discharge_invoice_id}/pdf', 'invoice_${a.id}.pdf')">Download</button>
+            </div>
+          ` : ''}
+          <a href="#" style="font-size:12px;color:var(--teal);display:inline-block;margin-top:8px" onclick="event.stopPropagation();toggleAdmissionMeds(${a.id}, this);return false;">Medicines &amp; test reports ▾</a>
+          <div id="admission-meds-${a.id}" style="display:none;margin-top:10px"></div>
+        </div>`;
     }
 
     async function openVisit(checkinId) {
@@ -578,35 +629,37 @@
           banner.style.display = "none";
         }
 
+        // Hospital Admissions shows ONLY currently-admitted stays — no bill, nothing historical.
+        // Once discharged, a stay moves out of here entirely and its invoice + test reports
+        // surface under Health Records instead (see dischargedAdmissions / applyFilters below).
         const currentlyAdmitted = admissions.filter(a => a.status === "admitted");
+        dischargedAdmissions = admissions.filter(a => a.status === "discharged");
+
         if (!currentlyAdmitted.length) {
           list.innerHTML = '';  // nothing currently admitted — say nothing rather than an empty "no admissions" card sitting above Health Records
-          return;
+        } else {
+          list.innerHTML = `<div class="card-header" style="margin-bottom:14px"><h2>Currently Admitted</h2></div>` + currentlyAdmitted.map(a => `
+            <div class="card" style="margin-bottom:10px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+                <div>
+                  <div style="font-weight:600;color:var(--navy)">${sanitize(a.hospital_name)}</div>
+                  <div style="font-size:12.5px;color:var(--slate)">Ward ${sanitize(a.ward)}, Bed ${sanitize(a.bed_number)}${a.admitting_doctor_name ? ' · ' + sanitize(a.admitting_doctor_name) : ''}</div>
+                  ${a.diagnosis ? `<div style="font-size:12.5px;color:var(--slate);margin-top:4px">${sanitize(a.diagnosis)}</div>` : ''}
+                </div>
+                <span class="badge badge-teal">Admitted</span>
+              </div>
+              <div style="font-size:12px;color:var(--slate-light);margin-top:8px">
+                Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
+              </div>
+              <a href="#" style="font-size:12px;color:var(--teal);display:inline-block;margin-top:8px" onclick="toggleAdmissionMeds(${a.id}, this);return false;">Medicines &amp; tests ▾</a>
+              <div id="admission-meds-${a.id}" style="display:none;margin-top:10px"></div>
+            </div>
+          `).join('');
         }
-        list.innerHTML = `<div class="card-header" style="margin-bottom:14px"><h2>Currently Admitted</h2></div>` + currentlyAdmitted.map(a => `
-          <div class="card" style="margin-bottom:10px">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
-              <div>
-                <div style="font-weight:600;color:var(--navy)">${sanitize(a.hospital_name)}</div>
-                <div style="font-size:12.5px;color:var(--slate)">Ward ${sanitize(a.ward)}, Bed ${sanitize(a.bed_number)}${a.admitting_doctor_name ? ' · ' + sanitize(a.admitting_doctor_name) : ''}</div>
-                ${a.diagnosis ? `<div style="font-size:12.5px;color:var(--slate);margin-top:4px">${sanitize(a.diagnosis)}</div>` : ''}
-              </div>
-              <span class="badge ${a.status === 'admitted' ? 'badge-teal' : 'badge-slate'}">${a.status === 'admitted' ? 'Admitted' : 'Discharged'}</span>
-            </div>
-            <div style="font-size:12px;color:var(--slate-light);margin-top:8px">
-              Admitted ${new Date(a.admission_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
-              ${a.discharge_date ? ' · Discharged ' + new Date(a.discharge_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : ''}
-            </div>
-            ${a.status === 'discharged' && a.discharge_invoice_id ? `
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;margin-top:8px;border-top:1px solid var(--border)">
-                <div style="font-weight:500;font-size:13px">Invoice — ₹${a.discharge_invoice_total}</div>
-                <button class="btn btn-outline btn-sm" onclick="downloadFile('/portal/dashboard/invoices/${a.discharge_invoice_id}/pdf', 'invoice_${a.id}.pdf')">Download</button>
-              </div>
-            ` : ''}
-            <a href="#" style="font-size:12px;color:var(--teal);display:inline-block;margin-top:8px" onclick="toggleAdmissionMeds(${a.id}, this);return false;">Medicines &amp; tests ▾</a>
-            <div id="admission-meds-${a.id}" style="display:none;margin-top:10px"></div>
-          </div>
-        `).join('');
+
+        // Records may already have loaded before this resolved — re-apply filters now that
+        // dischargedAdmissions is populated, so they actually appear in Health Records.
+        if (allVisits.length || dischargedAdmissions.length) applyFilters();
       } catch (e) {
         list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
       }

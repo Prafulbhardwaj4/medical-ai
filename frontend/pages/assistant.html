@@ -40,18 +40,6 @@
       border-top: 1px solid var(--border); margin-top: 6px;
     }
 
-    .nurse-att-status { text-align: center; padding: 20px 0 16px; }
-    .nurse-att-status .badge { font-size: 15px; padding: 8px 18px; }
-    .nurse-att-actions { display: flex; flex-direction: column; gap: 10px; }
-    @media (min-width: 901px) {
-      .nurse-att-status { display: none; }
-      .nurse-att-actions { flex-direction: row; flex-wrap: wrap; }
-    }
-    .att-top-row.card-header { border-bottom: none; padding-bottom: 0; }
-    @media (min-width: 901px) {
-      .att-top-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-    }
-
     .roster-row {
       display: flex; justify-content: space-between; align-items: center;
       border-bottom: 1px solid var(--border); padding: 12px 0;
@@ -155,15 +143,16 @@
       <div id="emergency-hold-banner" style="display:none;background:#dc2626;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
 
       <div class="mobile-section d-active" id="section-attendance">
-        <div class="card" style="margin-bottom:20px">
-          <div class="att-top-row">
+        <div class="card att-card" style="margin-bottom:20px">
+          <div>
             <div class="card-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
-              <h2>Today's Status</h2>
+              <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
             </div>
             <div class="staff-att-status">
               <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
               <div id="nurse-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
             </div>
+            <script>syncStatusHeading('nurse-attendance-badge', 'todays-status-heading');</script>
             <div class="staff-att-actions" id="nurse-attendance-btns">
               <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
               <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
@@ -179,7 +168,10 @@
       <div class="mobile-section active d-active" id="section-home">
 
         <div class="card" id="up-next-card" style="display:none;margin-bottom:16px;background:var(--smoke)">
-          <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px">UP NEXT</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+            <div style="font-size:12px;color:var(--slate);font-weight:600">UP NEXT</div>
+            <span id="up-next-vitals"></span>
+          </div>
           <div style="font-size:15px"><strong id="up-next-name"></strong> <span style="color:var(--slate)" id="up-next-uid"></span></div>
           <div style="font-size:13px;color:var(--slate);margin-top:2px" id="up-next-phone"></div>
         </div>
@@ -546,13 +538,16 @@
       document.getElementById("queue-count-walkin").textContent = `${walkin.length} waiting`;
       document.getElementById("queue-count-online").textContent = `${online.length} waiting`;
 
+      const walkinEmptyMsg = walkinAll.length ? 'No patients match this filter.' : 'No patients currently.';
+      const onlineEmptyMsg = onlineAll.length ? 'No patients match this filter.' : 'No patients currently.';
+
       document.getElementById("queue-tbody-walkin").innerHTML = walkin.length
         ? walkin.map(v => renderQueueRow(v, 'created_at', false, patientIdCounts[v.patient_id] > 1)).join('')
-        : `<tr><td colspan="6"><div class="empty-state"><p>No patients match this filter.</p></div></td></tr>`;
+        : `<tr><td colspan="6"><div class="empty-state"><p>${walkinEmptyMsg}</p></div></td></tr>`;
 
       document.getElementById("queue-tbody-online").innerHTML = online.length
         ? online.map(v => renderQueueRow(v, 'booked_time', true, patientIdCounts[v.patient_id] > 1)).join('')
-        : `<tr><td colspan="6"><div class="empty-state"><p>No patients match this filter.</p></div></td></tr>`;
+        : `<tr><td colspan="6"><div class="empty-state"><p>${onlineEmptyMsg}</p></div></td></tr>`;
 
       const upNextCard = document.getElementById('up-next-card');
       const nextPatient = [...walkinAll, ...onlineAll]
@@ -563,6 +558,7 @@
         document.getElementById('up-next-name').textContent = nextPatient.patient_name;
         document.getElementById('up-next-uid').textContent = nextPatient.patient_uid ? `(${nextPatient.patient_uid})` : '';
         document.getElementById('up-next-phone').textContent = nextPatient.phone || '';
+        document.getElementById('up-next-vitals').innerHTML = vitalsCellHtml(nextPatient);
       } else {
         upNextCard.style.display = 'none';
       }

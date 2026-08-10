@@ -54,7 +54,17 @@
         <textarea id="suggestion-text" class="form-control" rows="4"
           placeholder="What would make this easier to use?" style="resize:vertical;margin-bottom:10px"></textarea>
         <button class="btn btn-primary" id="suggestion-send-btn" style="width:100%;margin-bottom:18px">Send</button>
-        <div style="font-size:12px;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px">Your suggestions</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:.03em">Your suggestions</div>
+          <select id="suggestion-mine-filter" class="form-control" style="width:auto;font-size:12px;padding:3px 6px" onchange="window.__suggestionWidget.filter(this.value)">
+            <option value="">All</option>
+            <option value="sent">Sent</option>
+            <option value="seen">Seen</option>
+            <option value="in_progress">In Progress</option>
+            <option value="rejected">Rejected</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
         <div id="suggestion-mine-list"></div>
       </div>
     `;
@@ -66,7 +76,7 @@
     backdrop.addEventListener("click", close);
     document.getElementById("suggestion-send-btn").addEventListener("click", send);
 
-    window.__suggestionWidget = { open, close, edit, followUp, toggleThread, sendThreadReply };
+    window.__suggestionWidget = { open, close, edit, followUp, toggleThread, sendThreadReply, filter };
   }
 
   function open() {
@@ -117,24 +127,44 @@
   };
 
   let mineCache = [];
+  let mineFilter = "";
+
+  function filter(status) {
+    mineFilter = status;
+    renderMine();
+  }
 
   async function loadMine() {
     const el = document.getElementById("suggestion-mine-list");
     el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Loading…</p>';
     try {
-      const rows = await api("GET", "/suggestions/mine");
-      mineCache = rows;
-      if (!rows.length) {
-        el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Nothing submitted yet.</p>';
-        return;
-      }
-      el.innerHTML = rows.map(s => `
-        <div style="padding:10px 0;border-bottom:1px solid var(--border)" id="sugg-row-${s.id}">
-          <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
-            <span style="font-size:13px" id="sugg-text-${s.id}">${sanitize(s.message)}</span>
-            <span class="badge ${STATUS_CLASS[s.status] || 'badge-grey'}" style="flex-shrink:0">${STATUS_LABEL[s.status] || s.status}</span>
-          </div>
-          ${s.status === 'rejected' && s.rejection_reason ? `<div style="font-size:12px;color:var(--slate-light);margin-top:4px">${sanitize(s.rejection_reason)}</div>` : ''}
+      mineCache = await api("GET", "/suggestions/mine");
+      renderMine();
+    } catch (e) {
+      el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`;
+    }
+  }
+
+  function renderMine() {
+    const el = document.getElementById("suggestion-mine-list");
+    const rows = mineFilter ? mineCache.filter(s => s.status === mineFilter) : mineCache;
+    if (!mineCache.length) {
+      el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Nothing submitted yet.</p>';
+      return;
+    }
+    if (!rows.length) {
+      el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Nothing with this status.</p>';
+      return;
+    }
+    const isTerminal = s => s.status === "completed" || s.status === "rejected";
+    el.innerHTML = rows.map(s => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border)" id="sugg-row-${s.id}">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+          <span style="font-size:13px" id="sugg-text-${s.id}">${sanitize(s.message)}</span>
+          <span class="badge ${STATUS_CLASS[s.status] || 'badge-grey'}" style="flex-shrink:0">${STATUS_LABEL[s.status] || s.status}</span>
+        </div>
+        ${s.status === 'rejected' && s.rejection_reason ? `<div style="font-size:12px;color:var(--slate-light);margin-top:4px">${sanitize(s.rejection_reason)}</div>` : ''}
+        ${isTerminal(s) ? '' : `
           <div style="margin-top:6px;display:flex;gap:12px">
             <a href="javascript:void(0)" style="font-size:12px" onclick="window.__suggestionWidget.edit(${s.id})">Edit</a>
             <a href="javascript:void(0)" style="font-size:12px" onclick="window.__suggestionWidget.toggleThread(${s.id})">💬 Conversation</a>
@@ -142,11 +172,9 @@
             ${s.follow_up_requested_at ? `<span style="font-size:12px;color:var(--slate-light)">Followed up ✓</span>` : ''}
           </div>
           <div id="sugg-thread-${s.id}" style="display:none;margin-top:8px"></div>
-        </div>
-      `).join('');
-    } catch (e) {
-      el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`;
-    }
+        `}
+      </div>
+    `).join('');
   }
 
   function edit(id) {
@@ -197,7 +225,7 @@
       const listHtml = rows.length
         ? rows.map(r => `
             <div style="margin-bottom:6px;text-align:${r.sender === 'staff' ? 'right' : 'left'}">
-              <div style="display:inline-block;max-width:85%;padding:5px 9px;border-radius:8px;font-size:12.5px;background:${r.sender === 'staff' ? 'var(--primary,#0f766e)' : 'var(--bg-light,#f1f5f9)'};color:${r.sender === 'staff' ? '#fff' : 'inherit'}">
+              <div style="display:inline-block;max-width:85%;padding:5px 9px;border-radius:10px;font-size:12.5px;background:${r.sender === 'staff' ? 'var(--teal)' : 'var(--white)'};color:${r.sender === 'staff' ? '#fff' : 'var(--navy)'};border:${r.sender === 'staff' ? 'none' : '1px solid var(--border)'}">
                 ${sanitize(r.message)}
               </div>
               <div style="font-size:10px;color:var(--slate-light)">${r.sender === 'staff' ? 'You' : 'Super Admin'}</div>

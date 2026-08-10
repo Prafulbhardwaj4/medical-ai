@@ -53,6 +53,17 @@ def list_my_suggestions(
     rows = db.query(Suggestion).filter(
         Suggestion.submitted_by == current_doctor.id
     ).order_by(Suggestion.created_at.desc()).all()
+
+    unread_ids = {
+        r.suggestion_id for r in db.query(SuggestionReply).join(
+            Suggestion, Suggestion.id == SuggestionReply.suggestion_id
+        ).filter(
+            Suggestion.submitted_by == current_doctor.id,
+            SuggestionReply.sender == "super_admin",
+            SuggestionReply.is_read_by_staff == False
+        ).all()
+    }
+
     return [
         {
             "id": s.id,
@@ -64,9 +75,29 @@ def list_my_suggestions(
             "can_edit": s.status in ("sent", "seen"),
             "can_follow_up": s.status not in ("completed", "rejected") and (now_ist_naive() - s.updated_at) >= timedelta(days=3),
             "follow_up_requested_at": s.follow_up_requested_at.isoformat() if s.follow_up_requested_at else None,
+            "has_unread_reply": s.id in unread_ids,
         }
         for s in rows
     ]
+
+
+@router.get("/unread-count")
+def suggestions_unread_count(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Staff-side badge count — questions from Super Admin the staff member
+    hasn't opened yet, across all their own suggestions. Registered ahead of
+    the /{suggestion_id} routes below so "unread-count" is never swallowed
+    as a suggestion_id path param."""
+    count = db.query(SuggestionReply).join(
+        Suggestion, Suggestion.id == SuggestionReply.suggestion_id
+    ).filter(
+        Suggestion.submitted_by == current_doctor.id,
+        SuggestionReply.sender == "super_admin",
+        SuggestionReply.is_read_by_staff == False
+    ).count()
+    return {"unread_count": count}
 
 
 @router.patch("/{suggestion_id}")
@@ -208,6 +239,15 @@ def list_suggestion_replies(
     rows = db.query(SuggestionReply).filter(
         SuggestionReply.suggestion_id == suggestion_id
     ).order_by(SuggestionReply.created_at.asc()).all()
+
+    if not is_super_admin:
+        db.query(SuggestionReply).filter(
+            SuggestionReply.suggestion_id == suggestion_id,
+            SuggestionReply.sender == "super_admin",
+            SuggestionReply.is_read_by_staff == False
+        ).update({"is_read_by_staff": True})
+        db.commit()
+
     return [{"id": r.id, "sender": r.sender, "message": r.message, "created_at": r.created_at.isoformat()} for r in rows]
 
 
@@ -231,8 +271,14 @@ def add_suggestion_reply(
         suggestion_id=suggestion_id,
         sender="super_admin" if is_super_admin else "staff",
         message=body.message.strip(),
+        is_read_by_staff=not is_super_admin,  # staff's own replies don't need to notify themselves
     )
     db.add(reply)
+
+    if is_super_admin:
+        from app.utils.notify import notify_suggestion_reply
+        notify_suggestion_reply(db, suggestion.hospital_id, suggestion.id, suggestion.submitted_by)
+
     db.commit()
     return {"message": "Reply sent"}
 

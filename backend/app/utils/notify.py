@@ -401,3 +401,17 @@ def sync_stock_notifications(db: Session, hospital_id: int):
             db.delete(n)
 
     db.commit()
+
+
+def notify_suggestion_reply(db: Session, hospital_id: int, suggestion_id: int, staff_id: int):
+    """Super Admin asked the submitting staff member something on their
+    suggestion. Targets only that staff member. link_id carries the
+    suggestion's id — the frontend's suggestion widget opens straight to
+    that suggestion's conversation thread rather than navigating pages."""
+    key = f"suggestion_reply:{suggestion_id}:{now_ist_naive().isoformat()}"
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="suggestion_reply", severity="info",
+        title="💬 Question on your suggestion",
+        message="Super Admin asked you something about a suggestion you sent in.",
+        link_type="suggestion", link_id=suggestion_id, is_read=False, target_doctor_id=staff_id,
+    ))

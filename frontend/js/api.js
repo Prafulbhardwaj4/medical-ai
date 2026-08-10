@@ -169,7 +169,8 @@ function closeModal(id) {
 function fillTopbar() {
   const doc = getDoctor();
   if (!doc) return;
-  const fullName = doc.title ? `${doc.title} ${doc.name}` : doc.name;
+  const displayTitle = doc.role === "super_admin" ? "Mr." : doc.title;
+  const fullName = displayTitle ? `${displayTitle} ${doc.name}` : doc.name;
   const el = document.getElementById("topbar-doctor-name");
   if (el) el.textContent = fullName;
   const cl = document.getElementById("topbar-clinic");
@@ -677,13 +678,26 @@ function openOffDutyTimeModal() {
   });
 }
 
+function syncStatusHeading(badgeId, headingSpanId) {
+  const badge = document.getElementById(badgeId);
+  const span = document.getElementById(headingSpanId);
+  if (!badge || !span) return;
+  const update = () => { span.textContent = badge.textContent ? `(${badge.textContent})` : ''; };
+  update();
+  new MutationObserver(update).observe(badge, { childList: true, characterData: true, subtree: true });
+}
+
 function renderOffDutyTimeLine(containerId, isoTime) {
   const el = document.getElementById(containerId);
   if (!el) return;
   if (!isoTime) { el.innerHTML = ''; return; }
   const t = new Date(isoTime);
   const timeStr = t.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
-  el.innerHTML = `Off duty by <strong>${timeStr}</strong> <a href="javascript:void(0)" onclick="editOffDutyTime('${containerId}')" style="margin-left:6px">Edit</a>`;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--border);border-radius:var(--radius,8px);padding:6px 10px">
+      <span>Off duty by <strong>${timeStr}</strong></span>
+      <a href="javascript:void(0)" onclick="editOffDutyTime('${containerId}')">Edit</a>
+    </div>`;
 }
 
 async function editOffDutyTime(containerId) {

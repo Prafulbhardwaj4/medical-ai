@@ -1840,13 +1840,32 @@ tbody tr:hover {
   width: 100% !important;
 }
 
+/* Compact, single-row desktop layout: title+badge on the left, the
+   off-duty time in its own bordered chip, action buttons pinned right. */
 @media (min-width: 901px) {
+  .att-card {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .att-card .card-header {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+    flex: 0 0 auto;
+  }
+
   .staff-att-status {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     text-align: left;
-    padding: 4px 0 16px;
+    padding: 0;
+    flex: 0 0 auto;
   }
 
   .staff-att-status #room-display,
@@ -1854,10 +1873,18 @@ tbody tr:hover {
     margin-top: 0 !important;
   }
 
+  .staff-att-status [id$="-off-duty-time-line"]:not(:empty) {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 5px 12px;
+    background: var(--smoke);
+  }
+
   .staff-att-actions {
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
+    margin-left: auto;
   }
 
   .staff-att-actions select {
@@ -3022,6 +3049,7 @@ tbody tr:hover {
 }
 
 .suggestion-header-btn {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3034,6 +3062,25 @@ tbody tr:hover {
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.suggestion-card {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.suggestion-card.has-unread {
+  border-color: #0d9488;
+  background: #f0fdfa;
+}
+
+.suggestion-filter-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
 .suggestion-header-btn:hover {

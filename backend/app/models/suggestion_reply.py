@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 from app.database import Base
 from app.utils.timezone import now_ist_naive
 
@@ -14,4 +14,5 @@ class SuggestionReply(Base):
     suggestion_id = Column(Integer, ForeignKey("suggestions.id"), nullable=False)
     sender = Column(String, nullable=False)  # "super_admin" | "staff"
     message = Column(Text, nullable=False)
+    is_read_by_staff = Column(Boolean, default=False, nullable=False)  # only meaningful for sender="super_admin" replies
     created_at = Column(DateTime, default=now_ist_naive, nullable=False)

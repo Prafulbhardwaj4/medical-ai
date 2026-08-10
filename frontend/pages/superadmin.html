@@ -266,24 +266,44 @@
 
   <!-- Suggestion Detail Modal -->
   <div class="modal-overlay" id="suggestion-detail-modal">
-    <div class="modal" style="max-width:520px">
-      <div class="modal-header">
-        <h2>Suggestion</h2>
-        <button class="modal-close" onclick="closeSuggestionModal()">×</button>
-      </div>
-      <div id="sugg-modal-meta" style="font-size:12px;color:var(--slate-light);margin-bottom:10px"></div>
-      <p id="sugg-modal-message" style="font-size:14.5px;margin:0 0 16px;white-space:pre-wrap"></p>
-
-      <div class="form-group">
-        <label class="form-label">Status</label>
-        <select class="form-control" id="sugg-modal-status" onchange="onSuggModalStatusChange()"></select>
+    <div class="modal" style="max-width:560px;min-height:560px;display:flex;flex-direction:column;padding:0;overflow:hidden">
+      <div style="background:var(--navy);color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <div style="font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal-light);font-weight:600;margin-bottom:4px">Suggestion</div>
+          <div id="sugg-modal-meta" style="font-size:13px;color:rgba(255,255,255,0.75)"></div>
+        </div>
+        <button onclick="closeSuggestionModal()" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:18px;line-height:1;cursor:pointer;flex-shrink:0">×</button>
       </div>
 
-      <div style="font-size:12px;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:.03em;margin:18px 0 8px">Questions to staff</div>
-      <div id="sugg-modal-replies" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:10px;margin-bottom:10px"></div>
-      <div style="display:flex;gap:8px">
-        <input class="form-control" id="sugg-modal-reply-text" placeholder="Ask the staff member something…" />
-        <button class="btn btn-primary btn-sm" onclick="sendSuggModalReply()">Ask</button>
+      <div style="padding:20px 24px;flex:1;overflow-y:auto;display:flex;flex-direction:column;min-height:0">
+        <div style="background:var(--teal-subtle);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:18px">
+          <p id="sugg-modal-message" style="font-size:14.5px;margin:0;white-space:pre-wrap;color:var(--navy)"></p>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">Status</label>
+          <select class="form-control" id="sugg-modal-status" onchange="onSuggModalStatusChange()"></select>
+        </div>
+
+        <div id="sugg-reject-reason-group" style="display:none;margin-bottom:14px;background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius);padding:12px">
+          <label class="form-label">Reason for rejecting</label>
+          <textarea class="form-control" id="sugg-reject-reason-text" rows="2" placeholder="Let the staff member know why…"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn btn-primary btn-sm" onclick="confirmRejectSuggestion()">Confirm Rejection</button>
+            <button class="btn btn-outline btn-sm" onclick="cancelRejectSuggestion()">Cancel</button>
+          </div>
+          <div class="err-msg" id="sugg-reject-reason-err"></div>
+        </div>
+
+        <div style="font-size:11px;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;margin:8px 0 8px;display:flex;align-items:center;gap:6px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          Questions to staff
+        </div>
+        <div id="sugg-modal-replies" style="flex:1;min-height:220px;max-height:280px;overflow-y:auto;background:var(--smoke);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px;margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px">
+          <input class="form-control" id="sugg-modal-reply-text" placeholder="Ask the staff member something…" />
+          <button class="btn btn-primary btn-sm" onclick="sendSuggModalReply()">Ask</button>
+        </div>
       </div>
     </div>
   </div>
@@ -915,9 +935,8 @@
         document.getElementById('sugg-modal-meta').textContent =
           `${s.hospital_name} · ${s.submitted_by_name} (${s.submitted_by_role}) · ${new Date(s.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
         document.getElementById('sugg-modal-message').textContent = s.message;
-        const statusSel = document.getElementById('sugg-modal-status');
-        statusSel.innerHTML = Object.entries(SUGG_STATUS_LABEL).map(([v, label]) =>
-          `<option value="${v}" ${v === s.status ? 'selected' : ''}>${label}</option>`).join('');
+        renderSuggModalStatusOptions(s.status);
+        document.getElementById('sugg-reject-reason-group').style.display = 'none';
         document.getElementById('sugg-modal-reply-text').value = '';
         await loadSuggModalReplies(id);
         document.getElementById('suggestion-detail-modal').classList.add('open');
@@ -928,6 +947,19 @@
       }
     }
 
+    // "sent" (Received) is the pre-seen starting state only — once a
+    // suggestion has moved on (even just to "seen"), it can't go back.
+    const STATUS_RANK = { sent: 0, seen: 1, in_progress: 2, rejected: 3, completed: 3 }; // rejected/completed are both terminal — status can only ever move forward, never back
+
+    function renderSuggModalStatusOptions(currentStatus) {
+      const statusSel = document.getElementById('sugg-modal-status');
+      const currentRank = STATUS_RANK[currentStatus] ?? 0;
+      statusSel.innerHTML = Object.entries(SUGG_STATUS_LABEL)
+        .filter(([v]) => v === currentStatus || (STATUS_RANK[v] ?? 0) > currentRank)
+        .map(([v, label]) => `<option value="${v}" ${v === currentStatus ? 'selected' : ''}>${label}</option>`).join('');
+      statusSel.disabled = currentRank >= 3; // completed/rejected — locked, nothing left to change
+    }
+
     function closeSuggestionModal() {
       document.getElementById('suggestion-detail-modal').classList.remove('open');
       suggModalCurrent = null;
@@ -936,17 +968,35 @@
     async function onSuggModalStatusChange() {
       if (!suggModalCurrent) return;
       const status = document.getElementById('sugg-modal-status').value;
-      let rejection_reason = null;
       if (status === 'rejected') {
-        rejection_reason = prompt('Reason for rejecting this suggestion:');
-        if (!rejection_reason || !rejection_reason.trim()) {
-          document.getElementById('sugg-modal-status').value = suggModalCurrent.status; // revert
-          return;
-        }
+        document.getElementById('sugg-reject-reason-text').value = '';
+        document.getElementById('sugg-reject-reason-err').textContent = '';
+        document.getElementById('sugg-reject-reason-group').style.display = '';
+        return;
       }
+      await applySuggStatus(status, null);
+    }
+
+    async function confirmRejectSuggestion() {
+      const reason = document.getElementById('sugg-reject-reason-text').value.trim();
+      if (!reason) {
+        document.getElementById('sugg-reject-reason-err').textContent = 'A reason is required to reject.';
+        return;
+      }
+      await applySuggStatus('rejected', reason);
+    }
+
+    function cancelRejectSuggestion() {
+      document.getElementById('sugg-reject-reason-group').style.display = 'none';
+      document.getElementById('sugg-modal-status').value = suggModalCurrent.status;
+    }
+
+    async function applySuggStatus(status, rejection_reason) {
       try {
         await api('PATCH', `/suggestions/${suggModalCurrent.id}/status`, { status, rejection_reason });
         suggModalCurrent.status = status;
+        document.getElementById('sugg-reject-reason-group').style.display = 'none';
+        renderSuggModalStatusOptions(status);
         toast('Status updated', 'success');
         loadSuggestions();
         refreshSuggestionsBadge();
@@ -965,12 +1015,12 @@
           el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No questions asked yet.</p>';
           return;
         }
-        el.innerHTML = rows.map(r => `
+       el.innerHTML = rows.map(r => `
           <div style="margin-bottom:8px;text-align:${r.sender === 'super_admin' ? 'right' : 'left'}">
-            <div style="display:inline-block;max-width:85%;padding:6px 10px;border-radius:8px;font-size:13px;background:${r.sender === 'super_admin' ? 'var(--primary,#0f766e)' : 'var(--bg-light,#f1f5f9)'};color:${r.sender === 'super_admin' ? '#fff' : 'inherit'}">
+            <div style="display:inline-block;max-width:85%;padding:7px 11px;border-radius:12px;font-size:13px;background:${r.sender === 'super_admin' ? 'var(--teal)' : 'var(--white)'};color:${r.sender === 'super_admin' ? '#fff' : 'var(--navy)'};border:${r.sender === 'super_admin' ? 'none' : '1px solid var(--border)'}">
               ${sanitize(r.message)}
             </div>
-            <div style="font-size:10px;color:var(--slate-light)">${r.sender === 'super_admin' ? 'You' : 'Staff'}</div>
+            <div style="font-size:10px;color:var(--slate-light);margin-top:2px">${r.sender === 'super_admin' ? 'You' : 'Staff'}</div>
           </div>
         `).join('');
         el.scrollTop = el.scrollHeight;

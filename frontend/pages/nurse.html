@@ -15,17 +15,6 @@
       #section-vitals, #section-tasks, #section-history { display: none !important; }
       #section-vitals.d-active, #section-tasks.d-active, #section-history.d-active { display: block !important; }
     }
-    /* Today's Status row — title left, controls right on desktop; stacked on mobile */
-    .att-top-row h2 { margin: 0; }
-    .att-top-row.card-header { border-bottom: none; padding-bottom: 0; }
-    @media (min-width: 901px) {
-      .att-top-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 16px;
-      }
-    }
 
     /* Row cards used in vitals / tasks / history lists */
     .ns-row {
@@ -160,16 +149,17 @@
     <main class="main-content">
       <!-- Attendance — sits at the top of Home -->
       <div class="mobile-section" id="section-attendance">
-        <div class="card">
-          <div class="att-top-row">
+        <div class="card att-card">
+          <div>
             <div class="card-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
-              <h2>Today's Status</h2>
+              <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
             </div>
             <div class="staff-att-status">
               <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
               <div id="nurse-room-display" style="margin-top:6px;font-size:13px;color:var(--slate)"></div>
               <div id="nurse-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
             </div>
+            <script>syncStatusHeading('nurse-attendance-badge', 'todays-status-heading');</script>
             <div class="staff-att-actions" id="nurse-attendance-btns">
               <select class="form-control" id="nurse-room-select" style="display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
               <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
