@@ -38,11 +38,7 @@ def vitals_queue(
     from app.utils.portal_checkin import sweep_todays_online_checkins
     sweep_todays_online_checkins(db, current_doctor.hospital_id)
 
-    # include_done=true is the assistant's combined view: it also surfaces
-    # patients whose vitals are already recorded, so they don't vanish from
-    # the assistant's dashboard the moment vitals are done. Plain nurse.html
-    # never passes this, so its own working queue is unaffected.
-    statuses = ["pending", "sent_back", "done"] if include_done else ["pending", "sent_back"]
+    statuses = ["pending", "sent_back", "done", "none"] if include_done else ["pending", "sent_back", "none"]
     checkins = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.vitals_status.in_(statuses),

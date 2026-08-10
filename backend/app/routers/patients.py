@@ -1197,7 +1197,13 @@ def checkin_patient(
             if payload.send_to_nurse:
                 extra_nurse = pick_random_nurse(db, current_doctor.hospital_id, extra_doctor.id)
 
-            extra_token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+            # Same visit, same token — not a second independently-generated
+            # token. token_number still has to be globally unique at the DB
+            # level (see the model's hard-backstop comment), so this suffixes
+            # the shared base token rather than issuing an unrelated one;
+            # reception/patient still see one visit, one token family.
+            suffix_n = len(additional_tokens_out) + 2
+            extra_token = f"{token}-{suffix_n}"
             for attempt in range(max_token_attempts):
                 extra_checkin = Checkin(
                     hospital_id=current_doctor.hospital_id,
@@ -1220,7 +1226,8 @@ def checkin_patient(
                     db.rollback()
                     if attempt == max_token_attempts - 1:
                         continue
-                    extra_token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+                    suffix_n += 100  # collision on the suffixed token — jump the suffix rather than issuing an unrelated token number
+                    extra_token = f"{token}-{suffix_n}"
             db.refresh(extra_checkin)
             log_action(
                 db, current_doctor, action="patient_checked_in", target_type="patient", target_id=patient.id,
@@ -1461,7 +1468,7 @@ def todays_queue(
             "token_number": c.token_number,
             "issue_category": c.issue_category,
             "created_at": c.created_at.isoformat(),
-            "estimated_time": None,
+            "estimated_time": c.booked_time.isoformat() if c.booked_time else None,
             "status": "returned" if c.is_returned else ("done" if c.token_number in confirmed_tokens else "waiting"),
             "is_emergency": c.is_emergency,
             "is_referral": ref is not None,
@@ -1678,17 +1685,46 @@ def reception_pending_payments(
         if not buckets:
             continue
 
+        doctor = db.query(Doctor).filter(Doctor.id == c.doctor_id).first()
         result.append({
             "checkin_id": c.id,
             "patient_id": patient.id,
             "patient_name": patient.name,
             "patient_uid": patient.patient_uid,
             "patient_phone": patient.phone,
+            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else None,
             "buckets": buckets,
             "is_finalized": c.is_finalized,
+            "visit_group_id": c.visit_group_id,
         })
 
-    return result
+    # Multi-doctor visits (see Checkin.visit_group_id) currently produce one
+    # row per doctor above — group those back into a single patient entry
+    # with a doctors[] breakdown, so reception sees one visit, not several
+    # "patients", while still being able to pay/check each doctor's own
+    # consultation line independently.
+    grouped = {}
+    order = []
+    for row in result:
+        key = row["visit_group_id"] or row["checkin_id"]
+        if key not in grouped:
+            grouped[key] = {
+                "patient_id": row["patient_id"],
+                "patient_name": row["patient_name"],
+                "patient_uid": row["patient_uid"],
+                "patient_phone": row["patient_phone"],
+                "is_finalized": row["is_finalized"],
+                "doctors": [],
+            }
+            order.append(key)
+        grouped[key]["is_finalized"] = grouped[key]["is_finalized"] and row["is_finalized"]
+        grouped[key]["doctors"].append({
+            "checkin_id": row["checkin_id"],
+            "doctor_name": row["doctor_name"],
+            "buckets": row["buckets"],
+        })
+
+    return [grouped[k] for k in order]
 
 
 @router.get("/{patient_id}/pending-tasks")

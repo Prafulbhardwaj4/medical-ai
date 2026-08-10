@@ -269,13 +269,13 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <button class="btn btn-outline btn-sm" id="bills-header-btn" onclick="openBillsModal()">
-          🧾 Bills
-        </button>
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
 
       <div class="topbar-doctor">
+        <button class="btn btn-outline btn-sm" id="bills-header-btn" onclick="openBillsModal()">
+          🧾 Bills
+        </button>
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <span id="topbar-clinic" style="color:var(--slate)"></span>
@@ -623,7 +623,7 @@
 
             <div id="additional-doctors-list"></div>
             <div id="visit-total-row"
-              style="display:none;font-size:14px;color:var(--slate);margin-bottom:10px;text-align:right">
+              style="display:none;font-size:14px;color:var(--slate);margin-bottom:10px;text-align:right;padding-right:10px">
               Total for this visit: <strong id="visit-total-amount">₹0</strong>
             </div>
 
@@ -1592,6 +1592,7 @@
 
     let hospitalDoctors = [];
     let selectedAdditionalDoctors = {}; // doctor_id -> fee
+    let allDoctorsForAdd = []; // full hospital roster fetched for the Add Doctor modal, used to look up name/specialization for the summary
     let billsFilter = 'all';
     let billsRows = [];
 
@@ -1679,7 +1680,8 @@
         return;
       }
 
-      list.innerHTML = allDoctors.filter(d => d.id !== primaryId).map(d => {
+      allDoctorsForAdd = allDoctors;
+      list.innerHTML = allDoctors.filter(d => d.id !== primaryId && d.on_duty_today).map(d => {
         const checked = selectedAdditionalDoctors[d.id] !== undefined;
         const initial = (d.name || '?').trim().charAt(0).toUpperCase();
         return `
@@ -1689,7 +1691,7 @@
             <input type="checkbox" id="add-doc-chk-${d.id}" ${checked ? 'checked' : ''}
               onchange="toggleAdditionalDoctor(${d.id}, ${d.consultation_fee ?? 'null'})" />
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              ${d.title} ${d.name}${d.on_duty_today ? '' : ' <span style="color:var(--slate-light);font-size:12px">(not present today)</span>'}
+              ${d.title} ${d.name}${d.specialization ? ` <span style="color:var(--slate-light);font-size:12px">— ${d.specialization}</span>` : ''}
             </span>
           </label>
           <input type="number" class="form-control" id="add-doc-fee-${d.id}" style="width:88px;flex-shrink:0;display:${checked ? '' : 'none'}"
@@ -1697,6 +1699,9 @@
             oninput="selectedAdditionalDoctors[${d.id}] = parseFloat(this.value) || 0; renderAdditionalDoctorsList();" />
         </div>`;
       }).join('');
+      if (!allDoctors.some(d => d.id !== primaryId && d.on_duty_today)) {
+        list.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No other doctors are present right now.</p>';
+      }
     }
 
     function toggleAdditionalDoctor(doctorId, defaultFee) {
@@ -1720,14 +1725,29 @@
       const el = document.getElementById('additional-doctors-list');
       const totalRow = document.getElementById('visit-total-row');
       if (!ids.length) { el.innerHTML = ''; totalRow.style.display = 'none'; return; }
-      el.innerHTML = ids.map(id => {
-        const d = hospitalDoctors.find(x => x.id === id);
-        return `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--slate);padding:4px 0">
-          <span>+ ${d ? d.title + ' ' + d.name : 'Doctor'}</span><span>₹${selectedAdditionalDoctors[id] || 0}</span>
-        </div>`;
-      }).join('');
+      const primaryId = parseInt(document.getElementById('doc-select').value);
+      const primaryDoctor = (allDoctorsForAdd || []).find(x => x.id === primaryId);
       const primaryFee = parseFloat(document.getElementById('consultation-fee').value) || 0;
       const extraTotal = ids.reduce((sum, id) => sum + (selectedAdditionalDoctors[id] || 0), 0);
+
+      const rowHtml = (name, spec, fee) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-size:13.5px;font-weight:600;color:var(--navy)">${name}</div>
+            ${spec ? `<div style="font-size:12px;color:var(--slate-light)">${spec}</div>` : ''}
+          </div>
+          <span style="font-size:13.5px;color:var(--slate)">₹${fee || 0}</span>
+        </div>`;
+
+      let html = `<div style="border:1px solid var(--border);border-radius:var(--radius);margin:10px 0;overflow:hidden">`;
+      if (primaryDoctor) html += rowHtml(`${primaryDoctor.title} ${primaryDoctor.name}`, primaryDoctor.specialization, primaryFee);
+      html += ids.map(id => {
+        const d = (allDoctorsForAdd || []).find(x => x.id === id);
+        return rowHtml(d ? `${d.title} ${d.name}` : 'Doctor', d ? d.specialization : '', selectedAdditionalDoctors[id]);
+      }).join('');
+      html += `</div>`;
+      el.innerHTML = html;
+
       document.getElementById('visit-total-amount').textContent = `₹${primaryFee + extraTotal}`;
       totalRow.style.display = '';
     }
@@ -2100,13 +2120,19 @@
 
       list.innerHTML = filtered.map(r => {
         const idx = pendingPaymentRows.indexOf(r);
+        const first = r.doctors[0].buckets;
         const parts = [];
-        if (r.buckets.consultation) parts.push(r.buckets.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
-        if (r.buckets.tests) parts.push(r.buckets.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${r.buckets.tests.pending_total} pending`);
-        if (r.buckets.charges) parts.push(r.buckets.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${r.buckets.charges.pending_total} pending`);
-        if (r.buckets.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[r.buckets.pharmacy.status] || r.buckets.pharmacy.status}`);
+        if (r.doctors.length > 1) {
+          const unpaidCount = r.doctors.filter(d => d.buckets.consultation && d.buckets.consultation.status !== 'paid').length;
+          parts.push(`${r.doctors.length} doctors — ${unpaidCount ? unpaidCount + ' unpaid' : 'all paid'}`);
+        } else if (first.consultation) {
+          parts.push(first.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
+        }
+        if (first.tests) parts.push(first.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${first.tests.pending_total} pending`);
+        if (first.charges) parts.push(first.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${first.charges.pending_total} pending`);
+        if (first.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[first.pharmacy.status] || first.pharmacy.status}`);
         return `
-          <div id="pp-row-${r.checkin_id}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div>
               <strong>${r.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${r.patient_uid || ''}</span>
               <div style="font-size:12px;color:var(--slate)">${parts.join(' · ')}</div>
@@ -2132,27 +2158,31 @@
       const row = paymentToggleRow;
       const body = document.getElementById('payment-toggle-body');
       let html = '';
-      const needsTestLines = row.buckets.tests && row.buckets.tests.status !== 'paid';
+      const first = row.doctors[0].buckets;
+      const needsTestLines = first.tests && first.tests.status !== 'paid';
 
-      if (row.buckets.consultation) {
-        const paid = row.buckets.consultation.status === 'paid';
+      // One consultation-fee line per doctor on this visit, each with its
+      // own checkbox — reception pays for whichever doctor(s) they want.
+      row.doctors.forEach(d => {
+        if (!d.buckets.consultation) return;
+        const paid = d.buckets.consultation.status === 'paid';
         html += `
           <div class="pay-toggle-row">
             <div class="pay-toggle-info">
               <span class="pay-toggle-icon">🩺</span>
               <div>
-                <div class="pay-toggle-label">Consultation Fee</div>
+                <div class="pay-toggle-label">Consultation Fee — ${sanitize(d.doctor_name || '')}</div>
                 <div class="pay-toggle-sub ${paid ? 'is-paid' : 'is-unpaid'}">${paid ? 'Paid' : 'Unpaid'}</div>
               </div>
             </div>
             <label class="pay-toggle-switch">
-              <input type="checkbox" ${paid ? 'checked' : ''} onchange="togglePaymentSwitch('consultation', this.checked)" />
+              <input type="checkbox" ${paid ? 'checked' : ''} onchange="togglePaymentSwitch('consultation', this.checked, ${d.checkin_id})" />
               <span class="pay-toggle-slider"></span>
             </label>
           </div>`;
-      }
-      if (row.buckets.tests) {
-        const paid = row.buckets.tests.status === 'paid';
+      });
+      if (first.tests) {
+        const paid = first.tests.status === 'paid';
         if (paid) {
           html += `
             <div class="pay-toggle-row">
@@ -2180,8 +2210,8 @@
             </div>`;
         }
       }
-      if (row.buckets.charges) {
-        const chargesPaid = row.buckets.charges.status === 'paid';
+      if (first.charges) {
+        const chargesPaid = first.charges.status === 'paid';
         if (chargesPaid) {
           html += `
             <div class="pay-toggle-row">
@@ -2200,14 +2230,14 @@
                 <span class="pay-toggle-icon">➕</span>
                 <div>
                   <div class="pay-toggle-label">Ad-hoc Charges</div>
-                  <div class="pay-toggle-sub is-unpaid">Rs.${row.buckets.charges.pending_total.toFixed(2)} pending</div>
+                  <div class="pay-toggle-sub is-unpaid">Rs.${first.charges.pending_total.toFixed(2)} pending</div>
                 </div>
               </div>
               <button class="btn btn-primary btn-sm" onclick="collectOpdChargesFromToggleModal()">Collect Payment</button>
             </div>`;
         }
       }
-      if (row.buckets.pharmacy) {
+      if (first.pharmacy) {
         html += `
           <div class="pay-toggle-row">
             <div class="pay-toggle-info">
@@ -2216,7 +2246,7 @@
                 <div class="pay-toggle-label">Pharmacy</div>
               </div>
             </div>
-            <span class="badge badge-grey">${PHARM_STATUS_LABEL[row.buckets.pharmacy.status] || row.buckets.pharmacy.status}</span>
+            <span class="badge badge-grey">${PHARM_STATUS_LABEL[first.pharmacy.status] || first.pharmacy.status}</span>
           </div>`;
       }
       body.innerHTML = html || '<p style="color:var(--slate-light)">Nothing to show.</p>';
@@ -2253,7 +2283,7 @@
       try {
         const result = await api("POST", `/patients/${row.patient_id}/collect-test-payment`, { payment_method: method });
         toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
-        row.buckets.tests.status = 'paid';
+        row.doctors[0].buckets.tests.status = 'paid';
         renderPaymentToggleBody();
         loadPendingPayments();
       } catch (e) { toast(e.message, 'error'); }
@@ -2266,25 +2296,26 @@
       try {
         const result = await api("POST", `/patients/${row.patient_id}/collect-opd-charges`, { payment_method: method });
         toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
-        row.buckets.charges.status = 'paid';
+        row.doctors[0].buckets.charges.status = 'paid';
         renderPaymentToggleBody();
         loadPendingPayments();
       } catch (e) { toast(e.message, 'error'); }
     }
 
-    async function togglePaymentSwitch(kind, turningOn) {
+    async function togglePaymentSwitch(kind, turningOn, checkinId) {
       const row = paymentToggleRow;
       try {
         if (kind === 'consultation') {
+          const doctorEntry = row.doctors.find(d => d.checkin_id === checkinId);
           if (turningOn) {
             const method = await askPaymentMethod();
             if (!method) { renderPaymentToggleBody(); return; }
-            await api("PATCH", `/patients/checkin/${row.checkin_id}/mark-paid`, { payment_method: method });
+            await api("PATCH", `/patients/checkin/${checkinId}/mark-paid`, { payment_method: method });
           } else {
             if (!confirm('Mark the consultation fee as unpaid?')) { renderPaymentToggleBody(); return; }
-            await api("PATCH", `/patients/checkin/${row.checkin_id}/mark-unpaid`, {});
+            await api("PATCH", `/patients/checkin/${checkinId}/mark-unpaid`, {});
           }
-          row.buckets.consultation.status = turningOn ? 'paid' : 'unpaid';
+          if (doctorEntry) doctorEntry.buckets.consultation.status = turningOn ? 'paid' : 'unpaid';
         } else if (kind === 'tests') {
           if (turningOn) {
             const method = await askPaymentMethod();
@@ -2295,7 +2326,7 @@
             if (!confirm('Mark tests as unpaid? Only tests not yet started at the lab can be reverted.')) { renderPaymentToggleBody(); return; }
             await api("POST", `/patients/${row.patient_id}/revert-test-payment`, {});
           }
-          row.buckets.tests.status = turningOn ? 'paid' : 'unpaid';
+          row.doctors[0].buckets.tests.status = turningOn ? 'paid' : 'unpaid';
         }
         renderPaymentToggleBody();
         loadPendingPayments();

@@ -112,16 +112,110 @@ def list_admissions(account: PatientAccount = Depends(get_current_patient_accoun
     return out
 
 
-@router.get("/admissions/{admission_id}/tests")
-def admission_tests(admission_id: int, account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
-    """Names + status only — no price, whether admitted or discharged. Money only
-    ever surfaces via the discharge invoice, once the stay is closed out."""
+@router.get("/admissions/{admission_id}/reports")
+def admission_reports(admission_id: int, account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
+    """Tests grouped into reports the same way they were ordered: everything
+    submitted together in one "Order Test(s)" action (sharing an
+    order_batch_id) is one report, regardless of how results trickle in.
+    Tests ordered separately — even the same test, a different day — are
+    separate reports. Legacy orders from before order_batch_id existed
+    (null) each stand alone as their own single-test report. Names + status
+    only, no price — money only ever surfaces via the discharge invoice."""
     patient_ids = _owned_patient_ids(account)
     admission = db.query(Admission).filter(Admission.id == admission_id, Admission.patient_id.in_(patient_ids)).first()
     if not admission:
         raise HTTPException(status_code=404, detail="Admission not found")
-    orders = db.query(TestOrder).filter(TestOrder.admission_id == admission.id).all()
-    return [{"id": t.id, "test_name": t.test_name, "status": t.status} for t in orders]
+
+    orders = db.query(TestOrder).filter(
+        TestOrder.admission_id == admission.id
+    ).order_by(TestOrder.created_at.asc()).all()
+
+    groups = {}
+    order_index = []  # preserves first-seen order for stable output ordering
+    for t in orders:
+        key = t.order_batch_id or f"__single_{t.id}"
+        if key not in groups:
+            groups[key] = []
+            order_index.append(key)
+        groups[key].append(t)
+
+    result = []
+    for key in order_index:
+        tests = groups[key]
+        result.append({
+            "batch_key": key,
+            "order_date": min(t.created_at for t in tests).isoformat(),
+            "tests": [{"id": t.id, "test_name": t.test_name, "status": t.status} for t in tests],
+            "all_verified": all(t.status == "verified_released" for t in tests),
+            "any_verified": any(t.status == "verified_released" for t in tests),
+        })
+    # Most recent report first — reads most naturally for a stay-in-progress.
+    result.sort(key=lambda r: r["order_date"], reverse=True)
+    return result
+
+
+@router.get("/admissions/{admission_id}/reports/{batch_key}/pdf")
+def download_admission_report_pdf(
+    admission_id: int,
+    batch_key: str,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    """One bundled PDF per report (batch) — same bundle-only rule as OPD
+    visit reports. Only verified_released tests from this batch are
+    included; if none are ready yet, 404."""
+    patient_ids = _owned_patient_ids(account)
+    admission = db.query(Admission).filter(Admission.id == admission_id, Admission.patient_id.in_(patient_ids)).first()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission not found")
+
+    all_in_admission = db.query(TestOrder).filter(TestOrder.admission_id == admission.id).all()
+    if batch_key.startswith("__single_"):
+        batch_orders = [t for t in all_in_admission if f"__single_{t.id}" == batch_key]
+    else:
+        batch_orders = [t for t in all_in_admission if t.order_batch_id == batch_key]
+
+    orders = [t for t in batch_orders if t.status == "verified_released"]
+    if not orders:
+        raise HTTPException(status_code=404, detail="No completed test results in this report yet")
+
+    patient = db.query(Patient).filter(Patient.id == admission.patient_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == admission.hospital_id).first()
+    ordering_doctor = db.query(Doctor).filter(Doctor.id == admission.admitting_doctor_id).first() if admission.admitting_doctor_id else None
+    lab_staff_id = next((o.verified_by for o in orders if o.verified_by), None)
+    lab_staff = db.query(Doctor).filter(Doctor.id == lab_staff_id).first() if lab_staff_id else None
+    is_male = (patient.gender or "").lower() == "male"
+
+    tests_payload = []
+    for order in orders:
+        catalog_item = db.query(TestCatalogItem).filter(TestCatalogItem.id == order.test_id).first() if order.test_id else None
+        try:
+            result_data = json.loads(order.result_data or "{}")
+        except Exception:
+            result_data = {}
+
+        if catalog_item and catalog_item.is_panel:
+            params = db.query(TestCatalogParameter).filter(
+                TestCatalogParameter.test_catalog_item_id == catalog_item.id,
+                TestCatalogParameter.is_active == True  # noqa: E712
+            ).order_by(TestCatalogParameter.display_order).all()
+            rows = [{
+                "name": p.name, "unit": p.unit or "",
+                "range": (p.reference_range_male if is_male else p.reference_range_female) or "",
+                "value": result_data.get(p.name, "")
+            } for p in params if result_data.get(p.name)]
+        else:
+            range_str = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) if catalog_item else ""
+            unit = catalog_item.unit if catalog_item else ""
+            rows = [{"name": order.test_name, "unit": unit or "", "range": range_str or "", "value": result_data.get("value", "")}]
+
+        tests_payload.append({"test_name": order.test_name, "rows": rows, "notes": result_data.get("notes", "")})
+
+    filepath = generate_combined_test_report_pdf(
+        order_id_key=f"admission_{admission_id}_{batch_key}", tests_payload=tests_payload,
+        patient=patient, ordering_doctor=ordering_doctor, lab_staff=lab_staff, hospital=hospital
+    )
+    return FileResponse(filepath, media_type="application/pdf", filename=f"test_report_admission_{admission_id}.pdf")
 
 
 @router.get("/admissions/{admission_id}/medications")
@@ -130,8 +224,15 @@ def admission_medications(admission_id: int, account: PatientAccount = Depends(g
     admission = db.query(Admission).filter(Admission.id == admission_id, Admission.patient_id.in_(patient_ids)).first()
     if not admission:
         raise HTTPException(status_code=404, detail="Admission not found")
-    orders = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.admission_id == admission.id).all()
-    return [{"id": o.id, "medicine_name": o.medicine_name, "dosage": o.dosage, "is_active": o.is_active, "sourced_outside": o.sourced_outside} for o in orders]
+    orders = db.query(AdmissionMedicationOrder).filter(
+        AdmissionMedicationOrder.admission_id == admission.id
+    ).order_by(AdmissionMedicationOrder.created_at.desc()).all()
+    return [{
+        "id": o.id, "medicine_name": o.medicine_name, "dosage": o.dosage,
+        "route": o.route, "frequency": o.frequency_note,
+        "is_active": o.is_active, "sourced_outside": o.sourced_outside,
+        "started_at": o.created_at.isoformat() if o.created_at else None,
+    } for o in orders]
 
 
 @router.patch("/admissions/{admission_id}/medications/{order_id}/sourced-outside")

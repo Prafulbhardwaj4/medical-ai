@@ -585,7 +585,8 @@ async function openReportsModal(patientId) {
   }
 }
 
-function openOffDutyTimeModal() {
+function openOffDutyTimeModal(confirmLabel) {
+  confirmLabel = confirmLabel || "Mark Present";
   return new Promise((resolve) => {
     const roundToNearest5 = (date) => { const ms = 5 * 60 * 1000; return new Date(Math.round(date.getTime() / ms) * ms); };
     const def = roundToNearest5(new Date(Date.now() + 9 * 60 * 60 * 1000)); // default: 9-hour shift from now
@@ -628,7 +629,7 @@ function openOffDutyTimeModal() {
         </div>
         <div style="display:flex;gap:10px">
           <button type="button" class="btn btn-outline" style="flex:1" id="off-duty-cancel-btn">Cancel</button>
-          <button type="button" class="btn btn-primary" style="flex:1" id="off-duty-confirm-btn">Mark Present</button>
+          <button type="button" class="btn btn-primary" style="flex:1" id="off-duty-confirm-btn">${confirmLabel}</button>
         </div>
       </div>
     `;
@@ -701,7 +702,7 @@ function renderOffDutyTimeLine(containerId, isoTime) {
 }
 
 async function editOffDutyTime(containerId) {
-  const newTime = await promptOffDutyTime();
+  const newTime = await openOffDutyTimeModal("Save");
   if (!newTime) return;
   try {
     await api("PATCH", "/doctors/attendance/off-duty-time", { expected_off_duty_at: newTime });

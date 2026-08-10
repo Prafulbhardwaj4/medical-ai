@@ -150,24 +150,22 @@
       <!-- Attendance — sits at the top of Home -->
       <div class="mobile-section" id="section-attendance">
         <div class="card att-card">
-          <div>
-            <div class="card-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
-              <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
-            </div>
-            <div class="staff-att-status">
-              <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
-              <div id="nurse-room-display" style="margin-top:6px;font-size:13px;color:var(--slate)"></div>
-              <div id="nurse-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
-            </div>
-            <script>syncStatusHeading('nurse-attendance-badge', 'todays-status-heading');</script>
-            <div class="staff-att-actions" id="nurse-attendance-btns">
-              <select class="form-control" id="nurse-room-select" style="display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
-              <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
-              <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
-              <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
-            </div>
+          <div class="card-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
+            <h2>Today's Status <span id="todays-status-heading" style="font-weight:400;font-size:13px;color:var(--slate)"></span></h2>
           </div>
-          <div id="nurse-coverage-block" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+          <div class="staff-att-status">
+            <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
+            <div id="nurse-room-display" style="margin-top:6px;font-size:13px;color:var(--slate)"></div>
+            <div id="nurse-off-duty-time-line" style="display:none;margin-top:6px;font-size:13px;color:var(--slate)"></div>
+          </div>
+          <script>syncStatusHeading('nurse-attendance-badge', 'todays-status-heading');</script>
+          <div class="staff-att-actions" id="nurse-attendance-btns">
+            <select class="form-control" id="nurse-room-select" style="display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
+            <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
+            <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
+            <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
+          </div>
+          <div id="nurse-coverage-block" style="display:none;flex-basis:100%;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
             <div style="font-size:13px;color:var(--slate);font-weight:600;margin-bottom:8px">Wards you're covering</div>
             <div id="nurse-ward-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
             <div style="font-size:13px;color:var(--slate);font-weight:600;margin-bottom:8px">Doctors you're covering</div>

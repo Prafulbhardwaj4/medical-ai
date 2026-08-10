@@ -137,6 +137,7 @@ class AddAdmissionTestIn(BaseModel):
     price: float = 0
     priority: Optional[str] = "routine"  # "routine" | "urgent" | "stat" — Phase 3 item 5
     clinical_indication: Optional[str] = None  # e.g. "suspected DKA" — Phase 3 item 7
+    order_batch_id: Optional[str] = None  # shared across every test submitted in the same "Order Test(s)" action
 
 
 class RequestWardChangeIn(BaseModel):

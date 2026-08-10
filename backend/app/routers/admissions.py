@@ -1216,6 +1216,7 @@ def order_admission_test(admission_id: str, body: AddAdmissionTestIn, current_do
         paid_at=now_ist_naive(), queued_at=now_ist_naive(),
         priority=priority,
         clinical_indication=(body.clinical_indication or "").strip() or None,
+        order_batch_id=body.order_batch_id,
     )
     db.add(test)
     db.add(AdmissionCharge(

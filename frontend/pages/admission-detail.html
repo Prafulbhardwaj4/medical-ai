@@ -438,18 +438,20 @@
 
   <!-- Add Test modal -->
   <div class="modal-overlay" id="modal-add-test">
-    <div class="modal" style="max-width:400px">
-      <div class="modal-header"><h2>Order Test</h2><button class="modal-close" onclick="closeModal('modal-add-test')">&times;</button></div>
-      <div class="form-group">
-        <label class="form-label">Test</label>
-        <select class="form-control" id="test-catalog-select" onchange="onTestCatalogSelect()"><option value="">Loading...</option></select>
+    <div class="modal" style="max-width:600px">
+      <div class="modal-header"><h2>Order Test(s)</h2><button class="modal-close" onclick="closeModal('modal-add-test')">&times;</button></div>
+      <p style="font-size:12.5px;color:var(--slate-light);margin:-4px 0 12px">
+        Everything added below and submitted together will show as one report to the patient as results come in — order separately (or on a different day) if these should be separate reports.
+      </p>
+      <div style="position:relative">
+        <input class="form-control" id="test-catalog-search" placeholder="Search tests to order…" autocomplete="off"
+          oninput="renderAdmTestSuggestions()" onfocus="renderAdmTestSuggestions()" />
+        <div id="test-suggestions"
+          style="display:none;position:absolute;z-index:20;background:#fff;border:1px solid var(--border);
+          border-radius:8px;max-height:220px;overflow-y:auto;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.08);margin-top:4px"></div>
       </div>
-      <div id="test-not-in-catalog" style="display:none">
-        <div class="form-group"><label class="form-label">Test Name</label><input class="form-control" id="test-name" /></div>
-        <div class="form-group"><label class="form-label">Price (₹)</label><input class="form-control" type="number" min="0" id="test-price" value="0" /></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Priority</label>
+      <div class="form-group" style="margin-top:12px">
+        <label class="form-label">Priority (applies to this whole order)</label>
         <select class="form-control" id="test-priority">
           <option value="routine" selected>Routine</option>
           <option value="urgent">Urgent</option>
@@ -460,9 +462,9 @@
         <label class="form-label">Clinical Indication (optional)</label>
         <input class="form-control" id="test-clinical-indication" placeholder="e.g. suspected DKA" />
       </div>
-      <p id="test-price-preview" style="font-size:12.5px;color:var(--slate-light);display:none;margin-top:-8px"></p>
+      <div id="test-rows" style="margin-top:8px"></div>
       <div class="err-msg" id="test-err"></div>
-      <button class="btn btn-primary" style="width:100%" onclick="submitAddTest()">Order</button>
+      <button class="btn btn-primary" style="width:100%" onclick="submitAddTest()">Order All</button>
     </div>
   </div>
 
@@ -1630,64 +1632,111 @@
 
     // ---------- Tests ----------
     let testCatalogCache = [];
+    let testCatalogLoaded = false;
+
     async function openAddTestModal() {
       document.getElementById("test-err").textContent = "";
-      document.getElementById("test-not-in-catalog").style.display = "none";
-      document.getElementById("test-price-preview").style.display = "none";
-      document.getElementById("test-name").value = "";
-      document.getElementById("test-price").value = "0";
+      document.getElementById("test-rows").innerHTML = "";
+      document.getElementById("test-catalog-search").value = "";
+      document.getElementById("test-suggestions").style.display = "none";
+      document.getElementById("test-clinical-indication").value = "";
       openModal("modal-add-test");
-      const sel = document.getElementById("test-catalog-select");
-      sel.innerHTML = `<option value="">Loading...</option>`;
-      try {
-        testCatalogCache = await api("GET", "/admissions/test-catalog");
-        sel.innerHTML = `<option value="">Select test...</option>` +
-          testCatalogCache.map(t => `<option value="${t.id}">${sanitize(t.name)}</option>`).join('') +
-          `<option value="__other__">Other / Not in catalog</option>`;
-      } catch (e) {
-        sel.innerHTML = `<option value="__other__">Other / Not in catalog</option>`;
-        onTestCatalogSelect();
+      if (!testCatalogLoaded) {
+        try {
+          testCatalogCache = await api("GET", "/admissions/test-catalog");
+          testCatalogLoaded = true;
+        } catch (e) { testCatalogCache = []; }
       }
     }
 
-    function onTestCatalogSelect() {
-      const val = document.getElementById("test-catalog-select").value;
-      const notInCatalog = document.getElementById("test-not-in-catalog");
-      const preview = document.getElementById("test-price-preview");
-      if (val === "__other__") {
-        notInCatalog.style.display = "block";
-        preview.style.display = "none";
-        return;
+    function renderAdmTestSuggestions() {
+      const box = document.getElementById('test-suggestions');
+      const query = document.getElementById('test-catalog-search').value.trim().toLowerCase();
+      const matches = testCatalogCache.filter(t => !query || t.name.toLowerCase().includes(query)).slice(0, 20);
+
+      let html = matches.map(t => `
+        <div onclick="selectAdmTest(${t.id})" style="padding:8px 12px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between"
+          onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">
+          <span>${sanitize(t.name)}</span>
+          <span style="color:var(--slate)">₹${t.fee.toFixed(2)}</span>
+        </div>
+      `).join('');
+
+      if (query) {
+        html += `<div onclick="selectAdmTestManual()" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--teal);border-top:1px solid var(--border)"
+          onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">+ Add "${sanitize(document.getElementById('test-catalog-search').value.trim())}" manually (not in catalog)</div>`;
       }
-      notInCatalog.style.display = "none";
-      if (!val) { preview.style.display = "none"; return; }
-      const t = testCatalogCache.find(x => String(x.id) === val);
+
+      if (!html) { box.style.display = 'none'; box.innerHTML = ''; return; }
+      box.innerHTML = html;
+      box.style.display = 'block';
+    }
+
+    function selectAdmTest(id) {
+      const t = testCatalogCache.find(x => x.id === id);
       if (!t) return;
-      preview.style.display = "block";
-      preview.textContent = `₹${t.fee.toFixed(2)}`;
+      addAdmTestRow({ test_id: t.id, test_name: t.name, price: t.fee });
+      document.getElementById('test-catalog-search').value = '';
+      document.getElementById('test-suggestions').style.display = 'none';
+    }
+
+    function selectAdmTestManual() {
+      const name = document.getElementById('test-catalog-search').value.trim();
+      if (!name) return;
+      addAdmTestRow({ test_id: null, test_name: name, price: 0, manual: true });
+      document.getElementById('test-catalog-search').value = '';
+      document.getElementById('test-suggestions').style.display = 'none';
+    }
+
+    function addAdmTestRow(t) {
+      const wrap = document.getElementById("test-rows");
+      const div = document.createElement("div");
+      div.className = "test-row";
+      div.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:10px;padding:12px;background:var(--smoke);border-radius:var(--radius);border:1px solid var(--border)";
+      div.dataset.testId = t.test_id || '';
+      div.innerHTML = `
+        <div class="form-group am-test-name" style="margin:0;flex:2;min-width:160px">
+          <label class="form-label">Test</label>
+          <input class="form-control" value="${sanitize(t.test_name)}" ${t.manual ? '' : 'readonly'} />
+        </div>
+        <div class="form-group am-test-price" style="margin:0;flex:1;min-width:100px">
+          <label class="form-label">Price (₹)</label>
+          <input class="form-control" type="number" min="0" step="0.01" value="${t.price || 0}" ${t.manual ? '' : 'readonly'} />
+        </div>
+        <button type="button" class="btn-remove-med" onclick="this.closest('.test-row').remove()" title="Remove">✕</button>
+      `;
+      wrap.appendChild(div);
     }
 
     async function submitAddTest() {
       const err = document.getElementById("test-err");
-      const sel = document.getElementById("test-catalog-select").value;
-      const priority = document.getElementById("test-priority").value;
-      const clinicalIndication = document.getElementById("test-clinical-indication").value.trim() || null;
-      let payload;
-
-      if (sel === "__other__" || !sel) {
-        const name = document.getElementById("test-name").value.trim();
-        if (!name) { err.textContent = "Test name is required"; return; }
-        payload = { test_name: name, price: parseFloat(document.getElementById("test-price").value) || 0, priority, clinical_indication: clinicalIndication };
-      } else {
-        const t = testCatalogCache.find(x => String(x.id) === sel);
-        if (!t) { err.textContent = "Please select a test"; return; }
-        payload = { test_id: t.id, test_name: t.name, price: t.fee, priority, clinical_indication: clinicalIndication };
+      err.textContent = "";
+      const rows = [...document.querySelectorAll("#test-rows .test-row")];
+      if (!rows.length) { err.textContent = "Add at least one test"; return; }
+      for (const row of rows) {
+        const name = row.querySelector(".am-test-name input").value.trim();
+        if (!name) { err.textContent = "Each row needs a test name"; return; }
       }
 
+      const priority = document.getElementById("test-priority").value;
+      const clinicalIndication = document.getElementById("test-clinical-indication").value.trim() || null;
+      // One batch id shared by every row in this submission — this is what
+      // ties them together into a single report on the patient portal.
+      const batchId = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
       try {
-        await api("POST", `/admissions/${admissionId}/tests`, payload);
+        for (const row of rows) {
+          const testId = row.dataset.testId ? parseInt(row.dataset.testId) : null;
+          const name = row.querySelector(".am-test-name input").value.trim();
+          const price = parseFloat(row.querySelector(".am-test-price input").value) || 0;
+          const payload = {
+            test_id: testId, test_name: name, price, priority,
+            clinical_indication: clinicalIndication, order_batch_id: batchId,
+          };
+          await api("POST", `/admissions/${admissionId}/tests`, payload);
+        }
         closeModal("modal-add-test");
-        toast("Test ordered", "success");
+        toast(`${rows.length} test(s) ordered`, "success");
         loadAdmission();
       } catch (e) { err.textContent = e.message; }
     }

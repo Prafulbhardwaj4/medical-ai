@@ -996,7 +996,6 @@
     }
 
     function vitalsCellHtml(q) {
-      if (q.status === 'expected' || !q.vitals_status || q.vitals_status === 'none') return '<span style="color:var(--slate-light)">—</span>';
       if (q.vitals_status === 'done') return '<span class="badge badge-teal">Recorded</span>';
       if (q.vitals_status === 'sent_back') return '<span class="badge badge-red">Recheck sent</span>';
       return '<span class="badge badge-grey" title="Send patient to nurse for vitals">Not recorded</span>';

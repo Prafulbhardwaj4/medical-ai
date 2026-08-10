@@ -28,6 +28,20 @@
       overflow-y: auto; z-index: 200;
     }
     .doc-picker-panel.open { display: block; }
+    /* .app-shell clips overflow — an absolutely-positioned panel that
+       tries to extend below the sticky header can get cut off on narrow
+       screens. Anchor it to the viewport instead on mobile so it's never
+       clipped by an ancestor. */
+    @media (max-width: 900px) {
+      .doc-picker-panel {
+        position: fixed;
+        top: 60px;
+        left: 12px;
+        right: 12px;
+        min-width: 0;
+        width: auto;
+      }
+    }
     .doc-picker-row {
       display: flex; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 8px;
       cursor: pointer; font-size: 13.5px;
@@ -46,6 +60,19 @@
     }
     .roster-row:last-child { border-bottom: none; }
     .roster-row.assigned-to-me { background: var(--bg-light, #f8fafc); border-radius: var(--radius); padding: 12px 10px; }
+
+    /* The shared mobile stylesheet hides .topbar-doctor entirely on small
+       screens (used on other pages to drop the doctor-name/clinic/sign-out
+       cluster). That would also swallow the "Assisting" picker below since
+       it lives inside that same container — pull it back out specifically
+       on this page. */
+    @media (max-width: 900px) {
+      .topbar-doctor { display: flex !important; gap: 8px; }
+      .topbar-doctor .topbar-divider,
+      #topbar-clinic,
+      .topbar-doctor button[onclick="logout()"] { display: none !important; }
+      .doc-picker-btn { font-size: 12px; padding: 6px 8px; }
+    }
   </style>
 </head>
 <body>
@@ -159,9 +186,6 @@
               <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
             </div>
           </div>
-          <p id="doc-picker-hint" style="font-size:12.5px;color:var(--slate-light);margin:12px 0 0;display:none">
-            Mark yourself present, then use the "Assisting" dropdown in the top bar to pick which doctor(s) you're covering.
-          </p>
         </div>
       </div>
 
@@ -372,7 +396,6 @@
       const btnPresent = document.getElementById('nurse-btn-present');
       const btnBreak = document.getElementById('nurse-btn-break');
       const btnOffDuty = document.getElementById('nurse-btn-offduty');
-      document.getElementById('doc-picker-hint').style.display = (status === 'present' || status === 'on_break' || status === 'off_duty') ? 'none' : '';
       document.getElementById('nurse-off-duty-time-line').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';

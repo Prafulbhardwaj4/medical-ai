@@ -13,6 +13,12 @@ class TestOrder(Base):
     test_id = Column(Integer, ForeignKey("test_catalog_items.id"), nullable=True)
     test_name = Column(String, nullable=False)
     price = Column(Float, nullable=False, default=0)
+    # Tests submitted together in one "Order Test(s)" action share the same
+    # batch id, so the patient portal reports them as one report as results
+    # trickle in — tests ordered separately (different actions/days) each
+    # get their own batch id, even if same test name. Null = legacy order
+    # from before this existed; treated as its own single-test report.
+    order_batch_id = Column(String, nullable=True, index=True)
     included = Column(Boolean, default=True, nullable=False)
     status = Column(String, nullable=False, default="payment_pending")
     # payment_pending -> paid -> sample_collected -> processing -> result_entered -> verified_released
