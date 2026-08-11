@@ -769,6 +769,22 @@ def update_order_status(
         order.completed_at = now_ist_naive()
         order.completed_by = current_doctor.id
 
+        # If this tech is the only lab-role account at the hospital, the
+        # separate verify step is a click with no actual gatekeeping effect
+        # (nothing becomes more/less editable after it) — skip straight to
+        # released instead of making them tap Verify on their own entry.
+        other_lab_staff_exists = db.query(Doctor).filter(
+            Doctor.hospital_id == current_doctor.hospital_id,
+            Doctor.role == UserRole.lab,
+            Doctor.is_active == True,
+            Doctor.id != current_doctor.id,
+        ).first() is not None
+        if not other_lab_staff_exists:
+            order.status = "verified_released"
+            order.verified_by = current_doctor.id
+            order.verified_at = now_ist_naive()
+            order.self_verified_sole_staff = True
+
     db.commit()
 
     log_action(
@@ -776,7 +792,7 @@ def update_order_status(
         action="test_order_status_updated",
         target_type="test_order",
         target_id=order.id,
-        target_label=f"{order.test_name} -> {status}",
+        target_label=f"{order.test_name} -> {order.status}",
         hospital_id=current_doctor.hospital_id
     )
     return {"id": order.id, "status": order.status}
@@ -817,6 +833,32 @@ def acknowledge_critical_result(
         details=json.dumps({"channel": "in_app_action"})
     )
     return {"id": order.id, "critical_ack_at": order.critical_ack_at.isoformat()}
+
+
+@router.get("/orders/{order_id}/current-result")
+def get_order_current_result(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Powers the "Edit Report" form for an already-verified_released order —
+    the existing report endpoints only ever generate a PDF, nothing returns
+    a single order's raw current values as JSON for prefilling an edit."""
+    require_lab(current_doctor)
+    order = db.query(TestOrder).filter(
+        TestOrder.id == order_id,
+        TestOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Test order not found")
+    _require_hiv_access(db, order, current_doctor)
+
+    try:
+        result_data = json.loads(order.result_data or "{}")
+    except Exception:
+        result_data = {}
+
+    return {"id": order.id, "test_id": order.test_id, "test_name": order.test_name, "status": order.status, "results": result_data}
 
 
 @router.post("/orders/{order_id}/result")

@@ -456,7 +456,7 @@ def download_consultation_test_report(
     if not orders:
         raise HTTPException(status_code=404, detail="No completed test results for this visit yet")
 
-    hospital = db.query(Hospital).filter(Hospital.id == consultation.hospital_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == patient.hospital_id).first()
     ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first()
     lab_staff_id = next((o.verified_by for o in orders if o.verified_by), None)
     lab_staff = db.query(Doctor).filter(Doctor.id == lab_staff_id).first() if lab_staff_id else None

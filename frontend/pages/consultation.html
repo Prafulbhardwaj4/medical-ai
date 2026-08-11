@@ -351,6 +351,9 @@
 
       <!-- STEP 2: Review -->
       <div id="panel-2" class="card" style="display:none">
+        <div id="reopen-banner" style="display:none;background:#f0fdfa;border:1px solid var(--teal);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--navy)">
+          ↩ Editing today's confirmed consultation for this token — no new recording, no new token. Add/change medicines, order additional tests, or update advice below, then save.
+        </div>
         <div class="card-header">
           <h2>Review & Edit Prescription</h2>
           <span class="badge badge-teal">AI Structured</span>
@@ -1053,10 +1056,12 @@
     // }
 
     // ── Confirm ─────────────────────────────────────────
+    let isReopenMode = false;
+
     async function doConfirm() {
       const btn = document.getElementById("confirm-btn");
       btn.disabled = true;
-      btn.textContent = "Generating…";
+      btn.textContent = isReopenMode ? "Saving…" : "Generating…";
 
       const editedData = {
         chief_complaint: document.getElementById("f-complaint").value.trim(),
@@ -1064,6 +1069,9 @@
         vitals: collectVitalsPayload(),
         medicines: getMedicines(),
         tests: selectedTests.map(t => t.test_name),
+        recommended_test_ids: selectedTests.map(t => t.id),
+        test_priorities: Object.fromEntries(selectedTests.map(t => [t.id, t.priority || 'routine'])),
+        clinical_indication: document.getElementById('test-clinical-indication')?.value.trim() || null,
         advice: document.getElementById("f-advice").value.trim(),
         followup: document.getElementById("f-followup").value.trim(),
         nurse_instructions: document.getElementById("f-nurse-instructions").value.trim()
@@ -1077,7 +1085,8 @@
           document.getElementById("token-display").textContent = window._tokenNumber;
           goStep(3);
           btn.disabled = false;
-          btn.textContent = "Confirm & Generate PDF →";
+          btn.textContent = isReopenMode ? "Save Changes" : "Confirm & Generate PDF →";
+          if (isReopenMode) toast("Consultation updated.", "success");
           return;
         }
 
@@ -1303,6 +1312,42 @@
       }
     });
 
+    async function checkReopenMode() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('reopen') !== '1') return;
+      try {
+        const c = await api("GET", `/patients/${patientId}/checkin-today`);
+        if (!c.exists || !c.token_number) { toast("No token found for today.", "error"); return; }
+        const history = await api("GET", `/consultations/history/${patientId}`);
+        const match = (history || []).find(v => v.token_number === c.token_number);
+        if (!match) { toast("Could not find today's consultation to reopen.", "error"); return; }
+
+        consultationId = match.id;
+        window._tokenNumber = match.token_number;
+        window._lastEditedData = {
+          chief_complaint: match.chief_complaint || "",
+          diagnosis: match.diagnosis || "",
+          vitals: safeJSON(match.vitals, {}),
+          medicines: safeJSON(match.medicines, []),
+          advice: match.advice || "",
+          followup: match.followup || "",
+          nurse_instructions: "",
+        };
+        const orderedTests = safeJSON(match.ordered_tests, []) || [];
+        selectedTests = orderedTests.map(t => ({ id: t.test_id, test_name: t.test_name, price: t.price, priority: 'routine' }));
+        renderTestChips();
+
+        isReopenMode = true;
+        document.getElementById('reopen-banner').style.display = 'block';
+        const confirmBtn = document.getElementById('confirm-btn');
+        if (confirmBtn) confirmBtn.textContent = 'Save Changes';
+
+        goStep(2);
+      } catch (e) {
+        toast("Couldn't reopen today's consultation.", "error");
+      }
+    }
+
     (async () => {
       try {
         const r = await api("GET", `/patients/resolve/${patientToken}`);
@@ -1313,6 +1358,7 @@
         loadMedicineCatalog();
         loadNurseVitals();
         checkExistingAdmitReferral();
+        await checkReopenMode();
       } catch (e) {
         window.location.href = "/pages/dashboard.html";
       }

@@ -534,6 +534,10 @@ function promptOffDutyTime() {
 }
 
 async function openReportsModal(patientId) {
+  if (!patientId) {
+    toast("Still loading this patient — try again in a moment.", "info");
+    return;
+  }
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay open";
   overlay.innerHTML = `

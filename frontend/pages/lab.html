@@ -540,8 +540,11 @@
           <div class="card-header">
             <h2>Reports</h2>
           </div>
-          <input class="form-control" id="lab-reports-search" placeholder="Search by patient name or UID…"
-            oninput="searchLabReports(this.value)" style="margin-bottom:12px" />
+          <div style="margin-bottom:12px">
+            <button class="btn btn-outline btn-sm" id="lab-reports-search-toggle" style="display:none" onclick="toggleLabReportsSearch()">🔍 Search</button>
+            <input class="form-control" id="lab-reports-search" placeholder="Search by patient name or UID…"
+              oninput="searchLabReports(this.value)" style="display:none" />
+          </div>
           <div id="lab-reports-list"><p style="color:var(--slate)">Loading…</p></div>
         </div>
       </div>
@@ -752,6 +755,22 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="modal-edit-report">
+    <div class="modal" style="max-width:480px;max-height:88vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <h2 style="margin:0" id="edit-report-title">Edit Report</h2>
+        <button class="modal-close" onclick="closeEditReportModal()">×</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--slate);margin:0 0 12px">This report has already been released. Saving a correction here updates it in place — it stays released, no re-verification needed, and the change is logged under your name.</p>
+      <div id="edit-report-body" style="overflow-y:auto;flex:1;padding-right:4px"><p style="color:var(--slate)">Loading…</p></div>
+      <div class="err-msg" id="edit-report-err"></div>
+      <div style="display:flex;gap:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <button class="btn btn-outline" style="flex:1" onclick="closeEditReportModal()">Cancel</button>
+        <button class="btn btn-primary" style="flex:1" id="btn-save-report-edit" onclick="saveReportEdit()">Save Correction</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <script src="../js/api.js?v=4"></script>
   <script src="../js/chat-widget.js?v=1"></script>
@@ -782,11 +801,25 @@
       labReportsSearchTimer = setTimeout(() => runLabReportsSearch(val), 350);
     }
 
+    let labReportsTotalCount = null;
+
     async function runLabReportsSearch(q) {
       try {
         const results = await api("GET", `/lab/reports/history?q=${encodeURIComponent(q)}`);
+        if (!q.trim() && labReportsTotalCount === null) {
+          labReportsTotalCount = results.length;
+          document.getElementById('lab-reports-search-toggle').style.display = results.length > 2 ? '' : 'none';
+        }
         renderLabReports(results);
       } catch (e) { }
+    }
+
+    function toggleLabReportsSearch() {
+      const input = document.getElementById('lab-reports-search');
+      const toggleBtn = document.getElementById('lab-reports-search-toggle');
+      input.style.display = 'block';
+      toggleBtn.style.display = 'none';
+      input.focus();
     }
 
     function renderLabReports(results) {
@@ -828,6 +861,7 @@
           <div class="lr-item-body">
             <div class="lr-item-date">${v.completed_at ? formatDateTime(v.completed_at) : 'Date unknown'}${v.token_number ? ' · Token #' + sanitize(v.token_number) : ''}</div>
             <div class="lr-item-tests">${sanitize(v.test_names.join(', '))}</div>
+            ${v.order_ids.map((oid, i) => `<a href="#" style="font-size:12px;color:var(--teal);margin-right:12px" onclick="openEditReportModal(${oid}, '${sanitize(v.test_names[i] || '').replace(/'/g, "\\'")}');return false;">Edit ${sanitize(v.test_names[i] || '')}</a>`).join('')}
           </div>
           <div class="lr-item-actions">
             <button class="btn btn-outline btn-sm" onclick="downloadReport([${v.order_ids.join(',')}])">Download</button>
@@ -1628,14 +1662,19 @@
 
       try {
         const payloads = bulkResultsDraft.payloads;
+        let stillAwaitingVerification = false;
         for (const p of payloads) {
           await api("POST", `/lab/orders/${p.orderId}/result`, { results: p.results });
-          await api("PATCH", `/lab/orders/${p.orderId}/status`, { status: 'result_entered' });
+          // The backend auto-skips straight to verified_released when this
+          // tech is the only lab-role staff at the hospital — read back what
+          // it actually did instead of assuming 'result_entered' happened.
+          const statusResult = await api("PATCH", `/lab/orders/${p.orderId}/status`, { status: 'result_entered' });
           const order = labQueueData.find(o => o.id === p.orderId);
-          if (order) order.status = 'result_entered';
+          if (order) order.status = statusResult.status;
+          if (statusResult.status === 'result_entered') stillAwaitingVerification = true;
         }
         renderQueue(labQueueData);
-        toast('Results saved — awaiting independent verification before release', 'success');
+        toast(stillAwaitingVerification ? 'Results saved — awaiting independent verification before release' : 'Results saved and released.', 'success');
         document.getElementById('modal-results-confirm').classList.remove('open');
         closeBulkResultsModal();
         refreshOpenPatientModal();
@@ -1645,6 +1684,89 @@
       } finally {
         btn.disabled = false;
         btn.textContent = 'Save Results';
+      }
+    }
+
+    let editReportOrderId = null;
+    let editReportMode = null;
+    let editReportParams = [];
+
+    async function openEditReportModal(orderId, testName) {
+      editReportOrderId = orderId;
+      document.getElementById('edit-report-title').textContent = `Edit — ${testName}`;
+      document.getElementById('edit-report-err').textContent = '';
+      const bodyEl = document.getElementById('edit-report-body');
+      bodyEl.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+      document.getElementById('modal-edit-report').classList.add('open');
+
+      try {
+        const current = await api("GET", `/lab/orders/${orderId}/current-result`);
+        let detail = null;
+        if (current.test_id) {
+          try { detail = await api("GET", `/lab/tests/${current.test_id}`); } catch (e) { }
+        }
+
+        if (detail && detail.is_panel && detail.parameters.length) {
+          editReportMode = 'panel';
+          editReportParams = detail.parameters;
+          bodyEl.innerHTML = detail.parameters.map(p => `
+            <div class="bulk-param-row">
+              <div class="bulk-param-meta"><strong>${sanitize(p.name)}</strong>${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}</div>
+              <input class="form-control" id="edit-val-${p.id}" value="${sanitize(current.results[p.name] ?? '')}" placeholder="Value" />
+            </div>
+          `).join('');
+        } else {
+          editReportMode = 'single';
+          editReportParams = [];
+          bodyEl.innerHTML = `
+            <div class="bulk-param-row">
+              <div class="bulk-param-meta"><strong>Result</strong>${detail?.unit ? ' (' + sanitize(detail.unit) + ')' : ''}</div>
+              <input class="form-control" id="edit-val-single" value="${sanitize(current.results.value ?? '')}" placeholder="Value" />
+            </div>
+          `;
+        }
+      } catch (e) {
+        bodyEl.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+      }
+    }
+
+    function closeEditReportModal() {
+      document.getElementById('modal-edit-report').classList.remove('open');
+      editReportOrderId = null;
+    }
+
+    async function saveReportEdit() {
+      const errEl = document.getElementById('edit-report-err');
+      errEl.textContent = '';
+      const NUM_RE = /^-?\d+(\.\d+)?$/;
+      const results = {};
+
+      if (editReportMode === 'panel') {
+        for (const p of editReportParams) {
+          const val = document.getElementById(`edit-val-${p.id}`).value.trim();
+          if (!val) continue;
+          if (p.unit && !NUM_RE.test(val)) { errEl.textContent = `${p.name} must be a number.`; return; }
+          results[p.name] = val;
+        }
+        if (!Object.keys(results).length) { errEl.textContent = "Enter at least one value."; return; }
+      } else {
+        const val = document.getElementById('edit-val-single').value.trim();
+        if (!val) { errEl.textContent = "Enter a value."; return; }
+        results.value = val;
+      }
+
+      const btn = document.getElementById('btn-save-report-edit');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      try {
+        await api("POST", `/lab/orders/${editReportOrderId}/result`, { results });
+        toast('Report corrected.', 'success');
+        closeEditReportModal();
+      } catch (e) {
+        errEl.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Correction';
       }
     }
 

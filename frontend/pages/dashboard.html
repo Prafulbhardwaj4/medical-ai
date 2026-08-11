@@ -201,8 +201,10 @@
         <!-- Attendance tab: status only, matching lab.html -->
         <div class="mobile-section" id="section-attendance">
           <div class="card att-card" id="attendance-card">
-            <div class="card-header" style="margin-bottom:0">
+            <div class="card-header" style="margin-bottom:0" id="att-card-header">
               <h2>Today's Status</h2>
+              <button class="btn btn-primary btn-sm" id="btn-mark-present" onclick="markAttendance('present')">Mark
+                Present</button>
             </div>
             <div class="staff-att-status">
               <span class="badge badge-grey" id="attendance-badge">Not marked</span>
@@ -218,8 +220,6 @@
                 <button type="button" class="btn btn-outline btn-sm" id="emergency-btn"
                   onclick="toggleEmergency()" style="color:#dc2626;border-color:#dc2626">Emergency</button>
               </div>
-              <button class="btn btn-primary" id="btn-mark-present" onclick="markAttendance('present')">Mark
-                Present</button>
               <button class="btn btn-outline" id="btn-mark-break" onclick="markAttendance('on_break')"
                 style="display:none">On Break</button>
               <button class="btn btn-outline" id="btn-mark-offduty" onclick="markAttendance('off_duty')"
@@ -241,29 +241,11 @@
               <div class="stat-value" id="stat-today">—</div>
               <div class="stat-sub">prescriptions generated</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-label">WhatsApp</div>
-              <div class="stat-value" style="font-size:1rem;padding-top:6px;color:var(--slate)">Coming Soon</div>
-              <div class="stat-sub">via WhatsApp Cloud API</div>
-            </div>
           </div>
         </div>
 
         <!-- Home tab: Today's Queue only -->
         <div class="mobile-section active" id="section-home">
-          <div class="card" id="return-queue-card" style="display:none;border-color:var(--accent-purple,#8b5cf6)">
-            <div class="card-header">
-              <h2>Return Queue</h2>
-              <span style="color:var(--slate);font-size:0.85rem">Same-day rechecks — no new token</span>
-            </div>
-            <div class="table-wrap">
-              <table class="responsive-cards">
-                <thead><tr><th>Token</th><th>Patient</th><th></th></tr></thead>
-                <tbody id="return-queue-tbody"></tbody>
-              </table>
-            </div>
-          </div>
-
           <div class="card" id="queue-card-walkin">
             <div class="card-header">
               <h2>Walk-ins</h2>
@@ -273,19 +255,20 @@
                   onchange="renderQueueRows()">
                   <option value="all">All</option>
                   <option value="waiting">Waiting</option>
-                  <option value="consulted">Consulted</option>
+                  <option value="done">Consulted</option>
+                  <option value="expected">Expected</option>
                 </select>
               </div>
             </div>
             <div class="table-wrap">
-              <table id="queue-table-walkin" class="responsive-cards">
+              <table id="queue-table-online" class="responsive-cards">
                 <thead>
                   <tr>
-                    <th>Token</th>
-                    <th>Patient</th>
+                    <th style="text-align:center">Token</th>
+                    <th style="text-align:center">Patient</th>
+                    <th style="text-align:center">Phone</th>
                     <th style="text-align:center">Checked In</th>
-                    <th>Vitals</th>
-                    <th>Status</th>
+                    <th style="text-align:center">Vitals</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -320,11 +303,11 @@
               <table id="queue-table-online" class="responsive-cards">
                 <thead>
                   <tr>
-                    <th>Token</th>
-                    <th>Patient</th>
+                    <th style="text-align:center">Token</th>
+                    <th style="text-align:center">Patient</th>
+                    <th style="text-align:center">Phone</th>
                     <th style="text-align:center">Est. Time</th>
-                    <th>Vitals</th>
-                    <th>Status</th>
+                    <th style="text-align:center">Vitals</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -1015,25 +998,27 @@
       // back to reception, not for another consult) or for merely-expected
       // online patients who haven't checked in yet.
       const showConsult = q.status !== 'expected' && q.status !== 'done';
+      const isDone = q.status === 'done';
+      const isReturnVisit = q.status === 'returned';
       return `
       <tr>
-        <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
-        <td data-label="Patient">${q.patient_name}${q.is_referral ? ` <span class="badge badge-navy" title="${(q.referral_note || '').replace(/"/g, '&quot;')}">Referred by ${q.referred_by_name || 'another doctor'}</span>` : ''}</td>
-        <td data-label="${q.source === 'online' ? 'Est. Time' : 'Checked In'}" style="color:var(--slate);text-align:center">${timeLabel}</td>
-        <td data-label="Vitals">${vitalsCellHtml(q)}</td>
-        <td data-label="Status"><span class="badge ${meta.badge}">${meta.label}</span></td>
-        <td data-label="" style="text-align:left">${showConsult ? `<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}')">Consult</button>` : ''}</td>
+        <td data-label="Token" style="text-align:center"><strong>${q.token_number || '—'}</strong></td>
+        <td data-label="Patient" style="text-align:center">${q.patient_name}${q.is_referral ? ` <span class="badge badge-navy" title="${(q.referral_note || '').replace(/"/g, '&quot;')}">Referred by ${q.referred_by_name || 'another doctor'}</span>` : ''}${isReturnVisit ? ' <span class="badge badge-purple" title="Same-day recheck — no new token">Recheck</span>' : ''}</td>
+        <td data-label="Phone" style="text-align:center;color:var(--slate)">${q.patient_phone || '—'}</td>
+        <td data-label="${q.source === 'online' ? 'Est. Time' : 'Checked In'}" style="color:var(--slate);text-align:right">${timeLabel}</td>
+        <td data-label="Vitals" style="text-align:center">${vitalsCellHtml(q)}</td>
+        <td data-label="" style="text-align:center">${showConsult
+          ? `<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}'${isReturnVisit ? ', true' : ''})">Consult</button>`
+          : (isDone ? `<span class="badge badge-teal">Consulted</span>` : '')}</td>
       </tr>`;
     }
 
     function renderQueueRows() {
-      renderReturnQueue();
-
       const walkinFilter = document.getElementById("queue-filter-walkin").value;
       const onlineFilter = document.getElementById("queue-filter-online").value;
 
-      const walkinData = _queueData.filter(q => q.source !== 'online' && q.status !== 'returned');
-      const onlineData = _queueData.filter(q => q.source === 'online' && q.status !== 'returned');
+      const walkinData = _queueData.filter(q => q.source !== 'online');
+      const onlineData = _queueData.filter(q => q.source === 'online');
 
       const walkinFiltered = walkinFilter === 'all' ? walkinData : walkinData.filter(q => q.status === walkinFilter);
       const onlineFiltered = onlineFilter === 'all' ? onlineData : onlineData.filter(q => q.status === onlineFilter);
@@ -1048,21 +1033,6 @@
       document.getElementById("queue-tbody-online").innerHTML = onlineFiltered.length
         ? onlineFiltered.map(renderQueueRow).join('')
         : `<tr><td colspan="7"><div class="empty-state"><p>No online appointments today.</p></div></td></tr>`;
-    }
-
-    function renderReturnQueue() {
-      const card = document.getElementById('return-queue-card');
-      const tbody = document.getElementById('return-queue-tbody');
-      if (!card || !tbody) return;
-      const returned = _queueData.filter(q => q.status === 'returned');
-      if (!returned.length) { card.style.display = 'none'; return; }
-      card.style.display = '';
-      tbody.innerHTML = returned.map(q => `
-        <tr>
-          <td data-label="Token"><strong>${q.token_number || '—'}</strong></td>
-          <td data-label="Patient">${q.patient_name}</td>
-          <td data-label="">${`<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}', true)">Consult</button>`}</td>
-        </tr>`).join('');
     }
 
     loadQueue();

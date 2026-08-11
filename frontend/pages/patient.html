@@ -303,15 +303,20 @@
           </div>
         </div>
         <div class="patient-header-actions">
-          <span class="badge badge-amber" id="vitals-badge" style="display:none"></span>
           <button class="btn btn-outline btn-lg" id="btn-send-vitals" onclick="sendForVitals()" style="display:none">
             🩺 Send for Vitals
+          </button>
+          <button class="btn btn-outline btn-lg" id="btn-send-admit" onclick="confirmSendAdmit()">
+            🛏️ Send Admit
           </button>
           <button class="btn btn-outline btn-lg" onclick="openReportsModal(patientId)">
             📋 Reports
           </button>
           <button class="btn btn-outline btn-lg" onclick="openEditPatient()">
             ✏️ Edit Details
+          </button>
+          <button class="btn btn-outline btn-lg" id="btn-continue-consult" onclick="continueConsultation()" style="display:none;border-color:var(--teal);color:var(--teal)">
+            ↩ Continue Consultation
           </button>
           <button class="btn btn-primary btn-lg" id="btn-new-consult" onclick="startConsultation()">
             + New Consultation
@@ -601,6 +606,10 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
+    async function continueConsultation() {
+      window.location.href = `/pages/consultation.html?${patientToken}&reopen=1`;
+    }
+
     async function startConsultation() {
       // A consultation must trace back to a real, paid token for today —
       // otherwise a doctor could complete and confirm an entire consultation
@@ -653,12 +662,55 @@
       }
     })();
 
+    function confirmSendAdmit() {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay open";
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:360px">
+          <div class="modal-header"><h2>Send to Admission?</h2></div>
+          <p style="font-size:13px;color:var(--slate);margin-bottom:16px">This sends the patient to reception to be admitted. Confirm?</p>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-outline" style="flex:1" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+            <button class="btn btn-primary" style="flex:1" id="confirm-send-admit-btn">Yes, Send</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#confirm-send-admit-btn').addEventListener('click', () => doSendAdmit(overlay));
+    }
+
+    async function doSendAdmit(overlay) {
+      try {
+        await api("POST", "/admissions/referrals", { patient_id: patientId });
+        toast("Sent to reception for admission.", "success");
+        overlay.remove();
+        markAdmitButtonSent();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function markAdmitButtonSent() {
+      const btn = document.getElementById('btn-send-admit');
+      if (!btn) return;
+      btn.textContent = "🛏️ Sent to Admit";
+      btn.disabled = true;
+    }
+
+    async function checkExistingAdmitReferral() {
+      try {
+        const referrals = await api("GET", "/admissions/referrals");
+        if (referrals.some(r => r.patient_id === patientId)) markAdmitButtonSent();
+      } catch (e) { /* non-critical */ }
+    }
+
     async function loadVitalsStatus() {
       try {
         const c = await api("GET", `/patients/${patientId}/checkin-today`);
         const badge = document.getElementById('vitals-badge');
         const btn = document.getElementById('btn-send-vitals');
         const card = document.getElementById('vitals-card');
+
+        const continueBtn = document.getElementById('btn-continue-consult');
+        continueBtn.style.display = (c.exists && c.is_returned) ? '' : 'none';
+
         if (!c.exists) { badge.style.display = 'none'; btn.style.display = 'none'; card.style.display = 'none'; return; }
 
         if (c.vitals_status === 'none') {

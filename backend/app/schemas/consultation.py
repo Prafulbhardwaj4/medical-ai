@@ -21,6 +21,9 @@ class ConsultationStructured(BaseModel):
     vitals: Optional[Dict[str, str]] = {}
     medicines: Optional[List[MedicineItem]] = []
     tests: Optional[List[str]] = []
+    recommended_test_ids: Optional[List[int]] = []  # real, orderable tests — same-day-return reopen flow adds NEW ones here; `tests` above stays just the display list
+    test_priorities: Optional[Dict[int, str]] = {}
+    clinical_indication: Optional[str] = None
     advice: Optional[str] = ""
     followup: Optional[str] = ""
 

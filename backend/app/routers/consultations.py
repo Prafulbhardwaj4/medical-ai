@@ -1139,6 +1139,51 @@ def update_consultation(
                 db.add(order)
                 new_medicine_orders.append(order)
 
+    # Same treatment for tests: a same-day-return reopen can add NEW tests
+    # that were never ordered originally — those need a real, billable
+    # TestOrder, not just an update to the cosmetic `tests` display list
+    # above (which is all the rest of this function ever touched before).
+    new_test_orders = []
+    if was_confirmed and payload.recommended_test_ids:
+        old_test_ids = set(json.loads(consultation.recommended_test_ids or "[]"))
+        new_test_ids = [tid for tid in payload.recommended_test_ids if tid not in old_test_ids]
+        if new_test_ids:
+            test_items = db.query(TestCatalogItem).filter(
+                TestCatalogItem.id.in_(new_test_ids),
+                TestCatalogItem.hospital_id == current_doctor.hospital_id
+            ).all()
+            todays_checkin_for_tests = db.query(Checkin).filter(
+                Checkin.patient_id == consultation.patient_id,
+                Checkin.doctor_id == consultation.doctor_id,
+                Checkin.visit_date == ist_today()
+            ).order_by(desc(Checkin.created_at)).first()
+
+            valid_priorities = {"routine", "urgent", "stat"}
+            indication = (payload.clinical_indication or "").strip() or None
+            added_fee = 0
+            for t in test_items:
+                requested_priority = (payload.test_priorities or {}).get(t.id, "routine")
+                order = TestOrder(
+                    consultation_id=consultation.id,
+                    patient_id=consultation.patient_id,
+                    hospital_id=current_doctor.hospital_id,
+                    test_id=t.id,
+                    test_name=t.name,
+                    price=t.fee,
+                    status="payment_pending",
+                    priority=requested_priority if requested_priority in valid_priorities else "routine",
+                    clinical_indication=indication,
+                )
+                db.add(order)
+                new_test_orders.append(order)
+                added_fee += t.fee
+
+            if added_fee > 0 and todays_checkin_for_tests:
+                todays_checkin_for_tests.test_fee = (todays_checkin_for_tests.test_fee or 0) + added_fee
+
+            all_ids = list(old_test_ids) + [t.id for t in test_items]
+            consultation.recommended_test_ids = json.dumps(all_ids)
+
     db.commit()
     db.refresh(consultation)
 
@@ -1156,6 +1201,7 @@ def update_consultation(
                 "diff": field_diff,
                 "medicine_orders_cancelled": cancelled_order_ids,
                 "refunds_created": [r.id for r in refunds_created],
+                "new_test_orders": [t.id for t in new_test_orders],
             })
         )
 
@@ -1163,6 +1209,7 @@ def update_consultation(
         "message": "Consultation updated successfully",
         "new_medicine_orders_added": len(new_medicine_orders),
         "medicine_orders_cancelled": len(cancelled_order_ids),
+        "new_test_orders_added": len(new_test_orders),
         "pending_refunds_created": len(refunds_created),
     }
 

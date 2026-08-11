@@ -1621,16 +1621,22 @@
       const el = document.getElementById('bills-modal-list');
       if (!rows.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">Nothing here.</p>'; return; }
       el.innerHTML = rows.map(r => {
+        // /patients/reception/pending-payments returns a FLAT list — one row
+        // per checkin (so a multi-doctor visit is already multiple rows,
+        // one per doctor, each with their own buckets directly on it).
+        // There's no nested r.doctors[] anywhere in that response.
+        const b = r.buckets || {};
         const parts = [];
-        if (r.buckets.consultation) parts.push(r.buckets.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
-        if (r.buckets.tests) parts.push(r.buckets.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${r.buckets.tests.pending_total} pending`);
-        if (r.buckets.charges) parts.push(r.buckets.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${r.buckets.charges.pending_total} pending`);
-        if (r.buckets.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[r.buckets.pharmacy.status] || r.buckets.pharmacy.status}`);
+        if (b.consultation) parts.push(b.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
+        if (b.tests) parts.push(b.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${b.tests.pending_total} pending`);
+        if (b.charges) parts.push(b.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${b.charges.pending_total} pending`);
+        if (b.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[b.pharmacy.status] || b.pharmacy.status}`);
         return `
           <div style="padding:12px 0;border-bottom:1px solid var(--border)">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
               <div>
                 <strong>${r.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${r.patient_uid || ''}</span>
+                ${r.doctor_name ? `<span style="font-size:12px;color:var(--slate)"> · ${r.doctor_name}</span>` : ''}
                 <span class="badge ${r.is_finalized ? 'badge-green' : 'badge-amber'}" style="margin-left:6px">${r.is_finalized ? 'Generated' : 'Pending'}</span>
                 <div style="font-size:12px;color:var(--slate)">${parts.join(' · ')}</div>
               </div>
