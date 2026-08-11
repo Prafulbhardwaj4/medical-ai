@@ -578,7 +578,7 @@ async function openReportsModal(patientId) {
               ${t.result_data ? `<div style="font-size:13px;color:var(--slate);margin-top:4px">
                 ${Object.entries(t.result_data).map(([k, v2]) => `${k}: <strong>${v2}</strong>`).join(' &nbsp;·&nbsp; ')}
               </div>` : ''}
-              <a href="${API_BASE}/lab/reports/${t.order_id}.pdf" target="_blank" style="font-size:13px">View full report (PDF)</a>
+              <a href="${BASE}/lab/reports/${t.order_id}.pdf" target="_blank" style="font-size:13px">View full report (PDF)</a>
             </div>
           `).join('')}
         </div>

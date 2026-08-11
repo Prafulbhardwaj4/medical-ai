@@ -1380,7 +1380,8 @@
     if (__startTab === 'portal') {
       loadEmergencyWard(); loadPendingReview();
       loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter();
-      document.getElementById('slot-preview-date').valueAsDate = new Date();
+      const slotPreviewDateEl = document.getElementById('slot-preview-date');
+      if (slotPreviewDateEl) slotPreviewDateEl.valueAsDate = new Date();
     }
     setInterval(() => { if (document.getElementById('section-portal')?.classList.contains('active') || document.getElementById('section-portal')?.classList.contains('d-active')) loadEmergencyWard(); }, 15000);
 
@@ -1621,31 +1622,40 @@
       const el = document.getElementById('bills-modal-list');
       if (!rows.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">Nothing here.</p>'; return; }
       el.innerHTML = rows.map(r => {
-        // /patients/reception/pending-payments returns a FLAT list — one row
-        // per checkin (so a multi-doctor visit is already multiple rows,
-        // one per doctor, each with their own buckets directly on it).
-        // There's no nested r.doctors[] anywhere in that response.
-        const b = r.buckets || {};
-        const parts = [];
-        if (b.consultation) parts.push(b.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
-        if (b.tests) parts.push(b.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${b.tests.pending_total} pending`);
-        if (b.charges) parts.push(b.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${b.charges.pending_total} pending`);
-        if (b.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[b.pharmacy.status] || b.pharmacy.status}`);
+        // /patients/reception/pending-payments groups a multi-doctor visit
+        // into ONE row per patient, with a doctors[] breakdown — each entry
+        // carries its own checkin_id/doctor_name/buckets, so each doctor's
+        // bill on the same visit can still be generated independently.
+        const doctorBlocks = (r.doctors || []).map(d => {
+          const b = d.buckets || {};
+          const parts = [];
+          if (b.consultation) parts.push(b.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
+          if (b.tests) parts.push(b.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${b.tests.pending_total} pending`);
+          if (b.charges) parts.push(b.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${b.charges.pending_total} pending`);
+          if (b.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[b.pharmacy.status] || b.pharmacy.status}`);
+          return `
+            <div style="padding:8px 0;border-top:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+                <div>
+                  ${d.doctor_name ? `<span style="font-size:12.5px;font-weight:600;color:var(--slate)">${d.doctor_name}</span>` : ''}
+                  <div style="font-size:12px;color:var(--slate)">${parts.join(' · ')}</div>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="confirmGenerateBill(${d.checkin_id}, this)">🧾 Generate Bill</button>
+              </div>
+              <div id="bills-confirm-${d.checkin_id}" style="display:none;margin-top:8px;padding:10px;background:#fef9c3;border-radius:var(--radius);font-size:13px">
+                Generate this bill now? <button class="btn btn-primary btn-sm" onclick="doGenerateBill(${d.checkin_id}, this)">Yes, generate</button>
+                <button class="btn btn-outline btn-sm" onclick="document.getElementById('bills-confirm-${d.checkin_id}').style.display='none'">Cancel</button>
+              </div>
+            </div>
+          `;
+        }).join('');
         return `
           <div style="padding:12px 0;border-bottom:1px solid var(--border)">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-              <div>
-                <strong>${r.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${r.patient_uid || ''}</span>
-                ${r.doctor_name ? `<span style="font-size:12px;color:var(--slate)"> · ${r.doctor_name}</span>` : ''}
-                <span class="badge ${r.is_finalized ? 'badge-green' : 'badge-amber'}" style="margin-left:6px">${r.is_finalized ? 'Generated' : 'Pending'}</span>
-                <div style="font-size:12px;color:var(--slate)">${parts.join(' · ')}</div>
-              </div>
-              <button class="btn btn-primary btn-sm" onclick="confirmGenerateBill(${r.checkin_id}, this)">🧾 Generate Bill</button>
+            <div>
+              <strong>${r.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${r.patient_uid || ''}</span>
+              <span class="badge ${r.is_finalized ? 'badge-green' : 'badge-amber'}" style="margin-left:6px">${r.is_finalized ? 'Generated' : 'Pending'}</span>
             </div>
-            <div id="bills-confirm-${r.checkin_id}" style="display:none;margin-top:8px;padding:10px;background:#fef9c3;border-radius:var(--radius);font-size:13px">
-              Generate this bill now? <button class="btn btn-primary btn-sm" onclick="doGenerateBill(${r.checkin_id}, this)">Yes, generate</button>
-              <button class="btn btn-outline btn-sm" onclick="document.getElementById('bills-confirm-${r.checkin_id}').style.display='none'">Cancel</button>
-            </div>
+            ${doctorBlocks}
           </div>
         `;
       }).join('');
@@ -1660,7 +1670,7 @@
       try {
         const invoice = await api("POST", `/billing/checkins/${checkinId}/finalize-invoice`, {});
         toast(`Bill generated — Rs.${invoice.grand_total}`, 'success');
-        window.open(`${API_BASE}/billing/invoices/${invoice.id}/pdf`, '_blank');
+        window.open(`${BASE}/billing/invoices/${invoice.id}/pdf`, '_blank');
         openBillsModal(); // refresh — patient stays listed if any bucket is still pending
       } catch (e) {
         toast(e.message, 'error');
