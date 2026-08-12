@@ -1131,10 +1131,45 @@ def get_patient_reports(
         completed_iso = o.completed_at.isoformat() if o.completed_at else None
         if completed_iso and (v["date"] is None or completed_iso > v["date"]):
             v["date"] = completed_iso
+
+        # result_data on the order is just {param_name: value} — no unit or
+        # reference range travels with it, that lives on the catalog. Build
+        # a proper row list (name/value/unit/range) here so the doctor-side
+        # modal can render it as a real table instead of a flat key:value dump.
+        try:
+            raw_results = json.loads(o.result_data) if o.result_data else {}
+        except Exception:
+            raw_results = {}
+        catalog_item = db.query(TestCatalogItem).filter(TestCatalogItem.id == o.test_id).first() if o.test_id else None
+        is_male = (patient.gender or "").lower() == "male"
+        rows = []
+        if catalog_item and catalog_item.is_panel:
+            params = db.query(TestCatalogParameter).filter(
+                TestCatalogParameter.test_catalog_item_id == catalog_item.id,
+                TestCatalogParameter.is_active == True
+            ).order_by(TestCatalogParameter.display_order).all()
+            for p in params:
+                if p.name not in raw_results:
+                    continue
+                rows.append({
+                    "name": p.name,
+                    "value": raw_results.get(p.name, ""),
+                    "unit": p.unit or "",
+                    "range": (p.reference_range_male if is_male else p.reference_range_female) or "",
+                })
+        elif raw_results:
+            range_str = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) if catalog_item else ""
+            rows.append({
+                "name": o.test_name,
+                "value": raw_results.get("value", ""),
+                "unit": (catalog_item.unit if catalog_item else "") or "",
+                "range": range_str or "",
+            })
+
         v["tests"].append({
             "order_id": o.id,
             "test_name": o.test_name,
-            "result_data": json.loads(o.result_data) if o.result_data else None,
+            "results": rows,
             "is_critical": o.is_critical,
             "verified_at": o.verified_at.isoformat() if o.verified_at else None,
         })

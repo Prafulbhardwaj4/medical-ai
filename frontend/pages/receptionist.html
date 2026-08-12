@@ -1254,6 +1254,7 @@
   <script src="../js/chat-widget.js?v=1"></script>
   <script src="../js/suggestion-widget.js?v=1"></script>
   <script>
+    let expectedTodayFilterLoaded = false;  
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
 
@@ -1638,9 +1639,8 @@
               <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
                 <div>
                   ${d.doctor_name ? `<span style="font-size:12.5px;font-weight:600;color:var(--slate)">${d.doctor_name}</span>` : ''}
-                  <div style="font-size:12px;color:var(--slate)">${parts.join(' · ')}</div>
                 </div>
-                <button class="btn btn-primary btn-sm" onclick="confirmGenerateBill(${d.checkin_id}, this)">🧾 Generate Bill</button>
+                <button class="btn btn-primary btn-sm" onclick="confirmGenerateBill(${d.checkin_id}, this)" ${d.needs_regenerate ? '' : 'disabled title="Nothing new to bill since it was generated"'}>🧾 Generate Bill</button>
               </div>
               <div id="bills-confirm-${d.checkin_id}" style="display:none;margin-top:8px;padding:10px;background:#fef9c3;border-radius:var(--radius);font-size:13px">
                 Generate this bill now? <button class="btn btn-primary btn-sm" onclick="doGenerateBill(${d.checkin_id}, this)">Yes, generate</button>
@@ -1670,8 +1670,8 @@
       try {
         const invoice = await api("POST", `/billing/checkins/${checkinId}/finalize-invoice`, {});
         toast(`Bill generated — Rs.${invoice.grand_total}`, 'success');
-        window.open(`${BASE}/billing/invoices/${invoice.id}/pdf`, '_blank');
-        openBillsModal(); // refresh — patient stays listed if any bucket is still pending
+        downloadFile(`/billing/invoices/${invoice.id}/pdf`, `invoice_${invoice.id}.pdf`);
+        openBillsModal();
       } catch (e) {
         toast(e.message, 'error');
         btn.disabled = false;
@@ -3236,7 +3236,6 @@
       } catch (e) { el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`; }
     }
 
-    let expectedTodayFilterLoaded = false;
     async function loadUpcomingBookings() {
       const el = document.getElementById("upcoming-list");
       const doctorId = document.getElementById("upcoming-doctor-filter").value;

@@ -541,7 +541,7 @@ async function openReportsModal(patientId) {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay open";
   overlay.innerHTML = `
-    <div class="modal" style="max-width:520px;max-height:80vh;overflow-y:auto">
+    <div class="modal" style="max-width:760px;width:92vw;max-height:88vh;overflow-y:auto">
       <div class="modal-header">
         <h2>Reports</h2>
         <button class="modal-close" id="reports-modal-close">&times;</button>
@@ -560,7 +560,9 @@ async function openReportsModal(patientId) {
       body.innerHTML = `<p style="color:var(--slate)">No reports available yet for this patient.</p>`;
       return;
     }
-    body.innerHTML = visits.map((v, i) => `
+    body.innerHTML = visits.map((v, i) => {
+      const orderIdsKey = v.tests.map(t => t.order_id).join(',');
+      return `
       <div style="border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:10px">
         <button type="button" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'"
           style="width:100%;text-align:left;background:none;border:none;padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
@@ -568,22 +570,42 @@ async function openReportsModal(patientId) {
             <span style="color:var(--slate);font-size:13px"> · Token ${v.token_number || '—'}</span></span>
           <span style="color:var(--slate)">${v.tests.length} test${v.tests.length > 1 ? 's' : ''} ▾</span>
         </button>
-        <div style="display:${i === 0 ? '' : 'none'};padding:0 14px 12px">
+        <div style="display:${i === 0 ? '' : 'none'};padding:0 14px 14px">
+          <button class="btn btn-outline btn-sm" style="margin-bottom:10px" onclick="downloadFile('/lab/reports/combined?order_ids=${orderIdsKey}', 'report_${orderIdsKey}.pdf')">📄 View Full Report (PDF)</button>
           ${v.tests.map(t => `
-            <div style="padding:8px 0;border-top:1px solid var(--border)">
-              <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="padding:10px 0;border-top:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
                 <strong>${t.test_name}</strong>
                 ${t.is_critical ? '<span class="badge badge-red">Critical</span>' : ''}
               </div>
-              ${t.result_data ? `<div style="font-size:13px;color:var(--slate);margin-top:4px">
-                ${Object.entries(t.result_data).map(([k, v2]) => `${k}: <strong>${v2}</strong>`).join(' &nbsp;·&nbsp; ')}
-              </div>` : ''}
-              <a href="${BASE}/lab/reports/${t.order_id}.pdf" target="_blank" style="font-size:13px">View full report (PDF)</a>
+              ${t.results && t.results.length ? `
+                <table style="width:100%;border-collapse:collapse;font-size:13px">
+                  <thead>
+                    <tr style="color:var(--slate);text-align:left">
+                      <th style="padding:4px 8px 4px 0;font-weight:500">Parameter</th>
+                      <th style="padding:4px 8px;font-weight:500">Value</th>
+                      <th style="padding:4px 8px;font-weight:500">Unit</th>
+                      <th style="padding:4px 0 4px 8px;font-weight:500">Range</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${t.results.map(row => `
+                      <tr style="border-top:1px solid var(--border)">
+                        <td style="padding:5px 8px 5px 0">${row.name}</td>
+                        <td style="padding:5px 8px;font-weight:600">${row.value}</td>
+                        <td style="padding:5px 8px;color:var(--slate)">${row.unit || '—'}</td>
+                        <td style="padding:5px 0 5px 8px;color:var(--slate)">${row.range || '—'}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              ` : `<p style="font-size:13px;color:var(--slate-light)">No values recorded.</p>`}
             </div>
           `).join('')}
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   } catch (e) {
     overlay.querySelector("#reports-modal-body").innerHTML = `<p style="color:var(--red)">Couldn't load reports right now.</p>`;
   }

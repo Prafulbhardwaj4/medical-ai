@@ -1688,6 +1688,22 @@ def reception_pending_payments(
             continue
 
         doctor = db.query(Doctor).filter(Doctor.id == c.doctor_id).first()
+
+        # is_finalized stays true forever once a bill's ever been generated
+        # (finalize-invoice regenerates in place rather than resetting it) —
+        # so it can't tell reception whether there's anything NEW since the
+        # last generation. Compare against what's actually billable right
+        # now, using the exact same gather used at generation time, so
+        # "Generate Bill" only re-enables when there's genuinely something
+        # to add, not on every render.
+        needs_regenerate = not c.is_finalized
+        if c.is_finalized and c.invoice_id:
+            from app.routers.billing import gather_invoice_items
+            current_items = gather_invoice_items(db, c)
+            invoice = db.query(Invoice).filter(Invoice.id == c.invoice_id).first()
+            billed_count = len(json.loads(invoice.items_json)) if invoice and invoice.items_json else 0
+            needs_regenerate = len(current_items) > billed_count
+
         result.append({
             "checkin_id": c.id,
             "patient_id": patient.id,
@@ -1697,6 +1713,7 @@ def reception_pending_payments(
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else None,
             "buckets": buckets,
             "is_finalized": c.is_finalized,
+            "needs_regenerate": needs_regenerate,
             "visit_group_id": c.visit_group_id,
         })
 
@@ -1724,6 +1741,7 @@ def reception_pending_payments(
             "checkin_id": row["checkin_id"],
             "doctor_name": row["doctor_name"],
             "buckets": row["buckets"],
+            "needs_regenerate": row["needs_regenerate"],
         })
 
     return [grouped[k] for k in order]

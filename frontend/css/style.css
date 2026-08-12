@@ -1841,6 +1841,10 @@ tbody tr:hover {
 }
 
 @media (max-width: 900px) {
+  #location-toggle #loc-toggle-btn,
+  #location-toggle #emergency-btn {
+    flex: 1;
+  }
   #att-card-header {
     display: flex;
     align-items: center;

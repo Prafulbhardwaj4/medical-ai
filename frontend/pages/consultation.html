@@ -1313,8 +1313,7 @@
     });
 
     async function checkReopenMode() {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('reopen') !== '1') return;
+      if (window.location.hash !== '#reopen') return;
       try {
         const c = await api("GET", `/patients/${patientId}/checkin-today`);
         if (!c.exists || !c.token_number) { toast("No token found for today.", "error"); return; }

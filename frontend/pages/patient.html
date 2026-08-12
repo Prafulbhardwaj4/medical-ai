@@ -607,7 +607,11 @@
     }
 
     async function continueConsultation() {
-      window.location.href = `/pages/consultation.html?${patientToken}&reopen=1`;
+      // patientToken IS the raw query string here (see consultation.html's
+      // `location.search.slice(1)`), not a named param — appending
+      // &reopen=1 would corrupt the token itself. A hash fragment doesn't
+      // touch location.search at all, so the token stays intact.
+      window.location.href = `/pages/consultation.html?${patientToken}#reopen`;
     }
 
     async function startConsultation() {
