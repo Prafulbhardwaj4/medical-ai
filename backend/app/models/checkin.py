@@ -51,3 +51,5 @@ class Checkin(Base):
     emergency_destination = Column(String, nullable=True)  # "ward" | "cabin" — where reception sent the patient
 
     visit_group_id = Column(Integer, nullable=True)  # set to the primary checkin's own id when a visit covers 2+ doctors in one go (item 7) — links siblings for combined billing/display, never used to change queue/consult behavior, each doctor's queue entry works exactly like any normal checkin
+
+    up_next_skip = Column(Boolean, default=False, nullable=False)  # staff (assistant or doctor) manually advanced past this patient because they weren't present when called — stays in the real queue, just no longer highlighted as "up next"; shared by /patients/queue/today and /nurses/vitals-queue so assistant and doctor views stay in sync

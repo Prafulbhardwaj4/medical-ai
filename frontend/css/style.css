@@ -1853,6 +1853,35 @@ tbody tr:hover {
   #att-card-header #btn-mark-present {
     flex-shrink: 0;
   }
+
+  .att-card {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .att-card .card-header {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+    flex: 1 1 auto;
+  }
+
+  .att-card .staff-att-status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+    padding: 0;
+    gap: 4px;
+    flex: 0 0 auto;
+  }
+
+  .att-card .staff-att-actions {
+    flex: 1 1 100%;
+    margin-top: 12px;
+  }
 }
 
 /* Compact, single-row desktop layout: title+badge on the left, the
@@ -1957,20 +1986,11 @@ tbody tr:hover {
     display: flex;
   }
 
-  .topbar-doctor {
-    display: none;
-  }
-
   #bills-header-btn {
     margin-left: auto;
     margin-right: 8px;
-  }
-
-  @media (max-width: 900px) {
-    #bills-header-btn {
-      display: flex;
-      align-items: center;
-    }
+    display: flex;
+    align-items: center;
   }
 
   .topbar-profile-btn {
@@ -2406,6 +2426,10 @@ tbody tr:hover {
      matching specificity but appears later in the cascade. */
   table.responsive-cards td.col-checkin-time {
     text-align: right;
+  }
+
+  table.responsive-cards .patient-name-line {
+    justify-content: flex-end;
   }
 }
 

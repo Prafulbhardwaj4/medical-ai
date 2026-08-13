@@ -42,6 +42,10 @@
       #pharmacy-stock-view.mobile-section:not(.d-active) {
         display: none !important;
       }
+
+      #pharmacy-admission-view.mobile-section:not(.d-active) {
+        display: none !important;
+      }
     }
 
     @media (min-width: 901px) {
@@ -79,6 +83,9 @@
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
       <div class="topbar-doctor">
+        <button class="btn btn-outline btn-sm" id="bills-header-btn" onclick="openBillsModal()">
+          🧾 Bills
+        </button>
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <span id="topbar-clinic" style="color:var(--slate)"></span>
@@ -162,6 +169,12 @@
         </svg>
         Pending
       </div>
+      <div class="nav-item" id="nav-admission-tab" onclick="showPharmDesktopTab('admission')" style="cursor:pointer">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
+        Admission
+      </div>
       <div class="nav-item" id="nav-patients-tab" onclick="showPharmDesktopTab('patients')" style="cursor:pointer">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -194,19 +207,11 @@
         </svg>
         Pending
       </button>
-      <button class="bottom-nav-item" id="tab-btn-patients" onclick="showPharmSection('patients')">
+      <button class="bottom-nav-item" id="tab-btn-admission" onclick="showPharmSection('admission')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
         </svg>
-        Patients
-      </button>
-      <button class="bottom-nav-item" id="tab-btn-stock" onclick="showPharmSection('stock')">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-        </svg>
-        Meds
+        Admission
       </button>
       <button class="bottom-nav-item" id="tab-btn-attendance" onclick="showPharmSection('attendance')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -215,7 +220,38 @@
         </svg>
         Attendance
       </button>
+      <button class="bottom-nav-item" onclick="openMobileMenu()">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        Menu
+      </button>
     </nav>
+
+    <div class="mobile-menu-sheet" id="mobile-menu-sheet">
+      <div class="mobile-menu-header">
+        <h2>More</h2>
+        <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
+      </div>
+      <div class="mobile-menu-body">
+        <a class="mobile-menu-item" href="#"
+          onclick="closeMobileMenu();showPharmSection('patients');return false;">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          Patients
+        </a>
+        <a class="mobile-menu-item" href="#"
+          onclick="closeMobileMenu();showPharmSection('stock');return false;">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+          Meds
+        </a>
+      </div>
+    </div>
 
     <main class="main-content">
       <div class="mobile-section" id="section-attendance">
@@ -242,7 +278,7 @@
         <div class="card">
           <div class="card-header"
             style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-            <h2 style="margin:0">Home</h2>
+            <h2 style="margin:0">Queue</h2>
           </div>
 
           <div style="display:grid;grid-template-columns:1fr 200px;gap:10px;margin:16px 0 14px">
@@ -259,8 +295,10 @@
             <p style="color:var(--slate)">Loading…</p>
           </div>
         </div>
+      </div>
 
-        <div class="card" style="margin-top:16px">
+      <div id="pharmacy-admission-view" class="mobile-section">
+        <div class="card">
           <div class="card-header">
             <h2 style="margin:0">Admitted Patients — Medicines to Send</h2>
           </div>
@@ -664,6 +702,23 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="modal-bills">
+    <div class="modal" style="max-width:560px;max-height:85vh;display:flex;flex-direction:column">
+      <div class="modal-header">
+        <h2>Today's Bills</h2><button class="modal-close" onclick="closeModal('modal-bills')">×</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-outline btn-sm bills-filter-btn" data-filter="all"
+          onclick="setBillsFilter('all')">All</button>
+        <button class="btn btn-outline btn-sm bills-filter-btn" data-filter="generated"
+          onclick="setBillsFilter('generated')">Generated</button>
+        <button class="btn btn-outline btn-sm bills-filter-btn" data-filter="pending"
+          onclick="setBillsFilter('pending')">Pending</button>
+      </div>
+      <div id="bills-modal-list" style="overflow-y:auto;flex:1"></div>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <script src="../js/api.js?v=4"></script>
   <script src="../js/chat-widget.js?v=1"></script>
@@ -672,6 +727,91 @@
     if (!requireAuth()) throw new Error("Not authenticated");
     if (getDoctor()?.role !== 'pharmacy') window.location.href = 'login.html';
     fillTopbar();
+
+    const PHARM_STATUS_LABEL = {
+      pending: "Advised",
+      paid_not_dispensed: "Paid, awaiting dispense",
+      dispensed: "Dispensed"
+    };
+    let billsFilter = 'all';
+    let billsRows = [];
+
+    async function openBillsModal() {
+      document.getElementById('modal-bills').classList.add('open');
+      document.getElementById('bills-modal-list').innerHTML = '<p style="color:var(--slate-light)">Loading…</p>';
+      try {
+        billsRows = await api("GET", "/patients/reception/pending-payments");
+        setBillsFilter(billsFilter);
+      } catch (e) {
+        document.getElementById('bills-modal-list').innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    function setBillsFilter(f) {
+      billsFilter = f;
+      document.querySelectorAll('.bills-filter-btn').forEach(b => {
+        b.className = b.dataset.filter === f ? 'btn btn-primary btn-sm bills-filter-btn' : 'btn btn-outline btn-sm bills-filter-btn';
+      });
+      renderBillsModalList();
+    }
+
+    function renderBillsModalList() {
+      const rows = billsFilter === 'all' ? billsRows
+        : billsFilter === 'generated' ? billsRows.filter(r => r.is_finalized)
+          : billsRows.filter(r => !r.is_finalized);
+      const el = document.getElementById('bills-modal-list');
+      if (!rows.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">Nothing here.</p>'; return; }
+      el.innerHTML = rows.map(r => {
+        const doctorBlocks = (r.doctors || []).map(d => {
+          const b = d.buckets || {};
+          const parts = [];
+          if (b.consultation) parts.push(b.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
+          if (b.tests) parts.push(b.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${b.tests.pending_total} pending`);
+          if (b.charges) parts.push(b.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${b.charges.pending_total} pending`);
+          if (b.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[b.pharmacy.status] || b.pharmacy.status}`);
+          return `
+            <div style="padding:8px 0;border-top:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+                <div>
+                  ${d.doctor_name ? `<span style="font-size:12.5px;font-weight:600;color:var(--slate)">${d.doctor_name}</span>` : ''}
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="confirmGenerateBill(${d.checkin_id}, this)" ${d.needs_regenerate ? '' : 'disabled title="Nothing new to bill since it was generated"'}>🧾 Generate Bill</button>
+              </div>
+              <div id="bills-confirm-${d.checkin_id}" style="display:none;margin-top:8px;padding:10px;background:#fef9c3;border-radius:var(--radius);font-size:13px">
+                Generate this bill now? <button class="btn btn-primary btn-sm" onclick="doGenerateBill(${d.checkin_id}, this)">Yes, generate</button>
+                <button class="btn btn-outline btn-sm" onclick="document.getElementById('bills-confirm-${d.checkin_id}').style.display='none'">Cancel</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+        return `
+          <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <strong>${r.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${r.patient_uid || ''}</span>
+              <span class="badge ${r.is_finalized ? 'badge-green' : 'badge-amber'}" style="margin-left:6px">${r.is_finalized ? 'Generated' : 'Pending'}</span>
+            </div>
+            ${doctorBlocks}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function confirmGenerateBill(checkinId) {
+      document.getElementById(`bills-confirm-${checkinId}`).style.display = '';
+    }
+
+    async function doGenerateBill(checkinId, btn) {
+      btn.disabled = true;
+      try {
+        const invoice = await api("POST", `/billing/checkins/${checkinId}/finalize-invoice`, {});
+        toast(`Bill generated — Rs.${invoice.grand_total}`, 'success');
+        downloadFile(`/billing/invoices/${invoice.id}/pdf`, `invoice_${invoice.id}.pdf`);
+        openBillsModal();
+      } catch (e) {
+        toast(e.message, 'error');
+        btn.disabled = false;
+      }
+    }
 
     if (["admin", "sub_admin", "pharmacy"].includes(getDoctor()?.role)) {
       document.getElementById('notif-bell-btn').style.display = '';
@@ -1466,12 +1606,13 @@
     // Mobile: bottom-nav driven. Attendance is just another tab here (section-attendance
     // included), same as the other sections — only the active one is shown.
     function showPharmSection(id) {
-      ['home', 'pending', 'patients', 'stock', 'attendance'].forEach(s => {
+      ['home', 'pending', 'admission', 'patients', 'stock', 'attendance'].forEach(s => {
         const sectionEl = s === 'attendance' ? document.getElementById('section-attendance') : document.getElementById('pharmacy-' + s + '-view');
         sectionEl.classList.toggle('active', s === id);
         const mobileBtn = document.getElementById('tab-btn-' + s);
         if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
       });
+      if (id === 'admission') loadAdmissionPharmQueue();
       if (id === 'stock') loadStockMedicines();
       if (id === 'pending') loadPendingTasks();
       if (id === 'patients') loadPharmPatients();
@@ -1480,12 +1621,13 @@
     // Desktop: sidebar driven. Home / Pending / Patients / Medicine Catalog act as real tabs;
     // Attendance card stays intact and always visible above them (not part of this switch).
     function showPharmDesktopTab(id) {
-      const ids = ['pharmacy-home-view', 'pharmacy-pending-view', 'pharmacy-patients-view', 'pharmacy-stock-view'];
+      const ids = ['pharmacy-home-view', 'pharmacy-pending-view', 'pharmacy-admission-view', 'pharmacy-patients-view', 'pharmacy-stock-view'];
       ids.forEach(elId => document.getElementById(elId).classList.remove('d-active'));
       document.getElementById('pharmacy-' + id + '-view').classList.add('d-active');
-      ['home', 'pending', 'patients', 'stock'].forEach(t => {
+      ['home', 'pending', 'admission', 'patients', 'stock'].forEach(t => {
         document.getElementById('nav-' + t + '-tab').classList.toggle('active', t === id);
       });
+      if (id === 'admission') loadAdmissionPharmQueue();
       if (id === 'stock') loadStockMedicines();
       if (id === 'pending') loadPendingTasks();
       if (id === 'patients') loadPharmPatients();

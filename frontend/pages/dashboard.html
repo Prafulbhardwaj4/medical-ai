@@ -248,7 +248,15 @@
         <div class="mobile-section active" id="section-home">
           <div class="card" id="up-next-card-doctor" style="display:none;margin-bottom:16px;background:var(--smoke)">
             <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px">UP NEXT</div>
-            <div style="font-size:15px"><strong id="up-next-name-doctor"></strong> <span style="color:var(--slate)" id="up-next-uid-doctor"></span></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span id="up-next-vitals-doctor"></span>
+              <strong id="up-next-name-doctor"></strong>
+            </div>
+            <div style="font-size:13px;color:var(--slate);margin-top:2px" id="up-next-uid-doctor"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">
+              <span style="font-size:13px;color:var(--slate)" id="up-next-phone-doctor"></span>
+              <span id="up-next-consult-doctor"></span>
+            </div>
           </div>
 
           <div class="card" id="queue-card-walkin">
@@ -988,6 +996,7 @@
       const now = new Date();
       const next = _queueData.find(q => {
         if (q.status !== 'waiting') return false;
+        if (q.up_next_skip) return false;
         if (q.source === 'online' && q.estimated_time) {
           const minutesLate = (now - new Date(toIST(q.estimated_time))) / 60000;
           if (minutesLate > GRACE_MINUTES) return false;
@@ -997,7 +1006,13 @@
       if (!next) { card.style.display = 'none'; return; }
       card.style.display = '';
       document.getElementById('up-next-name-doctor').textContent = next.patient_name;
-      document.getElementById('up-next-uid-doctor').textContent = next.patient_uid ? `(${next.patient_uid})` : '';
+      document.getElementById('up-next-uid-doctor').textContent = next.patient_uid || '';
+      document.getElementById('up-next-phone-doctor').textContent = next.patient_phone || '';
+      document.getElementById('up-next-vitals-doctor').innerHTML = vitalsCellHtml(next);
+      const showConsult = next.status !== 'expected' && next.status !== 'done';
+      document.getElementById('up-next-consult-doctor').innerHTML = showConsult
+        ? `<button class="btn btn-primary btn-sm" onclick="goToPatient(${next.patient_id}, '${next.url_token}'${next.status === 'returned' ? ', true' : ''})">Consult</button>`
+        : '';
     }
 
     function vitalsCellHtml(q) {

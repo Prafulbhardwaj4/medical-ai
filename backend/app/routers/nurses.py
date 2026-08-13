@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import json
 
 from app.database import get_db
@@ -39,26 +39,45 @@ def vitals_queue(
     sweep_todays_online_checkins(db, current_doctor.hospital_id)
 
     statuses = ["pending", "sent_back", "done", "none"] if include_done else ["pending", "sent_back", "none"]
-    checkins = db.query(Checkin).filter(
+    # This endpoint is reused for two different things: the nurse's own
+    # "who needs vitals right now" queue (include_done=False — a returned
+    # patient doesn't need fresh vitals unless a recheck was requested,
+    # which shows up separately via vitals_status=="sent_back") and the
+    # assistant's general walk-in/online view (include_done=True — a
+    # requeued "Send Again" patient sets is_returned=True but must stay
+    # visible in that view all day, not disappear the moment it's set).
+    query = db.query(Checkin).filter(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.vitals_status.in_(statuses),
         Checkin.visit_date == ist_today(),
         Checkin.is_paid == True,
-        Checkin.is_returned == False
-    ).order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
+    )
+    if not include_done:
+        query = query.filter(Checkin.is_returned == False)
+    checkins = query.order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
 
     # Rechecks jump the fresh-vitals-pending line — the doctor's already mid-turn
     # waiting on this, unlike a walk-in still working through the normal queue.
     checkins.sort(key=lambda c: 0 if c.vitals_status == "sent_back" else 1)
 
     consulted_tokens = set()
-    if include_done and checkins:
+    if checkins:
         from app.models.consultation import Consultation
         consulted_tokens = {
             t[0] for t in db.query(Consultation.token_number).filter(
                 Consultation.token_number.in_([c.token_number for c in checkins])
             ).all()
         }
+
+    # A patient the doctor already saw without ever getting vitals recorded
+    # doesn't need to keep sitting in this queue indefinitely — drop it an
+    # hour after check-in. This runs regardless of include_done, since it's
+    # about genuinely stale entries, not about the nurse-vs-assistant view split.
+    stale_cutoff = now_ist_naive() - timedelta(hours=1)
+    checkins = [
+        c for c in checkins
+        if not (c.token_number in consulted_tokens and c.vitals_status in ("none", "pending") and c.created_at < stale_cutoff)
+    ]
 
     patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
     doctors = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_([c.doctor_id for c in checkins])).all()}
@@ -89,6 +108,7 @@ def vitals_queue(
             "vitals_status": c.vitals_status,
             "is_emergency": c.is_emergency,
             "is_consulted": c.token_number in consulted_tokens,
+            "up_next_skip": c.up_next_skip,
         })
     return result
 

@@ -179,6 +179,20 @@
       }
     }
 
+    @media (max-width: 700px) {
+      .lp-mlc-status-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .lp-mlc-status-row .lp-mlc-status-links {
+        flex: 1 1 auto;
+      }
+    }
+
     /* Pending tab: one card per patient, all their pending tests listed, one Requeue button */
     .lp-card {
       border: 1.5px solid var(--border);
@@ -498,8 +512,6 @@
           </div>
           <div class="staff-att-actions">
             <div id="lab-off-duty-time-line" style="display:none;font-size:13px;color:var(--slate)"></div>
-            <select class="form-control" id="lab-room-select" style="display:none"
-              onchange="markLabAttendance(labCurrentStatus)"></select>
             <button class="btn btn-primary" id="lab-btn-present" onclick="markLabAttendance('present')">Mark
               Present</button>
             <button class="btn btn-outline" id="lab-btn-break" onclick="markLabAttendance('on_break')"
@@ -946,18 +958,8 @@
     async function loadLabAttendance() {
       try {
         const data = await api("GET", "/doctors/attendance/my-status");
-        await loadLabRoomOptions(data.room_id);
         renderLabBadge(data.status);
         renderOffDutyTimeLine('lab-off-duty-time-line', data.expected_off_duty_at);
-      } catch (e) { }
-    }
-
-    async function loadLabRoomOptions(selectedId) {
-      try {
-        const rooms = await api("GET", "/admin/rooms?for_picker=lab");
-        document.getElementById('lab-room-select').innerHTML =
-          '<option value="">No room</option>' +
-          rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.display || r.name || r.room_number}</option>`).join('');
       } catch (e) { }
     }
 
@@ -967,7 +969,6 @@
       const btnPresent = document.getElementById('lab-btn-present');
       const btnBreak = document.getElementById('lab-btn-break');
       const btnOffDuty = document.getElementById('lab-btn-offduty');
-      document.getElementById('lab-room-select').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       document.getElementById('lab-off-duty-time-line').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';
@@ -998,9 +999,7 @@
           expected_off_duty_at = await openOffDutyTimeModal();
           if (!expected_off_duty_at) return;
         }
-        const roomVal = document.getElementById('lab-room-select').value;
-        const room_id = roomVal ? parseInt(roomVal) : null;
-        await markAttendanceCommon(status, room_id, { expected_off_duty_at }, alreadyActive);
+        await markAttendanceCommon(status, null, { expected_off_duty_at }, alreadyActive);
         renderLabBadge(status);
         if (status === 'present' || status === 'on_break') {
           try {
@@ -1195,9 +1194,10 @@
             ${indicationLine}
             ${fastingLine}
             ${tubeLine}
-            ${mlcLine}
-            ${accessionLine}
-            <div style="margin-top:4px"><span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}" id="lp-status-${o.id}">${STATUS_LABEL[o.status] || o.status}</span></div>
+            <div class="lp-mlc-status-row">
+              <div class="lp-mlc-status-links">${mlcLine}${accessionLine}</div>
+              <span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}" id="lp-status-${o.id}">${STATUS_LABEL[o.status] || o.status}</span>
+            </div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
             ${actionHtml}

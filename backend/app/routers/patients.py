@@ -1074,6 +1074,30 @@ def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> 
         if not existing:
             return token
 
+def _apply_recent_vitals_if_available(db: Session, checkin, patient_id: int, hospital_id: int):
+    """If this same patient had vitals recorded anywhere in this hospital
+    within the last 4 hours, reuse that reading instead of sending them to
+    a nurse again — vitals that fresh are still valid for a same-day return,
+    a second doctor on the same visit, or a fresh walk-in token shortly
+    after another one. Applied at checkin creation, before it ever has a
+    chance to show up in the vitals queue."""
+    cutoff = now_ist_naive() - timedelta(hours=4)
+    recent = db.query(Checkin).filter(
+        Checkin.patient_id == patient_id,
+        Checkin.hospital_id == hospital_id,
+        Checkin.vitals_status == "done",
+        Checkin.vitals_recorded_at.isnot(None),
+        Checkin.vitals_recorded_at >= cutoff,
+    ).order_by(desc(Checkin.vitals_recorded_at)).first()
+    if recent:
+        checkin.vitals_data = recent.vitals_data
+        checkin.vitals_status = "done"
+        checkin.vitals_recorded_by = recent.vitals_recorded_by
+        checkin.vitals_recorded_at = recent.vitals_recorded_at
+        return True
+    return False
+
+
 @router.post("/{patient_id}/checkin", response_model=CheckinOut, status_code=201)
 def checkin_patient(
     patient_id: int,
@@ -1166,13 +1190,21 @@ def checkin_patient(
             token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
     db.refresh(checkin)
 
+    reused_vitals = _apply_recent_vitals_if_available(db, checkin, patient.id, current_doctor.hospital_id)
+    if reused_vitals:
+        db.commit()
+        db.refresh(checkin)
+
     log_action(
         db, current_doctor,
         action="patient_checked_in",
         target_type="patient",
         target_id=patient.id,
         target_label=f"{patient.name} ({patient.patient_uid})",
-        details=f"Token {token} → {doctor.title} {doctor.name} ({payload.issue_category})" + (f" · sent to {nurse.title} {nurse.name} for vitals" if nurse else "")
+        details=f"Token {token} → {doctor.title} {doctor.name} ({payload.issue_category})" + (
+            " · vitals reused from within the last 4 hours" if reused_vitals else
+            (f" · sent to {nurse.title} {nurse.name} for vitals" if nurse else "")
+        )
     )
 
     additional_tokens_out = []
@@ -1229,10 +1261,14 @@ def checkin_patient(
                     suffix_n += 100  # collision on the suffixed token — jump the suffix rather than issuing an unrelated token number
                     extra_token = f"{token}-{suffix_n}"
             db.refresh(extra_checkin)
+            extra_reused_vitals = _apply_recent_vitals_if_available(db, extra_checkin, patient.id, current_doctor.hospital_id)
+            if extra_reused_vitals:
+                db.commit()
+                db.refresh(extra_checkin)
             log_action(
                 db, current_doctor, action="patient_checked_in", target_type="patient", target_id=patient.id,
                 target_label=f"{patient.name} ({patient.patient_uid})",
-                details=f"Token {extra_token} → {extra_doctor.title} {extra_doctor.name} (same visit as {token})"
+                details=f"Token {extra_token} → {extra_doctor.title} {extra_doctor.name} (same visit as {token})" + (" · vitals reused from within the last 4 hours" if extra_reused_vitals else "")
             )
             additional_tokens_out.append({
                 "checkin_id": extra_checkin.id,
@@ -1478,6 +1514,7 @@ def todays_queue(
             "source": c.source,
             "booked_time": c.booked_time.isoformat() if c.booked_time else None,
             "vitals_status": c.vitals_status,
+            "up_next_skip": c.up_next_skip,
         })
 
     # Merge in paid portal appointments for today that haven't been checked
@@ -1512,10 +1549,36 @@ def todays_queue(
             "is_referral": False,
             "source": "online",
             "vitals_status": None,
+            "up_next_skip": False,
         })
 
     result.sort(key=lambda r: r.get("estimated_time") or r["created_at"])
     return result
+
+
+@router.post("/queue/{checkin_id}/skip-next")
+def skip_next_patient(
+    checkin_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Manually advance past this patient in the "up next" highlight — they
+    weren't present when called. Callable by the doctor or the assistant
+    covering them; either way it's the same flag on the same checkin, so
+    both views update together."""
+    if current_doctor.role.value not in ("doctor", "nurse", "assistant"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    checkin = db.query(Checkin).filter(
+        Checkin.id == checkin_id,
+        Checkin.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not checkin:
+        raise HTTPException(status_code=404, detail="Checkin not found")
+
+    checkin.up_next_skip = True
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/assistant-queue")
@@ -1610,10 +1673,7 @@ def reception_pending_payments(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    """Ambient box on the receptionist main screen — today's check-ins only,
-    with per-patient Consultation / Tests / Pharmacy buckets. A bucket is
-    omitted entirely if it doesn't apply to that patient."""
-    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+    if current_doctor.role.value not in ["receptionist", "pharmacy", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     today = ist_today()
@@ -1697,12 +1757,14 @@ def reception_pending_payments(
         # "Generate Bill" only re-enables when there's genuinely something
         # to add, not on every render.
         needs_regenerate = not c.is_finalized
+        invoice_generated_at = None
         if c.is_finalized and c.invoice_id:
             from app.routers.billing import gather_invoice_items
             current_items = gather_invoice_items(db, c)
             invoice = db.query(Invoice).filter(Invoice.id == c.invoice_id).first()
             billed_count = len(json.loads(invoice.items_json)) if invoice and invoice.items_json else 0
             needs_regenerate = len(current_items) > billed_count
+            invoice_generated_at = invoice.created_at.isoformat() if invoice and invoice.created_at else None
 
         result.append({
             "checkin_id": c.id,
@@ -1714,6 +1776,7 @@ def reception_pending_payments(
             "buckets": buckets,
             "is_finalized": c.is_finalized,
             "needs_regenerate": needs_regenerate,
+            "invoice_generated_at": invoice_generated_at,
             "visit_group_id": c.visit_group_id,
         })
 
@@ -2156,12 +2219,13 @@ def get_patient_documents(
             "has_invoice": bool(c.invoice_id)
         })
         if c.invoice_id:
+            invoice = db.query(Invoice).filter(Invoice.id == c.invoice_id).first()
             documents.append({
                 "type": "invoice",
                 "label": f"Invoice — Token {c.token_number}",
                 "ref_id": c.invoice_id,
                 "extra": None,
-                "date": c.created_at.isoformat() if c.created_at else None
+                "date": (invoice.generated_at.isoformat() if invoice and invoice.generated_at else c.created_at.isoformat() if c.created_at else None)
             })
 
     consultations = db.query(Consultation).filter(

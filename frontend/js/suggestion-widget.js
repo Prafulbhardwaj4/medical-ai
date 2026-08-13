@@ -38,56 +38,103 @@
     }
     rightGroup.insertBefore(trigger, rightGroup.firstChild);
 
-    const backdrop = document.createElement("div");
-    backdrop.className = "suggestion-backdrop";
-    backdrop.id = "suggestion-backdrop";
-
-    const panel = document.createElement("div");
-    panel.className = "suggestion-panel";
-    panel.id = "suggestion-panel";
-    panel.innerHTML = `
-      <div class="chat-panel-header">
-        <strong>Suggest something</strong>
-        <button class="chat-back-btn" onclick="window.__suggestionWidget.close()">&times;</button>
-      </div>
-      <div class="chat-panel-body" style="padding:16px">
-        <textarea id="suggestion-text" class="form-control" rows="4"
-          placeholder="What would make this easier to use?" style="resize:vertical;margin-bottom:10px"></textarea>
-        <button class="btn btn-primary" id="suggestion-send-btn" style="width:100%;margin-bottom:18px">Send</button>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <div style="font-size:12px;font-weight:600;color:var(--slate);text-transform:uppercase;letter-spacing:.03em">Your suggestions</div>
-          <select id="suggestion-mine-filter" class="form-control" style="width:auto;font-size:12px;padding:3px 6px" onchange="window.__suggestionWidget.filter(this.value)">
-            <option value="">All</option>
-            <option value="sent">Sent</option>
-            <option value="seen">Seen</option>
-            <option value="in_progress">In Progress</option>
-            <option value="rejected">Rejected</option>
-            <option value="completed">Completed</option>
-          </select>
+    // List view — the primary screen: navy header, "+ Suggest" top-right,
+    // suggestions listed in sequence below. Same visual language as the
+    // Super Admin suggestion detail modal (navy header bar, teal accents).
+    const listModal = document.createElement("div");
+    listModal.className = "modal-overlay";
+    listModal.id = "suggestion-list-modal";
+    listModal.innerHTML = `
+      <div class="modal" style="max-width:480px;max-height:85vh;padding:0;overflow:hidden;display:flex;flex-direction:column">
+        <div style="background:var(--navy);color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center">
+          <h2 style="margin:0;font-size:17px">Suggestions</h2>
+          <div style="display:flex;align-items:center;gap:10px">
+            <button id="suggestion-new-btn" style="background:var(--teal);border:none;color:#fff;padding:6px 12px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">+ Suggest</button>
+            <button id="suggestion-list-close-btn" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:26px;height:26px;border-radius:50%;font-size:16px;line-height:1;cursor:pointer">×</button>
+          </div>
         </div>
-        <div id="suggestion-mine-list"></div>
+        <div style="padding:16px 22px;overflow-y:auto;flex:1">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+            <select id="suggestion-mine-filter" class="form-control" style="width:auto;font-size:12px;padding:3px 6px" onchange="window.__suggestionWidget.filter(this.value)">
+              <option value="">All</option>
+              <option value="sent">Sent</option>
+              <option value="seen">Seen</option>
+              <option value="in_progress">In Progress</option>
+              <option value="rejected">Rejected</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+          <div id="suggestion-mine-list"></div>
+        </div>
       </div>
     `;
 
-    document.body.appendChild(backdrop);
-    document.body.appendChild(panel);
+    // Compose view — a separate modal reached via "+ Suggest", with its own
+    // Back button rather than living inline in the list.
+    const composeModal = document.createElement("div");
+    composeModal.className = "modal-overlay";
+    composeModal.id = "suggestion-compose-modal";
+    composeModal.innerHTML = `
+      <div class="modal" style="max-width:440px;padding:0;overflow:hidden">
+        <div style="background:var(--navy);color:#fff;padding:18px 22px;display:flex;align-items:center;gap:12px">
+          <button id="suggestion-back-btn" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">←</button>
+          <h2 style="margin:0;font-size:17px" id="suggestion-compose-title">New Suggestion</h2>
+        </div>
+        <div style="padding:20px 22px">
+          <textarea id="suggestion-text" class="form-control" rows="5"
+            placeholder="What would make this easier to use?" style="resize:vertical;margin-bottom:14px"></textarea>
+          <button class="btn btn-primary" id="suggestion-send-btn" style="width:100%;background:var(--teal);border-color:var(--teal)">Send</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(listModal);
+    document.body.appendChild(composeModal);
 
     trigger.addEventListener("click", open);
-    backdrop.addEventListener("click", close);
+    listModal.addEventListener("click", (e) => { if (e.target === listModal) close(); });
+    composeModal.addEventListener("click", (e) => { if (e.target === composeModal) closeCompose(); });
+    document.getElementById("suggestion-list-close-btn").addEventListener("click", close);
+    document.getElementById("suggestion-new-btn").addEventListener("click", () => openCompose());
+    document.getElementById("suggestion-back-btn").addEventListener("click", closeCompose);
     document.getElementById("suggestion-send-btn").addEventListener("click", send);
 
     window.__suggestionWidget = { open, close, edit, followUp, toggleThread, sendThreadReply, filter };
   }
 
   function open() {
-    document.getElementById("suggestion-panel").classList.add("open");
-    document.getElementById("suggestion-backdrop").classList.add("open");
+    document.getElementById("suggestion-list-modal").classList.add("open");
     loadMine();
   }
 
   function close() {
-    document.getElementById("suggestion-panel").classList.remove("open");
-    document.getElementById("suggestion-backdrop").classList.remove("open");
+    document.getElementById("suggestion-list-modal").classList.remove("open");
+  }
+
+  function openCompose(editingId) {
+    const textarea = document.getElementById("suggestion-text");
+    const btn = document.getElementById("suggestion-send-btn");
+    const title = document.getElementById("suggestion-compose-title");
+    if (editingId) {
+      const row = mineCache.find(s => s.id === editingId);
+      textarea.value = row ? row.message : "";
+      btn.textContent = "Save Edit";
+      btn.dataset.editingId = editingId;
+      title.textContent = "Edit Suggestion";
+    } else {
+      textarea.value = "";
+      btn.textContent = "Send";
+      delete btn.dataset.editingId;
+      title.textContent = "New Suggestion";
+    }
+    document.getElementById("suggestion-list-modal").classList.remove("open");
+    document.getElementById("suggestion-compose-modal").classList.add("open");
+    textarea.focus();
+  }
+
+  function closeCompose() {
+    document.getElementById("suggestion-compose-modal").classList.remove("open");
+    document.getElementById("suggestion-list-modal").classList.add("open");
   }
 
   async function send() {
@@ -108,6 +155,7 @@
         toast("Suggestion sent", "success");
       }
       textarea.value = "";
+      closeCompose();
       loadMine();
     } catch (e) {
       toast(e.message, "error");
@@ -157,19 +205,20 @@
       return;
     }
     const isTerminal = s => s.status === "completed" || s.status === "rejected";
+    const pillBtnStyle = "font-size:12px;padding:4px 10px;border-radius:20px;border:1px solid var(--teal);color:var(--teal);background:#fff;cursor:pointer";
     el.innerHTML = rows.map(s => `
-      <div style="padding:10px 0;border-bottom:1px solid var(--border)" id="sugg-row-${s.id}">
+      <div style="padding:12px;margin-bottom:10px;border:1px solid var(--border);border-radius:var(--radius-lg,10px)" id="sugg-row-${s.id}">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
           <span style="font-size:13px" id="sugg-text-${s.id}">${sanitize(s.message)}</span>
           <span class="badge ${STATUS_CLASS[s.status] || 'badge-grey'}" style="flex-shrink:0">${STATUS_LABEL[s.status] || s.status}</span>
         </div>
-        ${s.status === 'rejected' && s.rejection_reason ? `<div style="font-size:12px;color:var(--slate-light);margin-top:4px">${sanitize(s.rejection_reason)}</div>` : ''}
+        ${s.status === 'rejected' && s.rejection_reason ? `<div style="font-size:12px;color:var(--slate-light);margin-top:4px;background:#fef2f2;border-radius:6px;padding:6px 8px">${sanitize(s.rejection_reason)}</div>` : ''}
         ${isTerminal(s) ? '' : `
-          <div style="margin-top:6px;display:flex;gap:12px">
-            <a href="javascript:void(0)" style="font-size:12px" onclick="window.__suggestionWidget.edit(${s.id})">Edit</a>
-            <a href="javascript:void(0)" style="font-size:12px" onclick="window.__suggestionWidget.toggleThread(${s.id})">💬 Conversation</a>
-            ${s.can_follow_up ? `<a href="javascript:void(0)" style="font-size:12px" onclick="window.__suggestionWidget.followUp(${s.id})">${s.follow_up_requested_at ? 'Follow up again' : 'Follow Up'}</a>` : ''}
-            ${s.follow_up_requested_at ? `<span style="font-size:12px;color:var(--slate-light)">Followed up ✓</span>` : ''}
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+            <button style="${pillBtnStyle}" onclick="window.__suggestionWidget.edit(${s.id})">Edit</button>
+            <button style="${pillBtnStyle}" onclick="window.__suggestionWidget.toggleThread(${s.id})">💬 Conversation</button>
+            ${s.can_follow_up ? `<button style="${pillBtnStyle}" onclick="window.__suggestionWidget.followUp(${s.id})">${s.follow_up_requested_at ? 'Follow up again' : 'Follow Up'}</button>` : ''}
+            ${s.follow_up_requested_at ? `<span style="font-size:12px;color:var(--slate-light);align-self:center">Followed up ✓</span>` : ''}
           </div>
           <div id="sugg-thread-${s.id}" style="display:none;margin-top:8px"></div>
         `}
@@ -184,13 +233,7 @@
       toast("This one is already in progress and cannot be changed — you can send another suggestion.", "error");
       return;
     }
-    const textarea = document.getElementById("suggestion-text");
-    const btn = document.getElementById("suggestion-send-btn");
-    textarea.value = row.message;
-    textarea.focus();
-    btn.textContent = "Save Edit";
-    btn.dataset.editingId = id;
-    document.getElementById("suggestion-panel").scrollTop = 0;
+    openCompose(id);
   }
 
   async function followUp(id) {
