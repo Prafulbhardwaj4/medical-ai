@@ -1817,24 +1817,18 @@ tbody tr:hover {
     display: block !important;
     margin-bottom: 20px;
   }
-
-  /* receptionist.html's four desktop tabs (home/patients/portal/availability)
-     are switched via showRecDesktopTab() toggling a "d-active" class — but
-     no CSS ever consumed that class, so the rule above made all four always
-     visible at once regardless of the selected tab. Scoped by ID (not the
-     shared .mobile-section class) so lab.html/dashboard.html, which rely on
-     .mobile-section staying always-visible on desktop, are unaffected. */
-  #section-home,
-  #section-patients,
-  #section-portal,
-  #section-availability {
+  
+  #page-receptionist #section-home,
+  #page-receptionist #section-patients,
+  #page-receptionist #section-portal,
+  #page-receptionist #section-availability {
     display: none !important;
   }
 
-  #section-home.d-active,
-  #section-patients.d-active,
-  #section-portal.d-active,
-  #section-availability.d-active {
+  #page-receptionist #section-home.d-active,
+  #page-receptionist #section-patients.d-active,
+  #page-receptionist #section-portal.d-active,
+  #page-receptionist #section-availability.d-active {
     display: block !important;
   }
 }
