@@ -82,12 +82,27 @@ def vitals_queue(
     patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
     doctors = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_([c.doctor_id for c in checkins])).all()}
 
+    # One patient seeing several doctors on the same visit (visit_group_id)
+    # is one person standing in front of the nurse once — collapse those
+    # sibling checkins into a single queue entry rather than showing the
+    # same patient two or three times. Recording vitals against the entry's
+    # checkin_id already fans out to every sibling (see submit_vitals below).
+    seen_groups = set()
     result = []
     for c in checkins:
+        group_key = c.visit_group_id or c.id
+        if group_key in seen_groups:
+            continue
+        seen_groups.add(group_key)
+
         p = patients.get(c.patient_id)
         if not p:
             continue
+
+        group_checkins = [x for x in checkins if (x.visit_group_id or x.id) == group_key]
+        doctor_names = [f"{doctors[x.doctor_id].title} {doctors[x.doctor_id].name}" for x in group_checkins if x.doctor_id in doctors]
         d = doctors.get(c.doctor_id)
+
         result.append({
             "checkin_id": c.id,
             "patient_id": p.id,
@@ -99,7 +114,7 @@ def vitals_queue(
             "token_number": c.token_number,
             "issue_category": c.issue_category,
             "doctor_id": d.id if d else None,
-            "doctor_name": f"{d.title} {d.name}" if d else "—",
+            "doctor_name": ", ".join(doctor_names) if doctor_names else "—",
             "created_at": c.created_at.isoformat(),
             "is_recheck": c.vitals_status == "sent_back",
             "recheck_request": c.vitals_recheck_request,

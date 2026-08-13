@@ -511,8 +511,26 @@ def get_history(
         .all()
     )
 
+    def _med_key(m):
+        return "|".join([
+            (m.get("name") or "").strip().lower(),
+            (m.get("brand_name") or "").strip().lower(),
+            (m.get("dosage") or "").strip().lower(),
+            (m.get("frequency") or "").strip().lower(),
+            (m.get("duration") or "").strip().lower(),
+        ])
+
     result = []
     for c, doctor in consultations:
+        medicine_statuses = {}
+        orders = db.query(MedicineOrder).filter(MedicineOrder.consultation_id == c.id).all()
+        for o in orders:
+            key = _med_key({
+                "name": o.medicine_name, "brand_name": o.brand_name,
+                "dosage": o.dosage, "frequency": o.frequency, "duration": o.duration,
+            })
+            medicine_statuses[key] = o.status
+
         item = ConsultationHistoryItem(
             id=c.id,
             token_number=c.token_number,
@@ -526,6 +544,7 @@ def get_history(
             whatsapp_status=c.whatsapp_status,
             vitals=c.vitals,
             ordered_tests=c.ordered_tests,
+            medicine_statuses=medicine_statuses,
             doctor_name=f"{doctor.title} {doctor.name}" if doctor else "—",
             doctor_specialization=doctor.specialization if doctor else None
         )

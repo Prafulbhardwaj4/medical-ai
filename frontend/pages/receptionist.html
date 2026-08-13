@@ -652,7 +652,7 @@
 
           <!-- Bills Modal -->
           <div class="modal-overlay" id="modal-bills">
-            <div class="modal" style="max-width:560px;max-height:85vh;display:flex;flex-direction:column">
+            <div class="modal" style="max-width:720px;width:92vw;max-height:88vh;display:flex;flex-direction:column">
               <div class="modal-header">
                 <h2>Today's Bills</h2><button class="modal-close" onclick="closeModal('modal-bills')">×</button>
               </div>
@@ -1647,7 +1647,7 @@
         // into ONE row per patient, with a doctors[] breakdown — each entry
         // carries its own checkin_id/doctor_name/buckets, so each doctor's
         // bill on the same visit can still be generated independently.
-        const doctorBlocks = (r.doctors || []).map(d => {
+        const doctorBlocks = (r.doctors || []).map((d, dIdx) => {
           const b = d.buckets || {};
           const parts = [];
           if (b.consultation) parts.push(b.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
@@ -1655,10 +1655,11 @@
           if (b.charges) parts.push(b.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${b.charges.pending_total} pending`);
           if (b.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[b.pharmacy.status] || b.pharmacy.status}`);
           return `
-            <div style="padding:8px 0;border-top:1px solid var(--border)">
+            <div style="padding:8px 0;${dIdx > 0 ? 'border-top:1px solid var(--border)' : ''}">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
                 <div>
                   ${d.doctor_name ? `<span style="font-size:12.5px;font-weight:600;color:var(--slate)">${d.doctor_name}</span>` : ''}
+                  ${d.visit_time ? `<span style="font-size:11.5px;color:var(--slate-light);margin-left:6px">${d.is_online ? 'Booked for' : 'Checked in'} ${new Date(d.visit_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}</span>` : ''}
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="confirmGenerateBill(${d.checkin_id}, this)" ${d.needs_regenerate ? '' : 'disabled title="Nothing new to bill since it was generated"'}>🧾 Generate Bill</button>
               </div>

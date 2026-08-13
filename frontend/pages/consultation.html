@@ -248,7 +248,8 @@
 
       <a href="dashboard.html" class="mobile-back-link" id="mobile-back-link">← Back to Patient</a>
 
-      <!-- Steps -->
+      <!-- Steps (hidden entirely in reopen mode — Continue Consultation is its own
+           section, not "step 2 of 4"; see checkReopenMode) -->
       <div class="steps" id="steps">
         <div class="step active" id="step-1">
           <div class="step-num">1</div> Record
@@ -299,13 +300,8 @@
             <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)">No vitals recorded for this visit.</div>
           </div>
 
-          <div class="context-card" id="refer-doctor-card">
-            <div class="context-card-title">Refer to Doctor</div>
-            <div class="refer-card-body">
-              <p style="margin:0;color:var(--slate);font-size:13px">Send this patient to another doctor after this
-                consultation.</p>
-              <button class="btn btn-outline" onclick="openReferModal()">Refer to Doctor</button>
-            </div>
+          <div class="context-card" id="refer-doctor-card" style="display:flex;align-items:center;justify-content:center">
+            <button class="btn btn-outline" style="border-color:var(--teal);color:var(--teal)" onclick="openReferModal()">↪ Refer to Doctor</button>
           </div>
         </div>
 
@@ -355,8 +351,8 @@
           ↩ Editing today's confirmed consultation for this token — no new recording, no new token. Add/change medicines, order additional tests, or update advice below, then save.
         </div>
         <div class="card-header">
-          <h2>Review & Edit Prescription</h2>
-          <span class="badge badge-teal">AI Structured</span>
+          <h2 id="panel-2-title">Review & Edit Prescription</h2>
+          <span class="badge badge-teal" id="panel-2-ai-badge">AI Structured</span>
         </div>
 
         <div class="section-block">
@@ -427,7 +423,7 @@
         </div>
 
         <div style="display:flex;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:10px">
-          <button class="btn btn-outline" onclick="goStep(1)">← Back</button>
+          <button class="btn btn-outline" id="panel-2-back-btn" onclick="isReopenMode ? goBack() : goStep(1)">← Back</button>
           <button class="btn btn-navy btn-lg" id="confirm-btn" onclick="doConfirm()">Confirm & Generate PDF →</button>
         </div>
       </div>
@@ -461,19 +457,24 @@
       </div>
 
       <div id="refer-modal" class="modal">
-        <div class="modal-content">
-          <h3>Refer to Doctor</h3>
-          <div class="form-group">
-            <label class="form-label">Referring to</label>
-            <select class="form-control" id="refer-doctor-select"></select>
+        <div class="modal-content" style="max-width:440px;padding:0;overflow:hidden">
+          <div style="background:var(--navy);color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center">
+            <h3 style="margin:0;font-size:17px">↪ Refer to Doctor</h3>
+            <button onclick="closeReferModal()" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:26px;height:26px;border-radius:50%;font-size:16px;line-height:1;cursor:pointer">×</button>
           </div>
-          <div class="form-group">
-            <label class="form-label">Note for the receiving doctor</label>
-            <textarea class="form-control" id="refer-note" rows="2" placeholder="Reason for referral"></textarea>
-          </div>
-          <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px">
-            <button class="btn btn-outline" onclick="closeReferModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="submitReferral()">Send Referral</button>
+          <div style="padding:20px 22px">
+            <div class="form-group">
+              <label class="form-label">Referring to</label>
+              <select class="form-control" id="refer-doctor-select"></select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Note for the receiving doctor</label>
+              <textarea class="form-control" id="refer-note" rows="3" placeholder="Reason for referral"></textarea>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+              <button class="btn btn-outline" onclick="closeReferModal()">Cancel</button>
+              <button class="btn btn-primary" style="background:var(--teal);border-color:var(--teal)" onclick="submitReferral()">Send Referral</button>
+            </div>
           </div>
         </div>
       </div>
@@ -930,13 +931,23 @@
     }
 
     // ── Medicine rows ───────────────────────────────────
+    function _medRowKey(m) {
+      return [m.name, m.brand_name, m.dosage, m.frequency, m.duration]
+        .map(v => (v || "").trim().toLowerCase()).join("|");
+    }
+
+    let reopenMedicineStatuses = {};  // populated in checkReopenMode — composite key -> "advised"/"paid"/"dispensed"/"cancelled"
+
     function renderMedRows(meds) {
       const wrap = document.getElementById("med-rows");
       wrap.innerHTML = "";
-      (meds || []).forEach(m => addMedRow(m));
+      (meds || []).forEach(m => {
+        const status = reopenMedicineStatuses[_medRowKey(m)];
+        addMedRow(m, status === "dispensed");
+      });
     }
 
-    function addMedRow(m = {}) {
+    function addMedRow(m = {}, isDispensed = false) {
       const wrap = document.getElementById("med-rows");
       const div = document.createElement("div");
       div.className = "med-row";
@@ -948,35 +959,37 @@
       div.dataset.timesPerDay = (m.times_per_day ?? '') === null ? '' : (m.times_per_day ?? '');
       div.dataset.durationDays = (m.duration_days ?? '') === null ? '' : (m.duration_days ?? '');
       const schedule = m.schedule || "controlled";
+      const dis = isDispensed ? "disabled" : "";
       div.innerHTML = `
+        ${isDispensed ? `<div style="grid-column:1/-1;font-size:11.5px;color:var(--teal);font-weight:600;margin-bottom:2px">✓ Already dispensed — locked (can't be edited or removed; add a new line instead if this needs to change)</div>` : ''}
         <div class="form-group med-name" style="margin:0">
           <label class="form-label">Generic Name</label>
-          <input class="form-control" value="${m.name || ""}" placeholder="Paracetamol" />
+          <input class="form-control" value="${m.name || ""}" placeholder="Paracetamol" ${dis} />
         </div>
         <div class="form-group med-brand" style="margin:0">
           <label class="form-label">Brand Name</label>
-          <input class="form-control" value="${m.brand_name || ""}" placeholder="Crocin (optional)" />
+          <input class="form-control" value="${m.brand_name || ""}" placeholder="Crocin (optional)" ${dis} />
         </div>
         <div class="form-group med-dosage" style="margin:0">
           <label class="form-label">Dosage</label>
-          <input class="form-control" value="${m.dosage || ""}" placeholder="500mg" />
+          <input class="form-control" value="${m.dosage || ""}" placeholder="500mg" ${dis} />
         </div>
         <div class="form-group med-freq" style="margin:0">
           <label class="form-label">Frequency</label>
-          <input class="form-control" value="${m.frequency || ""}" placeholder="Twice daily" />
+          <input class="form-control" value="${m.frequency || ""}" placeholder="Twice daily" ${dis} />
         </div>
         <div class="form-group med-dur" style="margin:0">
           <label class="form-label">Duration</label>
-          <input class="form-control" value="${m.duration || ""}" placeholder="5 days" />
+          <input class="form-control" value="${m.duration || ""}" placeholder="5 days" ${dis} />
         </div>
         <div class="form-group med-schedule" style="margin:0">
           <label class="form-label">Schedule</label>
-          <select class="form-control">
+          <select class="form-control" ${dis}>
             <option value="otc" ${schedule === "otc" ? "selected" : ""}>OTC</option>
             <option value="controlled" ${schedule === "controlled" ? "selected" : ""}>Controlled</option>
           </select>
         </div>
-        <button class="btn-remove-med" onclick="this.parentElement.remove()" title="Remove">✕</button>
+        ${isDispensed ? '' : `<button class="btn-remove-med" onclick="this.parentElement.remove()" title="Remove">✕</button>`}
       `;
       wrap.appendChild(div);
     }
@@ -1278,14 +1291,25 @@
       renderTestChips();
     }
 
+    const COMPLETED_TEST_STATUSES = new Set(["result_entered", "verified_released"]);
+
     function renderTestChips() {
       const chipsEl = document.getElementById('test-chips');
-      chipsEl.innerHTML = selectedTests.map(t => `
-        <span class="badge badge-teal" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
-          ${t.test_name} — Rs.${t.price}
-          <span onclick="removeTest(${t.id})" style="cursor:pointer;font-weight:700">×</span>
-        </span>
-      `).join('');
+      chipsEl.innerHTML = selectedTests.map(t => {
+        const isDone = COMPLETED_TEST_STATUSES.has(t.status);
+        if (isDone) {
+          return `
+            <span class="badge badge-grey" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
+              ✓ ${t.test_name} — Already Tested
+              <a href="javascript:void(0)" onclick="openReportsModal(patientId)" style="color:var(--teal);font-weight:600">📋 Reports</a>
+            </span>`;
+        }
+        return `
+          <span class="badge badge-teal" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
+            ${t.test_name} — Rs.${t.price}
+            <span onclick="removeTest(${t.id})" style="cursor:pointer;font-weight:700">×</span>
+          </span>`;
+      }).join('');
 
       const totalEl = document.getElementById('test-total-fee');
       const total = selectedTests.reduce((sum, t) => sum + (t.price || 0), 0);
@@ -1332,12 +1356,17 @@
           followup: match.followup || "",
           nurse_instructions: "",
         };
+        reopenMedicineStatuses = match.medicine_statuses || {};
+
         const orderedTests = safeJSON(match.ordered_tests, []) || [];
-        selectedTests = orderedTests.map(t => ({ id: t.test_id, test_name: t.test_name, price: t.price, priority: 'routine' }));
+        selectedTests = orderedTests.map(t => ({ id: t.test_id, test_name: t.test_name, price: t.price, priority: 'routine', status: t.status }));
         renderTestChips();
 
         isReopenMode = true;
         document.getElementById('reopen-banner').style.display = 'block';
+        document.getElementById('steps').style.display = 'none';  // this is its own section, not a step in the stepper
+        document.getElementById('panel-2-title').textContent = 'Continue Consultation';
+        document.getElementById('panel-2-ai-badge').style.display = 'none';
         const confirmBtn = document.getElementById('confirm-btn');
         if (confirmBtn) confirmBtn.textContent = 'Save Changes';
 

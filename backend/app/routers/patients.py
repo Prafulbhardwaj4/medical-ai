@@ -1766,6 +1766,12 @@ def reception_pending_payments(
             needs_regenerate = len(current_items) > billed_count
             invoice_generated_at = invoice.created_at.isoformat() if invoice and invoice.created_at else None
 
+        # Walk-ins: check-in time. Online-booked: their consultation slot
+        # time is more useful to reception than when the checkin row itself
+        # was created (which for an auto-queued online patient is roughly
+        # "whenever the appointment day started", not the actual visit time).
+        visit_time = (c.booked_time or c.created_at) if c.source == "online" else c.created_at
+
         result.append({
             "checkin_id": c.id,
             "patient_id": patient.id,
@@ -1777,6 +1783,8 @@ def reception_pending_payments(
             "is_finalized": c.is_finalized,
             "needs_regenerate": needs_regenerate,
             "invoice_generated_at": invoice_generated_at,
+            "visit_time": visit_time.isoformat() if visit_time else None,
+            "is_online": c.source == "online",
             "visit_group_id": c.visit_group_id,
         })
 
@@ -1805,6 +1813,9 @@ def reception_pending_payments(
             "doctor_name": row["doctor_name"],
             "buckets": row["buckets"],
             "needs_regenerate": row["needs_regenerate"],
+            "invoice_generated_at": row["invoice_generated_at"],
+            "visit_time": row["visit_time"],
+            "is_online": row["is_online"],
         })
 
     return [grouped[k] for k in order]

@@ -68,6 +68,7 @@ class ConsultationHistoryItem(BaseModel):
     doctor_specialization: Optional[str] = None
     vitals: Optional[str] = None
     ordered_tests: Optional[str] = None
+    medicine_statuses: Optional[Dict[str, str]] = {}  # composite-key -> "advised"/"paid"/"dispensed"/"cancelled" — lets the reopen flow show dispensed medicines read-only
 
     class Config:
         from_attributes = True
