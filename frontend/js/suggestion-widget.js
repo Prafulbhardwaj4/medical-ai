@@ -45,7 +45,7 @@
     listModal.className = "modal-overlay";
     listModal.id = "suggestion-list-modal";
     listModal.innerHTML = `
-      <div class="modal" style="max-width:480px;max-height:85vh;padding:0;overflow:hidden;display:flex;flex-direction:column">
+      <div class="modal" style="max-width:600px;max-height:85vh;padding:0;overflow:hidden;display:flex;flex-direction:column">
         <div style="background:var(--navy);color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center">
           <h2 style="margin:0;font-size:17px">Suggestions</h2>
           <div style="display:flex;align-items:center;gap:10px">
@@ -75,7 +75,7 @@
     composeModal.className = "modal-overlay";
     composeModal.id = "suggestion-compose-modal";
     composeModal.innerHTML = `
-      <div class="modal" style="max-width:440px;padding:0;overflow:hidden">
+      <div class="modal" style="max-width:520px;padding:0;overflow:hidden">
         <div style="background:var(--navy);color:#fff;padding:18px 22px;display:flex;align-items:center;gap:12px">
           <button id="suggestion-back-btn" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">←</button>
           <h2 style="margin:0;font-size:17px" id="suggestion-compose-title">New Suggestion</h2>
