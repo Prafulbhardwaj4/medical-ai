@@ -203,6 +203,8 @@
           <div class="card att-card" id="attendance-card">
             <div class="card-header" style="margin-bottom:0" id="att-card-header">
               <h2>Today's Status</h2>
+              <button class="btn btn-primary btn-sm" id="btn-mark-present" onclick="markAttendance('present')">Mark
+                Present</button>
             </div>
             <div class="staff-att-status">
               <span class="badge badge-grey" id="attendance-badge">Not marked</span>
@@ -212,8 +214,6 @@
               <div id="off-duty-time-line" style="display:none;font-size:13px;color:var(--slate)"></div>
               <select class="form-control" id="room-select" data-no-search style="display:none"
                 onchange="markAttendance(currentAttendanceStatus)"></select>
-              <button class="btn btn-primary btn-sm" id="btn-mark-present" onclick="markAttendance('present')">Mark
-                Present</button>
               <div id="location-toggle" style="display:none;gap:6px;align-items:center">
                 <button type="button" class="btn btn-outline btn-sm" id="loc-toggle-btn"
                   onclick="toggleDoctorLocation()">In Cabin</button>
