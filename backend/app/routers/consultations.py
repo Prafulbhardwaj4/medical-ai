@@ -1203,6 +1203,24 @@ def update_consultation(
             all_ids = list(old_test_ids) + [t.id for t in test_items]
             consultation.recommended_test_ids = json.dumps(all_ids)
 
+    # A same-day return can happen any number of times before the day ends,
+    # and everything (medicines, tests) accumulates correctly in the DB by
+    # this point — but the actual prescription PDF was never regenerated on
+    # this path (only the original confirm_consultation ever called this),
+    # so it stayed frozen at whatever it looked like after the very first
+    # confirmation. Regenerate it here too, reusing the same token/hash
+    # already assigned — no new token, no new prescription document identity.
+    if was_confirmed and changed_fields and consultation.token_number:
+        patient_for_pdf = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
+        try:
+            pdf_path = generate_prescription_pdf(
+                current_doctor, patient_for_pdf, consultation,
+                consultation.token_number, consultation.verify_hash or ""
+            )
+            consultation.pdf_path = pdf_path
+        except Exception:
+            pass  # don't fail the whole save over a PDF regen hiccup — the DB record (the source of truth) is already correctly updated either way
+
     db.commit()
     db.refresh(consultation)
 

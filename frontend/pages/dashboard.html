@@ -248,14 +248,17 @@
         <div class="mobile-section active" id="section-home">
           <div class="card" id="up-next-card-doctor" style="display:none;margin-bottom:16px;background:var(--smoke)">
             <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px">UP NEXT</div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <span id="up-next-vitals-doctor"></span>
-              <strong id="up-next-name-doctor"></strong>
-            </div>
-            <div style="font-size:13px;color:var(--slate);margin-top:2px" id="up-next-uid-doctor"></div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">
-              <span style="font-size:13px;color:var(--slate)" id="up-next-phone-doctor"></span>
-              <span id="up-next-consult-doctor"></span>
+            <p id="up-next-empty-msg-doctor" style="display:none;margin:0;color:var(--slate);font-size:14px">No next patient currently.</p>
+            <div id="up-next-content-doctor">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <strong id="up-next-name-doctor"></strong>
+                <span id="up-next-vitals-doctor"></span>
+              </div>
+              <div style="font-size:13px;color:var(--slate);margin-top:2px" id="up-next-uid-doctor"></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">
+                <span style="font-size:13px;color:var(--slate)" id="up-next-phone-doctor"></span>
+                <span id="up-next-consult-doctor"></span>
+              </div>
             </div>
           </div>
 
@@ -1003,8 +1006,15 @@
         }
         return true;
       });
-      if (!next) { card.style.display = 'none'; return; }
+      if (!next) {
+        card.style.display = '';
+        document.getElementById('up-next-content-doctor').style.display = 'none';
+        document.getElementById('up-next-empty-msg-doctor').style.display = 'block';
+        return;
+      }
       card.style.display = '';
+      document.getElementById('up-next-content-doctor').style.display = 'block';
+      document.getElementById('up-next-empty-msg-doctor').style.display = 'none';
       document.getElementById('up-next-name-doctor').textContent = next.patient_name;
       document.getElementById('up-next-uid-doctor').textContent = next.patient_uid || '';
       document.getElementById('up-next-phone-doctor').textContent = next.patient_phone || '';

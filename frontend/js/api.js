@@ -533,6 +533,42 @@ function promptOffDutyTime() {
   });
 }
 
+function _parseRangeBounds(rangeStr) {
+  if (!rangeStr) return null;
+  const cleaned = String(rangeStr).replace(/,/g, "").trim();
+  const lowTxt = cleaned.toLowerCase();
+  if (cleaned.startsWith("<") || lowTxt.includes("less") || lowTxt.includes("upto") || lowTxt.includes("up to")) {
+    const nums = cleaned.match(/\d+\.?\d*/g);
+    return nums ? [null, parseFloat(nums[0])] : null;
+  }
+  if (cleaned.startsWith(">") || lowTxt.includes("greater") || lowTxt.includes("above")) {
+    const nums = cleaned.match(/\d+\.?\d*/g);
+    return nums ? [parseFloat(nums[0]), null] : null;
+  }
+  // Split only on a hyphen directly following a digit, so "0.6-1.1" splits
+  // into two positive bounds instead of "-1.1" being read as negative.
+  const parts = cleaned.split(/(?<=\d)\s*-\s*/);
+  if (parts.length === 2) {
+    const lowNums = parts[0].match(/\d+\.?\d*/g);
+    const highNums = parts[1].match(/\d+\.?\d*/g);
+    if (lowNums && highNums) return [parseFloat(lowNums[0]), parseFloat(highNums[0])];
+  }
+  return null;
+}
+
+function _isOutOfRange(valueStr, rangeStr) {
+  const bounds = _parseRangeBounds(rangeStr);
+  if (!bounds || !valueStr) return false;
+  const nums = String(valueStr).replace(/,/g, "").match(/\d+\.?\d*/g);
+  if (!nums) return false;
+  const val = parseFloat(nums[0]);
+  if (isNaN(val)) return false;
+  const [low, high] = bounds;
+  if (low !== null && val < low) return true;
+  if (high !== null && val > high) return true;
+  return false;
+}
+
 async function openReportsModal(patientId) {
   if (!patientId) {
     toast("Still loading this patient — try again in a moment.", "info");
@@ -589,14 +625,19 @@ async function openReportsModal(patientId) {
                     </tr>
                   </thead>
                   <tbody>
-                    ${t.results.map(row => `
+                    ${t.results.map(row => {
+                      const out = _isOutOfRange(row.value, row.range);
+                      const valueColor = out ? "#ef4444" : (row.value ? "#065f46" : "inherit");
+                      const valueWeight = out ? "700" : "600";
+                      return `
                       <tr style="border-top:1px solid var(--border)">
                         <td style="padding:5px 8px 5px 0">${row.name}</td>
-                        <td style="padding:5px 8px;font-weight:600">${row.value}</td>
+                        <td style="padding:5px 8px;font-weight:${valueWeight};color:${valueColor}">${row.value}</td>
                         <td style="padding:5px 8px;color:var(--slate)">${row.unit || '—'}</td>
                         <td style="padding:5px 0 5px 8px;color:var(--slate)">${row.range || '—'}</td>
                       </tr>
-                    `).join('')}
+                    `;
+                    }).join('')}
                   </tbody>
                 </table>
               ` : `<p style="font-size:13px;color:var(--slate-light)">No values recorded.</p>`}

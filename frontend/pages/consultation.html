@@ -268,14 +268,31 @@
         </div>
       </div>
 
+      <!-- Always visible regardless of which panel/step is active (fresh
+           recording OR Continue Consultation reopen mode) — this used to
+           live inside #panel-1, which goStep(2) hides entirely, so Vitals,
+           Refer to Doctor, and Reports were all unreachable from reopen mode. -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <p id="patient-label" style="margin:0">Loading patient…</p>
+          <button class="btn btn-outline" onclick="openReportsModal(patientId)">📋 Reports</button>
+        </div>
+        <div class="consult-context-grid">
+          <div id="nurse-vitals-wrap" class="context-card blue">
+            <div class="context-card-title">Vitals Recorded by Nurse</div>
+            <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)">No vitals recorded for this visit.</div>
+          </div>
+
+          <div class="context-card" id="refer-doctor-card" style="display:flex;align-items:center;justify-content:center">
+            <button class="btn btn-outline" style="border-color:var(--teal);color:var(--teal)" onclick="openReferModal()">↪ Refer to Doctor</button>
+          </div>
+        </div>
+      </div>
+
       <!-- STEP 1: Record -->
       <div id="panel-1" class="card">
         <div class="card-header">
-          <div>
-            <h2>Record Consultation</h2>
-            <p id="patient-label" style="margin-top:4px">Loading patient…</p>
-          </div>
-          <button class="btn btn-outline" onclick="openReportsModal(patientId)">📋 Reports</button>
+          <h2>Record Consultation</h2>
         </div>
 
         <div id="last-visit-wrap"
@@ -292,17 +309,6 @@
               placeholder="Search past visits by diagnosis, doctor, or date…" oninput="filterPastVisits()" />
           </div>
           <div id="past-visits-list"></div>
-        </div>
-
-        <div class="consult-context-grid">
-          <div id="nurse-vitals-wrap" class="context-card blue">
-            <div class="context-card-title">Vitals Recorded by Nurse</div>
-            <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)">No vitals recorded for this visit.</div>
-          </div>
-
-          <div class="context-card" id="refer-doctor-card" style="display:flex;align-items:center;justify-content:center">
-            <button class="btn btn-outline" style="border-color:var(--teal);color:var(--teal)" onclick="openReferModal()">↪ Refer to Doctor</button>
-          </div>
         </div>
 
         <div id="post-consult-wrap"

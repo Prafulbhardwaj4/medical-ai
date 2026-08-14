@@ -184,7 +184,8 @@
 
         <div class="card" id="up-next-card" style="display:none;margin-bottom:16px;background:var(--smoke)">
           <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:8px">UP NEXT</div>
-          <div style="display:flex;justify-content:space-between;gap:12px">
+          <p id="up-next-empty-msg" style="display:none;margin:0;color:var(--slate);font-size:14px">No next patient currently.</p>
+          <div id="up-next-content" style="display:flex;justify-content:space-between;gap:12px">
             <div>
               <div style="font-size:15px"><strong id="up-next-name"></strong></div>
               <div style="font-size:13px;color:var(--slate);margin-top:2px" id="up-next-uid"></div>
@@ -575,16 +576,21 @@
       const nextPatient = [...walkinAll, ...onlineAll]
         .filter(v => !v.is_consulted && !v.up_next_skip)
         .sort((a, b) => new Date(a.created_at || a.booked_time) - new Date(b.created_at || b.booked_time))[0];
+      upNextCard.style.display = '';  // card itself always stays, per spec — only its inner content toggles
       if (nextPatient) {
-        upNextCard.style.display = '';
+        document.getElementById('up-next-empty-msg').style.display = 'none';
+        document.getElementById('up-next-content').style.display = 'flex';
         document.getElementById('up-next-name').textContent = nextPatient.patient_name;
         document.getElementById('up-next-uid').textContent = nextPatient.patient_uid || '';
         document.getElementById('up-next-phone').textContent = nextPatient.phone || '';
         document.getElementById('up-next-vitals').innerHTML = vitalsCellHtml(nextPatient);
         document.getElementById('up-next-type').textContent = nextPatient.source === 'online' ? 'Online Appointment' : 'Walk-in';
         document.getElementById('up-next-btn').dataset.checkinId = nextPatient.checkin_id;
+        document.getElementById('up-next-btn').style.display = '';
       } else {
-        upNextCard.style.display = 'none';
+        document.getElementById('up-next-content').style.display = 'none';
+        document.getElementById('up-next-empty-msg').style.display = 'block';
+        document.getElementById('up-next-btn').style.display = 'none';
       }
     }
 
