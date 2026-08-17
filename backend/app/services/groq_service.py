@@ -87,7 +87,8 @@ async def structure_transcript(transcript: str, patient_history: str = "") -> di
             {"role": "user", "content": user_message}
         ],
         "temperature": 0.1,
-        "max_tokens": 1000
+        "max_tokens": 4000,
+        "reasoning_effort": "low"
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
