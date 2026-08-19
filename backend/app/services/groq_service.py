@@ -153,7 +153,7 @@ async def extract_medicines(raw_text: str) -> list:
     }
 
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
         "messages": [
             {"role": "system", "content": MEDICINE_EXTRACTION_PROMPT},
             {"role": "user", "content": f"Source text:\n{truncated}"}
@@ -231,7 +231,7 @@ async def match_tests_to_catalog(raw_terms: list, catalog_names: list) -> list:
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.1,
         "max_tokens": 500
@@ -296,7 +296,7 @@ async def extract_tests(raw_text: str) -> list:
     }
 
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
         "messages": [
             {"role": "system", "content": TEST_EXTRACTION_PROMPT},
             {"role": "user", "content": f"Source text:\n{truncated}"}
