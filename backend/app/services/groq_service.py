@@ -144,8 +144,14 @@ Rules:
 
 async def extract_medicines(raw_text: str) -> list:
     """Send raw extracted text (from PDF/Excel) to Groq and return a structured medicine list."""
+    import asyncio
+    import re
 
-    truncated = raw_text[:15000]
+    # Shrunk from 15000 — a single call this large can eat the entire
+    # per-minute token budget on the current account tier by itself,
+    # starving anything else (like a live consultation) running the same
+    # minute. Catalog rows are short; this still covers a large file.
+    truncated = raw_text[:8000]
 
     headers = {
         "Authorization": f"Bearer {settings.GROQ_API_KEY}",
@@ -159,11 +165,21 @@ async def extract_medicines(raw_text: str) -> list:
             {"role": "user", "content": f"Source text:\n{truncated}"}
         ],
         "temperature": 0.1,
-        "max_tokens": 4000
+        "max_tokens": 2000,
+        "reasoning_effort": "low"
     }
 
     async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(GROQ_API_URL, headers=headers, json=payload)
+        response = None
+        for attempt in range(3):
+            response = await client.post(GROQ_API_URL, headers=headers, json=payload)
+            if response.status_code != 429:
+                break
+            # Groq tells us exactly how long to wait — use that instead of guessing
+            wait_match = re.search(r"try again in ([\d.]+)s", response.text)
+            wait_seconds = float(wait_match.group(1)) + 1 if wait_match else 15
+            if attempt < 2:
+                await asyncio.sleep(wait_seconds)
 
     if response.status_code != 200:
         raise Exception(f"Groq API error {response.status_code}: {response.text}")
