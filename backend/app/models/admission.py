@@ -102,6 +102,8 @@ class AdmissionMedicationAdministration(Base):
     administered_at = Column(DateTime, default=now_ist_naive, nullable=False)
     notes = Column(String, nullable=True)
 
+    order = relationship("AdmissionMedicationOrder", back_populates="administrations")
+
 
 class AdmissionMedicationDispense(Base):
     """One real pharmacy-counter handover against a medication order — a
@@ -119,9 +121,6 @@ class AdmissionMedicationDispense(Base):
     dispensed_at = Column(DateTime, default=now_ist_naive, nullable=False)
 
     order = relationship("AdmissionMedicationOrder", back_populates="dispenses")
-
-    order = relationship("AdmissionMedicationOrder", back_populates="administrations")
-
 
 class AdmissionMedicationReturn(Base):
     """A return of already-dispensed/administered units against a specific
