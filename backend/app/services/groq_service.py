@@ -318,16 +318,18 @@ async def extract_tests(raw_text: str) -> list:
             {"role": "user", "content": f"Source text:\n{truncated}"}
         ],
         "temperature": 0.1,
-        "max_tokens": 4000
+        "max_tokens": 16000
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=90.0) as client:
         response = await client.post(GROQ_API_URL, headers=headers, json=payload)
 
     if response.status_code != 200:
         raise Exception(f"Groq API error {response.status_code}: {response.text}")
 
-    content = response.json()["choices"][0]["message"]["content"].strip()
+    choice = response.json()["choices"][0]
+    content = choice["message"]["content"].strip()
+    finish_reason = choice.get("finish_reason")
 
     if content.startswith("```"):
         content = content.split("```")[1]
@@ -338,6 +340,14 @@ async def extract_tests(raw_text: str) -> list:
     try:
         result = json.loads(content)
     except json.JSONDecodeError:
+        if finish_reason == "length":
+            # Response was cut off mid-generation, not actually malformed —
+            # the source document has more tests than fit in one response.
+            raise Exception(
+                "The source document has too many tests to extract in one pass — "
+                "response was cut off before it finished. Try splitting the file into "
+                "smaller batches (e.g. by category or page range) and uploading each separately."
+            )
         raise Exception(f"Groq returned invalid JSON: {content}")
 
     if not isinstance(result, list):
