@@ -10,7 +10,7 @@ from app.models.doctor import Doctor, UserRole
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem, StructureRequest
 from app.utils.auth import get_current_doctor, now_ist_naive, ist_day_bounds, ist_today, decode_access_token, is_token_blacklisted
 from app.utils.audit import log_action
-from app.services.whisper import transcribe_audio
+# from app.services.whisper import transcribe_audio
 from app.services.groq_service import structure_transcript, match_tests_to_catalog
 from app.services.pdf_service import generate_prescription_pdf
 from app.services.sms_service import send_sms
@@ -240,10 +240,10 @@ async def transcribe(
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Empty audio file")
 
-    try:
-        transcript = await transcribe_audio(audio_bytes, audio.filename or "recording.webm")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Whisper transcription failed: {str(e)}")
+    # try:
+    #     transcript = await transcribe_audio(audio_bytes, audio.filename or "recording.webm")
+    # except Exception as e:
+    #     raise HTTPException(status_code=502, detail=f"Whisper transcription failed: {str(e)}")
 
     # Reuse existing unconfirmed draft if one exists, else create new
     consultation = db.query(Consultation).filter(
