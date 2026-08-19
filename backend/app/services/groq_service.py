@@ -1,4 +1,6 @@
 import json
+import json
+import asyncio
 import httpx
 from app.config import settings
 
@@ -301,29 +303,35 @@ Rules:
 """
 
 
-async def extract_tests(raw_text: str) -> list:
-    """Send raw extracted text (from PDF/Excel) to Groq and return a structured test list."""
+def _chunk_source_text(raw_text: str, max_chars: int = 3500) -> list:
+    """Split on blank lines / test-entry boundaries where possible, so a
+    single test's fields never get split across two chunks — falls back to
+    a flat character slice if the text has no clean line breaks at all."""
+    lines = raw_text.split("\n")
+    chunks, current = [], []
+    current_len = 0
+    for line in lines:
+        if current_len + len(line) + 1 > max_chars and current:
+            chunks.append("\n".join(current))
+            current, current_len = [], 0
+        current.append(line)
+        current_len += len(line) + 1
+    if current:
+        chunks.append("\n".join(current))
+    return chunks or [raw_text[:max_chars]]
 
-    truncated = raw_text[:15000]
 
-    headers = {
-        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
+async def _extract_tests_single_chunk(client: "httpx.AsyncClient", headers: dict, chunk: str) -> list:
     payload = {
         "model": "openai/gpt-oss-120b",
         "messages": [
             {"role": "system", "content": TEST_EXTRACTION_PROMPT},
-            {"role": "user", "content": f"Source text:\n{truncated}"}
+            {"role": "user", "content": f"Source text:\n{chunk}"}
         ],
         "temperature": 0.1,
-        "max_tokens": 16000
+        "max_tokens": 3000
     }
-
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        response = await client.post(GROQ_API_URL, headers=headers, json=payload)
-
+    response = await client.post(GROQ_API_URL, headers=headers, json=payload)
     if response.status_code != 200:
         raise Exception(f"Groq API error {response.status_code}: {response.text}")
 
@@ -341,16 +349,42 @@ async def extract_tests(raw_text: str) -> list:
         result = json.loads(content)
     except json.JSONDecodeError:
         if finish_reason == "length":
-            # Response was cut off mid-generation, not actually malformed —
-            # the source document has more tests than fit in one response.
             raise Exception(
-                "The source document has too many tests to extract in one pass — "
-                "response was cut off before it finished. Try splitting the file into "
-                "smaller batches (e.g. by category or page range) and uploading each separately."
+                "A chunk of the source document produced more tests than fit in one response — "
+                "try a smaller chunk size."
             )
-        raise Exception(f"Groq returned invalid JSON: {content}")
+        raise Exception(f"Groq returned invalid JSON for one chunk: {content}")
 
     if not isinstance(result, list):
-        raise Exception("Groq did not return a JSON array")
-
+        raise Exception("Groq did not return a JSON array for one chunk")
     return result
+
+
+async def extract_tests(raw_text: str) -> list:
+    """Send raw extracted text (from PDF/Excel) to Groq and return a structured
+    test list. Chunks the source rather than sending it in one request —
+    Groq's on_demand tier caps requests at 8000 tokens total (input +
+    reserved output combined), and a single hospital test-list document
+    routinely exceeds that on its own. Each chunk is a separate, small
+    request well under the cap; results are concatenated. A test that gets
+    split across two chunks is unlikely with the ~3500-char chunk size
+    (each test entry is a few hundred chars), but if a duplicate test_name
+    does appear across chunks (e.g. a panel's intro line repeated), it's
+    left as-is here — dedup happens wherever this list is reviewed before
+    import, same as any other extraction result."""
+    truncated = raw_text[:40000]  # overall document cap, unrelated to the per-request TPM limit
+    chunks = _chunk_source_text(truncated)
+
+    headers = {
+        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    all_results = []
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for chunk in chunks:
+            chunk_results = await _extract_tests_single_chunk(client, headers, chunk)
+            all_results.extend(chunk_results)
+            await asyncio.sleep(2)  # stay well clear of the 8000 TPM ceiling between requests
+
+    return all_results
