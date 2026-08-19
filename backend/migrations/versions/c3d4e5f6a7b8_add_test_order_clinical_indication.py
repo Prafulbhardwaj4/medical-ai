@@ -22,7 +22,11 @@ def upgrade():
             sa.Column('consultation_id', sa.Integer(), sa.ForeignKey('consultations.id'), nullable=False),
             sa.Column('patient_id', sa.Integer(), sa.ForeignKey('patients.id'), nullable=False),
             sa.Column('hospital_id', sa.Integer(), sa.ForeignKey('hospitals.id'), nullable=False),
-            sa.Column('test_id', sa.Integer(), sa.ForeignKey('test_catalog_items.id'), nullable=True),
+            # test_catalog_items lives on yet another branch that isn't guaranteed to have
+            # applied by this point on a from-scratch replay — store the column without an
+            # enforced FK constraint here; it's already nullable/optional by design, and the
+            # relationship is enforced at the application layer regardless.
+            sa.Column('test_id', sa.Integer(), nullable=True),
             sa.Column('test_name', sa.String(), nullable=False),
             sa.Column('price', sa.Float(), nullable=False, server_default='0'),
             sa.Column('status', sa.String(), nullable=False, server_default='payment_pending'),
