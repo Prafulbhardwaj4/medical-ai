@@ -321,7 +321,15 @@ def _chunk_source_text(raw_text: str, max_chars: int = 3500) -> list:
     return chunks or [raw_text[:max_chars]]
 
 
-async def _extract_tests_single_chunk(client: "httpx.AsyncClient", headers: dict, chunk: str) -> list:
+async def _extract_tests_single_chunk(client: "httpx.AsyncClient", headers: dict, chunk: str, depth: int = 0) -> list:
+    """Self-correcting rather than tuned-by-guessing: if a chunk's output
+    gets cut off before valid JSON completes, split THIS chunk in half and
+    retry each half separately, instead of failing or relying on a fixed
+    chunk-size constant being right for every document's density (a
+    panel-heavy chunk produces far more output JSON per input char than a
+    flat single-value-test chunk, so no fixed size is ever universally
+    safe). Caps at 4 splits deep (16 pieces) as a sanity backstop against a
+    single pathological line that can't be usefully split further."""
     payload = {
         "model": "openai/gpt-oss-120b",
         "messages": [
@@ -348,10 +356,24 @@ async def _extract_tests_single_chunk(client: "httpx.AsyncClient", headers: dict
     try:
         result = json.loads(content)
     except json.JSONDecodeError:
+        if finish_reason == "length" and depth < 4 and len(chunk) > 200:
+            mid = len(chunk) // 2
+            # split on the nearest preceding newline so we don't cut a
+            # single test's line in half
+            split_at = chunk.rfind("\n", 0, mid)
+            if split_at == -1:
+                split_at = mid
+            first_half, second_half = chunk[:split_at], chunk[split_at:]
+            await asyncio.sleep(2)
+            first_results = await _extract_tests_single_chunk(client, headers, first_half, depth + 1)
+            await asyncio.sleep(2)
+            second_results = await _extract_tests_single_chunk(client, headers, second_half, depth + 1)
+            return first_results + second_results
         if finish_reason == "length":
             raise Exception(
-                "A chunk of the source document produced more tests than fit in one response — "
-                "try a smaller chunk size."
+                "A piece of the source document kept producing more tests than fit in one "
+                "response even after repeated splitting — there may be one unusually dense "
+                "block (e.g. a huge panel) that needs to be extracted separately by hand."
             )
         raise Exception(f"Groq returned invalid JSON for one chunk: {content}")
 
@@ -383,7 +405,7 @@ async def extract_tests(raw_text: str) -> list:
     all_results = []
     async with httpx.AsyncClient(timeout=60.0) as client:
         for chunk in chunks:
-            chunk_results = await _extract_tests_single_chunk(client, headers, chunk)
+            chunk_results = await _extract_tests_single_chunk(client, headers, chunk, depth=0)
             all_results.extend(chunk_results)
             await asyncio.sleep(2)  # stay well clear of the 8000 TPM ceiling between requests
 
