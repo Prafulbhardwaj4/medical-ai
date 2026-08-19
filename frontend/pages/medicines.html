@@ -802,9 +802,9 @@
       document.getElementById('m-price-per-pack-single').value = '';
       document.getElementById('m-billing-mode').value = 'per_unit';
       document.getElementById('m-nppa-ceiling').value = '';
-      document.getElementById('m-gst').value = m.gst_percent != null ? m.gst_percent : '';
-      document.getElementById('m-hsn').value = m.hsn_code || '';
-      document.getElementById('m-low-stock-threshold').value = m.low_stock_threshold != null ? m.low_stock_threshold : 25;
+      document.getElementById('m-gst').value = '';
+      document.getElementById('m-hsn').value = '';
+      document.getElementById('m-low-stock-threshold').value = 25;
       showStripPricing(true);
       updateComputedPrice();
       document.getElementById('m-stock-info').innerHTML = 'Stock can be added from the medicine card once this is saved.';
