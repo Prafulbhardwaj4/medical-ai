@@ -76,3 +76,4 @@ class TestOrder(Base):
     critical_detected_at = Column(DateTime, nullable=True)   # when this specific breach was first flagged — reset if it clears then re-breaches
     critical_ack_at = Column(DateTime, nullable=True)        # when the ordering doctor acknowledged the alert
     critical_escalated_at = Column(DateTime, nullable=True)  # set once escalated past the doctor (Phase 1 item 3)
+    sample_overdue_notified_at = Column(DateTime, nullable=True)  # set once lab staff have been pinged that an admitted patient's sample is 2+ hours uncollected — prevents re-notifying on every sweep

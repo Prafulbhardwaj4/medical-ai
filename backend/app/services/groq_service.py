@@ -32,7 +32,7 @@ Return ONLY valid JSON with exactly these fields:
       "schedule": "string - either 'otc' or 'controlled'"
     }
   ],
-  "tests": ["string - test name"],
+  "tests": ["string - test name, one entry per individual test — see Rules for tests below"],
   "advice": "string - all doctor advice, lifestyle instructions, dietary recommendations",
   "followup": "string - follow up instructions if mentioned, else empty string",
   "nurse_instructions": "string - any post-consultation tasks for the nurse mentioned by doctor: injections, dressings, IV fluids, wound care, etc. Empty string if not mentioned."
@@ -47,6 +47,12 @@ Rules for medicines:
 - brand_name: common Indian brand names are often spoken as a contraction of brand+strength — e.g. 'Pan 40' means brand 'Pan-40', generic Pantoprazole, dosage 40mg; 'Dolo 650' means brand 'Dolo-650', generic Paracetamol, dosage 650mg; 'Augmentin 625' means brand 'Augmentin-625', generic Amoxicillin+Clavulanic Acid, dosage 625mg. When the doctor says a name like this, split it: put the generic in name, the strength in dosage, and the spoken brand word (with its number, e.g. 'Pan-40') in brand_name — do not drop the brand just because it looks like a dosage.
 - If only a plain generic name was said with no brand word at all, leave brand_name as empty string.
 - name: always use the generic/chemical name. If only a brand name was said, convert to generic (e.g. Crocin → Paracetamol) and put the brand in brand_name.
+
+Rules for tests:
+- Whenever the doctor directs any diagnostic test or lab investigation to be done — however casually phrased ("get your CBC done", "go get these 3 tests done: CBC, LFT, KFT", "send for an X-ray", "let's check your sugar levels") — extract each individual test name as its own separate entry in the tests array. This is a structured order, never advice/lifestyle text, even when phrased conversationally.
+- If the doctor lists several tests together in one sentence, split them into separate array entries — one string per test, not one combined string.
+- Only use the tests array for things the doctor is ordering the patient to actually get done (a real diagnostic test/investigation). Do not put test-ordering sentences, or any part of them, into the advice field — advice is only for lifestyle/dietary/general instructions unrelated to ordering a test.
+- Use the plain test name as commonly said (e.g. "CBC", "LFT", "KFT", "X-ray chest") — catalog-matching against the hospital's actual test list happens in a separate step afterward, so just capture what the doctor said here.
 
 Rules for schedule field:
 - "controlled": antibiotics (azithromycin, amoxicillin etc.), benzodiazepines, opioids, sedatives, antipsychotics, steroids, habit-forming or antimicrobial-resistance-risk drugs.

@@ -51,6 +51,11 @@ class Admission(Base):
     discharge_summary = Column(Text, nullable=True)
     discharge_invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
 
+    balance_collected = Column(Boolean, nullable=False, default=False)  # true once reception has explicitly collected the running-bill balance, as its own step before Discharge Patient becomes available
+    balance_payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi"
+    balance_collected_at = Column(DateTime, nullable=True)
+    balance_collected_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+
     created_at = Column(DateTime, default=now_ist_naive)
 
     medication_orders = relationship("AdmissionMedicationOrder", back_populates="admission", cascade="all, delete-orphan")
@@ -74,17 +79,21 @@ class AdmissionMedicationOrder(Base):
     prescribed_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     is_active = Column(Boolean, default=True)
     sourced_outside = Column(Boolean, default=False, nullable=False)  # patient/relatives are sourcing this themselves — no stock deduction, no bill line
-    dispensed_at = Column(DateTime, nullable=True)   # pharmacy has physically sent this to the ward — visibility only, no stock/billing here (that already happens per-dose in administer_dose)
+    dispensed_at = Column(DateTime, nullable=True)   # last time pharmacy dispensed against this order — see AdmissionMedicationDispense for the full, billable history (an order can be re-dispensed on refill)
     dispensed_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     manual_unit_price = Column(Float, nullable=True)  # per-dose price entered at order time — only used when medicine_id is null (not in catalog), since there's no HospitalMedicine row to price from
     created_at = Column(DateTime, default=now_ist_naive)
 
     admission = relationship("Admission", back_populates="medication_orders")
     administrations = relationship("AdmissionMedicationAdministration", back_populates="order", cascade="all, delete-orphan")
+    dispenses = relationship("AdmissionMedicationDispense", back_populates="order", cascade="all, delete-orphan")
 
 
 class AdmissionMedicationAdministration(Base):
-    """One real, logged instance of a dose being given."""
+    """One real, logged instance of a dose being given at the bedside — purely
+    a clinical/MAR record. No stock or billing effect: the family already
+    paid pharmacy and collected the physical stock (see
+    AdmissionMedicationDispense) before any dose is given from it."""
     __tablename__ = "admission_medication_administrations"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -92,6 +101,24 @@ class AdmissionMedicationAdministration(Base):
     administered_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     administered_at = Column(DateTime, default=now_ist_naive, nullable=False)
     notes = Column(String, nullable=True)
+
+
+class AdmissionMedicationDispense(Base):
+    """One real pharmacy-counter handover against a medication order — a
+    relative collects some quantity, pharmacy deducts stock and bills the
+    running admission bill for it. An order can be dispensed more than once
+    over a stay (refills), so this is its own history, not a single flag."""
+    __tablename__ = "admission_medication_dispenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("admission_medication_orders.id"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    unit_price = Column(Float, nullable=False, default=0)
+    total_amount = Column(Float, nullable=False, default=0)
+    dispensed_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
+    dispensed_at = Column(DateTime, default=now_ist_naive, nullable=False)
+
+    order = relationship("AdmissionMedicationOrder", back_populates="dispenses")
 
     order = relationship("AdmissionMedicationOrder", back_populates="administrations")
 

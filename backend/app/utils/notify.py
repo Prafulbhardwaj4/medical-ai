@@ -129,6 +129,22 @@ def notify_critical_result(db: Session, hospital_id: int, order_id: int, patient
     ))
 
 
+def notify_admission_sample_overdue(db: Session, hospital_id: int, order_id: int, patient_name: str,
+                                     test_name: str, ward: str = None, bed_number: str = None):
+    """Fired once (see TestOrder.sample_overdue_notified_at) when an
+    admitted patient's ordered sample still hasn't been collected after
+    ADMISSION_SAMPLE_OVERDUE_MINUTES — hospital-wide to lab staff, not
+    targeted, since whoever's on the ward round can pick it up."""
+    key = f"admission_sample_overdue:{order_id}"
+    location = f" — {ward}, Bed {bed_number}" if ward else ""
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="admission_sample_overdue", severity="warning",
+        title=f"Sample still not collected — {patient_name}",
+        message=f"{test_name} for {patient_name}{location} was ordered over 2 hours ago and the sample hasn't been collected yet.",
+        link_type="admission_test", link_id=order_id, is_read=False,
+    ))
+
+
 def notify_critical_result_escalation(db: Session, hospital_id: int, order_id: int, patient_name: str,
                                        test_name: str, critical_note: str, stage: str,
                                        ward: str = None, bed_number: str = None):
@@ -148,6 +164,24 @@ def notify_critical_result_escalation(db: Session, hospital_id: int, order_id: i
     db.add(Notification(
         hospital_id=hospital_id, source_key=key, type="critical_result_escalation", severity="critical",
         title=title, message=message, link_type="test_order", link_id=order_id, is_read=False,
+    ))
+
+
+def notify_admission_referral(db: Session, hospital_id: int, patient_id: int, patient_name: str,
+                               referred_by_name: str, reason: str = None):
+    """Reception-facing broadcast — any receptionist logged in at this
+    hospital sees it. This is informational only: reception still waits for
+    the patient/relatives to physically show up before actually admitting,
+    it just means they don't have to keep re-checking the referral list to
+    notice a new one landed."""
+    key = f"admission_referral:{patient_id}:{now_ist_naive().isoformat()}"
+    message = f"{referred_by_name} sent {patient_name} for admission."
+    if reason:
+        message += f" Reason: {reason}"
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="admission_referral", severity="info",
+        title=f"Admission requested — {patient_name}", message=message,
+        link_type="admission_referral", link_id=patient_id, is_read=False
     ))
 
 

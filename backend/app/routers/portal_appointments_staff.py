@@ -14,10 +14,97 @@ from app.utils.auth import get_current_doctor
 from app.utils.timezone import now_ist_naive
 from app.utils.portal_billing import current_doctor_fee, create_patient_cancellation_refund
 from app.utils.portal_checkin import convert_appointment_to_checkin
+from app.utils.portal_auth import hash_password
+from app.models.portal import PatientAccount
+from app.models.doctor_slot import DoctorSlot
+from app.routers.portal_appointments import _estimated_slot_datetime, _release_abandoned_holds, _check_no_duplicate_active_booking
+from app.schemas.portal import BookForCallerIn
+import random
+import string
 
 router = APIRouter(prefix="/portal-appointments-staff", tags=["portal-appointments-staff"])
 
 _STAFF_ROLES = ["admin", "sub_admin", "receptionist"]
+
+
+@router.post("/book-for-caller", response_model=None)
+def book_appointment_for_caller(
+    body: BookForCallerIn,
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Reception books an online-appointment slot for someone who called in,
+    using the exact same slot capacity/locking machinery the patient portal
+    itself uses (see book_appointment in portal_appointments.py) — so a
+    phone-booked slot and a portal-booked slot are indistinguishable to
+    every doctor/queue view downstream. If this phone number has no portal
+    account yet, one is created here with a temporary password reception
+    reads out to the caller — there's no forgot-password flow in this
+    codebase yet, so this is the only way today for a phone booking to also
+    give the caller working portal access, rather than a dead-end account
+    they can never log into."""
+    if current_doctor.role.value not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not (body.patient_name or "").strip():
+        raise HTTPException(status_code=400, detail="Patient name is required")
+
+    account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
+    temp_password = None
+    account_is_new = False
+    if not account:
+        temp_password = "".join(random.choices(string.digits, k=6))
+        account = PatientAccount(phone=body.phone, password_hash=hash_password(temp_password))
+        db.add(account)
+        db.flush()  # need account.id below, before the outer commit
+        account_is_new = True
+
+    slot = db.query(DoctorSlot).filter(
+        DoctorSlot.id == body.slot_id, DoctorSlot.hospital_id == current_doctor.hospital_id
+    ).with_for_update().first()
+    if not slot:
+        raise HTTPException(status_code=404, detail="Slot not found")
+
+    _release_abandoned_holds(db, slot)
+
+    if slot.booked_count >= slot.capacity:
+        raise HTTPException(status_code=400, detail="This slot just filled up. Please pick another.")
+
+    from app.models.doctor_availability import DoctorUnavailability
+    if db.query(DoctorUnavailability).filter(
+        DoctorUnavailability.doctor_id == slot.doctor_id, DoctorUnavailability.date == slot.slot_date
+    ).first():
+        raise HTTPException(status_code=400, detail="This doctor is unavailable on this date. Please pick another date or doctor.")
+
+    _check_no_duplicate_active_booking(db, account, None, body.patient_name, slot.doctor_id)
+
+    slot.booked_count += 1
+    requested_time = _estimated_slot_datetime(slot, slot.booked_count)
+
+    appt = Appointment(
+        account_id=account.id,
+        hospital_id=current_doctor.hospital_id,
+        doctor_id=slot.doctor_id,
+        slot_id=slot.id,
+        type="scheduled",
+        requested_time=requested_time,
+        notes=body.notes,
+        status=AppointmentStatus.booked,
+        payment_status="unpaid",
+        new_patient_name=body.patient_name.strip(),
+        new_patient_gender=body.patient_gender,
+        new_patient_age=body.patient_age,
+    )
+    db.add(appt)
+    db.commit()
+    db.refresh(appt)
+
+    return {
+        "appointment_id": appt.id,
+        "estimated_time": requested_time.isoformat(),
+        "account_is_new": account_is_new,
+        "temp_password": temp_password,  # only present when a new account was created — read this out to the caller once, never logged/stored elsewhere
+    }
 
 
 @router.post("/notify-doctor/{doctor_id}")

@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     LAB_CRITICAL_ACK_MINUTES: int = 15               # ordering doctor unacknowledged this long -> escalate to nurse/ward
     LAB_CRITICAL_ESCALATION_GRACE_MINUTES: int = 15  # escalated but still unacknowledged this much longer -> notify admin directly
 
+    # Admitted-patient sample collection (Lab Flow).
+    ADMISSION_SAMPLE_OVERDUE_MINUTES: int = 120  # sample still not collected this long after a ward test was ordered -> notify lab staff
+
     # TAT tiers (Phase 5 item 17) — clock starts at accessioning (item 15), not order placement.
     # Send-out/referral tests (Phase 7, not yet built) will override this with the external lab's
     # own committed TAT once that exists, rather than ever padding a tier down to look routine.

@@ -592,6 +592,7 @@
             </div>
             <div id="search-results" style="margin-bottom:14px"></div>
             <button class="btn btn-outline" style="width:100%" onclick="openNewPatient()">+ Add as New Patient</button>
+            <button class="btn btn-outline" style="width:100%;margin-top:8px;border-color:var(--teal);color:var(--teal)" onclick="openPhoneBookingModal()">📅 Book Online Appointment (Phone)</button>
             <button class="btn btn-sm" id="btn-emergency-intake"
               style="width:100%;margin-top:8px;background:#dc2626;color:#fff;border-color:#dc2626;display:none"
               onclick="openEmergencyIntakeModal()">🚨 Emergency Intake</button>
@@ -980,6 +981,58 @@
   </div>
 
   <!-- Emergency Intake Modal (admits directly into the Emergency Ward) -->
+  <div class="modal-overlay" id="modal-phone-booking">
+    <div class="modal" style="max-width:640px;width:92vw;max-height:88vh;overflow-y:auto">
+      <div class="modal-header">
+        <h2>📅 Book Online Appointment (Phone)</h2>
+        <button class="modal-close" onclick="closePhoneBookingModal()">×</button>
+      </div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:14px">Same slots and daily limits as online booking — this fills a real slot, not a separate queue.</p>
+
+      <div id="pb-step-slot">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Doctor</label>
+            <select class="form-control" id="pb-doctor" onchange="loadPhoneBookingSlots()"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date</label>
+            <input class="form-control" type="date" id="pb-date" onchange="loadPhoneBookingSlots()" />
+          </div>
+        </div>
+        <div id="pb-slots-preview" style="margin:10px 0 16px"><p style="color:var(--slate-light);font-size:13px">Pick a doctor and date to see that day's slots.</p></div>
+
+        <div class="form-group"><label class="form-label">Caller's Phone Number</label><input class="form-control" id="pb-phone" placeholder="10-digit mobile number" /></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Patient Name</label><input class="form-control" id="pb-patient-name" /></div>
+          <div class="form-group"><label class="form-label">Age</label><input class="form-control" type="number" min="0" id="pb-patient-age" /></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Gender</label>
+          <select class="form-control" id="pb-patient-gender">
+            <option value="">Select...</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="err-msg" id="pb-err"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="submitPhoneBooking()">Book This Slot</button>
+      </div>
+
+      <div id="pb-step-done" style="display:none;text-align:center;padding:10px 0">
+        <div style="font-size:1.1rem;font-weight:700;color:var(--navy);margin-bottom:6px">✓ Slot Booked</div>
+        <p id="pb-done-summary" style="color:var(--slate);font-size:14px;margin-bottom:14px"></p>
+        <div id="pb-temp-password-box" style="display:none;background:var(--teal-subtle);border:1px solid var(--teal);border-radius:var(--radius);padding:14px;margin-bottom:14px">
+          <p style="font-size:13px;color:var(--navy);margin:0 0 6px">This is a new portal account for this number. Read this out to the caller now — it won't be shown again:</p>
+          <p style="font-size:13px;margin:0">Login phone: <strong id="pb-temp-phone"></strong></p>
+          <p style="font-size:13px;margin:0">Temporary password: <strong id="pb-temp-password"></strong></p>
+        </div>
+        <button class="btn btn-primary" style="width:100%" onclick="closePhoneBookingModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="modal-emergency-intake">
     <div class="modal" style="max-width:400px" id="em-modal-form">
       <div class="modal-header">
@@ -1337,6 +1390,8 @@
         } else if (linkType === 'ward_change_request') {
           const { token } = await api("GET", `/admissions/token-for/${linkId}`);
           location.href = `admission-detail.html?id=${token}`;
+        } else if (linkType === 'admission_referral') {
+          location.href = `admissions.html?admit_patient_id=${linkId}`;
         }
       } catch (e) { toast(e.message, "error"); }
     }
@@ -2712,6 +2767,113 @@
         btn.style.display = status.available ? '' : 'none';
       } catch (e) {
         btn.style.display = 'none';  // fail closed — never show the option if the check itself failed
+      }
+    }
+
+    let phoneBookingSelectedSlotId = null;
+    let phoneBookingHospitalId = null;
+
+    async function openPhoneBookingModal() {
+      document.getElementById('pb-step-slot').style.display = '';
+      document.getElementById('pb-step-done').style.display = 'none';
+      document.getElementById('pb-phone').value = '';
+      document.getElementById('pb-patient-name').value = '';
+      document.getElementById('pb-patient-age').value = '';
+      document.getElementById('pb-patient-gender').value = '';
+      document.getElementById('pb-err').textContent = '';
+      document.getElementById('pb-date').value = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      phoneBookingSelectedSlotId = null;
+
+      const doctorSel = document.getElementById('pb-doctor');
+      doctorSel.innerHTML = '<option value="">Loading doctors...</option>';
+      try {
+        const me = getDoctor();
+        phoneBookingHospitalId = me.hospital_id;
+        const doctors = await api("GET", `/portal/hospitals/${me.hospital_id}/doctors`);
+        doctorSel.innerHTML = '<option value="">Select doctor...</option>' +
+          doctors.map(d => `<option value="${d.id}">${d.name}${d.specialization ? ' — ' + d.specialization : ''}</option>`).join('');
+      } catch (e) {
+        doctorSel.innerHTML = '<option value="">Could not load doctors</option>';
+      }
+
+      document.getElementById('modal-phone-booking').classList.add('open');
+    }
+
+    function closePhoneBookingModal() {
+      document.getElementById('modal-phone-booking').classList.remove('open');
+    }
+
+    async function loadPhoneBookingSlots() {
+      const doctorId = document.getElementById('pb-doctor').value;
+      const date = document.getElementById('pb-date').value;
+      const previewEl = document.getElementById('pb-slots-preview');
+      phoneBookingSelectedSlotId = null;
+      if (!doctorId || !date) { previewEl.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Pick a doctor and date to see that day\'s slots.</p>'; return; }
+
+      previewEl.innerHTML = '<p style="color:var(--slate)">Loading slots…</p>';
+      try {
+        const data = await api("GET", `/portal/hospitals/${phoneBookingHospitalId}/doctors/${doctorId}/slots?date=${date}`);
+        if (data.doctor_unavailable) { previewEl.innerHTML = '<p style="color:var(--danger)">This doctor is unavailable on this date.</p>'; return; }
+        const levelColor = { green: '#10b981', yellow: '#f59e0b', red: '#ef4444' };
+        const periods = ['morning', 'afternoon', 'evening'];
+        const anySlots = periods.some(p => (data[p] || []).length);
+        if (!anySlots) { previewEl.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No slots configured for this date.</p>'; return; }
+
+        previewEl.innerHTML = periods.map(p => (data[p] || []).length ? `
+          <div style="margin-bottom:8px">
+            <div style="font-size:11px;font-weight:600;color:var(--slate);text-transform:uppercase;margin-bottom:4px">${p}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${data[p].map(s => `
+                <button type="button" class="btn btn-sm" data-slot-id="${s.id}"
+                  style="border:1.5px solid ${levelColor[s.level]};color:${s.full ? 'var(--slate-light)' : levelColor[s.level]};background:#fff"
+                  ${s.full ? 'disabled' : `onclick="selectPhoneBookingSlot(${s.id}, this)"`}>
+                  ${s.time} (${s.booked_count}/${s.capacity})
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        ` : '').join('');
+      } catch (e) {
+        previewEl.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+      }
+    }
+
+    function selectPhoneBookingSlot(slotId, btn) {
+      phoneBookingSelectedSlotId = slotId;
+      document.querySelectorAll('#pb-slots-preview button[data-slot-id]').forEach(b => b.style.outline = 'none');
+      btn.style.outline = '2px solid var(--teal)';
+    }
+
+    async function submitPhoneBooking() {
+      const err = document.getElementById('pb-err');
+      err.textContent = '';
+      if (!phoneBookingSelectedSlotId) { err.textContent = 'Pick a slot.'; return; }
+      const phone = document.getElementById('pb-phone').value.trim();
+      const name = document.getElementById('pb-patient-name').value.trim();
+      if (!phone) { err.textContent = "Caller's phone number is required."; return; }
+      if (!name) { err.textContent = 'Patient name is required.'; return; }
+
+      try {
+        const result = await api("POST", "/portal-appointments-staff/book-for-caller", {
+          phone,
+          patient_name: name,
+          patient_gender: document.getElementById('pb-patient-gender').value || null,
+          patient_age: parseInt(document.getElementById('pb-patient-age').value) || null,
+          slot_id: phoneBookingSelectedSlotId,
+        });
+        document.getElementById('pb-step-slot').style.display = 'none';
+        document.getElementById('pb-step-done').style.display = 'block';
+        document.getElementById('pb-done-summary').textContent =
+          `${name} is booked for ${new Date(result.estimated_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}.`;
+        if (result.account_is_new) {
+          document.getElementById('pb-temp-password-box').style.display = 'block';
+          document.getElementById('pb-temp-phone').textContent = phone;
+          document.getElementById('pb-temp-password').textContent = result.temp_password;
+        } else {
+          document.getElementById('pb-temp-password-box').style.display = 'none';
+        }
+      } catch (e) {
+        err.textContent = e.message;
       }
     }
 

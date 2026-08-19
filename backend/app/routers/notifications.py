@@ -52,6 +52,14 @@ def list_notifications(
         query = query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
     if current_doctor.role.value in ("nurse", "assistant"):
         query = query.filter(Notification.type.in_(NURSE_VISIBLE_TYPES))
+    if current_doctor.role.value in ("admin", "sub_admin"):
+        # target_doctor_id marks a notification as meant for one specific
+        # individual (e.g. a staff member's suggestion reply) — admin/
+        # sub_admin should only see it if they ARE that individual, not
+        # every such notification hospital-wide.
+        query = query.filter(
+            (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)
+        )
     notifications = query.order_by(Notification.is_read.asc(), Notification.updated_at.desc()).limit(100).all()
 
     unread_query = db.query(Notification).filter(
@@ -68,6 +76,10 @@ def list_notifications(
         unread_query = unread_query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
     if current_doctor.role.value in ("nurse", "assistant"):
         unread_query = unread_query.filter(Notification.type.in_(NURSE_VISIBLE_TYPES))
+    if current_doctor.role.value in ("admin", "sub_admin"):
+        unread_query = unread_query.filter(
+            (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)
+        )
     unread_count = unread_query.count()
 
     return {"notifications": [serialize(n) for n in notifications], "unread_count": unread_count}
@@ -98,6 +110,10 @@ def get_unread_count(
         query = query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
     if current_doctor.role.value in ("nurse", "assistant"):
         query = query.filter(Notification.type.in_(NURSE_VISIBLE_TYPES))
+    if current_doctor.role.value in ("admin", "sub_admin"):
+        query = query.filter(
+            (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)
+        )
     count = query.count()
     return {"unread_count": count}
 
@@ -150,6 +166,10 @@ def mark_all_read(
         query = query.filter(Notification.type.in_(RECEPTIONIST_VISIBLE_TYPES))
     if current_doctor.role.value == "lab":
         query = query.filter(Notification.type.in_(LAB_VISIBLE_TYPES))
+    if current_doctor.role.value in ("admin", "sub_admin"):
+        query = query.filter(
+            (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)
+        )
     query.update({"is_read": True})
     db.commit()
     return {"marked": True}

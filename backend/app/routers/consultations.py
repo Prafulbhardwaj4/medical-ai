@@ -531,6 +531,18 @@ def get_history(
             })
             medicine_statuses[key] = o.status
 
+        # ordered_tests (c.ordered_tests) is a static JSON snapshot taken
+        # when the tests were originally ordered — it never reflects later
+        # lab progress. test_statuses is the live status, queried fresh
+        # here the same way medicine_statuses already is above, so the
+        # reopen flow can correctly lock a test read-only once it's
+        # actually been resulted, not just at whatever status it happened
+        # to be at order time.
+        test_statuses = {}
+        for t in db.query(TestOrder).filter(TestOrder.consultation_id == c.id).all():
+            if t.test_id is not None:
+                test_statuses[str(t.test_id)] = t.status
+
         item = ConsultationHistoryItem(
             id=c.id,
             token_number=c.token_number,
@@ -545,6 +557,7 @@ def get_history(
             vitals=c.vitals,
             ordered_tests=c.ordered_tests,
             medicine_statuses=medicine_statuses,
+            test_statuses=test_statuses,
             doctor_name=f"{doctor.title} {doctor.name}" if doctor else "—",
             doctor_specialization=doctor.specialization if doctor else None
         )

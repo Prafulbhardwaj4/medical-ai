@@ -402,6 +402,44 @@
     let currentPage = 1;
     let allLogs = [];
 
+    function prettifyKey(k) {
+      return k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function formatAuditDetails(raw) {
+      if (!raw) return "—";
+      let parsed;
+      try { parsed = JSON.parse(raw); }
+      catch (e) { return sanitize(raw); }
+
+      if (parsed === null || typeof parsed !== "object") return sanitize(String(parsed));
+
+      // Shape: { changed_fields: [...], old: {...}, new: {...} } — e.g. lab result edits
+      if (Array.isArray(parsed.changed_fields) && parsed.old && parsed.new && !parsed.diff) {
+        const lines = parsed.changed_fields.map(f =>
+          `${sanitize(prettifyKey(f))}: ${sanitize(String(parsed.old[f]))} → ${sanitize(String(parsed.new[f]))}`
+        );
+        return lines.join("<br>") || "—";
+      }
+
+      // Shape: { changed_fields: [...], diff: { field: {old, new} } } — e.g. prescription edits
+      if (Array.isArray(parsed.changed_fields) && parsed.diff) {
+        const lines = parsed.changed_fields
+          .filter(f => parsed.diff[f])
+          .map(f => `${sanitize(prettifyKey(f))}: ${sanitize(String(parsed.diff[f].old))} → ${sanitize(String(parsed.diff[f].new))}`);
+        const extras = Object.entries(parsed)
+          .filter(([k, v]) => !["changed_fields", "diff"].includes(k) && v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0))
+          .map(([k, v]) => `${sanitize(prettifyKey(k))}: ${sanitize(Array.isArray(v) ? v.join(", ") : String(v))}`);
+        return [...lines, ...extras].join("<br>") || "—";
+      }
+
+      // Generic fallback: any other JSON-shaped details, rendered as readable key: value lines
+      const lines = Object.entries(parsed)
+        .filter(([k, v]) => v !== null && v !== undefined && v !== "" && !(Array.isArray(v) && v.length === 0))
+        .map(([k, v]) => `${sanitize(prettifyKey(k))}: ${sanitize(Array.isArray(v) || typeof v === "object" ? JSON.stringify(v) : String(v))}`);
+      return lines.join("<br>") || "—";
+    }
+
     async function loadSummary() {
       try {
         const data = await api("GET", "/audit/summary");
@@ -454,7 +492,7 @@
               <span style="color:var(--slate)">${l.target_type}</span>
               ${l.target_label ? `<br><span style="font-weight:500">${sanitize(l.target_label)}</span>` : ""}
             </td>
-            <td data-label="Details" style="font-size:13px;color:var(--slate)">${l.details ? sanitize(l.details) : "—"}</td>
+            <td data-label="Details" style="font-size:13px;color:var(--slate)">${formatAuditDetails(l.details)}</td>
           </tr>
         `).join("");
 

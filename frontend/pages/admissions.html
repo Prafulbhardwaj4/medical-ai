@@ -463,6 +463,10 @@
             <option value="upi">UPI</option>
           </select>
         </div>
+        <div class="form-group">
+          <label class="form-label">Admission Date & Time</label>
+          <input class="form-control" type="datetime-local" id="admit-datetime" />
+        </div>
         <div class="err-msg" id="admit-err"></div>
         <div style="display:flex;gap:10px">
           <button class="btn btn-outline" style="flex:1" onclick="backToSearch()">Back</button>
@@ -820,6 +824,8 @@
       document.getElementById("admit-step-details").style.display = "block";
       document.getElementById("admit-diagnosis").value = "";
       document.getElementById("admit-type").value = "planned";
+      const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+      document.getElementById("admit-datetime").value = now.toISOString().slice(0, 16);
       try {
         const res = await api("GET", `/admissions/last-diagnosis/${id}`);
         if (res.diagnosis) document.getElementById("admit-diagnosis").value = res.diagnosis;
@@ -854,6 +860,8 @@
       const depositAmount = parseFloat(document.getElementById("admit-deposit").value) || 0;
       const depositMethod = document.getElementById("admit-deposit-method").value;
       if (depositAmount > 0 && !depositMethod) { err.textContent = "Please select how the deposit was collected"; return; }
+      const admitDatetime = document.getElementById("admit-datetime").value;
+      if (!admitDatetime) { err.textContent = "Admission date/time is required"; return; }
 
       try {
         const res = await api("POST", "/admissions", {
@@ -861,6 +869,7 @@
           diagnosis: diagnosis, admitting_doctor_id: parseInt(doctorId, 10),
           deposit_amount: depositAmount, deposit_payment_method: depositAmount > 0 ? depositMethod : null,
           admission_type: document.getElementById("admit-type").value,
+          admission_date: new Date(admitDatetime).toISOString(),
         });
         toast("Patient admitted", "success");
         closeAdmitModal();

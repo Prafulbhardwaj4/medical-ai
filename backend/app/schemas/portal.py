@@ -88,6 +88,17 @@ class BookAppointmentIn(BaseModel):
     new_patient_blood_group: Optional[str] = None  # optional
 
 
+class BookForCallerIn(BaseModel):
+    """Reception booking an online-appointment slot on behalf of a phone
+    caller — same slot/capacity system the patient portal itself uses."""
+    phone: str
+    patient_name: str
+    patient_gender: Optional[str] = None
+    patient_age: Optional[int] = None
+    slot_id: int
+    notes: Optional[str] = None
+
+
 class AddressUpdateIn(BaseModel):
     address: str
 

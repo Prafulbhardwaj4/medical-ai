@@ -39,7 +39,7 @@ class Doctor(Base):
     created_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     consultation_fee = Column(Float, nullable=True)
     professional_fee_per_admission = Column(Float, nullable=True)  # visiting/empanelled consultant's own fee for IPD care — distinct from the OPD consultation_fee and from the hospital's facility/room charges; blank = not applicable (e.g. in-house/salaried doctor)
-    visit_fee = Column(Float, nullable=True)  # per-round IPD visit fee — logged each time this doctor does rounds on an admitted patient (see /admissions/{id}/log-visit); distinct from professional_fee_per_admission, which is a one-time fee for the whole stay
+    visit_fee = Column(Float, nullable=True)
     room_number = Column(String, nullable=True)
     active_consultation_id = Column(Integer, ForeignKey("consultations.id"), nullable=True)  # unconfirmed draft this doctor is currently mid-session with, if any — kept in sync by consultations.py so an emergency interrupt always resumes the *right* draft, never a guess
 

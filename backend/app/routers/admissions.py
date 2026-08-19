@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, date as date_cls
+from datetime import datetime, date as date_cls, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -25,7 +25,7 @@ from app.models.patient_allergy import PatientAllergy
 from app.models.credit_debit_note import CreditDebitNote
 from app.models.refund import Refund
 from app.schemas.admission import (
-    AdmitPatientIn, AddMedicationOrderIn, AdministerDoseIn, AddChargeIn, AddAdmissionTestIn, DischargeIn,
+    AdmitPatientIn, AddMedicationOrderIn, AdministerDoseIn, AddChargeIn, AddAdmissionTestIn, DischargeIn, CollectBalanceIn,
     WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn,
     TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, EmergencyAlertIn,
     ProfessionalFeeIn, VALID_ADMISSION_TYPES, AdmissionConsentIn, VALID_CONSENT_TYPES, VALID_DISCHARGE_TYPES,
@@ -121,7 +121,10 @@ def _ward_type_initials(name: str) -> str:
 
 
 def _bed_labels_for_ward_type(wt: AdmissionWardType) -> list[str]:
-    initials = _ward_type_initials(wt.name)
+    # Must use the FROZEN bed_prefix, never re-derive from wt.name — a ward
+    # rename would otherwise silently reshuffle every existing bed label and
+    # break occupied-bed detection for beds assigned under the old name.
+    initials = wt.bed_prefix or _ward_type_initials(wt.name)
     return [f"{initials}-{i}" for i in range(1, wt.total_beds + 1)]
 
 
@@ -243,11 +246,20 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
     if body.deposit_amount > 0 and not body.deposit_payment_method:
         raise HTTPException(status_code=400, detail="Please select how the deposit was collected")
 
+    admission_dt = now_ist_naive()
+    if body.admission_date:
+        try:
+            admission_dt = datetime.fromisoformat(body.admission_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid admission date/time")
+        if admission_dt > now_ist_naive():
+            raise HTTPException(status_code=400, detail="Admission date/time can't be in the future")
+
     admission = Admission(
         patient_id=patient.id, hospital_id=current_doctor.hospital_id,
         admitting_doctor_id=admitting_doctor_id, ward=ward_name, ward_type_id=ward_type_id, bed_number=body.bed_number,
         diagnosis=body.diagnosis, daily_room_charge=daily_charge,
-        status="admitted", admission_date=now_ist_naive(),
+        status="admitted", admission_date=admission_dt,
         public_token=secrets.token_urlsafe(16),
         admission_type=admission_type,
     )
@@ -494,13 +506,40 @@ def send_to_admission(body: SendToAdmissionIn, current_doctor: Doctor = Depends(
         referred_by=current_doctor.id, reason=body.reason,
     )
     db.add(referral)
+
+    from app.utils.notify import notify_admission_referral
+    notify_admission_referral(
+        db, current_doctor.hospital_id, patient.id, patient.name,
+        f"{current_doctor.title} {current_doctor.name}", body.reason
+    )
+
     db.commit()
     return {"message": f"{patient.name} sent to reception for admission"}
+
+
+def _expire_stale_admission_referrals(db: Session, hospital_id: int) -> None:
+    """No background scheduler in this codebase — same lazy-sweep pattern as
+    _expire_stale_pending_reviews in portal_appointments_staff.py. Runs
+    whenever reception loads the referral list: a referral reception never
+    acted on within 24 hours auto-expires, since by then the patient either
+    came in through some other route or isn't coming — reception shouldn't
+    have to keep seeing a stale entry, and the doctor can always re-refer
+    the patient fresh if it's still needed."""
+    cutoff = now_ist_naive() - timedelta(hours=24)
+    stale = db.query(AdmissionReferral).filter(
+        AdmissionReferral.hospital_id == hospital_id,
+        AdmissionReferral.status == "pending",
+        AdmissionReferral.created_at < cutoff,
+    ).all()
+    for r in stale:
+        r.status = "expired"
 
 
 @router.get("/referrals")
 def list_referrals(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     """Reception's '+ Admit' list — ONLY patients a doctor has actually sent."""
+    _expire_stale_admission_referrals(db, current_doctor.hospital_id)
+    db.commit()
     referrals = db.query(AdmissionReferral).filter(
         AdmissionReferral.hospital_id == current_doctor.hospital_id, AdmissionReferral.status == "pending"
     ).order_by(AdmissionReferral.created_at.desc()).all()
@@ -628,7 +667,7 @@ def create_ward_type(body: WardTypeCreateIn, current_doctor: Doctor = Depends(ge
     category = (body.category or "general").strip().lower()
     if category not in VALID_WARD_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid ward category")
-    wt = AdmissionWardType(hospital_id=current_doctor.hospital_id, name=body.name.strip(), total_beds=body.total_beds, daily_charge=body.daily_charge, default_deposit=body.default_deposit, is_icu=body.is_icu, is_ot=body.is_ot, ot_charge=body.ot_charge, category=category, is_emergency_ward=body.is_emergency_ward)
+    wt = AdmissionWardType(hospital_id=current_doctor.hospital_id, name=body.name.strip(), total_beds=body.total_beds, daily_charge=body.daily_charge, default_deposit=body.default_deposit, is_icu=body.is_icu, is_ot=body.is_ot, ot_charge=body.ot_charge, category=category, is_emergency_ward=body.is_emergency_ward, bed_prefix=_ward_type_initials(body.name.strip()))
     db.add(wt)
     db.flush()
     if body.is_emergency_ward:
@@ -653,6 +692,9 @@ def update_ward_type(ward_type_id: int, body: WardTypeCreateIn, current_doctor: 
     category = (body.category or "general").strip().lower()
     if category not in VALID_WARD_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid ward category")
+    # bed_prefix is intentionally NOT updated when the name changes — it stays
+    # frozen at whatever it was set to on creation, so renaming a ward never
+    # reshuffles or orphans its already-assigned bed numbers.
     wt.name = body.name.strip()
     wt.total_beds = body.total_beds
     wt.daily_charge = body.daily_charge
@@ -746,7 +788,6 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
     billable_items, _pretax_payable_total = _build_discharge_bill(db, a)
     hospital_for_gst = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
     _, gst_subtotal, gst_amount, gst_grand_total = apply_gst(billable_items, hospital_for_gst)
-    professional_fee_item = next((i for i in billable_items if i["type"] == "professional_fee"), None)
 
     return {
         "id": a.public_token, "status": a.status, "ward": a.ward, "bed_number": a.bed_number,
@@ -768,15 +809,11 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
                                   for al in db.query(PatientAllergy).filter(PatientAllergy.patient_id == patient.id, PatientAllergy.is_active == True).all()]} if patient else None,
         "admitting_doctor_name": f"{doctor.title} {doctor.name}" if doctor else None,
         "admission_type": a.admission_type,
-        "professional_fee_override": a.professional_fee_override,
-        "professional_fee_default": doctor.professional_fee_per_admission if doctor else None,
         "medications": med_out,
         "charges": charges_out,
         "tests": tests_out,
         "bill": {
             "room_total": room_total, "room_breakdown": room_breakdown, "charges_total": charge_total,
-            "professional_fee": professional_fee_item["line_total"] if professional_fee_item else 0,
-            "professional_fee_label": professional_fee_item["name"] if professional_fee_item else None,
             "subtotal": gst_subtotal, "gst_total": gst_amount, "grand_total": gst_grand_total,
         }
     }
@@ -1061,52 +1098,6 @@ def add_charge(admission_id: str, body: AddChargeIn, current_doctor: Doctor = De
     return {"message": "Charge added"}
 
 
-@router.post("/{admission_id}/log-visit")
-def log_doctor_visit(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    """Doctor-visit charges currently only existed via the generic 'Other
-    Charges' free-text mechanism, which someone had to remember to use —
-    unlike medicine/tests/bed-night, which accrue automatically. This is a
-    one-tap action that auto-creates the charge at the doctor's own
-    configured per-visit fee, closing that gap."""
-    if current_doctor.role.value not in ["doctor", "nurse", "assistant", "receptionist", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    if a.status != "admitted":
-        raise HTTPException(status_code=400, detail="Cannot log a visit for a discharged admission")
-
-    # A doctor logs their own visit; nurse/assistant/admin log on behalf of
-    # the admitting doctor, since that's whose visit fee actually applies.
-    visiting_doctor = current_doctor if current_doctor.role.value == "doctor" else db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
-    if not visiting_doctor:
-        raise HTTPException(status_code=400, detail="No treating doctor on this admission to log a visit for")
-    if not visiting_doctor.visit_fee:
-        raise HTTPException(status_code=400, detail=f"{visiting_doctor.title} {visiting_doctor.name} has no per-visit fee configured — set one in doctor settings first")
-
-    charge = AdmissionCharge(
-        admission_id=a.id, charge_type="other",
-        description=f"Doctor Visit — {visiting_doctor.title} {visiting_doctor.name}",
-        amount=visiting_doctor.visit_fee, quantity=1, added_by=current_doctor.id, charged_at=now_ist_naive(),
-    )
-    db.add(charge)
-    db.commit()
-    return {"message": "Visit logged", "amount": visiting_doctor.visit_fee}
-
-
-@router.patch("/{admission_id}/professional-fee")
-def update_professional_fee(admission_id: str, body: ProfessionalFeeIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    """Sets a negotiated per-admission override of the treating doctor's
-    professional fee — null clears it back to the doctor's own default."""
-    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only the treating doctor or an admin can set the professional fee")
-    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    if a.status != "admitted":
-        raise HTTPException(status_code=400, detail="Cannot edit charges for a discharged admission")
-    if body.amount is not None and body.amount < 0:
-        raise HTTPException(status_code=400, detail="Amount cannot be negative")
-    a.professional_fee_override = body.amount
-    db.commit()
-    return {"message": "Professional fee updated", "professional_fee_override": a.professional_fee_override}
-
 
 @router.post("/{admission_id}/consents")
 def add_admission_consent(admission_id: str, body: AdmissionConsentIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
@@ -1251,22 +1242,6 @@ def _build_discharge_bill(db: Session, a: Admission):
         items.append({"type": "room", "name": f"Room charges — {a.ward}, Bed {a.bed_number} ({_days_admitted(a)} day(s))",
                       "qty": _days_admitted(a), "unit_price": current_rate, "line_total": _days_admitted(a) * current_rate, "payable_here": True,
                       "_is_icu": bool(ward_type and ward_type.is_icu)})
-
-    # Doctor's own professional/consultant fee — distinct from the facility
-    # charge above (room, nursing, equipment). Only appears if the admitting
-    # doctor has one configured, or this admission has a negotiated
-    # override — most in-house/salaried doctors won't have either, this is
-    # aimed at visiting/empanelled consultants. Reflects care actually
-    # rendered by this doctor to this patient only — never a
-    # referral/commission amount.
-    prof_fee = a.professional_fee_override
-    admitting_doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
-    if prof_fee is None and admitting_doctor:
-        prof_fee = admitting_doctor.professional_fee_per_admission
-    if prof_fee:
-        doctor_label = f"{admitting_doctor.title} {admitting_doctor.name}" if admitting_doctor else "Treating Doctor"
-        items.append({"type": "professional_fee", "name": f"Doctor Professional Fee — {doctor_label}",
-                      "qty": 1, "unit_price": prof_fee, "line_total": prof_fee, "payable_here": True})
 
     for c in charges:
         # Pharmacy (medicine) charges are settled only at the pharmacy counter, never at
@@ -1621,7 +1596,40 @@ def discharge_preview(admission_id: str, current_doctor: Doctor = Depends(get_cu
         "items": items, "subtotal": subtotal, "gst_total": gst_total, "charges_total": charges_total,
         "deposit_total": deposit_total, "tpa_covered": tpa_covered, "balance": balance,
         "amount_due": max(balance, 0), "refund_due": max(-balance, 0),
+        "balance_collected": a.balance_collected,
+        "balance_payment_method": a.balance_payment_method,
     }
+
+
+@router.post("/{admission_id}/collect-balance")
+def collect_balance(admission_id: str, body: CollectBalanceIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Collecting the running-bill balance is now its own explicit step,
+    separate from Discharge Patient — reception collects the money, confirms
+    it, and only then does the Discharge Patient action become available.
+    Re-collecting is allowed (e.g. a late charge added after the first
+    collection) — it just overwrites the recorded method/timestamp."""
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only reception can collect payment")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="Already discharged")
+    if body.payment_method not in ("cash", "card", "upi"):
+        raise HTTPException(status_code=400, detail="Invalid payment method")
+
+    items, subtotal, gst_total, charges_total, deposit_total, tpa_covered, balance = _settlement_summary(db, a)
+    amount_due = max(balance, 0)
+
+    a.balance_collected = True
+    a.balance_payment_method = body.payment_method
+    a.balance_collected_at = now_ist_naive()
+    a.balance_collected_by = current_doctor.id
+    db.commit()
+
+    log_action(
+        db, current_doctor, action="admission_balance_collected", target_type="admission", target_id=a.id,
+        target_label=a.public_token, details=f"Rs.{amount_due:.2f} via {body.payment_method}"
+    )
+    return {"message": "Payment collected", "amount_collected": amount_due}
 
 
 @router.post("/{admission_id}/discharge")
@@ -1639,11 +1647,9 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     if discharge_type == "lama_dama":
         if not (body.discharge_summary or "").strip():
             raise HTTPException(status_code=400, detail="A discharge summary documenting condition at time of leaving is required for LAMA/DAMA")
-        lama_consent = db.query(AdmissionConsent).filter(
-            AdmissionConsent.admission_id == a.id, AdmissionConsent.consent_type == "lama_dama"
-        ).first()
-        if not lama_consent:
-            raise HTTPException(status_code=400, detail="A signed LAMA/DAMA consent-to-leave record is required before this discharge can proceed — record it under Consents first")
+        # The consent-on-file requirement was tied to the digital-signature
+        # consent feature, which has been removed (too much overhead for
+        # staff to scan/upload signatures) — LAMA/DAMA no longer gates on it.
     elif discharge_type == "death":
         if not body.time_of_death:
             raise HTTPException(status_code=400, detail="Time of death is required")
@@ -1662,10 +1668,11 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     amount_due = max(balance, 0)
     refund_due = max(-balance, 0)
 
-    if amount_due > 0 and not body.payment_collected:
+    # Payment is now collected as its own separate step (POST .../collect-balance)
+    # before Discharge Patient is even reachable — this just verifies that
+    # already happened, rather than accepting a fresh self-attestation here.
+    if amount_due > 0 and not a.balance_collected:
         raise HTTPException(status_code=402, detail=f"Payment of Rs.{amount_due:.2f} is still pending (deposit Rs.{deposit_total:.2f}{' + TPA-covered Rs.' + format(tpa_covered, '.2f') if tpa_covered > 0 else ''} vs charges Rs.{charges_total:.2f}) — collect payment before discharge can proceed")
-    if body.payment_collected and not body.payment_method:
-        raise HTTPException(status_code=400, detail="Please select how payment was collected")
     if refund_due > 0 and not body.refund_channel:
         raise HTTPException(status_code=400, detail=f"Deposit exceeds charges by Rs.{refund_due:.2f} — select how the refund will be paid out")
 
@@ -1710,7 +1717,7 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
         items_json=json.dumps(items), grand_total=charges_total, subtotal=subtotal, gst_total=gst_total,
         amount_collected=amount_due,
         generated_by=current_doctor.id, generated_from="admission_discharge",
-        payment_method=body.payment_method,
+        payment_method=a.balance_payment_method,
         receipt_number=next_receipt_number(db, hospital),
         place_of_supply=hospital.state,
     )

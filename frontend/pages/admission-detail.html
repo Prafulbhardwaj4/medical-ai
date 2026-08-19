@@ -305,8 +305,6 @@
     <nav class="bottom-nav" id="app-bottom-nav" style="display:none"></nav>
 
     <main class="main-content">
-      <button class="btn btn-outline btn-sm" style="margin-bottom:16px" onclick="location.href='admissions.html'">&larr; Back to Admissions</button>
-
       <div id="patient-header" class="card" style="margin-bottom:20px"><p>Loading...</p></div>
 
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;" id="main-grid" class="admission-detail-grid">
@@ -315,7 +313,6 @@
             <div class="card-header">
               <h2>Medications (MAR)</h2>
               <div style="display:flex;gap:8px">
-                <button class="btn btn-outline btn-sm" id="btn-log-visit" onclick="logDoctorVisit()" style="display:none">Log Doctor Visit</button>
                 <button class="btn btn-outline btn-sm" id="btn-add-med" onclick="openAddMedModal()">+ Add Medication</button>
               </div>
             </div>
@@ -341,12 +338,8 @@
             <div id="progress-notes-list"><p>Loading...</p></div>
           </div>
 
-          <div class="card" style="margin-bottom:20px" id="consents-card">
-            <div class="card-header"><h2>Consents</h2></div>
-            <div id="consents-body"><p>Loading...</p></div>
-          </div>
 
-          <div class="card">
+          <div class="card" id="other-charges-card">
             <div class="card-header">
               <h2>Other Charges</h2>
               <button class="btn btn-outline btn-sm" onclick="openAddChargeModal()">+ Add Charge</button>
@@ -370,7 +363,6 @@
             <div class="card-header">
               <h2>Running Bill</h2>
               <div style="display:flex;gap:8px">
-                <button class="btn btn-outline btn-sm" onclick="logDoctorVisit()">Log Doctor Visit</button>
                 <button class="btn btn-outline btn-sm" onclick="openWaiverModal()">Waiver / Discount</button>
               </div>
             </div>
@@ -410,27 +402,16 @@
 
   <!-- Add Medication modal -->
   <div class="modal-overlay" id="modal-add-med">
-    <div class="modal" style="max-width:420px">
-      <div class="modal-header"><h2>Add Medication</h2><button class="modal-close" onclick="closeModal('modal-add-med')">&times;</button></div>
-      <div class="form-group">
-        <label class="form-label">Route / Form</label>
-        <select class="form-control" id="med-route" onchange="onMedRouteChange()"><option value="">Loading...</option></select>
+    <div class="modal" style="max-width:600px">
+      <div class="modal-header"><h2>Add Medication(s)</h2><button class="modal-close" onclick="closeModal('modal-add-med')">&times;</button></div>
+      <div style="position:relative">
+        <input class="form-control" id="med-catalog-search" placeholder="Search medicines to add…" autocomplete="off"
+          oninput="renderAdmMedSuggestions()" onfocus="renderAdmMedSuggestions()" />
+        <div id="med-suggestions"
+          style="display:none;position:absolute;z-index:20;background:#fff;border:1px solid var(--border);
+          border-radius:8px;max-height:220px;overflow-y:auto;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.08);margin-top:4px"></div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Medicine</label>
-        <select class="form-control" id="med-catalog-select" onchange="onMedCatalogSelect()" disabled><option value="">Select a route/form first...</option></select>
-      </div>
-      <div id="med-not-in-catalog" style="display:none">
-        <div class="form-group"><label class="form-label">Medicine Name</label><input class="form-control" id="med-name" /></div>
-        <div class="form-group"><label class="form-label">Dosage</label><input class="form-control" id="med-dosage" placeholder="e.g. 500mg" /></div>
-        <div class="form-group"><label class="form-label">Price per dose (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="med-manual-price" value="0" /></div>
-      </div>
-      <p id="med-price-preview" style="font-size:12.5px;color:var(--slate-light);display:none;margin:-8px 0 12px"></p>
-      <div class="form-group"><label class="form-label">Frequency (optional)</label><input class="form-control" id="med-freq" placeholder="e.g. Every 8 hours" /></div>
-      <div class="form-group" style="display:flex;align-items:center;gap:8px">
-        <input type="checkbox" id="med-sourced-outside" style="width:auto" />
-        <label class="form-label" style="margin:0" for="med-sourced-outside">Family is sourcing this medicine themselves (no hospital stock use, no bill line)</label>
-      </div>
+      <div id="med-rows" style="margin-top:12px"></div>
       <div class="err-msg" id="med-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitAddMed()">Add</button>
     </div>
@@ -451,14 +432,6 @@
           border-radius:8px;max-height:220px;overflow-y:auto;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.08);margin-top:4px"></div>
       </div>
       <div class="form-group" style="margin-top:12px">
-        <label class="form-label">Priority (applies to this whole order)</label>
-        <select class="form-control" id="test-priority">
-          <option value="routine" selected>Routine</option>
-          <option value="urgent">Urgent</option>
-          <option value="stat">STAT</option>
-        </select>
-      </div>
-      <div class="form-group">
         <label class="form-label">Clinical Indication (optional)</label>
         <input class="form-control" id="test-clinical-indication" placeholder="e.g. suspected DKA" />
       </div>
@@ -480,39 +453,6 @@
       <div class="form-group"><label class="form-label">Quantity</label><input class="form-control" type="number" min="1" id="charge-qty" value="1" /></div>
       <div class="err-msg" id="charge-err"></div>
         <button class="btn btn-primary" style="width:100%" onclick="submitAddCharge()">Add</button>
-    </div>
-  </div>
-
-  <!-- Consent modal -->
-  <div class="modal-overlay" id="modal-consent">
-    <div class="modal" style="max-width:440px">
-      <div class="modal-header"><h2 id="consent-modal-title">Record Consent</h2><button class="modal-close" onclick="closeModal('modal-consent')">&times;</button></div>
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
-          <input type="checkbox" id="consent-by-guardian" onchange="document.getElementById('consent-relationship-group').style.display=this.checked?'':'none'">
-          Signed on the patient's behalf (guardian / next-of-kin — required for a minor or incapacitated patient)
-        </label>
-      </div>
-      <div class="form-group"><label class="form-label">Signer's Name</label><input class="form-control" id="consent-signer-name" placeholder="Full name" /></div>
-      <div class="form-group" id="consent-relationship-group" style="display:none">
-        <label class="form-label">Relationship to Patient</label>
-        <input class="form-control" id="consent-relationship" placeholder="e.g. Father, Spouse, Legal Guardian" />
-      </div>
-      <div class="form-group"><label class="form-label">Witness (optional)</label><input class="form-control" id="consent-witness" placeholder="Independent witness name, where possible" /></div>
-      <div class="form-group"><label class="form-label">Notes (optional)</label><textarea class="form-control" id="consent-notes" rows="2" placeholder="e.g. which procedure, or capacity-evaluation note"></textarea></div>
-      <div class="err-msg" id="consent-err"></div>
-      <button class="btn btn-primary" style="width:100%" onclick="submitConsent()">Save</button>
-    </div>
-  </div>
-
-  <!-- Professional Fee modal -->
-  <div class="modal-overlay" id="modal-professional-fee">
-    <div class="modal" style="max-width:400px">
-      <div class="modal-header"><h2>Doctor Professional Fee</h2><button class="modal-close" onclick="closeModal('modal-professional-fee')">&times;</button></div>
-      <p style="font-size:13px;color:var(--slate);margin-bottom:10px">The treating doctor's own fee for this admission — separate from room/facility charges. Leave blank to clear the override and fall back to the doctor's default.</p>
-      <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="professional-fee-amount" /></div>
-      <div class="err-msg" id="professional-fee-err"></div>
-      <button class="btn btn-primary" style="width:100%" onclick="submitProfessionalFee()">Save</button>
     </div>
   </div>
 
@@ -626,29 +566,37 @@
 
   <!-- Discharge confirm modal -->
   <div class="modal-overlay" id="modal-discharge">
-    <div class="modal" style="max-width:440px">
+    <div class="modal" style="max-width:720px;width:92vw;max-height:88vh;overflow-y:auto">
       <div class="modal-header"><h2>Discharge Patient</h2><button class="modal-close" onclick="closeModal('modal-discharge')">&times;</button></div>
-      <p style="color:var(--slate);font-size:13.5px;margin-bottom:10px">This finalizes the bill and generates the discharge invoice. This can't be undone.</p>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:14px">This finalizes the bill and generates the discharge invoice. This can't be undone.</p>
 
-      <div class="form-group">
-        <label class="form-label">Discharge Type</label>
-        <select class="form-control" id="discharge-type" onchange="toggleDischargeTypeFields()">
-          <option value="planned">Planned / Routine</option>
-          <option value="lama_dama">LAMA / DAMA</option>
-          <option value="death">Death in Hospital</option>
-        </select>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Discharge Type</label>
+          <select class="form-control" id="discharge-type" onchange="toggleDischargeTypeFields()">
+            <option value="planned">Planned / Routine</option>
+            <option value="lama_dama">LAMA / DAMA</option>
+            <option value="death">Death in Hospital</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Discharging Doctor</label>
+          <select class="form-control" id="discharge-doctor"></select>
+        </div>
       </div>
 
-      <div id="discharge-lama-fields" style="display:none">
-        <p style="font-size:12.5px;color:var(--slate);background:var(--smoke);border-radius:var(--radius);padding:10px;margin-bottom:12px">Requires a signed LAMA/DAMA consent-to-leave on file (record it under Consents first) and a discharge summary documenting condition at time of leaving.</p>
-        <div class="form-group"><label class="form-label">Capacity Evaluation Note (if there's any question of impaired decision-making)</label><textarea class="form-control" id="discharge-capacity-note" rows="2"></textarea></div>
+      <div id="discharge-lama-fields" style="display:none;margin-bottom:14px">
+        <p style="font-size:12.5px;color:var(--slate);background:var(--smoke);border-radius:var(--radius);padding:10px;margin-bottom:10px">Discharge summary documenting condition at time of leaving is required for LAMA/DAMA.</p>
+        <div class="form-group" style="margin:0"><label class="form-label">Capacity Evaluation Note (if there's any question of impaired decision-making)</label><textarea class="form-control" id="discharge-capacity-note" rows="2"></textarea></div>
       </div>
 
-      <div id="discharge-death-fields" style="display:none">
-        <div class="form-group"><label class="form-label">Time of Death</label><input class="form-control" type="datetime-local" id="discharge-time-of-death" /></div>
-        <div class="form-group"><label class="form-label">Certifying Doctor</label><select class="form-control" id="discharge-certifying-doctor"></select></div>
+      <div id="discharge-death-fields" style="display:none;margin-bottom:14px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="form-group" style="margin:0"><label class="form-label">Time of Death</label><input class="form-control" type="datetime-local" id="discharge-time-of-death" /></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Certifying Doctor</label><select class="form-control" id="discharge-certifying-doctor"></select></div>
+        </div>
         <div class="form-group"><label class="form-label">Cause of Death</label><textarea class="form-control" id="discharge-cause-of-death" rows="2"></textarea></div>
-        <div class="form-group">
+        <div class="form-group" style="margin:0">
           <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
             <input type="checkbox" id="discharge-is-mlc"> Medico-Legal Case (MLC) — police/forensic involvement required before body release
           </label>
@@ -656,21 +604,29 @@
       </div>
 
       <div id="discharge-amount-box" style="background:var(--smoke);border-radius:var(--radius);padding:14px;margin-bottom:14px">
-        <div style="font-size:12px;color:var(--slate-light)" id="discharge-amount-label">Amount Due (excludes pharmacy — settled separately)</div>
-        <div id="discharge-amount-due" style="font-size:1.6rem;font-weight:800;color:var(--navy)">Loading…</div>
-        <div id="discharge-deposit-context" style="font-size:12px;color:var(--slate-light);margin-top:4px"></div>
-      </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="font-size:12px;color:var(--slate-light)" id="discharge-amount-label">Amount Due (excludes pharmacy — settled separately)</div>
+            <div id="discharge-amount-due" style="font-size:1.6rem;font-weight:800;color:var(--navy)">Loading…</div>
+            <div id="discharge-deposit-context" style="font-size:12px;color:var(--slate-light);margin-top:4px"></div>
+          </div>
+          <button class="btn btn-outline btn-sm" id="btn-discharge-waiver" onclick="openWaiverModal()">Waiver / Discount</button>
+        </div>
 
-      <div class="form-group" id="discharge-payment-row" style="display:none">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;margin-bottom:8px">
-          <input type="checkbox" id="discharge-payment-collected" onchange="togglePaymentMethodField()"> Payment collected
-        </label>
-        <select class="form-control" id="discharge-payment-method" style="display:none">
-          <option value="">Select method...</option>
-          <option value="cash">Cash</option>
-          <option value="card">Card</option>
-          <option value="upi">UPI</option>
-        </select>
+        <div id="discharge-payment-row" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-mid,#cbd5e1)">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <select class="form-control" id="discharge-payment-method" style="width:auto;flex:1;min-width:160px">
+              <option value="">Select payment method...</option>
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="upi">UPI</option>
+            </select>
+            <button class="btn btn-primary" id="btn-collect-payment" onclick="collectDischargeBalance()">Collect Payment</button>
+          </div>
+        </div>
+        <div id="discharge-payment-collected-note" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-mid,#cbd5e1);font-size:13px;color:#166534">
+          ✓ Payment collected — <span id="discharge-payment-collected-method"></span>
+        </div>
       </div>
 
       <div class="form-group" id="discharge-refund-row" style="display:none">
@@ -686,17 +642,18 @@
 
       <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
         <p style="font-weight:600;font-size:13.5px;margin-bottom:10px">Discharge Summary</p>
-        <div class="form-group"><label class="form-label">Discharging Doctor</label><select class="form-control" id="discharge-doctor"></select></div>
-        <div class="form-group"><label class="form-label">Course in Hospital</label><textarea class="form-control" id="discharge-course" rows="2"></textarea></div>
-        <div class="form-group"><label class="form-label">Procedures Performed</label><textarea class="form-control" id="discharge-procedures" rows="2"></textarea></div>
-        <div class="form-group"><label class="form-label">Discharge Diagnosis</label><textarea class="form-control" id="discharge-diagnosis" rows="2"></textarea></div>
-        <div class="form-group"><label class="form-label">Condition at Discharge</label><input class="form-control" id="discharge-condition" placeholder="e.g. Improved, Stable, Referred" /></div>
-        <div class="form-group"><label class="form-label">Medications on Discharge</label><textarea class="form-control" id="discharge-medications" rows="2"></textarea></div>
-        <div class="form-group"><label class="form-label">Follow-up Instructions</label><textarea class="form-control" id="discharge-followup" rows="2"></textarea></div>
-        <div class="form-group"><label class="form-label">Additional Notes (optional)</label><textarea class="form-control" id="discharge-summary" rows="3" placeholder="Anything that doesn't fit the fields above"></textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="form-group"><label class="form-label">Discharge Diagnosis</label><textarea class="form-control" id="discharge-diagnosis" rows="2"></textarea></div>
+          <div class="form-group"><label class="form-label">Condition at Discharge</label><input class="form-control" id="discharge-condition" placeholder="e.g. Improved, Stable, Referred" /></div>
+          <div class="form-group"><label class="form-label">Course in Hospital</label><textarea class="form-control" id="discharge-course" rows="2"></textarea></div>
+          <div class="form-group"><label class="form-label">Procedures Performed</label><textarea class="form-control" id="discharge-procedures" rows="2"></textarea></div>
+          <div class="form-group"><label class="form-label">Medications on Discharge</label><textarea class="form-control" id="discharge-medications" rows="2"></textarea></div>
+          <div class="form-group"><label class="form-label">Follow-up Instructions</label><textarea class="form-control" id="discharge-followup" rows="2"></textarea></div>
+        </div>
+        <div class="form-group"><label class="form-label">Additional Notes (optional)</label><textarea class="form-control" id="discharge-summary" rows="2" placeholder="Anything that doesn't fit the fields above"></textarea></div>
       </div>
       <div class="err-msg" id="discharge-err"></div>
-      <button class="btn btn-primary" style="width:100%" onclick="submitDischarge()">Confirm Discharge</button>
+      <button class="btn btn-primary" style="width:100%" id="btn-discharge-patient" onclick="submitDischarge()" disabled title="Collect payment first">Discharge Patient</button>
 
       <div id="discharge-output-options" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
         <p style="font-size:13px;color:var(--slate);margin-bottom:8px">Patient discharged. Share the invoice:</p>
@@ -786,9 +743,6 @@
     if (!canManageMedOrders()) {
       document.getElementById("btn-add-med").style.display = "none";
     }
-    if (isDoctorViewer || isNurseViewer() || isAdminViewer) {
-      document.getElementById("btn-log-visit").style.display = "";
-    }
     if (!canManageClinicalOrders()) {
       document.getElementById("btn-add-test").style.display = "none";
     }
@@ -807,11 +761,6 @@
       // Every card in the right column is billing-only, hidden for this role —
       // collapse the whole column via CSS rather than leaving a dead gap.
       document.getElementById("main-grid").classList.add("financial-hidden");
-    }
-    // Consents is clinical/legal, not billing — doctors and admins still need
-    // to see it. Only nurse/assistant lose it (matches original behaviour).
-    if (isNurseViewer()) {
-      document.getElementById("consents-card").style.display = "none";
     }
     if (canAddProgressNote()) {
       document.getElementById("progress-notes-form").style.display = "block";
@@ -832,7 +781,6 @@
 
     let admissionData = null;
     let tpaData = null;
-    let consentsData = [];
     let progressNotesData = [];
 
     async function loadAdmission() {
@@ -866,32 +814,24 @@
       if (isNurseViewer()) return;
 
       try {
-        const [depositResult, tpaResult, consentsResult] = await Promise.allSettled([
+        const [depositResult, tpaResult] = await Promise.allSettled([
           api("GET", `/admissions/${admissionId}/deposit-summary`),
           api("GET", `/admissions/${admissionId}/tpa-case`),
-          api("GET", `/admissions/${admissionId}/consents`),
         ]);
 
         depositData = depositResult.status === "fulfilled" ? depositResult.value : null;
         tpaData = tpaResult.status === "fulfilled" ? tpaResult.value : null;
-        consentsData = consentsResult.status === "fulfilled" ? consentsResult.value : [];
 
         renderDepositCard();
         renderTpaCard();
-        renderConsents();
 
-        [depositResult, tpaResult, consentsResult].forEach((result) => {
+        [depositResult, tpaResult].forEach((result) => {
           if (result.status === "rejected") console.error("Admission secondary load failed:", result.reason);
         });
       } catch (e) {
         toast("Some billing details couldn't be loaded: " + e.message, "error");
       }
     }
-
-    const CONSENT_TYPE_LABELS = {
-      general: "General Admission Consent", procedure: "Procedure-specific Consent", anaesthesia: "Anaesthesia Consent",
-      blood_transfusion: "Blood Transfusion Consent", high_risk: "High-risk / Complication Consent", lama_dama: "LAMA / DAMA Consent",
-    };
 
     function renderProgressNotes() {
       const list = document.getElementById("progress-notes-list");
@@ -919,56 +859,6 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
-    function renderConsents() {
-      const body = document.getElementById("consents-body");
-      body.innerHTML = Object.keys(CONSENT_TYPE_LABELS).map(type => {
-        const records = consentsData.filter(c => c.consent_type === type).sort((a, b) => new Date(b.signed_at) - new Date(a.signed_at));
-        const latest = records[0];
-        const status = latest
-          ? `<span class="badge badge-green">Recorded</span> <span style="font-size:12px;color:var(--slate)">${sanitize(latest.signer_name)}${latest.relationship ? ' (' + sanitize(latest.relationship) + ')' : ''} · ${new Date(latest.signed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${records.length > 1 ? ' · ' + records.length + ' on file' : ''}</span>`
-          : `<span class="badge badge-grey">Not recorded</span>`;
-        return `
-          <div class="ns-row" style="align-items:center">
-            <div><strong>${CONSENT_TYPE_LABELS[type]}</strong><div class="ns-row-sub">${status}</div></div>
-            <button class="btn btn-outline btn-sm" onclick="openConsentModal('${type}')">+ Add</button>
-          </div>`;
-      }).join('');
-    }
-
-    let activeConsentType = null;
-    function openConsentModal(type) {
-      activeConsentType = type;
-      document.getElementById("consent-modal-title").textContent = `Record ${CONSENT_TYPE_LABELS[type]}`;
-      document.getElementById("consent-signer-name").value = "";
-      document.getElementById("consent-relationship").value = "";
-      document.getElementById("consent-witness").value = "";
-      document.getElementById("consent-notes").value = "";
-      const isMinor = admissionData?.patient?.age != null && admissionData.patient.age < 18;
-      document.getElementById("consent-by-guardian").checked = isMinor;
-      document.getElementById("consent-relationship-group").style.display = isMinor ? "" : "none";
-      document.getElementById("consent-err").textContent = "";
-      openModal("modal-consent");
-    }
-    async function submitConsent() {
-      const err = document.getElementById("consent-err");
-      const signerName = document.getElementById("consent-signer-name").value.trim();
-      const byGuardian = document.getElementById("consent-by-guardian").checked;
-      const relationship = document.getElementById("consent-relationship").value.trim();
-      if (!signerName) { err.textContent = "Signer's name is required."; return; }
-      if (byGuardian && !relationship) { err.textContent = "Relationship is required when signed on the patient's behalf."; return; }
-      try {
-        await api("POST", `/admissions/${admissionId}/consents`, {
-          consent_type: activeConsentType, signer_name: signerName, signed_by_guardian: byGuardian,
-          relationship: relationship || null,
-          witness_name: document.getElementById("consent-witness").value.trim() || null,
-          notes: document.getElementById("consent-notes").value.trim() || null,
-        });
-        closeModal("modal-consent");
-        toast("Consent recorded", "success");
-        loadAdmission();
-      } catch (e) { err.textContent = e.message; }
-    }
-
     async function placeDischargeOrder() {
       try {
         await api("POST", `/admissions/${admissionId}/discharge-order`, {});
@@ -992,8 +882,11 @@
       const hasAllergies = allergies.length > 0;
       document.getElementById("patient-header").innerHTML = `
         <div id="allergy-banner" style="background:${hasAllergies ? '#fee2e2' : 'var(--smoke)'};border:1px solid ${hasAllergies ? '#fecaca' : 'var(--border)'};border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <div style="font-size:13.5px;${hasAllergies ? 'color:#991b1b;font-weight:600' : 'color:var(--slate)'}">
-            ${hasAllergies ? '⚠ Allergic to: ' + allergies.map(al => `${sanitize(al.allergen)} (${sanitize(al.severity)})`).join(', ') : 'No known drug allergies recorded'}
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="location.href='admissions.html'">&larr; Back to Admissions</button>
+            <div style="font-size:13.5px;${hasAllergies ? 'color:#991b1b;font-weight:600' : 'color:var(--slate)'}">
+              ${hasAllergies ? '⚠ Allergic to: ' + allergies.map(al => `${sanitize(al.allergen)} (${sanitize(al.severity)})`).join(', ') : 'No known drug allergies recorded'}
+            </div>
           </div>
           ${canManageAllergies() ? `<button class="btn btn-outline btn-sm" onclick="openManageAllergiesModal()">Manage Allergies</button>` : ''}
         </div>
@@ -1006,7 +899,14 @@
               <span class="badge badge-navy">${ADMISSION_TYPE_LABELS[a.admission_type] || 'Planned / Elective'}</span>
             </div>
           </div>
-          ${a.status === 'admitted' ? `<button class="btn btn-sm ph-emergency-btn" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${a.status === 'admitted' ? `
+              <button class="btn btn-outline btn-sm" onclick="document.getElementById('deposit-card').scrollIntoView({behavior:'smooth',block:'center'})">Deposit &amp; Balance</button>
+              <button class="btn btn-outline btn-sm" onclick="document.getElementById('other-charges-card').scrollIntoView({behavior:'smooth',block:'center'})">Other Charges</button>
+              <button class="btn btn-outline btn-sm" onclick="openDischargeModal()">Discharge</button>
+            ` : ''}
+            ${a.status === 'admitted' ? `<button class="btn btn-sm ph-emergency-btn" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}
+          </div>
         </div>
 
         <div class="ph-info-grid">
@@ -1201,13 +1101,8 @@
             </div>`).join('')
         : '';
 
-      const professionalFeeRow = b.professional_fee > 0
-        ? `<div class="bill-row"><span>${sanitize(b.professional_fee_label)} <button class="btn btn-outline btn-sm" style="padding:1px 8px;margin-left:6px" onclick="openProfessionalFeeModal()">Edit</button></span><span>₹${b.professional_fee.toFixed(2)}</span></div>`
-        : `<div class="bill-row" style="color:var(--slate-light)"><span>Doctor Professional Fee <button class="btn btn-outline btn-sm" style="padding:1px 8px;margin-left:6px" onclick="openProfessionalFeeModal()">Set</button></span><span>—</span></div>`;
-
       document.getElementById("bill-body").innerHTML = `
         ${roomRows}
-        ${professionalFeeRow}
         <div class="bill-row" style="font-weight:600"><span>Medicines (${meds.length} dose${meds.length === 1 ? '' : 's'})</span><span>₹${sum(meds).toFixed(2)}</span></div>
         <div style="padding-left:10px;border-left:2px solid var(--border);margin:2px 0 8px">${medRows}</div>
         <div class="bill-row"><span>Tests</span><span>₹${sum(tests).toFixed(2)}</span></div>
@@ -1488,93 +1383,119 @@
 
     // ---------- Medications ----------
     let medCatalogCache = [];
+    let medCatalogLoaded = false;
+
     async function openAddMedModal() {
       document.getElementById("med-err").textContent = "";
-      document.getElementById("med-not-in-catalog").style.display = "none";
-      document.getElementById("med-price-preview").style.display = "none";
-      document.getElementById("med-name").value = "";
-      document.getElementById("med-dosage").value = "";
-      document.getElementById("med-manual-price").value = "0";
-      document.getElementById("med-sourced-outside").checked = false;
+      document.getElementById("med-rows").innerHTML = "";
+      document.getElementById("med-catalog-search").value = "";
+      document.getElementById("med-suggestions").style.display = "none";
       openModal("modal-add-med");
-      const routeSel = document.getElementById("med-route");
-      routeSel.innerHTML = `<option value="">Loading...</option>`;
-      try {
-        const forms = await api("GET", "/admissions/medicine-forms");
-        routeSel.innerHTML = forms.map(f => `<option value="${sanitize(f)}">${sanitize(f)}</option>`).join('') +
-          `<option value="Other">Other / Not in catalog</option>`;
-        onMedRouteChange();
-      } catch (e) {
-        routeSel.innerHTML = `<option value="Other">Other / Not in catalog</option>`;
+      if (!medCatalogLoaded) {
+        try {
+          medCatalogCache = await api("GET", "/admissions/medicine-catalog");
+          medCatalogLoaded = true;
+        } catch (e) { medCatalogCache = []; }
       }
     }
 
-    async function onMedRouteChange() {
-      const route = document.getElementById("med-route").value;
-      const medSel = document.getElementById("med-catalog-select");
-      const notInCatalog = document.getElementById("med-not-in-catalog");
-      document.getElementById("med-price-preview").style.display = "none";
+    function renderAdmMedSuggestions() {
+      const box = document.getElementById('med-suggestions');
+      const query = document.getElementById('med-catalog-search').value.trim().toLowerCase();
+      const matches = medCatalogCache.filter(m => !query || m.display_name.toLowerCase().includes(query)).slice(0, 20);
 
-      if (route === "Other" || !route) {
-        medSel.disabled = true;
-        medSel.innerHTML = `<option value="">—</option>`;
-        notInCatalog.style.display = "block";
-        return;
+      let html = matches.map(m => `
+        <div onclick="selectAdmMed(${m.id})" style="padding:8px 12px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between"
+          onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">
+          <span>${sanitize(m.display_name)}</span>
+          <span style="color:var(--slate)">₹${m.price.toFixed(2)}</span>
+        </div>
+      `).join('');
+
+      if (query) {
+        html += `<div onclick="selectAdmMedManual()" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--teal);border-top:1px solid var(--border)"
+          onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">+ Add "${sanitize(document.getElementById('med-catalog-search').value.trim())}" manually (not in catalog)</div>`;
       }
-      notInCatalog.style.display = "none";
-      medSel.disabled = false;
-      medSel.innerHTML = `<option value="">Loading...</option>`;
-      try {
-        medCatalogCache = await api("GET", `/admissions/medicine-catalog?dosage_form=${encodeURIComponent(route)}`);
-        if (!medCatalogCache.length) {
-          medSel.innerHTML = `<option value="">No medicines found for this form</option>`;
-          return;
-        }
-        medSel.innerHTML = `<option value="">Select medicine...</option>` +
-          medCatalogCache.map(m => `<option value="${m.id}">${sanitize(m.display_name)}</option>`).join('');
-      } catch (e) {
-        medSel.innerHTML = `<option value="">Could not load medicines</option>`;
-      }
+
+      if (!html) { box.style.display = 'none'; box.innerHTML = ''; return; }
+      box.innerHTML = html;
+      box.style.display = 'block';
     }
 
-    function onMedCatalogSelect() {
-      const id = document.getElementById("med-catalog-select").value;
-      const preview = document.getElementById("med-price-preview");
-      if (!id) { preview.style.display = "none"; return; }
-      const m = medCatalogCache.find(x => String(x.id) === id);
+    function selectAdmMed(id) {
+      const m = medCatalogCache.find(x => x.id === id);
       if (!m) return;
-      preview.style.display = "block";
-      preview.textContent = `₹${m.price.toFixed(2)} per dose${m.strength ? ' · ' + m.strength : ''}`;
+      addAdmMedRow({ medicine_id: m.id, medicine_name: m.display_name, dosage: m.strength || '', price: m.price });
+      document.getElementById('med-catalog-search').value = '';
+      document.getElementById('med-suggestions').style.display = 'none';
+    }
+
+    function selectAdmMedManual() {
+      const name = document.getElementById('med-catalog-search').value.trim();
+      if (!name) return;
+      addAdmMedRow({ medicine_id: null, medicine_name: name, dosage: '', price: 0, manual: true });
+      document.getElementById('med-catalog-search').value = '';
+      document.getElementById('med-suggestions').style.display = 'none';
+    }
+
+    function addAdmMedRow(m) {
+      const wrap = document.getElementById("med-rows");
+      const div = document.createElement("div");
+      div.className = "med-row";
+      div.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:10px;padding:12px;background:var(--smoke);border-radius:var(--radius);border:1px solid var(--border)";
+      div.dataset.medicineId = m.medicine_id || '';
+      div.innerHTML = `
+        <div class="form-group am-med-name" style="margin:0;flex:2;min-width:150px">
+          <label class="form-label">Medicine</label>
+          <input class="form-control" value="${sanitize(m.medicine_name)}" ${m.manual ? '' : 'readonly'} />
+        </div>
+        <div class="form-group am-med-dosage" style="margin:0;flex:1;min-width:100px">
+          <label class="form-label">Dosage</label>
+          <input class="form-control" value="${sanitize(m.dosage || '')}" placeholder="e.g. 500mg" />
+        </div>
+        <div class="form-group am-med-freq" style="margin:0;flex:1;min-width:120px">
+          <label class="form-label">Frequency</label>
+          <input class="form-control" placeholder="e.g. Every 8 hours" />
+        </div>
+        <div class="form-group am-med-price" style="margin:0;flex:1;min-width:90px">
+          <label class="form-label">Price/dose (₹)</label>
+          <input class="form-control" type="number" min="0" step="0.01" value="${m.price || 0}" ${m.manual ? '' : 'readonly'} />
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--slate);flex-basis:100%;margin-top:2px">
+          <input type="checkbox" class="am-med-sourced" style="width:auto" /> Family is sourcing this medicine themselves (no hospital stock use, no bill line)
+        </label>
+        <button type="button" class="btn-remove-med" onclick="this.closest('.med-row').remove()" title="Remove">✕</button>
+      `;
+      wrap.appendChild(div);
     }
 
     async function submitAddMed() {
       const err = document.getElementById("med-err");
-      const route = document.getElementById("med-route").value;
-      const freq = document.getElementById("med-freq").value.trim() || null;
-      const sourcedOutside = document.getElementById("med-sourced-outside").checked;
-      let payload;
-
-      if (route === "Other" || !route) {
-        const name = document.getElementById("med-name").value.trim();
-        const dosage = document.getElementById("med-dosage").value.trim();
-        if (!name || !dosage) { err.textContent = "Medicine name and dosage are required"; return; }
-        const manualPrice = parseFloat(document.getElementById("med-manual-price").value);
-        payload = { medicine_name: name, dosage, route: route || "Other", frequency_note: freq, manual_unit_price: isNaN(manualPrice) ? 0 : manualPrice, sourced_outside: sourcedOutside };
-      } else {
-        const catalogId = document.getElementById("med-catalog-select").value;
-        if (!catalogId) { err.textContent = "Please select a medicine"; return; }
-        const m = medCatalogCache.find(x => String(x.id) === catalogId);
-        payload = {
-          medicine_id: m.id, medicine_name: m.display_name,
-          dosage: m.strength || m.display_name, route, frequency_note: freq,
-          sourced_outside: sourcedOutside,
-        };
+      err.textContent = "";
+      const rows = [...document.querySelectorAll("#med-rows .med-row")];
+      if (!rows.length) { err.textContent = "Add at least one medicine"; return; }
+      for (const row of rows) {
+        const name = row.querySelector(".am-med-name input").value.trim();
+        const dosage = row.querySelector(".am-med-dosage input").value.trim();
+        if (!name || !dosage) { err.textContent = "Each row needs a medicine name and dosage"; return; }
       }
 
       try {
-        await api("POST", `/admissions/${admissionId}/medications`, payload);
+        for (const row of rows) {
+          const medicineId = row.dataset.medicineId ? parseInt(row.dataset.medicineId) : null;
+          const name = row.querySelector(".am-med-name input").value.trim();
+          const dosage = row.querySelector(".am-med-dosage input").value.trim();
+          const freq = row.querySelector(".am-med-freq input").value.trim() || null;
+          const price = parseFloat(row.querySelector(".am-med-price input").value) || 0;
+          const sourcedOutside = row.querySelector(".am-med-sourced").checked;
+          const payload = {
+            medicine_id: medicineId, medicine_name: name, dosage, route: "Oral",
+            frequency_note: freq, manual_unit_price: price, sourced_outside: sourcedOutside,
+          };
+          await api("POST", `/admissions/${admissionId}/medications`, payload);
+        }
         closeModal("modal-add-med");
-        toast("Medication added", "success");
+        toast(`${rows.length} medication(s) added`, "success");
         loadAdmission();
       } catch (e) { err.textContent = e.message; }
     }
@@ -1718,7 +1639,6 @@
         if (!name) { err.textContent = "Each row needs a test name"; return; }
       }
 
-      const priority = document.getElementById("test-priority").value;
       const clinicalIndication = document.getElementById("test-clinical-indication").value.trim() || null;
       // One batch id shared by every row in this submission — this is what
       // ties them together into a single report on the patient portal.
@@ -1730,7 +1650,7 @@
           const name = row.querySelector(".am-test-name input").value.trim();
           const price = parseFloat(row.querySelector(".am-test-price input").value) || 0;
           const payload = {
-            test_id: testId, test_name: name, price, priority,
+            test_id: testId, test_name: name, price,
             clinical_indication: clinicalIndication, order_batch_id: batchId,
           };
           await api("POST", `/admissions/${admissionId}/tests`, payload);
@@ -1755,35 +1675,6 @@
         });
         closeModal("modal-add-charge");
         toast("Charge added", "success");
-        loadAdmission();
-      } catch (e) { err.textContent = e.message; }
-    }
-
-    // ---------- Doctor Visit ----------
-    async function logDoctorVisit() {
-      try {
-        const result = await api("POST", `/admissions/${admissionId}/log-visit`, {});
-        toast(`Visit logged — ₹${result.amount.toFixed(2)}`, "success");
-        loadAdmission();
-      } catch (e) { toast(e.message, "error"); }
-    }
-
-    // ---------- Professional Fee ----------
-    function openProfessionalFeeModal() {
-      document.getElementById("professional-fee-amount").value = admissionData.professional_fee_override != null ? admissionData.professional_fee_override
-        : (admissionData.professional_fee_default != null ? admissionData.professional_fee_default : '');
-      document.getElementById("professional-fee-err").textContent = "";
-      openModal("modal-professional-fee");
-    }
-    async function submitProfessionalFee() {
-      const err = document.getElementById("professional-fee-err");
-      const raw = document.getElementById("professional-fee-amount").value.trim();
-      const amount = raw === '' ? null : parseFloat(raw);
-      if (amount !== null && (isNaN(amount) || amount < 0)) { err.textContent = "Enter a valid amount, or leave blank to clear."; return; }
-      try {
-        await api("PATCH", `/admissions/${admissionId}/professional-fee`, { amount });
-        closeModal("modal-professional-fee");
-        toast("Professional fee updated", "success");
         loadAdmission();
       } catch (e) { err.textContent = e.message; }
     }
@@ -1863,38 +1754,56 @@
           document.getElementById("discharge-amount-due").textContent = `₹${preview.amount_due.toFixed(2)}`;
         }
         document.getElementById("discharge-deposit-context").textContent = `Deposit paid: ₹${preview.deposit_total.toFixed(2)} · Charges accrued: ₹${preview.charges_total.toFixed(2)}`;
-        document.getElementById("discharge-payment-row").style.display = preview.amount_due > 0 ? "block" : "none";
-        document.getElementById("discharge-payment-collected").checked = false;
-        document.getElementById("discharge-payment-method").style.display = "none";
-        document.getElementById("discharge-payment-method").value = "";
         document.getElementById("discharge-refund-row").style.display = preview.refund_due > 0 ? "block" : "none";
         document.getElementById("discharge-refund-channel").value = "";
         dischargeRefundDue = preview.refund_due;
+
+        // Collect Payment / Discharge Patient sequence: amount_due of 0 skips
+        // straight to being able to discharge, same as balance already collected.
+        const alreadyCollected = preview.amount_due <= 0 || preview.balance_collected;
+        document.getElementById("discharge-payment-row").style.display = alreadyCollected ? "none" : "block";
+        document.getElementById("discharge-payment-method").value = "";
+        document.getElementById("discharge-payment-collected-note").style.display = alreadyCollected && preview.amount_due > 0 ? "block" : "none";
+        document.getElementById("discharge-payment-collected-method").textContent = preview.balance_payment_method || "";
+        document.getElementById("btn-discharge-patient").disabled = !alreadyCollected;
+        document.getElementById("btn-discharge-patient").title = alreadyCollected ? "" : "Collect payment first";
       } catch (e) {
         document.getElementById("discharge-amount-due").textContent = "—";
         document.getElementById("discharge-err").textContent = e.message;
       }
     }
 
-    function togglePaymentMethodField() {
-      const checked = document.getElementById("discharge-payment-collected").checked;
-      document.getElementById("discharge-payment-method").style.display = checked ? "block" : "none";
+    async function collectDischargeBalance() {
+      const err = document.getElementById("discharge-err");
+      err.textContent = "";
+      const method = document.getElementById("discharge-payment-method").value;
+      if (!method) { err.textContent = "Select how payment was collected."; return; }
+      if (!confirm(`Confirm ₹${dischargeAmountDue.toFixed(2)} collected via ${method.toUpperCase()}?`)) return;
+
+      const btn = document.getElementById("btn-collect-payment");
+      btn.disabled = true;
+      try {
+        await api("POST", `/admissions/${admissionId}/collect-balance`, { payment_method: method });
+        document.getElementById("discharge-payment-row").style.display = "none";
+        document.getElementById("discharge-payment-collected-note").style.display = "block";
+        document.getElementById("discharge-payment-collected-method").textContent = method;
+        document.getElementById("btn-discharge-patient").disabled = false;
+        document.getElementById("btn-discharge-patient").title = "";
+        toast("Payment collected", "success");
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     async function submitDischarge() {
       const err = document.getElementById("discharge-err");
       err.textContent = "";
-      const paymentCollected = document.getElementById("discharge-payment-collected").checked;
-      const paymentMethod = document.getElementById("discharge-payment-method").value;
-
       const refundChannel = document.getElementById("discharge-refund-channel").value;
 
-      if (dischargeAmountDue > 0 && !paymentCollected) {
+      if (document.getElementById("btn-discharge-patient").disabled) {
         alert(`Payment of ₹${dischargeAmountDue.toFixed(2)} is still pending. Collect payment before discharge can proceed.`);
-        return;
-      }
-      if (paymentCollected && !paymentMethod) {
-        err.textContent = "Please select how payment was collected";
         return;
       }
       if (dischargeRefundDue > 0 && !refundChannel) {
@@ -1909,12 +1818,12 @@
         if (!document.getElementById("discharge-cause-of-death").value.trim()) { err.textContent = "Cause of death is required."; return; }
       }
 
+      if (!confirm("Discharge this patient? This finalizes the bill and can't be undone.")) return;
+
       try {
         await api("POST", `/admissions/${admissionId}/discharge`, {
           discharge_type: dischargeType,
           discharge_summary: document.getElementById("discharge-summary").value.trim() || null,
-          payment_collected: paymentCollected,
-          payment_method: paymentCollected ? paymentMethod : null,
           refund_channel: dischargeRefundDue > 0 ? refundChannel : null,
           capacity_evaluation_note: dischargeType === "lama_dama" ? (document.getElementById("discharge-capacity-note").value.trim() || null) : null,
           time_of_death: dischargeType === "death" ? new Date(document.getElementById("discharge-time-of-death").value).toISOString() : null,

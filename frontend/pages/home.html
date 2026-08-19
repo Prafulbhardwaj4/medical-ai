@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedScribe — AI-Powered Hospital Management for Indian Hospitals</title>
+  <meta name="description" content="MedScribe is an AI-powered hospital management system built for Indian hospitals — OPD, IPD, Pathology, Pharmacy, Emergency Ward and an AI medical scribe that turns Hindi/English consultations into structured prescriptions in seconds." />
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    /* ── Landing page — scoped styles, reusing the app's existing design tokens ── */
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 84px;
+    }
+
+    .lp-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      width: 100%;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 48px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-xs);
+      transition: box-shadow 0.25s ease;
+    }
+
+    .lp-logo {
+      font-family: 'DM Mono', monospace;
+      font-size: 1.3rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--navy);
+    }
+
+    .lp-logo span { color: var(--teal); }
+
+    .lp-nav-links {
+      display: flex;
+      align-items: center;
+      gap: 34px;
+    }
+
+    .lp-nav-links a {
+      color: var(--slate);
+      text-decoration: none;
+      font-size: 0.87rem;
+      font-weight: 500;
+      transition: color 0.15s ease;
+    }
+
+    .lp-nav-links a:hover { color: var(--navy); }
+
+    @media (max-width: 860px) {
+      .lp-nav-links a:not(.lp-nav-cta) { display: none; }
+      .lp-header { padding: 16px 20px; }
+    }
+
+    /* ── Hero ── */
+    .lp-hero {
+      position: relative;
+      overflow: hidden;
+      padding: 168px 48px 110px;
+      background: var(--navy);
+      color: var(--white);
+    }
+
+    .lp-hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 15% 10%, rgba(13, 148, 136, 0.22) 0%, transparent 55%),
+        radial-gradient(circle at 85% 30%, rgba(20, 184, 166, 0.14) 0%, transparent 50%),
+        radial-gradient(circle at 50% 100%, rgba(13, 148, 136, 0.10) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .lp-hero::after {
+      content: '';
+      position: absolute;
+      top: -120px;
+      right: -120px;
+      width: 460px;
+      height: 460px;
+      border-radius: 50%;
+      border: 2px solid rgba(13, 148, 136, 0.14);
+      pointer-events: none;
+    }
+
+    .lp-hero-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 780px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .lp-vande-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 30px;
+      padding: 8px 18px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.85);
+      margin-bottom: 30px;
+      opacity: 0;
+      animation: lpFadeUp 0.7s ease 0.05s forwards;
+    }
+
+    .lp-vande-badge .lp-flag-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: linear-gradient(180deg, #FF9933 0%, #FFFFFF 45%, #138808 100%);
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
+      flex-shrink: 0;
+    }
+
+    .lp-hero h1 {
+      font-size: 3rem;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 22px;
+      opacity: 0;
+      animation: lpFadeUp 0.7s ease 0.15s forwards;
+    }
+
+    .lp-hero h1 em {
+      font-style: normal;
+      color: var(--teal-light);
+    }
+
+    .lp-hero-sub {
+      font-size: 1.05rem;
+      color: rgba(255, 255, 255, 0.62);
+      line-height: 1.7;
+      max-width: 560px;
+      margin: 0 auto 38px;
+      opacity: 0;
+      animation: lpFadeUp 0.7s ease 0.25s forwards;
+    }
+
+    .lp-hero-ctas {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      opacity: 0;
+      animation: lpFadeUp 0.7s ease 0.35s forwards;
+    }
+
+    .lp-btn-hero-primary {
+      background: var(--teal);
+      color: var(--white);
+      padding: 13px 28px;
+      border-radius: var(--radius);
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      box-shadow: 0 4px 20px rgba(13, 148, 136, 0.4);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lp-btn-hero-primary:hover {
+      background: #0b8078;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(13, 148, 136, 0.5);
+    }
+
+    .lp-btn-hero-outline {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: var(--white);
+      padding: 13px 28px;
+      border-radius: var(--radius);
+      font-size: 0.95rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+
+    .lp-btn-hero-outline:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.35);
+      transform: translateY(-2px);
+    }
+
+    .lp-hero-vande-main {
+      margin-top: 54px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1.02rem;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.4);
+      opacity: 0;
+      animation: lpFadeUp 0.7s ease 0.45s forwards;
+    }
+
+    .lp-hero-vande-main span {
+      color: var(--teal-light);
+    }
+
+    @keyframes lpFadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Trust strip ── */
+    .lp-trust-strip {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 22px 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+
+    .lp-trust-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 0.84rem;
+      color: var(--slate);
+      font-weight: 500;
+    }
+
+    .lp-trust-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+      flex-shrink: 0;
+      animation: lpBlink 2s infinite;
+    }
+
+    @keyframes lpBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    /* ── Generic section ── */
+    .lp-section {
+      padding: 96px 48px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .lp-section-tight { padding-top: 0; }
+
+    .lp-eyebrow {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--teal);
+      background: var(--teal-subtle);
+      padding: 5px 14px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+    }
+
+    .lp-section-head {
+      text-align: center;
+      max-width: 620px;
+      margin: 0 auto 56px;
+    }
+
+    .lp-section-head h2 {
+      font-size: 2rem;
+      color: var(--navy);
+      letter-spacing: -0.02em;
+      margin-bottom: 14px;
+    }
+
+    .lp-section-head p {
+      font-size: 0.98rem;
+      color: var(--slate);
+      line-height: 1.7;
+    }
+
+    /* ── Reveal-on-scroll ── */
+    .lp-reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .lp-reveal.lp-in-view {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── Feature grid ── */
+    .lp-feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+    }
+
+    @media (max-width: 900px) {
+      .lp-feature-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 600px) {
+      .lp-feature-grid { grid-template-columns: 1fr; }
+    }
+
+    .lp-feature-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px 24px;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .lp-feature-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg);
+      border-color: var(--teal-light);
+    }
+
+    .lp-feature-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--teal-subtle);
+      color: var(--teal);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 18px;
+      font-size: 1.3rem;
+    }
+
+    .lp-feature-card h3 {
+      font-size: 1.02rem;
+      color: var(--navy);
+      margin-bottom: 8px;
+    }
+
+    .lp-feature-card p {
+      font-size: 0.85rem;
+      color: var(--slate);
+      line-height: 1.65;
+    }
+
+    /* ── Roles strip ── */
+    .lp-roles-wrap {
+      background: var(--smoke-mid);
+    }
+
+    .lp-roles-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    @media (max-width: 760px) {
+      .lp-roles-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .lp-role-chip {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.87rem;
+      font-weight: 600;
+      color: var(--navy);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .lp-role-chip:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .lp-role-chip-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--teal);
+      flex-shrink: 0;
+    }
+
+    /* ── AI Scribe spotlight ── */
+    .lp-scribe {
+      position: relative;
+      overflow: hidden;
+      background: var(--navy);
+      color: var(--white);
+      padding: 100px 48px;
+    }
+
+    .lp-scribe::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 80% 20%, rgba(13, 148, 136, 0.20) 0%, transparent 50%),
+        radial-gradient(circle at 10% 90%, rgba(20, 184, 166, 0.12) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .lp-scribe-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+
+    @media (max-width: 900px) {
+      .lp-scribe-inner { grid-template-columns: 1fr; gap: 40px; }
+    }
+
+    .lp-scribe h2 {
+      font-size: 2rem;
+      letter-spacing: -0.02em;
+      margin-bottom: 18px;
+      color: var(--white);
+    }
+
+    .lp-scribe h2 em {
+      font-style: normal;
+      color: var(--teal-light);
+    }
+
+    .lp-scribe-sub {
+      font-size: 0.95rem;
+      color: rgba(255, 255, 255, 0.6);
+      line-height: 1.75;
+      margin-bottom: 30px;
+    }
+
+    .lp-scribe-features {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .lp-scribe-feature {
+      display: flex;
+      align-items: flex-start;
+      gap: 13px;
+      font-size: 0.88rem;
+      color: rgba(255, 255, 255, 0.82);
+    }
+
+    .lp-scribe-feature-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--teal-light);
+      margin-top: 6px;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.2);
+    }
+
+    .lp-scribe-mock {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-lg);
+      padding: 26px;
+      backdrop-filter: blur(6px);
+    }
+
+    .lp-scribe-mock-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 0.82rem;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .lp-scribe-mock-row:last-child { border-bottom: none; }
+
+    .lp-scribe-mock-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--teal-light);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      width: 92px;
+      flex-shrink: 0;
+    }
+
+    /* ── Pricing ── */
+    .lp-pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      align-items: stretch;
+    }
+
+    @media (max-width: 1180px) {
+      .lp-pricing-grid { grid-template-columns: repeat(2, 1fr); max-width: 720px; margin: 0 auto; }
+    }
+
+    @media (max-width: 900px) {
+      .lp-pricing-grid { grid-template-columns: 1fr; max-width: 420px; margin: 0 auto; }
+    }
+
+    .lp-price-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px 28px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .lp-price-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .lp-price-tier-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--slate);
+      margin-bottom: 10px;
+    }
+
+    .lp-price-amount {
+      font-family: 'DM Mono', monospace;
+      font-size: 2.1rem;
+      font-weight: 500;
+      color: var(--navy);
+      margin-bottom: 4px;
+      letter-spacing: -0.02em;
+    }
+
+    .lp-price-amount span {
+      font-size: 0.85rem;
+      font-weight: 400;
+      color: var(--slate-light);
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .lp-price-scope {
+      font-size: 0.83rem;
+      color: var(--slate);
+      margin-bottom: 24px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .lp-price-features {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 28px;
+      flex: 1;
+    }
+
+    .lp-price-feature {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      font-size: 0.85rem;
+      color: var(--slate);
+    }
+
+    .lp-price-check {
+      color: var(--teal);
+      flex-shrink: 0;
+      font-weight: 700;
+      margin-top: 1px;
+    }
+
+    /* .lp-price-feature-no {
+      color: var(--slate-light);
+    }
+
+    .lp-price-cross {
+      color: var(--slate-light);
+      flex-shrink: 0;
+      font-weight: 700;
+      margin-top: 1px;
+    }
+
+    .lp-soon-tag {
+      display: inline-flex;
+      align-items: center;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #b45309;
+      background: #fef3c7;
+      padding: 1px 7px;
+      border-radius: 10px;
+      margin-left: 7px;
+    }
+
+    .lp-price-card-premium .lp-soon-tag {
+      color: #fde68a;
+      background: rgba(255, 255, 255, 0.12);
+    } */
+
+    .lp-price-cta {
+      display: block;
+      text-align: center;
+      padding: 11px;
+      border-radius: var(--radius);
+      font-size: 0.88rem;
+      font-weight: 600;
+      text-decoration: none;
+      background: var(--smoke);
+      color: var(--navy);
+      border: 1px solid var(--border);
+      transition: all 0.15s ease;
+    }
+
+    .lp-price-cta:hover {
+      background: var(--smoke-mid);
+      border-color: var(--border-mid);
+    }
+
+    /* Tier 4 — premium treatment */
+    .lp-price-card-premium {
+      position: relative;
+      border: none;
+      background: linear-gradient(160deg, var(--navy) 0%, #142a52 100%);
+      box-shadow: 0 12px 40px rgba(15, 31, 61, 0.35), 0 0 0 1px rgba(20, 184, 166, 0.4);
+      padding: 34px 24px;
+    }
+
+    .lp-price-card-premium::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: var(--radius-lg);
+      padding: 1px;
+      background: linear-gradient(135deg, var(--teal-light), transparent 40%, transparent 60%, var(--teal-light));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .lp-price-card-premium:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 18px 50px rgba(15, 31, 61, 0.45), 0 0 0 1px rgba(20, 184, 166, 0.55);
+    }
+
+    .lp-premium-badge {
+      position: absolute;
+      top: -13px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, var(--teal), var(--teal-light));
+      color: var(--white);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 5px 16px;
+      border-radius: 20px;
+      box-shadow: 0 4px 12px rgba(13, 148, 136, 0.5);
+      white-space: nowrap;
+    }
+
+    .lp-price-card-premium .lp-price-tier-label { color: var(--teal-light); }
+    .lp-price-card-premium .lp-price-amount { color: var(--white); }
+    .lp-price-card-premium .lp-price-amount span { color: rgba(255, 255, 255, 0.5); }
+    .lp-price-card-premium .lp-price-scope { color: rgba(255, 255, 255, 0.55); border-bottom-color: rgba(255, 255, 255, 0.12); }
+    .lp-price-card-premium .lp-price-feature { color: rgba(255, 255, 255, 0.78); }
+    .lp-price-card-premium .lp-price-check { color: var(--teal-light); }
+
+    .lp-price-card-premium .lp-price-cta {
+      background: var(--teal);
+      color: var(--white);
+      border: none;
+      box-shadow: 0 4px 16px rgba(13, 148, 136, 0.4);
+    }
+
+    .lp-price-card-premium .lp-price-cta:hover {
+      background: var(--teal-light);
+      transform: translateY(-1px);
+    }
+
+    .lp-price-card-dimmed {
+      opacity: 0.55;
+    }
+
+    .lp-price-card-dimmed:hover {
+      transform: none;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .lp-price-cta-disabled {
+      cursor: default;
+      background: var(--smoke);
+      color: var(--slate-light);
+      border: 1px solid var(--border);
+      pointer-events: none;
+    }
+
+    .lp-price-card-premium.lp-price-card-dimmed {
+      opacity: 0.6;
+    }
+
+    .lp-price-card-premium.lp-price-card-dimmed:hover {
+      transform: none;
+      box-shadow: 0 12px 40px rgba(15, 31, 61, 0.35), 0 0 0 1px rgba(20, 184, 166, 0.4);
+    }
+
+    .lp-price-card-premium .lp-price-cta-disabled {
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.5);
+      border: none;
+      box-shadow: none;
+    }
+
+    /* ── Final CTA ── */
+    .lp-final-cta {
+      background: var(--teal-subtle);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 76px 48px;
+      text-align: center;
+    }
+
+    .lp-final-cta h2 {
+      font-size: 1.7rem;
+      color: var(--navy);
+      letter-spacing: -0.02em;
+      margin-bottom: 14px;
+    }
+
+    .lp-final-cta p {
+      font-size: 0.95rem;
+      color: var(--slate);
+      margin-bottom: 30px;
+    }
+
+    /* ── Footer ── */
+    .lp-footer {
+      background: var(--navy);
+      color: rgba(255, 255, 255, 0.5);
+      padding: 56px 48px 28px;
+    }
+
+    .lp-footer-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr;
+      gap: 40px;
+      padding-bottom: 36px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    @media (max-width: 760px) {
+      .lp-footer-inner { grid-template-columns: 1fr 1fr; }
+    }
+
+    .lp-footer-logo {
+      font-family: 'DM Mono', monospace;
+      font-size: 1.15rem;
+      color: var(--white);
+      margin-bottom: 12px;
+    }
+
+    .lp-footer-logo span { color: var(--teal-light); }
+
+    .lp-footer-blurb {
+      font-size: 0.83rem;
+      line-height: 1.7;
+      max-width: 260px;
+    }
+
+    .lp-footer-col h4 {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.85);
+      margin-bottom: 16px;
+    }
+
+    .lp-footer-col a {
+      display: block;
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.5);
+      text-decoration: none;
+      margin-bottom: 11px;
+      transition: color 0.15s ease;
+    }
+
+    .lp-footer-col a:hover { color: var(--teal-light); }
+
+    .lp-footer-bottom {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding-top: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.8rem;
+    }
+
+    .lp-footer-vande {
+      color: rgba(255, 255, 255, 0.4);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+    }
+
+    .lp-footer-vande span { color: var(--teal-light); }
+  </style>
+</head>
+
+<body style="background:var(--white)">
+
+  <!-- Header -->
+  <header class="lp-header" id="lp-header">
+    <div class="lp-logo">Med<span>Scribe</span></div>
+    <nav class="lp-nav-links">
+      <a href="#features">Features</a>
+      <a href="#roles">Who it's for</a>
+      <a href="#ai-scribe">AI Scribe</a>
+      <a href="#pricing">Pricing</a>
+      <a class="lp-nav-cta" href="login.html">
+        <span class="btn btn-primary btn-sm">Login</span>
+      </a>
+    </nav>
+  </header>
+
+  <!-- Hero -->
+  <section class="lp-hero">
+    <div class="lp-hero-inner">
+      <div class="lp-vande-badge"><span class="lp-flag-dot"></span> Vande Mataram — Proudly built in India, for India's hospitals</div>
+      <h1>Hospital management that <em>listens, structures,</em> and keeps up with your OPD.</h1>
+      <p class="lp-hero-sub">
+        MedScribe is an AI-powered hospital management system built specifically for Indian hospitals —
+        from registration to discharge, with an AI medical scribe that turns your consultation into a
+        structured prescription while you're still talking to the patient.
+      </p>
+      <div class="lp-hero-ctas">
+        <a href="login.html" class="lp-btn-hero-primary">Get Started →</a>
+        <a href="#features" class="lp-btn-hero-outline">See what's inside</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trust strip -->
+  <div class="lp-trust-strip">
+    <div class="lp-trust-item"><span class="lp-trust-dot"></span> Live with a pilot hospital today</div>
+    <div class="lp-trust-item">🇮🇳 Built for Indian hospital workflows</div>
+    <div class="lp-trust-item">🗣️ Hindi + English, out of the box</div>
+  </div>
+
+  <!-- Features -->
+  <section class="lp-section" id="features">
+    <div class="lp-section-head lp-reveal">
+      <div class="lp-eyebrow">Everything under one roof</div>
+      <h2>Every department, one connected system</h2>
+      <p>No more switching between a registration register, a WhatsApp group for reports, and a diary for admissions. MedScribe runs the whole patient journey in one place.</p>
+    </div>
+    <div class="lp-feature-grid">
+      <div class="lp-feature-card lp-reveal">
+        <div class="lp-feature-icon">📋</div>
+        <h3>OPD — Registration to Prescription</h3>
+        <p>Token-based registration, live queue management, consultation with the AI scribe, and a printable or WhatsApp-delivered prescription — all in one flow.</p>
+      </div>
+      <div class="lp-feature-card lp-reveal">
+        <div class="lp-feature-icon">🛏️</div>
+        <h3>IPD &amp; Admissions</h3>
+        <p>Ward and bed management, admission and discharge workflows, in-patient medication and test orders, and a running bill your billing team doesn't have to reconstruct by hand.</p>
+      </div>
+      <div class="lp-feature-card lp-reveal">
+        <div class="lp-feature-icon">🧪</div>
+        <h3>Pathology &amp; Lab</h3>
+        <p>Sample collection, result entry, verification and release — with reports available to the doctor and the patient the moment they're ready, no chasing required.</p>
+      </div>
+      <div class="lp-feature-card lp-reveal">
+        <div class="lp-feature-icon">📅</div>
+        <h3>Online Appointments</h3>
+        <p>Patients book a slot from their phone; reception sees expected arrivals for the day, with automatic queue placement when they walk in.</p>
+      </div>
+      <div class="lp-feature-card lp-reveal">
+        <div class="lp-feature-icon">💊</div>
+        <h3>Pharmacy</h3>
+        <p>Prescriptions flow straight to the pharmacy queue — dispense against stock, track batches and expiry, and keep billing in sync automatically.</p>
+      </div>
+      <div class="lp-feature-card lp-reveal">
+        <div class="lp-feature-icon">🚑</div>
+        <h3>Emergency Ward</h3>
+        <p>Fast-track intake for emergency patients with live bed availability, so reception and the on-call doctor are never working from different information.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Roles -->
+  <section class="lp-roles-wrap" id="roles">
+    <div class="lp-section">
+      <div class="lp-section-head lp-reveal">
+        <div class="lp-eyebrow">Built for the whole team</div>
+        <h2>A screen for every role in your hospital</h2>
+        <p>Every staff member gets a login built around how they actually work — not one generic dashboard everyone has to adapt to.</p>
+      </div>
+      <div class="lp-roles-grid">
+        <div class="lp-role-chip lp-reveal"><span class="lp-role-chip-dot"></span> Doctor</div>
+        <div class="lp-role-chip lp-reveal"><span class="lp-role-chip-dot"></span> Receptionist</div>
+        <div class="lp-role-chip lp-reveal"><span class="lp-role-chip-dot"></span> Nurse</div>
+        <div class="lp-role-chip lp-reveal"><span class="lp-role-chip-dot"></span> Assistant</div>
+        <div class="lp-role-chip lp-reveal"><span class="lp-role-chip-dot"></span> Lab</div>
+        <div class="lp-role-chip lp-reveal"><span class="lp-role-chip-dot"></span> Pharmacy</div>
+        <div class="lp-role-chip lp-reveal"><span class="lp-role-chip-dot"></span> Hospital Admin</div>
+        <div class="lp-role-chip lp-reveal"><span class="lp-role-chip-dot"></span> Patient Portal</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI Scribe -->
+  <section class="lp-scribe" id="ai-scribe">
+    <div class="lp-scribe-inner">
+      <div class="lp-reveal">
+        <div class="lp-eyebrow" style="background:rgba(13,148,136,0.15);color:var(--teal-light)">The MedScribe difference</div>
+        <h2>Your clinic's <em>AI scribe</em>, always ready.</h2>
+        <p class="lp-scribe-sub">
+          Record the consultation the way you'd naturally speak to a patient — switching between Hindi and English mid-sentence, the way most Indian doctors actually talk.
+          MedScribe listens, structures it into a proper prescription, and gets it to the patient before they've left the room.
+        </p>
+        <div class="lp-scribe-features">
+          <div class="lp-scribe-feature"><span class="lp-scribe-feature-dot"></span> Voice-to-prescription in under 30 seconds</div>
+          <div class="lp-scribe-feature"><span class="lp-scribe-feature-dot"></span> Hindi + English code-switching supported natively</div>
+          <div class="lp-scribe-feature"><span class="lp-scribe-feature-dot"></span> PDF sent to the patient via WhatsApp instantly</div>
+          <div class="lp-scribe-feature"><span class="lp-scribe-feature-dot"></span> Full patient history at a glance, every visit</div>
+        </div>
+      </div>
+      <div class="lp-scribe-mock lp-reveal">
+        <div class="lp-scribe-mock-row"><span class="lp-scribe-mock-label">You say</span> "इसको paracetamol 500 twice a day, teen din ke liye"</div>
+        <div class="lp-scribe-mock-row"><span class="lp-scribe-mock-label">Medscribe</span> Paracetamol 500mg — 1 tab, twice daily × 3 days</div>
+        <div class="lp-scribe-mock-row"><span class="lp-scribe-mock-label">Delivered</span> PDF prescription sent via WhatsApp ✓</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="lp-section" id="pricing">
+    <div class="lp-section-head lp-reveal">
+      <div class="lp-eyebrow">Simple, transparent pricing</div>
+      <h2>Priced around how much you actually use it</h2>
+      <p>No per-bed licensing, no confusing add-ons. Pick the tier that matches your monthly consultation volume.</p>
+    </div>
+    <div class="lp-pricing-grid">
+      <div class="lp-price-card lp-reveal">
+        <div class="lp-price-tier-label">Foundation</div>
+        <div class="lp-price-amount">₹9,999<span>/month</span></div>
+        <div class="lp-price-scope">Unlimited staff logins, every role</div>
+        <div class="lp-price-features">
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> OPD: registration, token queue, consultation, prescriptions</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Lab orders, pharmacy dispense, billing &amp; GST</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Pathology / Lab module</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Pharmacy module</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Online appointment booking</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Patient Portal</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Radiology / Imaging</div>
+        </div>
+        <a href="login.html" class="lp-price-cta">Get Started</a>
+      </div>
+
+      <div class="lp-price-card lp-reveal">
+        <div class="lp-price-tier-label">Growth</div>
+        <div class="lp-price-amount">₹24,999<span>/month</span></div>
+        <div class="lp-price-scope">Up to 4,000 consultations/month</div>
+        <div class="lp-price-features">
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Everything in Foundation</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> IPD / Admissions &amp; ward management unlocked</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> AI Medical Scribe for OPD</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Staff chat (staff ↔ admin)</div>
+        </div>
+        <a href="login.html" class="lp-price-cta">Get Started</a>
+      </div>
+
+      <div class="lp-price-card lp-price-card-dimmed lp-reveal">
+        <div class="lp-price-tier-label">Scale</div>
+        <div class="lp-price-amount">₹44,999<span>/month</span></div>
+        <div class="lp-price-scope">Up to 8,000 consultations/month</div>
+        <div class="lp-price-features">
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Everything in Growth</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Higher AI Scribe consultation volume</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> AI Scribe for admitted / IPD patients</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Pregnancy / Maternity management</div>
+        </div>
+        <span class="lp-price-cta lp-price-cta-disabled">Coming Soon</span>
+      </div>
+
+      <div class="lp-price-card lp-price-card-premium lp-price-card-dimmed lp-reveal">
+        <div class="lp-premium-badge">Most Powerful</div>
+        <div class="lp-price-tier-label">Enterprise</div>
+        <div class="lp-price-amount">₹54,999<span>/month</span></div>
+        <div class="lp-price-scope">Unlimited consultations</div>
+        <div class="lp-price-features">
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Everything in Scale</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Blood Bank / transfusion management</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> OT / Surgery clinical documentation</div>
+          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Specialty-specific tools (e.g. orthopaedic)</div>
+        </div>
+        <span class="lp-price-cta lp-price-cta-disabled">Coming Soon</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="lp-final-cta">
+    <h2>See MedScribe running in your OPD, not a slide deck.</h2>
+    <p>We're currently live with a pilot hospital — happy to walk you through exactly how it fits your workflow.</p>
+    <a href="login.html" class="btn btn-primary btn-lg">Get Started →</a>
+  </section>
+
+  <!-- Footer -->
+  <footer class="lp-footer">
+    <div class="lp-footer-inner">
+      <div>
+        <div class="lp-footer-logo">Med<span>Scribe</span></div>
+        <p class="lp-footer-blurb">AI-powered hospital management built for Indian hospitals — OPD to discharge, in one system.</p>
+      </div>
+      <div class="lp-footer-col">
+        <h4>Product</h4>
+        <a href="#features">Features</a>
+        <a href="#roles">Who it's for</a>
+        <a href="#pricing">Pricing</a>
+      </div>
+      <div class="lp-footer-col">
+        <h4>Company</h4>
+        <a href="#">About</a>
+        <a href="#">Contact</a>
+      </div>
+      <div class="lp-footer-col">
+        <h4>Legal</h4>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+      </div>
+    </div>
+    <div class="lp-footer-bottom">
+      <span>© 2026 MedScribe. All rights reserved.</span>
+      <span class="lp-footer-vande"><span>Vikasit Bharat 2047</span></span>
+    </div>
+  </footer>
+
+  <script>
+    // Scroll-reveal
+    const lpObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('lp-in-view');
+          lpObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.lp-reveal').forEach(el => lpObserver.observe(el));
+  </script>
+</body>
+</html>

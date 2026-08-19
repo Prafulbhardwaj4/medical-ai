@@ -248,6 +248,39 @@ def _escalate_unacknowledged_critical_results(db: Session, hospital_id: int) -> 
         )
 
 
+def _escalate_uncollected_admission_samples(db: Session, hospital_id: int) -> None:
+    """No background scheduler in this codebase — same lazy-sweep pattern as
+    _escalate_unacknowledged_critical_results above. Pings lab staff once
+    (via sample_overdue_notified_at) if a ward-ordered sample is still
+    sitting unco​llected past ADMISSION_SAMPLE_OVERDUE_MINUTES."""
+    from app.config import settings
+    from app.models.admission import Admission
+    from app.utils.notify import notify_admission_sample_overdue
+
+    now = now_ist_naive()
+    deadline = now - timedelta(minutes=settings.ADMISSION_SAMPLE_OVERDUE_MINUTES)
+    orders = db.query(TestOrder).filter(
+        TestOrder.hospital_id == hospital_id,
+        TestOrder.admission_id.isnot(None),
+        TestOrder.status == "paid",
+        TestOrder.queued_at.isnot(None),
+        TestOrder.queued_at <= deadline,
+        TestOrder.sample_overdue_notified_at.is_(None),
+    ).all()
+
+    for order in orders:
+        patient = db.query(Patient).filter(Patient.id == order.patient_id).first()
+        admission = db.query(Admission).filter(Admission.id == order.admission_id).first()
+        notify_admission_sample_overdue(
+            db, hospital_id=hospital_id, order_id=order.id,
+            patient_name=patient.name if patient else "patient", test_name=order.test_name,
+            ward=admission.ward if admission else None, bed_number=admission.bed_number if admission else None,
+        )
+        order.sample_overdue_notified_at = now
+    if orders:
+        db.commit()
+
+
 @router.get("/idsp-notifiable-report")
 def get_idsp_notifiable_report(
     start_date: str = None,
@@ -366,9 +399,13 @@ def get_lab_queue(
         TestCatalogItem.hospital_id == current_doctor.hospital_id, TestCatalogItem.is_hiv_test == True
     ).all()]
 
+    # Admitted-patient samples have their own queue (see /admission-queue)
+    # since IPD orders can sit open across days — they never belonged
+    # boxed into "today's" OPD queue in the first place.
     orders = db.query(TestOrder).filter(
         TestOrder.hospital_id == current_doctor.hospital_id,
         TestOrder.status.in_(["paid", "sample_collected", "processing", "result_entered", "verified_released", "rejected"]),
+        TestOrder.admission_id.is_(None),
         TestOrder.queued_at >= today_start,
         TestOrder.queued_at <= today_end,
         ~TestOrder.test_id.in_(hiv_test_ids) if hiv_test_ids else True,
@@ -432,7 +469,92 @@ def get_lab_queue(
     return result
 
 
-@router.get("/tests/{test_id}")
+def _serialize_lab_orders(db: Session, orders: list) -> list:
+    """Shared row-shaping for lab queue listings — factored out of
+    get_lab_queue so get_admission_lab_queue doesn't duplicate it."""
+    from app.models.admission import Admission
+    result = []
+    for o in orders:
+        patient = db.query(Patient).filter(Patient.id == o.patient_id).first()
+        consultation = db.query(Consultation).filter(Consultation.id == o.consultation_id).first()
+        catalog_test = db.query(TestCatalogItem).filter(TestCatalogItem.id == o.test_id).first() if o.test_id else None
+
+        admission_ward = None
+        admission_bed = None
+        if o.admission_id:
+            admission = db.query(Admission).filter(Admission.id == o.admission_id).first()
+            if admission:
+                admission_ward = admission.ward
+                admission_bed = admission.bed_number
+
+        waiting_minutes = None
+        if o.paid_at:
+            waiting_minutes = int((now_ist_naive() - o.paid_at).total_seconds() // 60)
+
+        result.append({
+            "id": o.id,
+            "patient_id": o.patient_id,
+            "patient_name": patient.name if patient else "Unknown",
+            "patient_uid": patient.patient_uid if patient else "",
+            "patient_gender": patient.gender if patient else None,
+            "token_number": consultation.token_number if consultation else "",
+            "is_admission": o.admission_id is not None,
+            "ward": admission_ward,
+            "bed_number": admission_bed,
+            "test_id": o.test_id,
+            "test_name": o.test_name,
+            "price": o.price,
+            "status": o.status,
+            "priority": o.priority,
+            "clinical_indication": o.clinical_indication,
+            "fasting_required": catalog_test.fasting_required if catalog_test else False,
+            "required_tube": catalog_test.required_tube if catalog_test else None,
+            "rejection_reason": REJECTION_REASONS.get(o.rejection_reason, o.rejection_reason) if o.rejection_reason else None,
+            "sample_condition_caveat": o.sample_condition_caveat,
+            "redraw_of_order_id": o.redraw_of_order_id,
+            "accession_number": o.accession_number,
+            "accessioned_at": o.accessioned_at.isoformat() if o.accessioned_at else None,
+            "expected_tat_hours": _expected_tat_hours(o.priority),
+            "is_mlc_sample": o.is_mlc_sample,
+            "is_overdue": bool(
+                o.accessioned_at and o.status not in ("verified_released", "rejected")
+                and now_ist_naive() > o.accessioned_at + timedelta(hours=_expected_tat_hours(o.priority))
+            ),
+            "paid_at": o.paid_at.isoformat() if o.paid_at else None,
+            "waiting_minutes": waiting_minutes,
+            "sample_overdue": bool(
+                o.status == "paid" and o.admission_id is not None and o.sample_overdue_notified_at is not None
+            ),
+        })
+    return result
+
+
+@router.get("/admission-queue")
+def get_admission_lab_queue(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Separate queue for admitted (IPD) patients' tests — deliberately not
+    day-bounded like the main OPD queue, since a ward test ordered on day 2
+    of a stay is still valid to collect on day 3. Lab staff get pinged
+    separately (see _escalate_uncollected_admission_samples) if a sample
+    sits uncollected for 2+ hours."""
+    require_lab(current_doctor)
+    _escalate_uncollected_admission_samples(db, current_doctor.hospital_id)
+
+    orders = db.query(TestOrder).filter(
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.admission_id.isnot(None),
+        TestOrder.status.in_(["paid", "sample_collected", "processing", "result_entered", "verified_released", "rejected"]),
+    ).order_by(TestOrder.queued_at).all()
+
+    _priority_rank = {"stat": 0, "urgent": 1, "routine": 2}
+    orders.sort(key=lambda o: (_priority_rank.get(o.priority, 2), o.queued_at or now_ist_naive()))
+
+    return _serialize_lab_orders(db, orders)
+
+
+@router.get("/tests/{test_id}") 
 def get_lab_test_detail(
     test_id: int,
     db: Session = Depends(get_db),
@@ -769,21 +891,16 @@ def update_order_status(
         order.completed_at = now_ist_naive()
         order.completed_by = current_doctor.id
 
-        # If this tech is the only lab-role account at the hospital, the
-        # separate verify step is a click with no actual gatekeeping effect
-        # (nothing becomes more/less editable after it) — skip straight to
-        # released instead of making them tap Verify on their own entry.
-        other_lab_staff_exists = db.query(Doctor).filter(
-            Doctor.hospital_id == current_doctor.hospital_id,
-            Doctor.role == UserRole.lab,
-            Doctor.is_active == True,
-            Doctor.id != current_doctor.id,
-        ).first() is not None
-        if not other_lab_staff_exists:
-            order.status = "verified_released"
-            order.verified_by = current_doctor.id
-            order.verified_at = now_ist_naive()
-            order.self_verified_sole_staff = True
+        # The separate verify step is a click with no actual gatekeeping
+        # effect — nothing becomes more/less editable after it, and a
+        # correction after release already forces the result back through
+        # this same path (see save_order_result's was_already_completed
+        # handling below). Skip straight to released for everyone, not
+        # just sole-staff hospitals.
+        order.status = "verified_released"
+        order.verified_by = current_doctor.id
+        order.verified_at = now_ist_naive()
+        order.self_verified_sole_staff = True
 
     db.commit()
 

@@ -17,6 +17,7 @@ class AdmitPatientIn(BaseModel):
     deposit_amount: float = 0           # pre-filled from ward type's default, reception can override
     deposit_payment_method: Optional[str] = None  # required if deposit_amount > 0
     admission_type: str = "planned"     # "planned" | "emergency" | "maternity" | "transfer_in" | "day_care"
+    admission_date: Optional[str] = None  # ISO datetime string — reception can enter the actual admission date/time; defaults to now if not given
 
 
 class UpdateDiagnosisIn(BaseModel):
@@ -153,11 +154,13 @@ class ChangeWardIn(BaseModel):
 VALID_DISCHARGE_TYPES = {"planned", "lama_dama", "death"}
 
 
+class CollectBalanceIn(BaseModel):
+    payment_method: str  # "cash" | "card" | "upi"
+
+
 class DischargeIn(BaseModel):
     discharge_type: str = "planned"  # "planned" | "lama_dama" | "death"
     discharge_summary: Optional[str] = None
-    payment_collected: bool = False
-    payment_method: Optional[str] = None  # "cash" | "card" | "upi", required when payment_collected is True
     refund_channel: Optional[str] = None  # "cash" | "card" | "upi" | "online", required when the deposit exceeds charges
     # LAMA/DAMA only
     capacity_evaluation_note: Optional[str] = None  # only needed if there's any question of impaired decision-making

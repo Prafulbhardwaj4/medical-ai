@@ -1365,7 +1365,11 @@
         reopenMedicineStatuses = match.medicine_statuses || {};
 
         const orderedTests = safeJSON(match.ordered_tests, []) || [];
-        selectedTests = orderedTests.map(t => ({ id: t.test_id, test_name: t.test_name, price: t.price, priority: 'routine', status: t.status }));
+        const liveTestStatuses = match.test_statuses || {};
+        // ordered_tests is a snapshot from when the tests were first
+        // ordered — it never reflects later lab progress, so status comes
+        // from test_statuses (queried live) instead, not from t.status.
+        selectedTests = orderedTests.map(t => ({ id: t.test_id, test_name: t.test_name, price: t.price, priority: 'routine', status: liveTestStatuses[String(t.test_id)] }));
         renderTestChips();
 
         isReopenMode = true;
