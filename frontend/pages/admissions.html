@@ -379,6 +379,11 @@
             <input type="checkbox" id="wt-is-ot" onchange="document.getElementById('wt-ot-charge-group').style.display=this.checked?'':'none'"> Operation Theatre (auto-bills an OT charge when a patient is moved into this ward)
           </label>
         </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+            <input type="checkbox" id="wt-is-emergency"> Emergency Ward (enables Emergency Intake for reception — only one ward can hold this flag; setting it here will unset it elsewhere)
+          </label>
+        </div>
         <div class="form-group" id="wt-ot-charge-group" style="display:none">
           <label class="form-label">OT Charge (₹, per use)</label>
           <input class="form-control" type="number" min="0" id="wt-ot-charge" placeholder="Billed once when a patient moves into this ward" />
@@ -519,11 +524,12 @@
       const el = document.getElementById("vacancy-overview");
       try {
         wardTypesCache = await api("GET", "/admissions/ward-types");
-        if (!wardTypesCache.length) {
-          el.innerHTML = `<p style="color:var(--slate-light)">No ward types configured yet.${isAdminTier ? ' Click "Manage Rooms" to add one.' : ''}</p>`;
+        const configuredWards = wardTypesCache.filter(w => w.total_beds > 0);
+        if (!configuredWards.length) {
+          el.innerHTML = `<p style="color:var(--slate-light)">No ward types configured yet.${isAdminTier ? ' Click "Manage Rooms" to add beds to a ward.' : ''}</p>`;
           return;
         }
-        el.innerHTML = wardTypesCache.map(w => `
+        el.innerHTML = configuredWards.map(w => `
           <div class="card" style="margin-bottom:0">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
               <div style="font-weight:600;color:var(--navy)">${sanitize(w.name)}</div>
@@ -650,6 +656,7 @@
       document.getElementById("wt-ot-charge").value = w.ot_charge != null ? w.ot_charge : '';
       document.getElementById("wt-ot-charge-group").style.display = w.is_ot ? '' : 'none';
       document.getElementById("wt-category").value = w.category || 'general';
+      document.getElementById("wt-is-emergency").checked = !!w.is_emergency_ward;
       document.getElementById("wt-submit-btn").textContent = "Save Changes";
       document.getElementById("wt-cancel-edit-btn").style.display = "block";
       document.getElementById("wt-err").textContent = "";
@@ -669,6 +676,7 @@
       document.getElementById("wt-ot-charge").value = "";
       document.getElementById("wt-ot-charge-group").style.display = 'none';
       document.getElementById("wt-category").value = "general";
+      document.getElementById("wt-is-emergency").checked = false;
       document.getElementById("wt-submit-btn").textContent = "Add Ward Type";
       document.getElementById("wt-cancel-edit-btn").style.display = "none";
       document.getElementById("wt-err").textContent = "";
@@ -685,6 +693,7 @@
       const isOt = document.getElementById("wt-is-ot").checked;
       const otCharge = document.getElementById("wt-ot-charge").value ? parseFloat(document.getElementById("wt-ot-charge").value) : null;
       const category = document.getElementById("wt-category").value;
+      const isEmergency = document.getElementById("wt-is-emergency").checked;
       if (!name || isNaN(beds) || beds < 0 || isNaN(charge) || charge < 0 || isNaN(deposit) || deposit < 0) {
         err.textContent = "Please fill in all fields with valid values";
         return;
@@ -695,10 +704,10 @@
       }
       try {
         if (editingWardTypeId) {
-          await api("PUT", `/admissions/ward-types/${editingWardTypeId}`, { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category });
+          await api("PUT", `/admissions/ward-types/${editingWardTypeId}`, { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category, is_emergency_ward: isEmergency });
           toast("Ward type updated", "success");
         } else {
-          await api("POST", "/admissions/ward-types", { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category });
+          await api("POST", "/admissions/ward-types", { name, total_beds: beds, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category, is_emergency_ward: isEmergency });
           toast("Ward type added", "success");
         }
         wardTypesCache = await api("GET", "/admissions/ward-types");

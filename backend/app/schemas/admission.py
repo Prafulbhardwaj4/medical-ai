@@ -87,15 +87,9 @@ class AdmissionSummaryOut(BaseModel):
 class AddMedicationOrderIn(BaseModel):
     medicine_id: Optional[int] = None
     medicine_name: str
-    dosage: str
-    route: str = "Oral"
-    frequency_note: Optional[str] = None
-    manual_unit_price: Optional[float] = None
+    units: int = 1  # strips/bottles/etc, whatever the medicine's dosage form makes a sensible dispensing unit
+    manual_unit_price: Optional[float] = None  # per-strip/unit price — required by the route when medicine_id is None, ignored otherwise (catalog price is authoritative)
     sourced_outside: bool = False
-
-
-class AdministerDoseIn(BaseModel):
-    notes: Optional[str] = None
 
 
 class AddChargeIn(BaseModel):

@@ -97,6 +97,7 @@ class BookForCallerIn(BaseModel):
     patient_age: Optional[int] = None
     slot_id: int
     notes: Optional[str] = None
+    address: Optional[str] = None
 
 
 class AddressUpdateIn(BaseModel):

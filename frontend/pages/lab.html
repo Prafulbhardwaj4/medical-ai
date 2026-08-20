@@ -489,12 +489,6 @@
         </svg>
         Reports
       </div>
-      <div class="nav-item" id="sidebar-tab-admitted" onclick="showLabSection('admitted')">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m8-14v4m-2-2h4m-8 6h.01M17 15h.01" />
-        </svg>
-        Admitted
-      </div>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
@@ -561,6 +555,7 @@
       <div class="mobile-section active" id="section-queue">
         <div class="card">
           <div class="card-header" style="flex-wrap:wrap;gap:10px">
+            <h2 style="width:100%;margin-bottom:2px">Waiting Queue</h2>
             <input class="form-control" id="lab-queue-search" placeholder="Search patient or token…" style="max-width:220px" oninput="renderQueue(filterLabQueueData())" />
             <select class="form-control" id="lab-queue-filter" style="max-width:160px" onchange="renderQueue(filterLabQueueData())">
               <option value="all">All</option>
@@ -569,6 +564,23 @@
             </select>
           </div>
           <div id="lab-queue-list">
+            <p style="color:var(--slate)">Loading…</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Admitted (IPD) tab: dedicated bottom-nav tab on mobile; on desktop
+           every .mobile-section stacks, so placing this block right after Home
+           puts the admitted-patient card directly below the normal queue. -->
+      <div class="mobile-section" id="section-admitted">
+        <div class="card">
+          <div class="card-header">
+            <h2>Admitted Patients</h2>
+          </div>
+          <p style="font-size:12.5px;color:var(--slate-light);margin-top:-6px;margin-bottom:12px">
+            Ward-ordered tests stay here across days, not just today — a sample still not collected after 2 hours gets flagged below.
+          </p>
+          <div id="lab-admission-queue-list">
             <p style="color:var(--slate)">Loading…</p>
           </div>
         </div>
@@ -597,21 +609,6 @@
               oninput="searchLabReports(this.value)" />
           </div>
           <div id="lab-reports-list"><p style="color:var(--slate)">Loading…</p></div>
-        </div>
-      </div>
-
-      <!-- Admitted (IPD) tab -->
-      <div class="mobile-section" id="section-admitted">
-        <div class="card">
-          <div class="card-header">
-            <h2>Admitted Patients</h2>
-          </div>
-          <p style="font-size:12.5px;color:var(--slate-light);margin-top:-6px;margin-bottom:12px">
-            Ward-ordered tests stay here across days, not just today — a sample still not collected after 2 hours gets flagged below.
-          </p>
-          <div id="lab-admission-queue-list">
-            <p style="color:var(--slate)">Loading…</p>
-          </div>
         </div>
       </div>
 
@@ -1097,6 +1094,18 @@
 
     let labAdmissionQueueData = [];
 
+    // Every card in both the normal queue and the Admitted card opens the same
+    // patient-tests modal (openPatientTestsModal already merges both arrays),
+    // but the sample-collect / results-entry flow below previously only ever
+    // looked inside labQueueData — so those actions silently no-op for an
+    // admitted patient whose order only exists in labAdmissionQueueData.
+    function allQueueOrders() { return [...labQueueData, ...labAdmissionQueueData]; }
+    function findQueueOrder(id) { return allQueueOrders().find(o => o.id === id); }
+    function renderBothQueues() {
+      renderQueue(filterLabQueueData(), 'lab-queue-list');
+      renderQueue(labAdmissionQueueData, 'lab-admission-queue-list');
+    }
+
     async function loadAdmissionQueue() {
       try {
         const items = await api("GET", "/lab/admission-queue");
@@ -1296,9 +1305,9 @@
     async function deferTest(orderId) {
       try {
         await api("POST", `/lab/orders/${orderId}/defer`, {});
-        const order = labQueueData.find(o => o.id === orderId);
+        const order = findQueueOrder(orderId);
         if (order) order._deferred = true;
-        renderQueue(labQueueData);
+        renderBothQueues();
         refreshOpenPatientModal();
         toast('Marked for later — moved to Pending Tasks.', 'success');
       } catch (e) { toast(e.message, 'error'); }
@@ -1332,7 +1341,7 @@
       btn.disabled = true;
       try {
         for (const id of orderIds) {
-          const order = labQueueData.find(o => o.id === id);
+          const order = findQueueOrder(id);
           const detail = order && order.test_id != null ? testDetailCache[order.test_id] : null;
           let isNotifiable = false;
           if (detail && detail.notifiable_disease_id) {
@@ -1342,7 +1351,7 @@
           if (order) order.status = 'verified_released';
         }
         toast('Verified and released', 'success');
-        renderQueue(labQueueData);
+        renderBothQueues();
         refreshOpenPatientModal();
       } catch (e) {
         toast(e.message, 'error');
@@ -1533,7 +1542,7 @@
     }
 
     function openIdentityConfirmModal() {
-      const group = groupQueueByPatient(labQueueData).find(g => g.key === currentPatientKey);
+      const group = groupQueueByPatient(allQueueOrders()).find(g => g.key === currentPatientKey);
       if (!group) return;
       const identifiers = [
         `<div><strong>Name:</strong> ${sanitize(group.patient_name)}</div>`,
@@ -1574,7 +1583,7 @@
     }
 
     async function bulkAdvanceFromModal(fastingAnswer, ivLine) {
-      const group = groupQueueByPatient(labQueueData).find(g => g.key === currentPatientKey);
+      const group = groupQueueByPatient(allQueueOrders()).find(g => g.key === currentPatientKey);
       if (!group) return;
       const toAdvance = group.tests.filter(t => t.status === 'paid' && !t._deferred);
       if (!toAdvance.length) return;
@@ -1589,10 +1598,10 @@
           }
           await api("PATCH", `/lab/orders/${t.id}/status`, collectBody);
           await api("PATCH", `/lab/orders/${t.id}/status`, { status: 'processing' });
-          const order = labQueueData.find(o => o.id === t.id);
+          const order = findQueueOrder(t.id);
           if (order) order.status = 'processing';
         }
-        renderQueue(labQueueData);
+        renderBothQueues();
         refreshOpenPatientModal();
         toast(`Marked ${toAdvance.length} test${toAdvance.length > 1 ? 's' : ''} sample collected — ready for results.`, 'success');
       } catch (e) { toast(e.message, 'error'); }
@@ -1601,7 +1610,7 @@
     let bulkResultOrders = [];
 
     async function openBulkResultsModal() {
-      const group = groupQueueByPatient(labQueueData).find(g => g.key === currentPatientKey);
+      const group = groupQueueByPatient(allQueueOrders()).find(g => g.key === currentPatientKey);
       if (!group) return;
       const processingTests = group.tests.filter(t => t.status === 'processing');
       if (!processingTests.length) { toast('No tests ready for result entry.', 'info'); return; }
@@ -1750,11 +1759,11 @@
           // tech is the only lab-role staff at the hospital — read back what
           // it actually did instead of assuming 'result_entered' happened.
           const statusResult = await api("PATCH", `/lab/orders/${p.orderId}/status`, { status: 'result_entered' });
-          const order = labQueueData.find(o => o.id === p.orderId);
+          const order = findQueueOrder(p.orderId);
           if (order) order.status = statusResult.status;
           if (statusResult.status === 'result_entered') stillAwaitingVerification = true;
         }
-        renderQueue(labQueueData);
+        renderBothQueues();
         toast(stillAwaitingVerification ? 'Results saved — awaiting independent verification before release' : 'Results saved and released.', 'success');
         document.getElementById('modal-results-confirm').classList.remove('open');
         closeBulkResultsModal();
@@ -1878,7 +1887,9 @@
 
     loadLabAttendance();
     loadQueue();
+    loadAdmissionQueue();
     setInterval(loadQueue, 15000);
+    setInterval(loadAdmissionQueue, 15000);
   </script>
 </body>
 

@@ -1127,6 +1127,7 @@ def update_account(
     room_number: str = "",
     consultation_fee: float = None,
     professional_fee_per_admission: float = None,
+    role: str = None,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1140,6 +1141,16 @@ def update_account(
     account = query.first()
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
+
+    if role is not None:
+        if account.role.value in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Cannot change role of an admin account")
+        if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy"]:
+            raise HTTPException(status_code=400, detail="Invalid role")
+        account.role = UserRole(role)
+        if role not in ["doctor", "sub_admin"]:
+            account.consultation_fee = None
+            account.professional_fee_per_admission = None
 
     email = email.lower().strip()
     existing = db.query(Doctor).filter(Doctor.email == email, Doctor.id != doctor_id).first()

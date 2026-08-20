@@ -592,7 +592,7 @@
             </div>
             <div id="search-results" style="margin-bottom:14px"></div>
             <button class="btn btn-outline" style="width:100%" onclick="openNewPatient()">+ Add as New Patient</button>
-            <button class="btn btn-outline" style="width:100%;margin-top:8px;border-color:var(--teal);color:var(--teal)" onclick="openPhoneBookingModal()">📅 Book Online Appointment (Phone)</button>
+            <button class="btn btn-outline" style="width:100%;margin-top:8px;border-color:var(--teal);color:var(--teal)" onclick="openPhoneBookingModal()">📅 Book Appointment</button>
             <button class="btn btn-sm" id="btn-emergency-intake"
               style="width:100%;margin-top:8px;background:#dc2626;color:#fff;border-color:#dc2626;display:none"
               onclick="openEmergencyIntakeModal()">🚨 Emergency Intake</button>
@@ -984,7 +984,7 @@
   <div class="modal-overlay" id="modal-phone-booking">
     <div class="modal" style="max-width:640px;width:92vw;max-height:88vh;overflow-y:auto">
       <div class="modal-header">
-        <h2>📅 Book Online Appointment (Phone)</h2>
+        <h2>📅 Book Appointment</h2>
         <button class="modal-close" onclick="closePhoneBookingModal()">×</button>
       </div>
       <p style="font-size:13px;color:var(--slate);margin-bottom:14px">Same slots and daily limits as online booking — this fills a real slot, not a separate queue.</p>
@@ -1003,6 +1003,7 @@
         <div id="pb-slots-preview" style="margin:10px 0 16px"><p style="color:var(--slate-light);font-size:13px">Pick a doctor and date to see that day's slots.</p></div>
 
         <div class="form-group"><label class="form-label">Caller's Phone Number</label><input class="form-control" id="pb-phone" placeholder="10-digit mobile number" /></div>
+        <div class="form-group"><label class="form-label">Address</label><input class="form-control" id="pb-address" placeholder="Optional" /></div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Patient Name</label><input class="form-control" id="pb-patient-name" /></div>
           <div class="form-group"><label class="form-label">Age</label><input class="form-control" type="number" min="0" id="pb-patient-age" /></div>
@@ -2772,17 +2773,20 @@
 
     let phoneBookingSelectedSlotId = null;
     let phoneBookingHospitalId = null;
+    let phoneBookingDupChecked = false;
 
     async function openPhoneBookingModal() {
       document.getElementById('pb-step-slot').style.display = '';
       document.getElementById('pb-step-done').style.display = 'none';
       document.getElementById('pb-phone').value = '';
+      document.getElementById('pb-address').value = '';
       document.getElementById('pb-patient-name').value = '';
       document.getElementById('pb-patient-age').value = '';
       document.getElementById('pb-patient-gender').value = '';
       document.getElementById('pb-err').textContent = '';
       document.getElementById('pb-date').value = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       phoneBookingSelectedSlotId = null;
+      phoneBookingDupChecked = false;
 
       const doctorSel = document.getElementById('pb-doctor');
       doctorSel.innerHTML = '<option value="">Loading doctors...</option>';
@@ -2849,9 +2853,31 @@
       err.textContent = '';
       if (!phoneBookingSelectedSlotId) { err.textContent = 'Pick a slot.'; return; }
       const phone = document.getElementById('pb-phone').value.trim();
-      const name = document.getElementById('pb-patient-name').value.trim();
+      let name = document.getElementById('pb-patient-name').value.trim();
       if (!phone) { err.textContent = "Caller's phone number is required."; return; }
       if (!name) { err.textContent = 'Patient name is required.'; return; }
+
+      if (phone && !phoneBookingDupChecked) {
+        try {
+          const matches = await api("GET", `/patients/?search=${encodeURIComponent(phone)}`);
+          const digitsOnly = phone.replace(/\D/g, '').slice(-10);
+          const sameNumberMatches = matches.filter(p => (p.phone || '').replace(/\D/g, '').slice(-10) === digitsOnly);
+          if (sameNumberMatches.length) {
+            const choice = await promptDuplicatePatient(
+              sameNumberMatches,
+              `${sameNumberMatches.length === 1 ? 'A patient is' : sameNumberMatches.length + ' patients are'} already registered with this phone number.`
+            );
+            if (!choice) return; // reception cancelled out of the duplicate prompt
+            if (choice !== 'create') {
+              document.getElementById('pb-patient-name').value = choice.name;
+              document.getElementById('pb-patient-age').value = choice.age || '';
+              document.getElementById('pb-patient-gender').value = choice.gender || '';
+              name = choice.name;
+            }
+          }
+        } catch (e) { /* lookup failing shouldn't block a real phone booking */ }
+        phoneBookingDupChecked = true;
+      }
 
       try {
         const result = await api("POST", "/portal-appointments-staff/book-for-caller", {
@@ -2860,6 +2886,7 @@
           patient_gender: document.getElementById('pb-patient-gender').value || null,
           patient_age: parseInt(document.getElementById('pb-patient-age').value) || null,
           slot_id: phoneBookingSelectedSlotId,
+          address: document.getElementById('pb-address').value.trim() || null,
         });
         document.getElementById('pb-step-slot').style.display = 'none';
         document.getElementById('pb-step-done').style.display = 'block';

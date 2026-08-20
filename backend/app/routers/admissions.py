@@ -618,6 +618,8 @@ def medicine_catalog_for_ward(dosage_form: str = "", current_doctor: Doctor = De
             "generic_name": m.generic_name,
             "strength": m.strength,
             "price": (m.price_per_pack or 0) / m.pack_size if m.billing_mode == "per_pack" and m.pack_size else (m.price or m.price_per_pack or 0),
+            "dosage_forms": m.dosage_forms,
+            "pack_size": m.pack_size or 1,
         }
         for m in items
     ]
@@ -769,7 +771,7 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         doses = db.query(AdmissionMedicationAdministration).filter(AdmissionMedicationAdministration.order_id == m.id).order_by(AdmissionMedicationAdministration.administered_at.desc()).all()
         returned_qty = sum(r.quantity for r in db.query(AdmissionMedicationReturn).filter(AdmissionMedicationReturn.order_id == m.id).all())
         med_out.append({
-            "id": m.id, "medicine_name": m.medicine_name, "dosage": m.dosage, "route": m.route,
+            "id": m.id, "medicine_name": m.medicine_name, "quantity": m.quantity, "dosage": m.dosage, "route": m.route,
             "frequency_note": m.frequency_note, "is_active": m.is_active, "sourced_outside": m.sourced_outside,
             "doses": [{"id": d.id, "administered_at": d.administered_at.isoformat(), "notes": d.notes} for d in doses],
             "returned_quantity": returned_qty,
@@ -941,9 +943,28 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Cannot add medications to a discharged admission")
 
+    units = body.units if body.units and body.units > 0 else 1
+
+    # Billed and stock-deducted once, right here, upfront — a full strip/bottle
+    # physically leaves stock the moment it's ordered for the ward, not each
+    # time a dose is given from it. Catalog price is authoritative when the
+    # medicine is in the catalog; manual_unit_price only applies to free-text
+    # entries the client can't otherwise price.
+    medicine = None
+    unit_price = 0.0
+    if body.medicine_id:
+        medicine = db.query(HospitalMedicine).filter(
+            HospitalMedicine.id == body.medicine_id, HospitalMedicine.hospital_id == current_doctor.hospital_id
+        ).first()
+        if not medicine:
+            raise HTTPException(status_code=404, detail="Medicine not found in catalog")
+        unit_price = medicine.price_per_pack if medicine.price_per_pack else (medicine.price or 0) * (medicine.pack_size or 1)
+    else:
+        unit_price = body.manual_unit_price or 0.0
+
     order = AdmissionMedicationOrder(
         admission_id=a.id, medicine_id=body.medicine_id, medicine_name=body.medicine_name,
-        dosage=body.dosage, route=body.route, frequency_note=body.frequency_note,
+        quantity=units,
         manual_unit_price=(body.manual_unit_price if not body.medicine_id else None),
         sourced_outside=body.sourced_outside,
         prescribed_by=current_doctor.id,
@@ -951,59 +972,26 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
     db.add(order)
 
     if not order.sourced_outside:
+        if body.medicine_id:
+            deduct_stock_fefo(db, body.medicine_id, units * (medicine.pack_size or 1), round_to_pack=True)
+        db.add(AdmissionCharge(
+            admission_id=a.id, charge_type="medicine",
+            description=f"{body.medicine_name} — {units} unit(s) dispensed",
+            amount=unit_price, quantity=units, added_by=current_doctor.id, charged_at=now_ist_naive(),
+        ))
         patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
         db.add(Notification(
             hospital_id=a.hospital_id,
             source_key=f"admission_medicine_order:{a.id}:{now_ist_naive().isoformat()}",
             type="admission_medicine_order", severity="info",
             title=f"Medicine ordered — {patient.name if patient else 'patient'}",
-            message=f"{body.medicine_name} ({body.dosage}) ordered for {a.ward}, Bed {a.bed_number}.",
+            message=f"{body.medicine_name} ({units} unit(s)) ordered for {a.ward}, Bed {a.bed_number}.",
             link_type="admission_medicine_order", link_id=a.id, is_read=False,
         ))
 
     db.commit()
     db.refresh(order)
     return {"id": order.id, "message": "Medication order added"}
-
-
-@router.post("/{admission_id}/medications/{order_id}/administer")
-def administer_dose(admission_id: str, order_id: int, body: AdministerDoseIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "nurse"]:
-        raise HTTPException(status_code=403, detail="Only a doctor or nurse can log a dose")
-    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Medication order not found")
-    if not order.is_active:
-        raise HTTPException(status_code=400, detail="This medication order has been stopped")
-
-    admin_row = AdmissionMedicationAdministration(order_id=order.id, administered_by=current_doctor.id, administered_at=now_ist_naive(), notes=body.notes)
-    db.add(admin_row)
-
-    # If the family is sourcing this medicine themselves, still log the dose for
-    # the clinical record, but skip stock deduction and billing entirely.
-    if not order.sourced_outside:
-        unit_price = 0.0
-        if order.medicine_id:
-            medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.medicine_id).first()
-            if medicine:
-                deduct_stock_fefo(db, order.medicine_id, 1, round_to_pack=False)
-                if medicine.billing_mode == "per_pack" and medicine.pack_size:
-                    unit_price = (medicine.price_per_pack or 0) / medicine.pack_size
-                else:
-                    unit_price = medicine.price or medicine.price_per_pack or 0
-        else:
-            # Not in the catalog — no HospitalMedicine row to price from, so
-            # use whatever price was entered when the order was placed.
-            unit_price = order.manual_unit_price or 0.0
-
-        db.add(AdmissionCharge(
-            admission_id=a.id, charge_type="medicine",
-            description=f"{order.medicine_name} ({order.dosage}) — dose given",
-            amount=unit_price, quantity=1, added_by=current_doctor.id, charged_at=now_ist_naive(),
-        ))
-    db.commit()
-    return {"message": "Dose logged"}
 
 
 @router.patch("/{admission_id}/medications/{order_id}/stop")
@@ -1047,32 +1035,41 @@ def return_medication(admission_id: str, order_id: int, body: ReturnMedicationIn
     if body.quantity <= 0:
         raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
 
-    doses_given = db.query(AdmissionMedicationAdministration).filter(AdmissionMedicationAdministration.order_id == order.id).count()
+    if order.sourced_outside:
+        raise HTTPException(status_code=400, detail="This medicine was family-sourced — nothing was billed or stocked, so there's nothing to return")
+
+    # Units are billed and stock-deducted upfront, all at once, when the order
+    # is placed — so what's actually returnable is the ordered quantity minus
+    # whatever's already been credited back, not how many doses were given.
     already_returned = sum(r.quantity for r in db.query(AdmissionMedicationReturn).filter(AdmissionMedicationReturn.order_id == order.id).all())
-    available_to_return = doses_given - already_returned
+    available_to_return = order.quantity - already_returned
     if body.quantity > available_to_return:
         raise HTTPException(status_code=400, detail=f"Only {available_to_return} unit(s) from this order are eligible for return")
 
     if body.disposition not in ("returned_to_supplier", "sent_to_disposal", "restocked_to_shelf"):
         raise HTTPException(status_code=400, detail="disposition must be 'returned_to_supplier', 'sent_to_disposal', or 'restocked_to_shelf'")
 
-    unit_price = 0.0
+    medicine = None
     if order.medicine_id:
         medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.medicine_id).first()
-        if medicine:
-            if medicine.billing_mode == "per_pack" and medicine.pack_size:
-                unit_price = (medicine.price_per_pack or 0) / medicine.pack_size
-            else:
-                unit_price = medicine.price or medicine.price_per_pack or 0
-            # Stock only ever moves back up on the explicit, deliberate
-            # restocked_to_shelf choice — never as a default, never for the
-            # other two dispositions.
-            if body.disposition == "restocked_to_shelf":
-                medicine.stock_quantity = (medicine.stock_quantity or 0) + body.quantity
+
+    # Same per-unit price math used at order time (full strip/pack price),
+    # not a per-tablet price — otherwise the credit wouldn't match the charge.
+    if medicine:
+        unit_price = medicine.price_per_pack if medicine.price_per_pack else (medicine.price or 0) * (medicine.pack_size or 1)
+        # Stock only ever moves back up on the explicit, deliberate
+        # restocked_to_shelf choice — never as a default, never for the
+        # other two dispositions. Stock is tracked in raw units (tablets/ml),
+        # so a returned strip goes back as pack_size raw units, mirroring the
+        # deduction at order time.
+        if body.disposition == "restocked_to_shelf":
+            medicine.stock_quantity = (medicine.stock_quantity or 0) + body.quantity * (medicine.pack_size or 1)
+    else:
+        unit_price = order.manual_unit_price or 0.0
 
     credit_charge = AdmissionCharge(
         admission_id=a.id, charge_type="medicine",
-        description=f"{order.medicine_name} ({order.dosage}) — {body.quantity} returned ({body.disposition})",
+        description=f"{order.medicine_name} — {body.quantity} unit(s) returned ({body.disposition})",
         amount=-unit_price, quantity=body.quantity, added_by=current_doctor.id, charged_at=now_ist_naive(),
     )
     db.add(credit_charge)

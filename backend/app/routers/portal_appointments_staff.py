@@ -94,6 +94,7 @@ def book_appointment_for_caller(
         new_patient_name=body.patient_name.strip(),
         new_patient_gender=body.patient_gender,
         new_patient_age=body.patient_age,
+        address=body.address,
     )
     db.add(appt)
     db.commit()

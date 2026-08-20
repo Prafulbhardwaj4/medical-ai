@@ -177,6 +177,13 @@
           </svg>
           Patients
         </a>
+        <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();showMobileSection('stats');return false;">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm6 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Stats
+        </a>
         <a class="mobile-menu-item" href="doctor-slots.html">
           <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -514,12 +521,10 @@
   <script>
 
     function showMobileSection(id) {
-      ['home', 'patients', 'attendance'].forEach(s => {
+      ['home', 'patients', 'attendance', 'stats'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         document.getElementById('bn-' + s)?.classList.toggle('active', s === id);
       });
-      // Stats cards live inside the Home tab on mobile, not a separate reachable section
-      document.getElementById('section-stats').classList.toggle('active', id === 'home');
     }
 
     function switchDesktopTab(tab) {
@@ -995,17 +1000,13 @@
     function renderUpNextDoctor() {
       const card = document.getElementById('up-next-card-doctor');
       if (!card) return;
-      const GRACE_MINUTES = 15;  // an online patient this late is treated as a no-show for "who's up next" purposes — they still stay in the real queue, this only changes what the card highlights
-      const now = new Date();
-      const next = _queueData.find(q => {
-        if (q.status !== 'waiting') return false;
-        if (q.up_next_skip) return false;
-        if (q.source === 'online' && q.estimated_time) {
-          const minutesLate = (now - new Date(toIST(q.estimated_time))) / 60000;
-          if (minutesLate > GRACE_MINUTES) return false;
-        }
-        return true;
-      });
+      // Mirrors assistant.html's up-next selection exactly (see loadQueues() there):
+      // not done, not expected (not yet checked in), not skipped, earliest by
+      // check-in/booked time — no separate lateness rule, so both screens
+      // always agree on the same patient.
+      const next = [..._queueData]
+        .filter(q => q.status !== 'done' && q.status !== 'expected' && !q.up_next_skip)
+        .sort((a, b) => new Date(toIST(a.source === 'online' ? a.estimated_time : a.created_at)) - new Date(toIST(b.source === 'online' ? b.estimated_time : b.created_at)))[0];
       if (!next) {
         card.style.display = '';
         document.getElementById('up-next-content-doctor').style.display = 'none';

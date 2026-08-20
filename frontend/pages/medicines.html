@@ -325,7 +325,29 @@
       <div style="display:flex;gap:12px;margin-bottom:8px">
         <div style="flex:1">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Strength</label>
-          <input class="form-control" id="m-strength" placeholder="e.g. 500mg" />
+          <div style="display:flex;gap:8px">
+            <input class="form-control" id="m-strength-value" type="text" inputmode="decimal" placeholder="e.g. 500" style="flex:1" />
+            <select class="form-control" id="m-strength-unit" style="flex:1;min-width:110px" onchange="onStrengthUnitChange()">
+              <option value="mg">mg</option>
+              <option value="g">g</option>
+              <option value="mcg">mcg</option>
+              <option value="ml">ml</option>
+              <option value="IU">IU</option>
+              <option value="%">%</option>
+              <option value="% w/w">% w/w</option>
+              <option value="mg/5ml">mg/5ml</option>
+              <option value="mg/ml">mg/ml</option>
+              <option value="mcg/ml">mcg/ml</option>
+              <option value="mcg/dose">mcg/dose</option>
+              <option value="mcg/hr">mcg/hr</option>
+              <option value="mg/vial">mg/vial</option>
+              <option value="g/vial">g/vial</option>
+              <option value="mg/sachet">mg/sachet</option>
+              <option value="__custom__">Custom…</option>
+            </select>
+          </div>
+          <input class="form-control" id="m-strength-unit-custom" placeholder="Type exact unit, e.g. mg/10ml, IU/ml, % w/v" style="display:none;margin-top:8px" />
+          <p style="font-size:11px;color:var(--slate-light);margin-top:4px">Enter the number only — Cipla's 500 or a doctor's "500mg" both resolve to the same stock item. For combination drugs, values like "500+125" are fine.</p>
         </div>
         <div style="flex:1">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Schedule</label>
@@ -591,6 +613,43 @@
       'Other': 'e.g. 500mg or 5mg/ml'
     };
 
+    // Sensible default unit per dosage form — admin can still change it. Falls
+    // back to "mg" for anything not listed, per the "default mg" requirement.
+    const STRENGTH_UNIT_DEFAULT = {
+      'Tablet': 'mg', 'Capsule': 'mg', 'Sachet': 'g', 'Suppository': 'mg', 'Patch': 'mcg/hr',
+      'Syrup': 'mg/5ml', 'Suspension': 'mg/5ml', 'Drops': 'mg/ml',
+      'Injection': 'mg/ml',
+      'Ointment': '% w/w', 'Cream': '% w/w', 'Gel': '% w/w', 'Lotion': '% w/w',
+      'Inhaler': 'mcg/dose', 'Spray': 'mcg/dose', 'Powder': 'mg/sachet', 'Other': 'mg'
+    };
+
+    // Known unit suffixes, longest first so "mg/5ml" matches before a bare "mg" would.
+    const STRENGTH_UNITS_BY_LENGTH = ['% w/w', 'mg/5ml', 'mg/ml', 'mcg/ml', 'mcg/dose', 'mcg/hr', 'mg/vial', 'g/vial', 'mg/sachet', 'mcg', 'mg', 'g', 'IU', '%'];
+
+    // Splits a stored strength string like "500mg" or "125mg/5ml" back into
+    // { value, unit } for populating the Edit modal's two fields. Falls back to
+    // treating it as a custom unit — a leading number plus whatever text follows
+    // (e.g. "500mg/10ml", "1% w/v") — so any legacy or unusual format entered
+    // via the Custom option, or older free-text data, is never lost or garbled.
+    function parseStrength(str) {
+      const s = (str || '').trim();
+      if (!s) return { value: '', unit: 'mg' };
+      for (const unit of STRENGTH_UNITS_BY_LENGTH) {
+        if (s.endsWith(unit)) {
+          const value = s.slice(0, s.length - unit.length).trim();
+          if (value) return { value, unit };
+        }
+      }
+      const m = s.match(/^(\d+(\.\d+)?(\+\d+(\.\d+)?)?)\s*(.*)$/);
+      if (m && m[5]) return { value: m[1], unit: '__custom__', customUnit: m[5] };
+      return { value: s, unit: 'mg' };
+    }
+
+    function onStrengthUnitChange() {
+      const isCustom = document.getElementById('m-strength-unit').value === '__custom__';
+      document.getElementById('m-strength-unit-custom').style.display = isCustom ? '' : 'none';
+    }
+
     let previewData = [];
 
     function onCategorySelectChange() {
@@ -619,7 +678,8 @@
         freeInput.value = select.value;
         showStripPricing(DIVISIBLE_FORMS.includes(select.value));
       }
-      document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER[select.value] || 'e.g. 500mg';
+      document.getElementById('m-strength-value').placeholder = (STRENGTH_PLACEHOLDER[select.value] || 'e.g. 500mg').replace('e.g. ', '');
+      document.getElementById('m-strength-unit').value = STRENGTH_UNIT_DEFAULT[select.value] || 'mg';
       updateComputedPrice();
     }
 
@@ -794,8 +854,11 @@
       document.getElementById('m-form-select').value = 'Tablet';
       document.getElementById('m-form').style.display = 'none';
       document.getElementById('m-form').value = '';
-      document.getElementById('m-strength').value = '';
-      document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER['Tablet'];
+      document.getElementById('m-strength-value').value = '';
+      document.getElementById('m-strength-unit').value = STRENGTH_UNIT_DEFAULT['Tablet'];
+      document.getElementById('m-strength-unit-custom').value = '';
+      document.getElementById('m-strength-unit-custom').style.display = 'none';
+      document.getElementById('m-strength-value').placeholder = STRENGTH_PLACEHOLDER['Tablet'].replace('e.g. ', '');
       document.getElementById('m-schedule').value = 'otc';
       document.getElementById('m-pack-size').value = '';
       document.getElementById('m-price-per-pack').value = '';
@@ -840,12 +903,12 @@
         document.getElementById('m-form').value = m.dosage_forms || '';
       }
       showStripPricing(isDivisible);
-      document.getElementById('m-strength').value = m.strength || '';
-      document.getElementById('m-strength').placeholder = STRENGTH_PLACEHOLDER[document.getElementById('m-form-select').value] || 'e.g. 500mg';
-      document.getElementById('m-strength').onblur = function() {
-        const v = this.value.trim();
-        if (v && /^\d+(\.\d+)?$/.test(v)) this.value = v + 'mg';
-      };
+      const parsedStrength = parseStrength(m.strength);
+      document.getElementById('m-strength-value').value = parsedStrength.value;
+      document.getElementById('m-strength-unit').value = parsedStrength.unit;
+      document.getElementById('m-strength-unit-custom').value = parsedStrength.customUnit || '';
+      onStrengthUnitChange();
+      document.getElementById('m-strength-value').placeholder = (STRENGTH_PLACEHOLDER[document.getElementById('m-form-select').value] || 'e.g. 500mg').replace('e.g. ', '');
 
       document.getElementById('m-schedule').value = m.schedule || 'otc';
       document.getElementById('m-stock-info').innerHTML = `Current stock: <strong>${m.stock_quantity != null ? m.stock_quantity : 0}</strong> — use "+ Add Stock" on the medicine card to add more.`;
@@ -884,6 +947,7 @@
       const id = document.getElementById('m-id').value;
       const generic_name = document.getElementById('m-generic').value.trim();
       const errEl = document.getElementById('medicine-modal-err');
+      errEl.textContent = '';
       if (!generic_name) { errEl.textContent = 'Generic name is required.'; return; }
 
       const categorySelect = document.getElementById('m-category-select').value;
@@ -891,22 +955,85 @@
 
       const formSelect = document.getElementById('m-form-select').value;
       const dosage_forms = formSelect === 'Other' ? document.getElementById('m-form').value.trim() : formSelect;
-      const strength = document.getElementById('m-strength').value.trim();
+      const strengthValueRaw = document.getElementById('m-strength-value').value.trim();
+      const strengthUnitSelect = document.getElementById('m-strength-unit').value;
+      const strengthUnit = strengthUnitSelect === '__custom__' ? document.getElementById('m-strength-unit-custom').value.trim() : strengthUnitSelect;
 
       const isDivisible = isCurrentFormDivisible();
       const pack_size = isDivisible ? (parseInt(document.getElementById('m-pack-size').value) || 1) : 1;
-      const price_per_pack = isDivisible
-        ? (document.getElementById('m-price-per-pack').value ? parseFloat(document.getElementById('m-price-per-pack').value) : null)
-        : (document.getElementById('m-price-per-pack-single').value ? parseFloat(document.getElementById('m-price-per-pack-single').value) : null);
+      const priceRaw = isDivisible
+        ? document.getElementById('m-price-per-pack').value.trim()
+        : document.getElementById('m-price-per-pack-single').value.trim();
       const billing_mode = isDivisible ? document.getElementById('m-billing-mode').value : 'per_pack';
       const nppa_ceiling_price = document.getElementById('m-nppa-ceiling').value ? parseFloat(document.getElementById('m-nppa-ceiling').value) : null;
       const gst_percent = document.getElementById('m-gst').value ? parseFloat(document.getElementById('m-gst').value) : null;
       const hsn_code = document.getElementById('m-hsn').value.trim() || null;
       const low_stock_threshold = document.getElementById('m-low-stock-threshold').value ? parseInt(document.getElementById('m-low-stock-threshold').value) : 25;
+      const brandsRaw = document.getElementById('m-brands').value.trim();
+
+      // Multi-brand fan-out: comma-separated brand names (optionally paired with
+      // comma-separated strengths and/or prices, matched by position) create
+      // separate stock-tracked medicines, same as adding brands one-by-one via
+      // "+ Add Brand" — just done in one step. Single-value fields broadcast to
+      // every brand. Only applies when creating new (not editing an existing row).
+      const brandList = brandsRaw ? brandsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const strengthValueList = strengthValueRaw.includes(',') ? strengthValueRaw.split(',').map(s => s.trim()).filter(Boolean) : (strengthValueRaw ? [strengthValueRaw] : []);
+      const strengthList = strengthValueList.map(v => v + strengthUnit);
+      const priceList = priceRaw.includes(',') ? priceRaw.split(',').map(s => s.trim()).filter(Boolean) : (priceRaw ? [priceRaw] : []);
+
+      if (!id && brandList.length > 1) {
+        if (strengthList.length > 1 && strengthList.length !== brandList.length) {
+          errEl.textContent = `${strengthList.length} strengths given for ${brandList.length} brand names — provide one strength for all, or exactly one per brand.`;
+          return;
+        }
+        if (priceList.length > 1 && priceList.length !== brandList.length) {
+          errEl.textContent = `${priceList.length} prices given for ${brandList.length} brand names — provide one price for all, or exactly one per brand.`;
+          return;
+        }
+        for (const p of priceList) {
+          if (isNaN(parseFloat(p))) { errEl.textContent = 'Enter valid numeric prices.'; return; }
+        }
+
+        const rootPayload = {
+          generic_name,
+          brand_names: '',
+          category,
+          dosage_forms,
+          strength: strengthList.length === 1 ? strengthList[0] : '',
+          schedule: document.getElementById('m-schedule').value,
+          pack_size,
+          price_per_pack: null,
+          billing_mode,
+          gst_percent,
+          hsn_code,
+          low_stock_threshold,
+          nppa_ceiling_price
+        };
+
+        try {
+          const root = await api("POST", `/admin/medicines`, rootPayload);
+          for (let i = 0; i < brandList.length; i++) {
+            const brandPayload = {
+              brand_name: brandList[i],
+              price_per_pack: priceList.length ? parseFloat(priceList.length === 1 ? priceList[0] : priceList[i]) : null,
+              low_stock_threshold
+            };
+            if (strengthList.length > 1) brandPayload.strength = strengthList[i];
+            await api("POST", `/admin/medicines/${root.id}/brands`, brandPayload);
+          }
+          toast(`${brandList.length} medicines added.`, 'success');
+          closeMedicineModal();
+          loadMedicines();
+        } catch (e) { errEl.textContent = e.message; }
+        return;
+      }
+
+      const strength = strengthValueRaw ? (strengthValueRaw + strengthUnit) : '';
+      const price_per_pack = priceRaw ? parseFloat(priceRaw) : null;
 
       const payload = {
         generic_name,
-        brand_names: document.getElementById('m-brands').value.trim(),
+        brand_names: brandsRaw,
         category,
         dosage_forms,
         strength,

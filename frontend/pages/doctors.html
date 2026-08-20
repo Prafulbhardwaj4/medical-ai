@@ -202,7 +202,10 @@
   <div id="modal-overlay"
     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
     <div class="card" style="width:100%;max-width:480px;margin:24px;max-height:90vh;overflow-y:auto">
-      <h3 style="margin-bottom:20px">Add</h3>
+      <div class="modal-header" style="margin-bottom:20px">
+        <h3 style="margin:0">Add</h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
 
       <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Role</label>
       <select class="form-control" id="d-role" style="margin-bottom:20px" onchange="onRoleChange()">
@@ -238,8 +241,6 @@
           style="margin-bottom:14px" />
         <input class="form-control" id="d-fee" type="number" min="0" step="1"
           placeholder="Consultation Fee (Rs., optional)" style="margin-bottom:14px;display:none" />
-        <input class="form-control" id="d-professional-fee" type="number" min="0" step="1"
-          placeholder="Professional Fee per Admission (Rs., optional — for visiting/empanelled consultants)" style="margin-bottom:14px;display:none" />
       </div>
 
       <div style="position:relative;margin-bottom:8px">
@@ -282,6 +283,18 @@
         <button class="modal-close" onclick="closeEditModal()">×</button>
       </div>
       <input type="hidden" id="edit-staff-id" />
+      <div class="form-group" id="edit-role-group" style="display:none">
+        <label class="form-label">Role</label>
+        <select class="form-control" id="edit-role">
+          <option value="doctor">Doctor</option>
+          <option value="sub_admin">Sub Admin</option>
+          <option value="receptionist">Receptionist</option>
+          <option value="nurse">Nurse</option>
+          <option value="assistant">Assistant</option>
+          <option value="lab">Lab</option>
+          <option value="pharmacy">Pharmacy</option>
+        </select>
+      </div>
       <div class="form-group">
         <label class="form-label">Full Name</label>
         <div style="display:flex;gap:12px">
@@ -563,11 +576,12 @@
       document.getElementById('d-reg').value = '';
       document.getElementById('d-room').value = '';
       document.getElementById('d-fee').value = getDoctor()?.default_consultation_fee ?? '';
-      document.getElementById('d-professional-fee').value = '';
       document.getElementById('d-password').value = '';
       document.getElementById('d-confirm-password').value = '';
       document.getElementById('d-role').value = 'doctor';
-      document.getElementById('d-title').value = 'Dr.';
+      const titleSel = document.getElementById('d-title');
+      titleSel.value = 'Dr.';
+      titleSel.dispatchEvent(new Event('change'));
       toggleRoleFields();
       document.getElementById('modal-err').textContent = '';
       ['check-length', 'check-number', 'check-upper'].forEach(id => {
@@ -589,12 +603,13 @@
       const isDoctorRole = (role === 'doctor' || role === 'sub_admin');
       document.getElementById('doctor-only-fields').style.display = isDoctorRole ? '' : 'none';
       document.getElementById('d-fee').style.display = (isDoctorRole && getDoctor()?.billing_enabled) ? '' : 'none';
-      document.getElementById('d-professional-fee').style.display = (isDoctorRole && getDoctor()?.billing_enabled) ? '' : 'none';
     }
 
     function onRoleChange() {
       const role = document.getElementById('d-role').value;
-      document.getElementById('d-title').value = (role === 'doctor') ? 'Dr.' : 'Mr.';
+      const titleSel = document.getElementById('d-title');
+      titleSel.value = (role === 'doctor') ? 'Dr.' : 'Mr.';
+      titleSel.dispatchEvent(new Event('change'));
       toggleRoleFields();
       if (role === 'doctor' || role === 'sub_admin') {
         document.getElementById('d-fee').value = getDoctor()?.default_consultation_fee ?? '';
@@ -634,7 +649,6 @@
 
       const doctor = getDoctor();
       const fee = document.getElementById('d-fee').value.trim();
-      const professionalFee = document.getElementById('d-professional-fee').value.trim();
       const room = document.getElementById('d-room')?.value.trim() || '';
       const params = new URLSearchParams({
         hospital_id: doctor.hospital_id,
@@ -643,9 +657,6 @@
       });
       if (fee && needsSpecialization && doctor.billing_enabled) {
         params.set('consultation_fee', fee);
-      }
-      if (professionalFee && needsSpecialization && doctor.billing_enabled) {
-        params.set('professional_fee_per_admission', professionalFee);
       }
 
       const roleLabels = { doctor: 'Doctor', sub_admin: 'Sub Admin', receptionist: 'Receptionist', nurse: 'Nurse', lab: 'Lab Staff', pharmacy: 'Pharmacist' };
@@ -715,6 +726,16 @@
       const d = staffMap[id];
       if (!d) return;
       document.getElementById('edit-staff-id').value = d.id;
+      const roleGroup = document.getElementById('edit-role-group');
+      const roleSel = document.getElementById('edit-role');
+      const canChangeRole = ['admin', 'super_admin'].includes(getDoctor()?.role) && d.role !== 'admin' && d.role !== 'super_admin';
+      if (canChangeRole) {
+        roleGroup.style.display = '';
+        roleSel.value = d.role;
+        roleSel.dispatchEvent(new Event('change'));
+      } else {
+        roleGroup.style.display = 'none';
+      }
       document.getElementById('edit-title').value = d.title || 'Dr.';
       document.getElementById('edit-name').value = d.name;
       document.getElementById('edit-email').value = d.email;
@@ -743,6 +764,8 @@
       const room = document.getElementById('edit-room').value.trim();
       const fee = document.getElementById('edit-fee').value;
       const professionalFee = document.getElementById('edit-professional-fee').value;
+      const roleGroup = document.getElementById('edit-role-group');
+      const role = roleGroup.style.display !== 'none' ? document.getElementById('edit-role').value : '';
 
       if (!name || !email || !phone) { err.textContent = 'Name, email and phone are required.'; return; }
       if (phone.length !== 10 || !/^\d{10}$/.test(phone)) { err.textContent = 'Enter valid 10-digit phone.'; return; }
@@ -756,6 +779,7 @@
       });
       if (fee) params.append('consultation_fee', fee);
       if (professionalFee) params.append('professional_fee_per_admission', professionalFee);
+      if (role) params.append('role', role);
 
       try {
         await api('PATCH', `/admin/accounts/${id}?${params.toString()}`);

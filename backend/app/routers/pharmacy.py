@@ -79,10 +79,15 @@ def get_pharmacy_admission_queue(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     """Medicines doctors have ordered for currently-admitted patients — visibility
-    only, no payment collected here (billed at discharge, per-dose, in admissions.py).
-    Pharmacy just needs to see what to send to the ward and mark it sent."""
+    only, no payment collected here (billed automatically at order time, in
+    admissions.py). Pharmacy just needs to see what to send to the ward and
+    mark it sent. A still-pending order shows regardless of age; once
+    dispensed, it stays visible for the rest of the day it was sent (so the
+    "sent" confirmation doesn't vanish mid-shift) and drops off the next day."""
     require_pharmacy(current_doctor)
     from app.models.admission import Admission, AdmissionMedicationOrder
+
+    today_start, today_end = ist_day_bounds()
 
     orders = (
         db.query(AdmissionMedicationOrder, Admission)
@@ -92,6 +97,10 @@ def get_pharmacy_admission_queue(
             Admission.status == "admitted",
             AdmissionMedicationOrder.is_active == True,  # noqa: E712
             AdmissionMedicationOrder.sourced_outside == False,  # noqa: E712
+            or_(
+                AdmissionMedicationOrder.dispensed_at == None,  # noqa: E711
+                AdmissionMedicationOrder.dispensed_at.between(today_start, today_end),
+            ),
         )
         .order_by(AdmissionMedicationOrder.created_at.desc())
         .all()
@@ -100,17 +109,24 @@ def get_pharmacy_admission_queue(
     result = []
     for o, a in orders:
         patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+        medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == o.medicine_id).first() if o.medicine_id else None
+        prescriber = db.query(Doctor).filter(Doctor.id == o.prescribed_by).first() if o.prescribed_by else None
         result.append({
             "id": o.id,
             "admission_id": a.id,
             "admission_token": a.public_token,
+            "patient_id": a.patient_id,
             "patient_name": patient.name if patient else "Unknown",
             "ward": a.ward,
             "bed_number": a.bed_number,
             "medicine_name": o.medicine_name,
+            "strength": medicine.strength if medicine else None,
+            "quantity": o.quantity,
             "dosage": o.dosage,
             "route": o.route,
             "frequency_note": o.frequency_note,
+            "prescriber_name": f"{prescriber.title} {prescriber.name}" if prescriber else None,
+            "prescriber_role": prescriber.role.value if prescriber else None,
             "ordered_at": o.created_at.isoformat() if o.created_at else None,
             "dispensed_at": o.dispensed_at.isoformat() if o.dispensed_at else None,
         })

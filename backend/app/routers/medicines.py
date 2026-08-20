@@ -66,6 +66,7 @@ class BrandIn(BaseModel):
     brand_name: str
     price_per_pack: Optional[float] = None
     low_stock_threshold: Optional[int] = None
+    strength: Optional[str] = None  # overrides the parent's strength for this brand only; falls back to parent's if not given
 
 
 def serialize(m: HospitalMedicine):
@@ -236,7 +237,7 @@ def add_medicine_brand(
         generic_name=root.generic_name,
         category=root.category,
         dosage_forms=root.dosage_forms,
-        strength=root.strength,
+        strength=(payload.strength.strip() if payload.strength else root.strength),
         schedule=root.schedule,
         brand_name=brand_name,
         parent_medicine_id=root.id,

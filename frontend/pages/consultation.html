@@ -78,7 +78,7 @@
 
     .consult-context-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       gap: 14px;
       margin-bottom: 16px;
       align-items: stretch;
@@ -270,8 +270,8 @@
 
       <!-- Always visible regardless of which panel/step is active (fresh
            recording OR Continue Consultation reopen mode) — this used to
-           live inside #panel-1, which goStep(2) hides entirely, so Vitals,
-           Refer to Doctor, and Reports were all unreachable from reopen mode. -->
+           live inside #panel-1, which goStep(2) hides entirely, so Vitals
+           and Reports were unreachable from reopen mode. -->
       <div class="card" style="margin-bottom:16px">
         <div class="card-header">
           <p id="patient-label" style="margin:0">Loading patient…</p>
@@ -281,10 +281,6 @@
           <div id="nurse-vitals-wrap" class="context-card blue">
             <div class="context-card-title">Vitals Recorded by Nurse</div>
             <div id="nurse-vitals-summary" style="font-size:0.85rem;color:var(--navy)">No vitals recorded for this visit.</div>
-          </div>
-
-          <div class="context-card" id="refer-doctor-card" style="display:flex;align-items:center;justify-content:center">
-            <button class="btn btn-outline" style="border-color:var(--teal);color:var(--teal)" onclick="openReferModal()">↪ Refer to Doctor</button>
           </div>
         </div>
       </div>
@@ -455,33 +451,10 @@
             <button class="btn btn-outline" onclick="goStep(2)">← Edit</button>
             <!-- <button class="btn btn-outline btn-lg" onclick="copyPdfLink()">🔗 Copy PDF Link</button> -->
             <button class="btn btn-outline btn-lg" onclick="viewPdf()">📄 View PDF</button>
-            <button class="btn btn-outline btn-lg" onclick="admitPatient()">🛏️ Admit Patient</button>
+            <button class="btn btn-outline btn-lg" onclick="openAdmitModal()">🛏️ Admit Patient</button>
             <button class="btn btn-navy btn-lg" onclick="goBack()">✓ Done — Back to Patient</button>
           </div>
           <div id="wa-result"></div>
-        </div>
-      </div>
-
-      <div id="refer-modal" class="modal">
-        <div class="modal-content" style="max-width:440px;padding:0;overflow:hidden">
-          <div style="background:var(--navy);color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:center">
-            <h3 style="margin:0;font-size:17px">↪ Refer to Doctor</h3>
-            <button onclick="closeReferModal()" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:26px;height:26px;border-radius:50%;font-size:16px;line-height:1;cursor:pointer">×</button>
-          </div>
-          <div style="padding:20px 22px">
-            <div class="form-group">
-              <label class="form-label">Referring to</label>
-              <select class="form-control" id="refer-doctor-select"></select>
-            </div>
-            <div class="form-group" style="margin-bottom:0">
-              <label class="form-label">Note for the receiving doctor</label>
-              <textarea class="form-control" id="refer-note" rows="3" placeholder="Reason for referral"></textarea>
-            </div>
-            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
-              <button class="btn btn-outline" onclick="closeReferModal()">Cancel</button>
-              <button class="btn btn-primary" style="background:var(--teal);border-color:var(--teal)" onclick="submitReferral()">Send Referral</button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -502,6 +475,22 @@
     </main>
   </div>
 
+  <div class="modal-overlay" id="modal-send-to-admit">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-header">
+        <h2>🛏️ Send to Admit</h2>
+        <button class="modal-close" onclick="closeAdmitModal()">×</button>
+      </div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:14px">Reception will see this note alongside the admission request.</p>
+      <div class="form-group">
+        <label class="form-label">Notes for reception</label>
+        <textarea class="form-control" id="admit-notes" rows="3" placeholder="e.g. ward preference, urgency, anything reception should know"></textarea>
+      </div>
+      <div class="err-msg" id="admit-modal-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="confirmAdmitPatient()">Confirm — Send to Admit</button>
+    </div>
+  </div>
+
   <div id="toast"></div>
 
   <script src="../js/api.js?v=4"></script>
@@ -515,22 +504,34 @@
     let patientId = null;
 
     function markAdmitButtonSent() {
-      const btn = document.querySelector('button[onclick="admitPatient()"]');
+      const btn = document.querySelector('button[onclick="openAdmitModal()"]');
       if (!btn) return;
       btn.textContent = "🛏️ Sent to Admit";
       btn.disabled = true;
     }
 
-    async function admitPatient() {
+    function openAdmitModal() {
+      if (!patientId) { toast("No patient context available.", "error"); return; }
+      document.getElementById('admit-notes').value = document.getElementById("f-diagnosis").value.trim();
+      document.getElementById('admit-modal-err').textContent = '';
+      document.getElementById('modal-send-to-admit').classList.add('open');
+    }
+
+    function closeAdmitModal() {
+      document.getElementById('modal-send-to-admit').classList.remove('open');
+    }
+
+    async function confirmAdmitPatient() {
       if (!patientId) { toast("No patient context available.", "error"); return; }
       try {
         await api("POST", "/admissions/referrals", {
           patient_id: patientId,
-          reason: document.getElementById("f-diagnosis").value.trim() || null,
+          reason: document.getElementById("admit-notes").value.trim() || null,
         });
         toast("Sent to reception for admission.", "success");
+        closeAdmitModal();
         markAdmitButtonSent();
-      } catch (e) { toast(e.message, "error"); }
+      } catch (e) { document.getElementById('admit-modal-err').textContent = e.message; }
     }
 
     async function checkExistingAdmitReferral() {
@@ -1187,33 +1188,6 @@
 
     function goBack() {
       window.location.href = `/pages/patient.html?${patientToken}`;
-    }
-
-    async function openReferModal() {
-      try {
-        const doctors = await api("GET", "/patients/hospital-doctors");
-        const me = getDoctor();
-        const sel = document.getElementById("refer-doctor-select");
-        sel.innerHTML = doctors
-          .filter(d => d.id !== me.id)
-          .map(d => `<option value="${d.id}">${d.title} ${d.name} — ${d.specialization}</option>`).join('');
-      } catch (e) { toast(e.message, "error"); return; }
-      document.getElementById("refer-modal").classList.add("open");
-    }
-
-    function closeReferModal() {
-      document.getElementById("refer-modal").classList.remove("open");
-    }
-
-    async function submitReferral() {
-      const toDoctorId = document.getElementById("refer-doctor-select").value;
-      const note = document.getElementById("refer-note").value.trim();
-      if (!toDoctorId) { toast("Pick a doctor to refer to.", "info"); return; }
-      try {
-        const res = await api("POST", `/patients/${patientId}/refer?to_doctor_id=${toDoctorId}`, { note });
-        toast(res.message, "success");
-        closeReferModal();
-      } catch (e) { toast(e.message, "error"); }
     }
 
     function safeJSON(str, fallback) {

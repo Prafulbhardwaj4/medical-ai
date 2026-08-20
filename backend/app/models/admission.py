@@ -63,8 +63,13 @@ class Admission(Base):
 
 
 class AdmissionMedicationOrder(Base):
-    """A prescribed medication for this stay — the MAR logs actual doses
-    given against this order."""
+    """A prescribed medication for this stay. Billed once, upfront, at order
+    time — the full ordered quantity (in strips/packs/bottles) is deducted
+    from stock and charged immediately, since that's the point a real strip
+    physically leaves the pharmacy/ward stock. Stopping/resuming an order
+    afterwards is a clinical status flag only and never touches the bill —
+    the quantity was already paid for regardless of whether every unit in
+    it ends up administered."""
     __tablename__ = "admission_medication_orders"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -72,16 +77,18 @@ class AdmissionMedicationOrder(Base):
     medicine_id = Column(Integer, ForeignKey("hospital_medicines.id"), nullable=True)
     medicine_name = Column(String, nullable=False)  # snapshot / free-text fallback
 
-    dosage = Column(String, nullable=False)          # e.g. "500mg"
+    dosage = Column(String, nullable=False, default="")  # legacy field, no longer collected in the UI — dosage/frequency are verbal/manual, not tracked in-app
     route = Column(String, nullable=False, default="Oral")
-    frequency_note = Column(String, nullable=True)    # human-readable, e.g. "Every 8 hours"
+    frequency_note = Column(String, nullable=True)    # legacy, no longer collected — kept nullable so old rows still read fine
+
+    quantity = Column(Integer, nullable=False, default=1)  # strips/bottles/units ordered — this is what's billed and stock-deducted, all upfront
 
     prescribed_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     is_active = Column(Boolean, default=True)
     sourced_outside = Column(Boolean, default=False, nullable=False)  # patient/relatives are sourcing this themselves — no stock deduction, no bill line
     dispensed_at = Column(DateTime, nullable=True)   # last time pharmacy dispensed against this order — see AdmissionMedicationDispense for the full, billable history (an order can be re-dispensed on refill)
     dispensed_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
-    manual_unit_price = Column(Float, nullable=True)  # per-dose price entered at order time — only used when medicine_id is null (not in catalog), since there's no HospitalMedicine row to price from
+    manual_unit_price = Column(Float, nullable=True)  # per-strip/unit price entered at order time — only used when medicine_id is null (not in catalog), since there's no HospitalMedicine row to price from
     created_at = Column(DateTime, default=now_ist_naive)
 
     admission = relationship("Admission", back_populates="medication_orders")
