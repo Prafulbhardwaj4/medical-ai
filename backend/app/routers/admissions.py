@@ -252,6 +252,12 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
             admission_dt = datetime.fromisoformat(body.admission_date)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid admission date/time")
+        if admission_dt.tzinfo is not None:
+            # Frontend sends an offset-aware ISO string (e.g. from a datetime-local
+            # input) — strip the tzinfo so it compares cleanly against the naive
+            # IST timestamps used everywhere else in this codebase, since the offset
+            # is expected to already represent IST, not UTC.
+            admission_dt = admission_dt.replace(tzinfo=None)
         if admission_dt > now_ist_naive():
             raise HTTPException(status_code=400, detail="Admission date/time can't be in the future")
 
