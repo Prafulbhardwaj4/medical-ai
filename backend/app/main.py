@@ -216,9 +216,13 @@ _CORS_ORIGIN_REGEX = re.compile(r"https://.*\.(vercel\.app|netlify\.app|onrender
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error("UNHANDLED %s %s\n%s", request.method, request.url.path, traceback.format_exc())
+    # TEMPORARY — surfaces the real exception in the response body itself,
+    # since the Render log viewer isn't showing new entries right now.
+    # REVERT this back to the generic message once the bug above is found;
+    # exposing tracebacks to the client is not something to ship long-term.
     response = JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error. Check Render logs for traceback."},
+        content={"detail": f"{type(exc).__name__}: {exc}", "traceback": traceback.format_exc()},
     )
     # This handler is attached to Exception (not HTTPException), so Starlette
     # runs it from ServerErrorMiddleware, which wraps OUTSIDE CORSMiddleware.
