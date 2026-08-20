@@ -25,7 +25,7 @@ from app.models.patient_allergy import PatientAllergy
 from app.models.credit_debit_note import CreditDebitNote
 from app.models.refund import Refund
 from app.schemas.admission import (
-    AdmitPatientIn, AddMedicationOrderIn, AdministerDoseIn, AddChargeIn, AddAdmissionTestIn, DischargeIn, CollectBalanceIn,
+    AdmitPatientIn, AddMedicationOrderIn, AddChargeIn, AddAdmissionTestIn, DischargeIn, CollectBalanceIn,
     WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn,
     TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, EmergencyAlertIn,
     ProfessionalFeeIn, VALID_ADMISSION_TYPES, AdmissionConsentIn, VALID_CONSENT_TYPES, VALID_DISCHARGE_TYPES,
