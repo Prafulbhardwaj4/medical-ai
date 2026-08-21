@@ -329,6 +329,11 @@
         </div>
       </div>
 
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="btn btn-outline btn-sm" id="btn-view-active" onclick="setAdmissionsView('active')">Currently Admitted</button>
+        <button class="btn btn-outline btn-sm" id="btn-view-history" onclick="setAdmissionsView('history')">History</button>
+      </div>
+
       <div id="admissions-list"><p>Loading...</p></div>
     </main>
   </div>
@@ -914,6 +919,16 @@
       sel.value = current;
     }
 
+    let admissionsView = 'active';
+    function setAdmissionsView(mode) {
+      admissionsView = mode;
+      document.getElementById('btn-view-active').classList.toggle('btn-primary', mode === 'active');
+      document.getElementById('btn-view-active').classList.toggle('btn-outline', mode !== 'active');
+      document.getElementById('btn-view-history').classList.toggle('btn-primary', mode === 'history');
+      document.getElementById('btn-view-history').classList.toggle('btn-outline', mode !== 'history');
+      loadAdmissions(document.getElementById('admissions-search').value.trim());
+    }
+
     async function loadAdmissions(search = "") {
       const list = document.getElementById("admissions-list");
       try {
@@ -922,8 +937,14 @@
         if (search) params.set("search", search);
         if (wardFilter) params.set("ward_type_id", wardFilter);
         const qs = params.toString() ? `?${params.toString()}` : "";
-        const admissions = await api("GET", `/admissions/active${qs}`);
-        if (!admissions.length) { list.innerHTML = `<div class="card"><p style="color:var(--slate-light)">${search ? 'No matching admissions.' : 'No patients currently admitted.'}</p></div>`; return; }
+        const endpoint = admissionsView === 'history' ? '/admissions/history' : '/admissions/active';
+        const admissions = await api("GET", `${endpoint}${qs}`);
+        if (!admissions.length) {
+          const emptyMsg = admissionsView === 'history'
+            ? (search ? 'No matching discharged patients.' : 'No discharge history yet.')
+            : (search ? 'No matching admissions.' : 'No patients currently admitted.');
+          list.innerHTML = `<div class="card"><p style="color:var(--slate-light)">${emptyMsg}</p></div>`; return;
+        }
         list.innerHTML = admissions.map(a => `
           <div class="ward-card" onclick="location.href='admission-detail.html?id=${a.id}'">
             <div style="display:flex;gap:14px;align-items:center">
@@ -931,12 +952,13 @@
               <div>
                 <div style="font-weight:700;color:var(--navy)">${sanitize(a.patient_name)}</div>
                 <div style="font-size:13px;color:var(--slate)">${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)}${a.patient_uid ? ' · ' + sanitize(a.patient_uid) : ''}</div>
-                ${a.diagnosis ? `<div style="font-size:12.5px;color:var(--slate-light);margin-top:2px">${sanitize(a.diagnosis)}</div>` : ''}
+                ${(admissionsView === 'history' ? a.discharge_diagnosis : a.diagnosis) ? `<div style="font-size:12.5px;color:var(--slate-light);margin-top:2px">${sanitize(admissionsView === 'history' ? a.discharge_diagnosis : a.diagnosis)}</div>` : ''}
               </div>
             </div>
             <div style="text-align:right">
-              <span class="badge badge-teal">${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'}</span>
-              <div style="font-size:11px;color:var(--slate-light);margin-top:4px">Since ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
+              ${admissionsView === 'history'
+                ? `<span class="badge badge-grey">${sanitize((a.discharge_type || 'planned').replace('_', '/'))}</span><div style="font-size:11px;color:var(--slate-light);margin-top:4px">Discharged ${a.discharge_date ? new Date(a.discharge_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</div>`
+                : `<span class="badge badge-teal">${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'}</span><div style="font-size:11px;color:var(--slate-light);margin-top:4px">Since ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>`}
             </div>
           </div>`).join('');
       } catch (e) {
@@ -1052,6 +1074,7 @@
       } catch (e) { err.textContent = e.message; }
     }
 
+    document.getElementById('btn-view-active').classList.add('btn-primary');
     loadAdmissions();
     loadVacancyOverview().then(() => { populateAdmitWardDropdown(); populateAdmissionsWardFilter(); });
 

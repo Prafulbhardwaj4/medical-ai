@@ -397,7 +397,7 @@
               <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();downloadFile('/portal/dashboard/invoices/${a.discharge_invoice_id}/pdf', 'invoice_${a.id}.pdf')">Download</button>
             </div>
           ` : ''}
-          <a href="#" style="font-size:12px;color:var(--teal);display:inline-block;margin-top:8px" onclick="event.stopPropagation();toggleAdmissionMeds(${a.id}, this);return false;">Medicines &amp; test reports ▾</a>
+          <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="event.stopPropagation();toggleAdmissionMeds(${a.id}, this)">Medicines &amp; Test Reports ▾</button>
           <div id="admission-meds-${a.id}" style="display:none;margin-top:10px"></div>
         </div>`;
     }

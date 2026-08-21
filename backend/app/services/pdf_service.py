@@ -726,10 +726,19 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
     # description, qty, unit price, amount only. Any tax_amount/gst_rate/
     # hsn_sac fields the caller still passes on `items` (e.g. for internal
     # reporting) are simply ignored here, not rendered.
+    desc_style = ParagraphStyle("desc", fontSize=9.5, fontName="Helvetica", leading=12)
+    desc_note_style = ParagraphStyle("desc_note", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.grey, leading=10)
     table_data = [["Description", "Qty", "Unit Price", "Amount"]]
     for item in items:
+        description_cell = Paragraph(item["name"], desc_style)
+        if item.get("_dispensed_at_pharmacy"):
+            # Admission medicines are only ever billed at the moment pharmacy
+            # actually hands the strip over — so anything in this list was,
+            # by definition, dispensed. Stated as its own line rather than
+            # folded into the item name itself.
+            description_cell = [description_cell, Paragraph("Dispensed at Pharmacy Counter", desc_note_style)]
         table_data.append([
-            item["name"],
+            description_cell,
             str(item.get("qty", 1)),
             f"Rs.{item['unit_price']:.2f}",
             f"Rs.{item['line_total']:.2f}"

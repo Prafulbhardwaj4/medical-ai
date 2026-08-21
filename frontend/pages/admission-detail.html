@@ -983,6 +983,22 @@
     </div>
   </div>
 
+  <!-- Discharge confirm — replaces the native browser confirm(), which
+       renders as a plain unstyled OS popup with no site CSS at all. -->
+  <div class="modal-overlay" id="modal-discharge-confirm">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <h2>Confirm Discharge</h2>
+        <button class="modal-close" onclick="closeModal('modal-discharge-confirm')">&times;</button>
+      </div>
+      <p style="font-size:13.5px;color:var(--slate);margin-bottom:18px">This finalizes the bill and can't be undone. Discharge this patient?</p>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-discharge-confirm')">Cancel</button>
+        <button class="btn btn-primary" style="flex:1" onclick="closeModal('modal-discharge-confirm');finalizeDischarge()">Confirm Discharge</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="modal-request-ward-change">
     <div class="modal" style="max-width:420px">
       <div class="modal-header">
@@ -1055,7 +1071,7 @@
     function canManageClinicalOrders() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
     function canGiveDose() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
     function canManageMedOrders() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
-    function canReturnMed() { return ["nurse", "assistant"].includes(getDoctor()?.role); }
+    function canReturnMed() { return ["assistant"].includes(getDoctor()?.role); }
     function isNurseViewer() { return ["nurse", "assistant"].includes(getDoctor()?.role); }
     function canManageAllergies() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
     function canAddProgressNote() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
@@ -1371,8 +1387,9 @@
             <div style="font-size:11px;color:var(--slate-light)">
               ${t.queued_at ? 'Ordered ' + fmt(t.queued_at) : ''}
             </div>
-            <button class="btn btn-outline btn-sm" ${reportReady ? '' : 'disabled title="Report not generated yet"'}
-              onclick="${reportReady ? `downloadFile('/lab/orders/${t.id}/report', '${sanitize(t.test_name)}_report.pdf')` : ''}">Report</button>
+            <button class="btn btn-sm" ${reportReady
+              ? `style="background:var(--teal-subtle);color:var(--teal);border-color:var(--teal)" onclick="openReportsModal(admissionData.patient.id)"`
+              : `style="background:var(--smoke-mid);color:var(--slate-light);border-color:var(--border);cursor:not-allowed" disabled title="Report not generated yet"`}>Report</button>
           </span>
         </div>`;
       }).join('');

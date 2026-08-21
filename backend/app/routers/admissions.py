@@ -862,6 +862,38 @@ def list_active_admissions(search: str = "", ward_type_id: int = None, current_d
     return out
 
 
+@router.get("/history")
+def list_admission_history(search: str = "", ward_type_id: int = None, limit: int = 50, offset: int = 0, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Discharged admissions — the counterpart to /active. Newest discharge
+    first, capped at `limit` (default 50) since this list only grows."""
+    query = db.query(Admission).filter(
+        Admission.hospital_id == current_doctor.hospital_id, Admission.status == "discharged"
+    )
+    if ward_type_id:
+        query = query.filter(Admission.ward_type_id == ward_type_id)
+    admissions = query.order_by(Admission.discharge_date.desc()).offset(offset).limit(limit * 3 if search else limit).all()
+
+    out = []
+    for a in admissions:
+        p = db.query(Patient).filter(Patient.id == a.patient_id).first()
+        if search:
+            q = search.lower()
+            haystack = " ".join(filter(None, [p.name if p else "", p.phone if p else "", p.patient_uid if p else "", a.diagnosis or "", a.discharge_diagnosis or ""])).lower()
+            if q not in haystack:
+                continue
+        out.append({
+            "id": a.public_token, "patient_id": a.patient_id, "patient_name": p.name if p else "Unknown",
+            "patient_uid": p.patient_uid if p else None, "phone": p.phone if p else None,
+            "ward": a.ward, "bed_number": a.bed_number, "diagnosis": a.diagnosis,
+            "discharge_diagnosis": a.discharge_diagnosis, "discharge_type": a.discharge_type,
+            "admission_date": a.admission_date.isoformat(), "discharge_date": a.discharge_date.isoformat() if a.discharge_date else None,
+            "days_admitted": _days_admitted(a),
+        })
+        if search and len(out) >= limit:
+            break
+    return out
+
+
 @router.get("/{admission_id}")
 def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
@@ -1127,8 +1159,8 @@ def resume_medication(admission_id: str, order_id: int, current_doctor: Doctor =
 
 @router.post("/{admission_id}/medications/{order_id}/return")
 def return_medication(admission_id: str, order_id: int, body: ReturnMedicationIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["nurse", "assistant"]:
-        raise HTTPException(status_code=403, detail="Only a nurse or assistant can record a medicine return")
+    if current_doctor.role.value not in ["assistant"]:
+        raise HTTPException(status_code=403, detail="Only an assistant can record a medicine return")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Returns can only be recorded before discharge")

@@ -92,7 +92,7 @@ p {
   color: var(--navy);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 0 28px;
   height: 56px;
   position: sticky;
@@ -123,6 +123,7 @@ p {
   display: flex;
   align-items: center;
   gap: 14px;
+  margin-left: auto;
 }
 
 .topbar-doctor strong {
