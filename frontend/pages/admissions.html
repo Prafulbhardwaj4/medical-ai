@@ -1054,8 +1054,6 @@
 
     loadAdmissions();
     loadVacancyOverview().then(() => { populateAdmitWardDropdown(); populateAdmissionsWardFilter(); });
-    setInterval(() => loadAdmissions(document.getElementById('admissions-search')?.value.trim() || ''), 1000);
-    setInterval(loadVacancyOverview, 1000);
 
     // Deep-link from consultation.html's "Admit Patient" action — carries the
     // patient straight into the admit-details form, skipping the manual
