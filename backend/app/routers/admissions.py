@@ -1352,6 +1352,7 @@ def order_admission_test(admission_id: str, body: AddAdmissionTestIn, current_do
         admission_id=a.id, charge_type="test", description=body.test_name,
         amount=body.price, quantity=1, added_by=current_doctor.id, charged_at=now_ist_naive(),
     ))
+    db.flush()  # assign test.id before it's used below — was None, colliding on the notifications unique constraint
 
     patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
     db.add(Notification(

@@ -107,6 +107,7 @@ class AddMedicationOrderIn(BaseModel):
     medicine_name: str
     units: int = 1  # strips/bottles/etc, whatever the medicine's dosage form makes a sensible dispensing unit
     manual_unit_price: Optional[float] = None  # per-strip/unit price — only used when medicine_id is None (not in catalog); billing itself happens later, at pharmacy dispense
+    sourced_outside: bool = False  # patient/relatives sourcing this themselves — no stock deduction, no bill line
 
 
 class AddChargeIn(BaseModel):
