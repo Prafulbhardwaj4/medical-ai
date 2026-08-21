@@ -11,7 +11,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 PHARMACY_VISIBLE_TYPES = ["low_stock", "expiring_stock", "admission_medicine_order"]
 RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request", "sample_rejected"]
-LAB_VISIBLE_TYPES = ["admission_test_sample"]
+LAB_VISIBLE_TYPES = ["admission_test_sample", "admission_sample_overdue"]
 DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "no_assistant_alert", "emergency_ward_intake"]
 NURSE_VISIBLE_TYPES = ["critical_result_escalation", "sample_rejected"]
 

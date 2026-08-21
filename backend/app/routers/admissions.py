@@ -4,10 +4,12 @@ from datetime import datetime, date as date_cls, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func as sa_func
 
 from app.database import get_db
 from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionMedicationAdministration, AdmissionCharge, AdmissionMedicationReturn
 from app.models.admission_ward_type import AdmissionWardType
+from app.models.admission_room import AdmissionRoom
 from app.models.admission_ward_stay import AdmissionWardStay
 from app.models.admission_referral import AdmissionReferral
 from app.models.patient import Patient
@@ -29,7 +31,7 @@ from app.schemas.admission import (
     WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn,
     TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, EmergencyAlertIn,
     ProfessionalFeeIn, VALID_ADMISSION_TYPES, AdmissionConsentIn, VALID_CONSENT_TYPES, VALID_DISCHARGE_TYPES,
-    VALID_WARD_CATEGORIES, TpaSettleIn, ProgressNoteIn, EmergencyAdmitIn,
+    VALID_WARD_CATEGORIES, TpaSettleIn, ProgressNoteIn, EmergencyAdmitIn, RoomCreateIn, RoomOut,
 )
 from app.models.consultation import Consultation
 from app.models.doctor import UserRole
@@ -120,12 +122,25 @@ def _ward_type_initials(name: str) -> str:
     return re.sub(r"[^A-Za-z]", "", name)[:3].upper() or "WD"
 
 
-def _bed_labels_for_ward_type(wt: AdmissionWardType) -> list[str]:
-    # Must use the FROZEN bed_prefix, never re-derive from wt.name — a ward
-    # rename would otherwise silently reshuffle every existing bed label and
-    # break occupied-bed detection for beds assigned under the old name.
-    initials = wt.bed_prefix or _ward_type_initials(wt.name)
-    return [f"{initials}-{i}" for i in range(1, wt.total_beds + 1)]
+def _bed_labels_for_ward_type(db: Session, wt: AdmissionWardType) -> list[str]:
+    # Beds are generated per-room now ("101-1", "101-2", "102-1"...), not as
+    # one flat sequential range under the ward — a room's own number prefixes
+    # its beds, so two rooms in the same ward can never collide. Rooms are
+    # ordered by id (creation order) so labels stay stable as more get added.
+    rooms = db.query(AdmissionRoom).filter(AdmissionRoom.ward_type_id == wt.id).order_by(AdmissionRoom.id).all()
+    labels = []
+    for room in rooms:
+        labels.extend(f"{room.room_number}-{i}" for i in range(1, room.beds_count + 1))
+    return labels
+
+
+def _recompute_total_beds(db: Session, wt: AdmissionWardType):
+    """Keeps admission_ward_types.total_beds in sync with the sum of its
+    rooms' beds_count. Called after every room add/edit/delete."""
+    total = db.query(AdmissionRoom).filter(AdmissionRoom.ward_type_id == wt.id).with_entities(
+        sa_func.coalesce(sa_func.sum(AdmissionRoom.beds_count), 0)
+    ).scalar()
+    wt.total_beds = total or 0
 
 
 def _get_admission_or_404(db: Session, admission_token: str, hospital_id: int) -> Admission:
@@ -230,7 +245,7 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
         }
         if len(occupied_labels) >= ward_type.total_beds:
             raise HTTPException(status_code=400, detail=f"No beds available in {ward_type.name}")
-        valid_labels = set(_bed_labels_for_ward_type(ward_type))
+        valid_labels = set(_bed_labels_for_ward_type(db, ward_type))
         if not body.bed_number or body.bed_number not in valid_labels:
             raise HTTPException(status_code=400, detail="Please select a valid bed")
         if body.bed_number in occupied_labels:
@@ -384,7 +399,7 @@ def admit_emergency(body: EmergencyAdmitIn, current_doctor: Doctor = Depends(get
     db.add(patient)
     db.flush()  # get patient.id without committing yet — a half-failed request must never leave an orphan patient with no admission (see retry loop: patient row only truly commits alongside the admission below)
 
-    valid_labels = _bed_labels_for_ward_type(ward_type)
+    valid_labels = _bed_labels_for_ward_type(db, ward_type)
     admission = None
     is_overflow = False
     max_attempts = 8
@@ -640,7 +655,7 @@ def list_ward_type_beds(ward_type_id: int, current_doctor: Doctor = Depends(get_
             Admission.ward_type_id == wt.id, Admission.status == "admitted"
         ).all()
     }
-    labels = _bed_labels_for_ward_type(wt)
+    labels = _bed_labels_for_ward_type(db, wt)
     return [{"label": l, "occupied": l in occupied_labels} for l in labels]
 
 
@@ -650,7 +665,8 @@ def list_ward_types(current_doctor: Doctor = Depends(get_current_doctor), db: Se
     out = []
     for t in types:
         occupied = db.query(Admission).filter(Admission.ward_type_id == t.id, Admission.status == "admitted").count()
-        out.append(WardTypeOut(id=t.id, name=t.name, total_beds=t.total_beds, daily_charge=t.daily_charge, default_deposit=t.default_deposit, is_icu=t.is_icu, is_ot=t.is_ot, ot_charge=t.ot_charge, category=t.category, occupied=occupied, vacant=max(t.total_beds - occupied, 0)))
+        rooms = db.query(AdmissionRoom).filter(AdmissionRoom.ward_type_id == t.id).order_by(AdmissionRoom.id).all()
+        out.append(WardTypeOut(id=t.id, name=t.name, total_beds=t.total_beds, daily_charge=t.daily_charge, default_deposit=t.default_deposit, is_icu=t.is_icu, is_ot=t.is_ot, ot_charge=t.ot_charge, category=t.category, is_emergency_ward=t.is_emergency_ward, occupied=occupied, vacant=max(t.total_beds - occupied, 0), rooms=rooms))
     return out
 
 
@@ -670,20 +686,21 @@ def _clear_other_emergency_ward_flags(db: Session, hospital_id: int, keep_id: in
 def create_ward_type(body: WardTypeCreateIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     if current_doctor.role.value not in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
-    if body.total_beds < 0 or body.daily_charge < 0 or body.default_deposit < 0:
+    if body.daily_charge < 0 or body.default_deposit < 0:
         raise HTTPException(status_code=400, detail="Values cannot be negative")
     category = (body.category or "general").strip().lower()
     if category not in VALID_WARD_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid ward category")
-    wt = AdmissionWardType(hospital_id=current_doctor.hospital_id, name=body.name.strip(), total_beds=body.total_beds, daily_charge=body.daily_charge, default_deposit=body.default_deposit, is_icu=body.is_icu, is_ot=body.is_ot, ot_charge=body.ot_charge, category=category, is_emergency_ward=body.is_emergency_ward, bed_prefix=_ward_type_initials(body.name.strip()))
+    # total_beds starts at 0 — it's derived from rooms added afterwards via
+    # POST /ward-types/{id}/rooms, not set directly here.
+    wt = AdmissionWardType(hospital_id=current_doctor.hospital_id, name=body.name.strip(), total_beds=0, daily_charge=body.daily_charge, default_deposit=body.default_deposit, is_icu=body.is_icu, is_ot=body.is_ot, ot_charge=body.ot_charge, category=category, is_emergency_ward=body.is_emergency_ward, bed_prefix=_ward_type_initials(body.name.strip()))
     db.add(wt)
     db.flush()
     if body.is_emergency_ward:
         _clear_other_emergency_ward_flags(db, current_doctor.hospital_id, keep_id=wt.id)
     db.commit()
     db.refresh(wt)
-    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, is_ot=wt.is_ot, ot_charge=wt.ot_charge, category=wt.category, is_emergency_ward=wt.is_emergency_ward, occupied=0, vacant=wt.total_beds)
-
+    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, is_ot=wt.is_ot, ot_charge=wt.ot_charge, category=wt.category, is_emergency_ward=wt.is_emergency_ward, occupied=0, vacant=wt.total_beds, rooms=[])
 
 @router.put("/ward-types/{ward_type_id}", response_model=WardTypeOut)
 def update_ward_type(ward_type_id: int, body: WardTypeCreateIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
@@ -692,19 +709,17 @@ def update_ward_type(ward_type_id: int, body: WardTypeCreateIn, current_doctor: 
     wt = db.query(AdmissionWardType).filter(AdmissionWardType.id == ward_type_id, AdmissionWardType.hospital_id == current_doctor.hospital_id).first()
     if not wt:
         raise HTTPException(status_code=404, detail="Ward type not found")
-    if body.total_beds < 0 or body.daily_charge < 0 or body.default_deposit < 0:
+    if body.daily_charge < 0 or body.default_deposit < 0:
         raise HTTPException(status_code=400, detail="Values cannot be negative")
     occupied = db.query(Admission).filter(Admission.ward_type_id == wt.id, Admission.status == "admitted").count()
-    if body.total_beds < occupied:
-        raise HTTPException(status_code=400, detail=f"Cannot set total beds below {occupied} — that many are currently occupied")
     category = (body.category or "general").strip().lower()
     if category not in VALID_WARD_CATEGORIES:
         raise HTTPException(status_code=400, detail="Invalid ward category")
     # bed_prefix is intentionally NOT updated when the name changes — it stays
     # frozen at whatever it was set to on creation, so renaming a ward never
-    # reshuffles or orphans its already-assigned bed numbers.
+    # reshuffles or orphans its already-assigned bed numbers. total_beds is
+    # untouched here too — it's only ever changed via the rooms endpoints.
     wt.name = body.name.strip()
-    wt.total_beds = body.total_beds
     wt.daily_charge = body.daily_charge
     wt.default_deposit = body.default_deposit
     wt.is_icu = body.is_icu
@@ -715,7 +730,8 @@ def update_ward_type(ward_type_id: int, body: WardTypeCreateIn, current_doctor: 
     if body.is_emergency_ward:
         _clear_other_emergency_ward_flags(db, current_doctor.hospital_id, keep_id=wt.id)
     db.commit()
-    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, is_ot=wt.is_ot, ot_charge=wt.ot_charge, category=wt.category, is_emergency_ward=wt.is_emergency_ward, occupied=occupied, vacant=max(wt.total_beds - occupied, 0))
+    rooms = db.query(AdmissionRoom).filter(AdmissionRoom.ward_type_id == wt.id).order_by(AdmissionRoom.id).all()
+    return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, is_ot=wt.is_ot, ot_charge=wt.ot_charge, category=wt.category, is_emergency_ward=wt.is_emergency_ward, occupied=occupied, vacant=max(wt.total_beds - occupied, 0), rooms=rooms)
 
 
 @router.delete("/ward-types/{ward_type_id}")
@@ -728,9 +744,96 @@ def delete_ward_type(ward_type_id: int, current_doctor: Doctor = Depends(get_cur
     in_use = db.query(Admission).filter(Admission.ward_type_id == wt.id, Admission.status == "admitted").count()
     if in_use > 0:
         raise HTTPException(status_code=400, detail=f"Cannot delete — {in_use} patient(s) currently admitted under this ward type")
+    db.query(AdmissionRoom).filter(AdmissionRoom.ward_type_id == wt.id).delete()
     db.delete(wt)
     db.commit()
     return {"message": "Ward type deleted"}
+
+
+@router.post("/ward-types/{ward_type_id}/rooms", response_model=RoomOut, status_code=201)
+def add_room(ward_type_id: int, body: RoomCreateIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    wt = db.query(AdmissionWardType).filter(AdmissionWardType.id == ward_type_id, AdmissionWardType.hospital_id == current_doctor.hospital_id).first()
+    if not wt:
+        raise HTTPException(status_code=404, detail="Ward type not found")
+    room_number = (body.room_number or "").strip()
+    if not room_number:
+        raise HTTPException(status_code=400, detail="Room number/name is required")
+    if body.beds_count < 1:
+        raise HTTPException(status_code=400, detail="A room needs at least 1 bed")
+    dup = db.query(AdmissionRoom).filter(
+        AdmissionRoom.ward_type_id == ward_type_id, AdmissionRoom.room_number == room_number
+    ).first()
+    if dup:
+        raise HTTPException(status_code=400, detail=f"Room {room_number} already exists in this ward")
+    room = AdmissionRoom(hospital_id=current_doctor.hospital_id, ward_type_id=ward_type_id, room_number=room_number, beds_count=body.beds_count)
+    db.add(room)
+    db.flush()
+    _recompute_total_beds(db, wt)
+    db.commit()
+    db.refresh(room)
+    return room
+
+
+@router.put("/ward-types/{ward_type_id}/rooms/{room_id}", response_model=RoomOut)
+def update_room(ward_type_id: int, room_id: int, body: RoomCreateIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    wt = db.query(AdmissionWardType).filter(AdmissionWardType.id == ward_type_id, AdmissionWardType.hospital_id == current_doctor.hospital_id).first()
+    if not wt:
+        raise HTTPException(status_code=404, detail="Ward type not found")
+    room = db.query(AdmissionRoom).filter(AdmissionRoom.id == room_id, AdmissionRoom.ward_type_id == ward_type_id).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    room_number = (body.room_number or "").strip()
+    if not room_number:
+        raise HTTPException(status_code=400, detail="Room number/name is required")
+    if body.beds_count < 1:
+        raise HTTPException(status_code=400, detail="A room needs at least 1 bed")
+    dup = db.query(AdmissionRoom).filter(
+        AdmissionRoom.ward_type_id == ward_type_id, AdmissionRoom.room_number == room_number, AdmissionRoom.id != room_id
+    ).first()
+    if dup:
+        raise HTTPException(status_code=400, detail=f"Room {room_number} already exists in this ward")
+    # A shrink can't cut below beds that are currently occupied *in this specific room*
+    occupied_in_room = db.query(Admission).filter(
+        Admission.ward_type_id == ward_type_id, Admission.status == "admitted",
+        Admission.bed_number.like(f"{room.room_number}-%"),
+    ).count()
+    if body.beds_count < occupied_in_room:
+        raise HTTPException(status_code=400, detail=f"Cannot set beds below {occupied_in_room} — that many are currently occupied in this room")
+    if room_number != room.room_number and occupied_in_room > 0:
+        raise HTTPException(status_code=400, detail="Cannot rename a room with patients currently in it — discharge/move them first")
+    room.room_number = room_number
+    room.beds_count = body.beds_count
+    _recompute_total_beds(db, wt)
+    db.commit()
+    db.refresh(room)
+    return room
+
+
+@router.delete("/ward-types/{ward_type_id}/rooms/{room_id}")
+def delete_room(ward_type_id: int, room_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    wt = db.query(AdmissionWardType).filter(AdmissionWardType.id == ward_type_id, AdmissionWardType.hospital_id == current_doctor.hospital_id).first()
+    if not wt:
+        raise HTTPException(status_code=404, detail="Ward type not found")
+    room = db.query(AdmissionRoom).filter(AdmissionRoom.id == room_id, AdmissionRoom.ward_type_id == ward_type_id).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    occupied_in_room = db.query(Admission).filter(
+        Admission.ward_type_id == ward_type_id, Admission.status == "admitted",
+        Admission.bed_number.like(f"{room.room_number}-%"),
+    ).count()
+    if occupied_in_room > 0:
+        raise HTTPException(status_code=400, detail=f"Cannot delete — {occupied_in_room} patient(s) currently in this room")
+    db.delete(room)
+    db.flush()
+    _recompute_total_beds(db, wt)
+    db.commit()
+    return {"message": "Room deleted"}
 
 
 @router.get("/active")
@@ -889,7 +992,7 @@ def change_ward(admission_id: str, body: ChangeWardIn, current_doctor: Doctor = 
     }
     if len(occupied_labels) >= new_ward_type.total_beds:
         raise HTTPException(status_code=400, detail=f"No beds available in {new_ward_type.name}")
-    valid_labels = set(_bed_labels_for_ward_type(new_ward_type))
+    valid_labels = set(_bed_labels_for_ward_type(db, new_ward_type))
     if not body.bed_number or body.bed_number not in valid_labels:
         raise HTTPException(status_code=400, detail="Please select a valid bed")
     if body.bed_number in occupied_labels:
@@ -1024,8 +1127,8 @@ def resume_medication(admission_id: str, order_id: int, current_doctor: Doctor =
 
 @router.post("/{admission_id}/medications/{order_id}/return")
 def return_medication(admission_id: str, order_id: int, body: ReturnMedicationIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "nurse", "assistant"]:
-        raise HTTPException(status_code=403, detail="Only a doctor, nurse, or assistant can record a medicine return")
+    if current_doctor.role.value not in ["nurse", "assistant"]:
+        raise HTTPException(status_code=403, detail="Only a nurse or assistant can record a medicine return")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Returns can only be recorded before discharge")

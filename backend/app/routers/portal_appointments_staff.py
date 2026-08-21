@@ -9,14 +9,14 @@ from app.models.portal import Appointment, AppointmentStatus
 from app.models.doctor import Doctor
 from app.models.doctor_slot import DoctorSlot
 from app.models.notification import Notification
+from app.models.patient import Patient
 from app.schemas.portal import DeclineAppointmentIn, SuggestAppointmentIn
 from app.utils.auth import get_current_doctor
 from app.utils.timezone import now_ist_naive
 from app.utils.portal_billing import current_doctor_fee, create_patient_cancellation_refund
 from app.utils.portal_checkin import convert_appointment_to_checkin
 from app.utils.portal_auth import hash_password
-from app.models.portal import PatientAccount
-from app.models.doctor_slot import DoctorSlot
+from app.models.portal import PatientAccount, PatientProfileLink
 from app.routers.portal_appointments import _estimated_slot_datetime, _release_abandoned_holds, _check_no_duplicate_active_booking
 from app.schemas.portal import BookForCallerIn
 import random
@@ -37,27 +37,38 @@ def book_appointment_for_caller(
     using the exact same slot capacity/locking machinery the patient portal
     itself uses (see book_appointment in portal_appointments.py) — so a
     phone-booked slot and a portal-booked slot are indistinguishable to
-    every doctor/queue view downstream. If this phone number has no portal
-    account yet, one is created here with a temporary password reception
-    reads out to the caller — there's no forgot-password flow in this
-    codebase yet, so this is the only way today for a phone booking to also
-    give the caller working portal access, rather than a dead-end account
-    they can never log into."""
+    every doctor/queue view downstream. Reception has already resolved a
+    real hospital patient_id before calling this (existing patient picked,
+    or a new one just registered via the normal /patients/ flow), so this
+    links straight to that record via profile_link_id — no deferred
+    new_patient_name and no temporary portal password to read out. Portal
+    login credentials for phone bookings are on hold until the WhatsApp
+    channel is in place to deliver them properly."""
     if current_doctor.role.value not in _STAFF_ROLES:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    if not (body.patient_name or "").strip():
-        raise HTTPException(status_code=400, detail="Patient name is required")
+    patient = db.query(Patient).filter(
+        Patient.id == body.patient_id, Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
 
-    account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
-    temp_password = None
-    account_is_new = False
-    if not account:
-        temp_password = "".join(random.choices(string.digits, k=6))
-        account = PatientAccount(phone=body.phone, password_hash=hash_password(temp_password))
-        db.add(account)
-        db.flush()  # need account.id below, before the outer commit
-        account_is_new = True
+    link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == patient.id).first()
+    if not link:
+        account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
+        if not account:
+            # Not a real login yet — portal password delivery is on hold
+            # until WhatsApp is wired up, so this is just an internal,
+            # unshared placeholder that satisfies the not-null column.
+            placeholder_password = "".join(random.choices(string.ascii_letters + string.digits, k=24))
+            account = PatientAccount(phone=body.phone, password_hash=hash_password(placeholder_password))
+            db.add(account)
+            db.flush()
+        link = PatientProfileLink(account_id=account.id, patient_id=patient.id, relation="self")
+        db.add(link)
+        db.flush()
+
+    account = db.query(PatientAccount).filter(PatientAccount.id == link.account_id).first()
 
     slot = db.query(DoctorSlot).filter(
         DoctorSlot.id == body.slot_id, DoctorSlot.hospital_id == current_doctor.hospital_id
@@ -76,13 +87,14 @@ def book_appointment_for_caller(
     ).first():
         raise HTTPException(status_code=400, detail="This doctor is unavailable on this date. Please pick another date or doctor.")
 
-    _check_no_duplicate_active_booking(db, account, None, body.patient_name, slot.doctor_id)
+    _check_no_duplicate_active_booking(db, account, link.id, None, slot.doctor_id)
 
     slot.booked_count += 1
     requested_time = _estimated_slot_datetime(slot, slot.booked_count)
 
     appt = Appointment(
         account_id=account.id,
+        profile_link_id=link.id,
         hospital_id=current_doctor.hospital_id,
         doctor_id=slot.doctor_id,
         slot_id=slot.id,
@@ -91,9 +103,6 @@ def book_appointment_for_caller(
         notes=body.notes,
         status=AppointmentStatus.booked,
         payment_status="unpaid",
-        new_patient_name=body.patient_name.strip(),
-        new_patient_gender=body.patient_gender,
-        new_patient_age=body.patient_age,
         address=body.address,
     )
     db.add(appt)
@@ -103,8 +112,7 @@ def book_appointment_for_caller(
     return {
         "appointment_id": appt.id,
         "estimated_time": requested_time.isoformat(),
-        "account_is_new": account_is_new,
-        "temp_password": temp_password,  # only present when a new account was created — read this out to the caller once, never logged/stored elsewhere
+        "patient_name": patient.name,
     }
 
 

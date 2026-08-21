@@ -44,7 +44,6 @@ VALID_WARD_CATEGORIES = {"general", "icu", "private", "maternity", "nicu", "isol
 
 class WardTypeCreateIn(BaseModel):
     name: str
-    total_beds: int
     daily_charge: float
     default_deposit: float = 0
     is_icu: bool = False
@@ -52,6 +51,24 @@ class WardTypeCreateIn(BaseModel):
     ot_charge: Optional[float] = None
     category: str = "general"
     is_emergency_ward: bool = False
+    # total_beds is no longer set directly here — a ward type's bed count is
+    # the sum of its rooms (see RoomCreateIn below). New ward types start at
+    # 0 beds until the admin adds rooms to them.
+
+
+class RoomCreateIn(BaseModel):
+    room_number: str
+    beds_count: int
+
+
+class RoomOut(BaseModel):
+    id: int
+    ward_type_id: int
+    room_number: str
+    beds_count: int
+
+    class Config:
+        from_attributes = True
 
 
 class WardTypeOut(BaseModel):
@@ -67,6 +84,7 @@ class WardTypeOut(BaseModel):
     is_emergency_ward: bool = False
     occupied: int = 0
     vacant: int = 0
+    rooms: List[RoomOut] = []
 
     class Config:
         from_attributes = True
@@ -88,8 +106,7 @@ class AddMedicationOrderIn(BaseModel):
     medicine_id: Optional[int] = None
     medicine_name: str
     units: int = 1  # strips/bottles/etc, whatever the medicine's dosage form makes a sensible dispensing unit
-    manual_unit_price: Optional[float] = None  # per-strip/unit price — required by the route when medicine_id is None, ignored otherwise (catalog price is authoritative)
-    sourced_outside: bool = False
+    manual_unit_price: Optional[float] = None  # per-strip/unit price — only used when medicine_id is None (not in catalog); billing itself happens later, at pharmacy dispense
 
 
 class AddChargeIn(BaseModel):

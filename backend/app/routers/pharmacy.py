@@ -139,8 +139,14 @@ def dispense_admission_medicine(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    """This is the real billable moment for an admission medicine — a full
+    strip/bottle physically leaves pharmacy stock right here, once, so the
+    bill and stock deduction both happen here instead of at order time.
+    If a relative never comes to collect it, this never fires and the
+    medicine never appears on the bill."""
     require_pharmacy(current_doctor)
-    from app.models.admission import Admission, AdmissionMedicationOrder
+    from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionCharge
+    from app.utils.inventory import deduct_stock_fefo
 
     order = (
         db.query(AdmissionMedicationOrder)
@@ -150,10 +156,28 @@ def dispense_admission_medicine(
     )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    if order.dispensed_at:
+        raise HTTPException(status_code=400, detail="Already dispensed")
+
+    unit_price = 0.0
+    medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.medicine_id).first() if order.medicine_id else None
+    if medicine:
+        unit_price = medicine.price_per_pack if medicine.price_per_pack else (medicine.price or 0) * (medicine.pack_size or 1)
+        deduct_stock_fefo(db, order.medicine_id, order.quantity * (medicine.pack_size or 1), round_to_pack=True)
+    else:
+        # Not in the catalog — no stock to deduct, bill whatever price was entered when the order was placed.
+        unit_price = order.manual_unit_price or 0.0
+
+    db.add(AdmissionCharge(
+        admission_id=order.admission_id, charge_type="medicine",
+        description=f"{order.medicine_name} — {order.quantity} unit(s) dispensed",
+        amount=unit_price, quantity=order.quantity, added_by=current_doctor.id, charged_at=now_ist_naive(),
+    ))
+
     order.dispensed_at = now_ist_naive()
     order.dispensed_by = current_doctor.id
     db.commit()
-    return {"message": "Marked as dispensed to ward"}
+    return {"message": "Marked as dispensed to ward — billed to the admission"}
 
 
 @router.get("/queue")

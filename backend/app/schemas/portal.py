@@ -90,11 +90,12 @@ class BookAppointmentIn(BaseModel):
 
 class BookForCallerIn(BaseModel):
     """Reception booking an online-appointment slot on behalf of a phone
-    caller — same slot/capacity system the patient portal itself uses."""
+    caller — same slot/capacity system the patient portal itself uses.
+    Reception resolves patient_id beforehand via the normal /patients/
+    create-or-pick flow (see receptionist.html), so this always links a
+    real hospital patient record rather than a deferred new_patient_name."""
     phone: str
-    patient_name: str
-    patient_gender: Optional[str] = None
-    patient_age: Optional[int] = None
+    patient_id: int
     slot_id: int
     notes: Optional[str] = None
     address: Optional[str] = None

@@ -13,6 +13,7 @@ from app.models.doctor_availability import DoctorAvailabilityTemplate, DoctorUna
 from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionMedicationAdministration, AdmissionCharge, AdmissionMedicationReturn
 from app.models.chat_message import ChatMessage
 from app.models.admission_ward_type import AdmissionWardType
+from app.models.admission_room import AdmissionRoom
 from app.models.admission_referral import AdmissionReferral
 from app.models.opd_charge import OpdCharge
 from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
