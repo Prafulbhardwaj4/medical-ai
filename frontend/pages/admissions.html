@@ -20,6 +20,39 @@
       background: linear-gradient(135deg, var(--teal-subtle), #dff5f0); color: var(--teal);
       display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0;
     }
+    @media (max-width: 700px) {
+      .ward-filter-tabs { display: none; }
+      .ward-filter-select { display: block !important; }
+      .ward-card {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 14px;
+      }
+      .ward-card-main {
+        align-items: flex-start !important;
+      }
+      .ward-avatar {
+        width: 40px;
+        height: 40px;
+        font-size: 14px;
+      }
+      .ward-card-side {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        text-align: left !important;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .ward-card-side > div {
+        margin-top: 0 !important;
+        text-align: right;
+      }
+    }
+    #admit-deposit::-webkit-outer-spin-button,
+    #admit-deposit::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    #admit-deposit { -moz-appearance: textfield; }
   </style>
 </head>
 
@@ -41,11 +74,19 @@
         <span id="topbar-clinic" style="color:var(--slate)"></span>
         <button class="btn-logout" onclick="logout()">Sign out</button>
       </div>
+      <button class="notif-bell-btn" id="notif-bell-btn" onclick="toggleNotifPanel()" aria-label="Notifications">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        <span class="notif-badge" id="notif-badge">0</span>
+      </button>
       <button class="topbar-profile-btn" onclick="toggleProfileMenu()" aria-label="Profile">
         <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="8" r="4" />
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
+        <span class="profile-dot" id="profile-dot"></span>
       </button>
     </header>
 
@@ -55,6 +96,14 @@
         <strong id="profile-menu-name"></strong>
         <span id="profile-menu-clinic"></span>
       </div>
+      <button class="profile-menu-item" onclick="closeProfileMenu(); toggleNotifPanel()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        Notifications
+        <span class="profile-menu-badge" id="profile-menu-notif-badge" style="display:none">0</span>
+      </button>
       <button class="profile-menu-item" onclick="openEditDetailsModal()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
         Edit My Details
@@ -63,6 +112,20 @@
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
         Sign out
       </button>
+    </div>
+
+    <div class="notif-backdrop" id="notif-backdrop" onclick="closeNotifPanel()"></div>
+    <div class="notif-panel" id="notif-panel">
+      <div class="notif-panel-header">
+        <h3 style="margin:0;font-size:15px">Notifications</h3>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-outline btn-sm" onclick="markAllNotifsRead()">Mark all read</button>
+          <button class="modal-close" onclick="closeNotifPanel()">×</button>
+        </div>
+      </div>
+      <div class="notif-panel-body" id="notif-panel-body">
+        <p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">Loading…</p>
+      </div>
     </div>
 
     <nav class="sidebar" id="sidebar-doctor">
@@ -86,12 +149,6 @@
       </a>
       <div class="nav-divider"></div>
       <div class="sidebar-section-label">Quick Actions</div>
-      <div class="nav-item" onclick="location.href='dashboard.html?openAddPatient=1'">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-        </svg>
-        Add Patient
-      </div>
       <a class="nav-item" href="doctor-slots.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -214,6 +271,12 @@
         </svg>
         Availability
       </button>
+      <button class="bottom-nav-item" onclick="openMobileMenu()">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        Menu
+      </button>
     </nav>
 
     <nav class="bottom-nav" id="bottom-nav-receptionist" style="display:none">
@@ -243,6 +306,12 @@
         </svg>
         Attendance
       </button>
+      <button class="bottom-nav-item" onclick="openMobileMenu()">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        Menu
+      </button>
     </nav>
 
     <nav class="bottom-nav" id="bottom-nav-nurse" style="display:none">
@@ -267,6 +336,12 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
         Attendance
+      </button>
+      <button class="bottom-nav-item" onclick="openMobileMenu()">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        Menu
       </button>
     </nav>
 
@@ -293,10 +368,15 @@
         </svg>
         Attendance
       </button>
+      <button class="bottom-nav-item" onclick="openMobileMenu()">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        Menu
+      </button>
     </nav>
 
     <nav class="bottom-nav" id="app-bottom-nav" style="display:none"></nav>
-
 
     <main class="main-content">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px">
@@ -305,21 +385,27 @@
           <p style="color:var(--slate)">Currently admitted patients.</p>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-outline" id="btn-manage-wards" style="display:none" onclick="openManageWardsModal()">Manage Wards</button>
           <button class="btn btn-outline" id="btn-manage-rooms" style="display:none" onclick="openRoomsModal()">Manage Rooms</button>
           <button class="btn btn-outline" id="btn-add-rooms" style="display:none" onclick="openAddRoomModal()">+ Add Rooms</button>
-          <button class="btn btn-primary" id="btn-admit-patient" onclick="openAdmitModal()">+ Admit Patient</button>
+          <button class="btn btn-primary" id="btn-admit-patient" style="display:none" onclick="openAdmitModal()">+ Admit Patient</button>
         </div>
       </div>
 
       <div class="card" style="margin-bottom:20px">
-        <div class="card-header"><h2>Ward Vacancy</h2></div>
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <h2>Ward Vacancy</h2>
+          <select class="form-control" id="vacancy-ward-filter" style="max-width:220px" onchange="renderVacancyOverview()">
+            <option value="">All Wards</option>
+          </select>
+        </div>
         <div id="vacancy-overview" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
           <p style="color:var(--slate-light)">Loading...</p>
         </div>
       </div>
 
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
-        <div class="form-group" style="max-width:360px;margin-bottom:0;flex:1">
+        <div class="form-group admissions-search-field" style="max-width:360px;margin-bottom:0;flex:1">
           <input class="form-control" id="admissions-search" placeholder="Search name, phone, ID, or diagnosis..." oninput="onAdmissionsSearch(this.value)" />
         </div>
         <div class="form-group" style="max-width:280px;min-width:220px;flex-shrink:0;margin-bottom:0">
@@ -338,72 +424,24 @@
     </main>
   </div>
 
-  <!-- Rooms / ward types management (admin only) -->
+  <!-- Manage Rooms (admin only) — pick a ward type, see/edit its rooms only.
+       No ward-type details here anymore; that lives in Manage Wards. -->
   <div class="modal-overlay" id="modal-rooms">
-    <div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto">
+    <div class="modal" style="max-width:480px;max-height:85vh;overflow-y:auto">
       <div class="modal-header">
-        <h2>Manage Rooms &amp; Ward Types</h2>
+        <h2>Manage Rooms</h2>
         <button class="modal-close" onclick="closeRoomsModal()">&times;</button>
       </div>
-      <div class="card" style="background:var(--smoke);margin-bottom:18px">
-        <p style="font-weight:600;margin-bottom:10px" id="ward-form-title">Add Ward Type</p>
-        <div class="form-group">
-          <label class="form-label">Type</label>
-          <select class="form-control" id="wt-name-select" onchange="onWtNameSelectChange()">
-            <option value="General">General</option>
-            <option value="ICU">ICU</option>
-            <option value="Private Room">Private Room</option>
-            <option value="Other">Other</option>
-          </select>
-          <input class="form-control" id="wt-name" placeholder="Enter custom ward/room type" style="display:none;margin-top:8px" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Category</label>
-          <select class="form-control" id="wt-category">
-            <option value="general">General</option>
-            <option value="icu">ICU</option>
-            <option value="private">Private</option>
-            <option value="maternity">Maternity</option>
-            <option value="nicu">NICU</option>
-            <option value="isolation">Isolation</option>
-            <option value="day_care">Day-care</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div class="form-group"><label class="form-label">Daily Charge (₹)</label><input class="form-control" type="number" min="0" id="wt-charge" /></div>
-        <div class="form-group"><label class="form-label">Default Deposit (₹)</label><input class="form-control" type="number" min="0" id="wt-deposit" placeholder="Pre-filled at admission, reception can override" /></div>
-        <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
-            <input type="checkbox" id="wt-is-icu"> ICU / CCU / ICCU / NICU (always GST-exempt, regardless of daily rate)
-          </label>
-        </div>
-        <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
-            <input type="checkbox" id="wt-is-ot" onchange="document.getElementById('wt-ot-charge-group').style.display=this.checked?'':'none'"> Operation Theatre (auto-bills an OT charge when a patient is moved into this ward)
-          </label>
-        </div>
-        <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
-            <input type="checkbox" id="wt-is-emergency"> Emergency Ward (enables Emergency Intake for reception — only one ward can hold this flag; setting it here will unset it elsewhere)
-          </label>
-        </div>
-        <div class="form-group" id="wt-ot-charge-group" style="display:none">
-          <label class="form-label">OT Charge (₹, per use)</label>
-          <input class="form-control" type="number" min="0" id="wt-ot-charge" placeholder="Billed once when a patient moves into this ward" />
-        </div>
-        <div class="err-msg" id="wt-err"></div>
-        <div style="display:flex;gap:10px">
-          <button class="btn btn-outline" style="flex:1" id="wt-cancel-edit-btn" onclick="resetWardTypeForm()" style="display:none">Cancel Edit</button>
-          <button class="btn btn-primary" style="flex:1" onclick="submitWardType()" id="wt-submit-btn">Add Ward Type</button>
-        </div>
+
+      <div class="chip-scroll ward-filter-tabs" id="mr-ward-tabs" style="margin-bottom:16px"></div>
+      <select class="form-control ward-filter-select" id="mr-ward-select" style="display:none;margin-bottom:16px" onchange="selectRoomsWard(this.value)"></select>
+
+      <div id="mr-empty" style="display:none">
+        <p style="color:var(--slate-light);font-size:13px">No ward types yet — use "Manage Wards" to create one first.</p>
       </div>
 
-      <!-- Rooms panel — only shown while editing an existing ward type. A brand
-           new ward type has no rooms yet (Total Beds isn't set directly anymore),
-           so this appears the moment "Edit" is clicked, letting the admin add
-           rooms right there without a separate screen. -->
-      <div class="card" style="background:var(--smoke);margin-bottom:18px;display:none" id="wt-rooms-panel">
-        <p style="font-weight:600;margin-bottom:10px">Rooms in <span id="wt-rooms-panel-ward-name"></span></p>
+      <div class="card" style="background:var(--smoke);margin-bottom:0;display:none" id="mr-rooms-block">
+        <p style="font-weight:600;margin-bottom:10px">Rooms in <span id="mr-ward-name"></span></p>
         <div id="wt-rooms-list" style="margin-bottom:12px"></div>
         <div style="display:flex;gap:8px;align-items:flex-end">
           <div class="form-group" style="margin-bottom:0;flex:1">
@@ -418,18 +456,110 @@
         </div>
         <div class="err-msg" id="wt-room-err"></div>
       </div>
+    </div>
+  </div>
 
-      <div class="form-group" style="margin-bottom:10px">
-        <input class="form-control" id="wt-search" placeholder="Search rooms / ward types..." oninput="renderWardTypesList(this.value)" />
+  <!-- Manage Wards (admin only) — pick a ward type from a list, edit its
+       full details. Separate from Manage Rooms, which only deals with rooms. -->
+  <div class="modal-overlay" id="modal-manage-wards">
+    <div class="modal" style="max-width:480px;max-height:85vh;overflow-y:auto">
+      <div class="modal-header">
+        <h2>Manage Wards</h2>
+        <button class="modal-close" onclick="closeManageWardsModal()">&times;</button>
       </div>
-      <div id="ward-types-list"></div>
+
+      <div id="mw-list-view">
+        <button class="btn btn-outline" style="width:100%;margin-bottom:14px" onclick="openAddWardTypeModal(false)">+ Add Ward Type</button>
+        <div class="form-group" style="margin-bottom:10px">
+          <input class="form-control" id="mw-search" placeholder="Search ward types..." oninput="renderManageWardsList(this.value)" />
+        </div>
+        <div id="mw-ward-list"></div>
+      </div>
+
+      <div id="mw-edit-view" style="display:none">
+        <div class="card" style="background:var(--smoke);margin-bottom:0">
+          <p style="font-weight:600;margin-bottom:10px" id="ward-form-title">Edit Ward</p>
+          <div class="form-group">
+            <label class="form-label">Type</label>
+            <select class="form-control" id="wt-name-select" onchange="onWtNameSelectChange()">
+              <option value="General">General</option>
+              <option value="ICU">ICU</option>
+              <option value="Private Room">Private Room</option>
+              <option value="Other">Other</option>
+            </select>
+            <input class="form-control" id="wt-name" placeholder="Enter custom ward/room type" style="display:none;margin-top:8px" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Category</label>
+            <select class="form-control" id="wt-category">
+              <option value="general">General</option>
+              <option value="icu">ICU</option>
+              <option value="private">Private</option>
+              <option value="maternity">Maternity</option>
+              <option value="nicu">NICU</option>
+              <option value="isolation">Isolation</option>
+              <option value="day_care">Day-care</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Daily Charge (₹)</label><input class="form-control" type="number" min="0" id="wt-charge" /></div>
+          <div class="form-group"><label class="form-label">Default Deposit (₹)</label><input class="form-control" type="number" min="0" id="wt-deposit" placeholder="Pre-filled at admission, reception can override" /></div>
+          <div class="form-group">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+              <input type="checkbox" id="wt-is-icu"> ICU / CCU / ICCU / NICU (always GST-exempt, regardless of daily rate)
+            </label>
+          </div>
+          <div class="form-group">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+              <input type="checkbox" id="wt-is-ot" onchange="document.getElementById('wt-ot-charge-group').style.display=this.checked?'':'none'"> Operation Theatre (auto-bills an OT charge when a patient is moved into this ward)
+            </label>
+          </div>
+          <div class="form-group">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+              <input type="checkbox" id="wt-is-emergency"> Emergency Ward (enables Emergency Intake for reception — only one ward can hold this flag; setting it here will unset it elsewhere)
+            </label>
+          </div>
+          <div class="form-group" id="wt-ot-charge-group" style="display:none">
+            <label class="form-label">OT Charge (₹, per use)</label>
+            <input class="form-control" type="number" min="0" id="wt-ot-charge" placeholder="Billed once when a patient moves into this ward" />
+          </div>
+          <div class="err-msg" id="wt-err"></div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-outline" style="flex:1" onclick="backToManageWardsList()">Back</button>
+            <button class="btn btn-primary" style="flex:1" onclick="submitWardType()" id="wt-submit-btn">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick "Add Ward Type" — minimal: name + daily charge only. Reached from
+       Manage Wards or from the Add Rooms modal's "create a new ward type"
+       link. Everything else (category, deposit, ICU/OT/Emergency) can be set
+       afterwards from Manage Wards. -->
+  <div class="modal-overlay" id="modal-add-ward-type">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <h2>Add Ward Type</h2>
+        <button class="modal-close" onclick="closeAddWardTypeModal()">&times;</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ward / Room Type Name</label>
+        <input class="form-control" id="awt-name" placeholder="e.g. General Ward, ICU, Private Room" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Daily Charge (₹)</label>
+        <input class="form-control" type="number" min="0" id="awt-charge" />
+      </div>
+      <div class="err-msg" id="awt-err"></div>
+      <p style="font-size:12.5px;color:var(--slate-light);margin-bottom:14px">You can set category, deposit, and ICU/OT/Emergency options later from Manage Wards.</p>
+      <button class="btn btn-primary" style="width:100%" onclick="submitAddWardType()">Add Ward Type</button>
     </div>
   </div>
 
   <!-- Quick "Add Rooms" entry point — jumps straight to adding a room to an
-       existing ward type (including ones with zero rooms so far, which the
-       Manage Rooms list above deliberately hides), without wading through
-       the full manage/edit view first. -->
+       existing ward type (including ones with zero rooms so far), without
+       wading through Manage Rooms first. -->
   <div class="modal-overlay" id="modal-add-room">
     <div class="modal" style="max-width:420px">
       <div class="modal-header">
@@ -449,7 +579,7 @@
         <input class="form-control" type="number" min="1" id="add-room-beds" value="1" />
       </div>
       <div class="err-msg" id="add-room-err"></div>
-      <p style="font-size:12.5px;color:var(--slate-light);margin-bottom:14px">Don't see the ward you need? <a href="#" onclick="closeAddRoomModal();openRoomsModal();return false;">Create a new ward type</a> first.</p>
+      <p style="font-size:12.5px;color:var(--slate-light);margin-bottom:14px">Don't see the ward you need? <a href="#" onclick="closeAddRoomModal();openAddWardTypeModal(true);return false;">Create a new ward type</a> first.</p>
       <button class="btn btn-primary" style="width:100%" onclick="submitAddRoom()">Add Room</button>
     </div>
   </div>
@@ -495,7 +625,11 @@
           <label class="form-label">Ward</label>
           <select class="form-control" id="admit-ward-type" onchange="onAdmitWardTypeChange()"></select>
         </div>
-        <div class="form-group"><label class="form-label">Bed</label><select class="form-control" id="admit-bed"><option value="">Select a ward first...</option></select></div>
+        <div class="form-group">
+          <label class="form-label">Room</label>
+          <select class="form-control" id="admit-room" onchange="onAdmitRoomChange()"><option value="">Select a ward first...</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Bed</label><select class="form-control" id="admit-bed"><option value="">Select a room first...</option></select></div>
         <div class="form-group">
           <label class="form-label">Diagnosis *</label>
           <input class="form-control" id="admit-diagnosis" placeholder="Auto-suggested from last visit — edit as needed" />
@@ -541,6 +675,88 @@
   <script>
     if (!requireAuth()) { }
     fillTopbar();
+
+    async function toggleNotifPanel() {
+      const panel = document.getElementById('notif-panel');
+      const backdrop = document.getElementById('notif-backdrop');
+      if (panel.classList.contains('open')) {
+        closeNotifPanel();
+      } else {
+        panel.classList.add('open');
+        backdrop.classList.add('open');
+        await loadNotifList();
+      }
+    }
+
+    function closeNotifPanel() {
+      document.getElementById('notif-panel').classList.remove('open');
+      document.getElementById('notif-backdrop').classList.remove('open');
+    }
+
+    const NOTIF_ICON = { critical: 'critical', warning: 'warning', info: 'info' };
+
+    async function loadNotifList() {
+      const body = document.getElementById('notif-panel-body');
+      try {
+        const data = await api("GET", "/notifications");
+        loadNotifUnreadCount();
+        if (!data.notifications.length) {
+          body.innerHTML = '<p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">You\'re all caught up.</p>';
+          return;
+        }
+        body.innerHTML = data.notifications.map(n => `
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
+            <div class="notif-item-title">
+              <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
+              ${sanitize(n.title)}
+            </div>
+            <div class="notif-item-message">${sanitize(n.message)}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        body.innerHTML = '<p style="color:var(--danger);padding:20px;text-align:center;font-size:13px">Could not load notifications.</p>';
+      }
+    }
+
+    async function onNotifClick(id, linkType, linkId) {
+      try {
+        await api("PATCH", `/notifications/${id}/read`, {});
+        loadNotifUnreadCount();
+        closeNotifPanel();
+        if (linkType === 'admission' && linkId) {
+          const { token } = await api("GET", `/admissions/token-for/${linkId}`);
+          location.href = `admission-detail.html?id=${token}`;
+        }
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function markAllNotifsRead() {
+      try {
+        await api("POST", "/notifications/mark-all-read", {});
+        loadNotifList();
+      } catch (e) { }
+    }
+
+    async function loadNotifUnreadCount() {
+      try {
+        const data = await api("GET", "/notifications/unread-count");
+        const badge = document.getElementById('notif-badge');
+        const dot = document.getElementById('profile-dot');
+        const pmBadge = document.getElementById('profile-menu-notif-badge');
+        if (data.unread_count > 0) {
+          badge.textContent = data.unread_count > 9 ? '9+' : data.unread_count;
+          badge.style.display = 'flex';
+          if (dot) dot.style.display = 'block';
+          if (pmBadge) { pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count; pmBadge.style.display = 'inline-block'; }
+        } else {
+          badge.style.display = 'none';
+          if (dot) dot.style.display = 'none';
+          if (pmBadge) pmBadge.style.display = 'none';
+        }
+      } catch (e) { }
+    }
+    loadNotifUnreadCount();
+    setInterval(loadNotifUnreadCount, 30000);
     document.getElementById("profile-menu-name").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
 
     const isAdminTier = ["admin", "sub_admin"].includes(getDoctor()?.role);
@@ -549,6 +765,7 @@
       document.getElementById("bottom-nav-doctor").style.display = "none";
       document.getElementById("app-sidebar").style.display = "";
       document.getElementById("app-bottom-nav").style.display = "";
+      document.getElementById("btn-manage-wards").style.display = "";
       document.getElementById("btn-manage-rooms").style.display = "";
       document.getElementById("btn-add-rooms").style.display = "";
       document.getElementById("btn-admit-patient").style.display = "none";
@@ -558,6 +775,7 @@
       document.getElementById("sidebar-receptionist").style.display = "";
       document.getElementById("bottom-nav-doctor").style.display = "none";
       document.getElementById("bottom-nav-receptionist").style.display = "";
+      document.getElementById("btn-admit-patient").style.display = "";
     } else if (getDoctor()?.role === "nurse") {
       document.getElementById("sidebar-doctor").style.display = "none";
       document.getElementById("sidebar-nurse").style.display = "";
@@ -574,31 +792,81 @@
 
     let wardTypesCache = [];
 
+    // Card color per ward category — purely a visual grouping cue on the
+    // per-room vacancy cards, not tied to any backend field.
+    const WARD_CATEGORY_COLORS = {
+      general: "#2f7a78", icu: "#b23b3b", private: "#6a4fb0", maternity: "#c9668a",
+      nicu: "#b0752f", isolation: "#8a8a2f", day_care: "#3b7ab2", other: "#5a5a5a",
+    };
+    function wardCategoryColor(category) {
+      return WARD_CATEGORY_COLORS[(category || "general").toLowerCase()] || WARD_CATEGORY_COLORS.other;
+    }
+
     async function loadVacancyOverview() {
-      const el = document.getElementById("vacancy-overview");
       try {
         wardTypesCache = await api("GET", "/admissions/ward-types");
-        const configuredWards = wardTypesCache.filter(w => w.total_beds > 0);
-        if (!configuredWards.length) {
-          el.innerHTML = `<p style="color:var(--slate-light)">No ward types configured yet.${isAdminTier ? ' Click "Manage Rooms" to add beds to a ward.' : ''}</p>`;
-          return;
-        }
-        el.innerHTML = configuredWards.map(w => `
-          <div class="card" style="margin-bottom:0">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-              <div style="font-weight:600;color:var(--navy)">${sanitize(w.name)}</div>
-              ${isAdminTier ? `<div style="display:flex;gap:6px;flex-shrink:0">
-                <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick='openRoomsModal();editWardType(${JSON.stringify(w)})'>Edit</button>
-                <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick="confirmDeleteWardType(${w.id}, ${JSON.stringify(w.name)})">Delete</button>
-              </div>` : ''}
-            </div>
-            <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin:4px 0">${w.occupied}/${w.total_beds}</div>
-            <div style="font-size:12px;color:var(--slate-light)">${w.vacant} bed${w.vacant === 1 ? '' : 's'} free · ₹${w.daily_charge}/day</div>
-          </div>
-        `).join('');
+        populateVacancyWardFilter();
+        renderVacancyOverview();
       } catch (e) {
-        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        document.getElementById("vacancy-overview").innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
       }
+    }
+
+    function populateVacancyWardFilter() {
+      const sel = document.getElementById("vacancy-ward-filter");
+      const current = sel.value;
+      sel.innerHTML = `<option value="">All Wards</option>` + wardTypesCache.map(w =>
+        `<option value="${w.id}">${sanitize(w.name)}</option>`
+      ).join('');
+      if (current && wardTypesCache.some(w => String(w.id) === current)) sel.value = current;
+    }
+
+    // One card per ROOM (not merged per ward type) — adding another room of
+    // the same ward type adds its own separate card alongside the others.
+    function renderVacancyOverview() {
+      const el = document.getElementById("vacancy-overview");
+      const filterId = document.getElementById("vacancy-ward-filter").value;
+      const configuredWards = wardTypesCache.filter(w => w.total_beds > 0 && (!filterId || String(w.id) === filterId));
+
+      if (!configuredWards.length) {
+        if (filterId) {
+          el.innerHTML = `<p style="color:var(--slate-light)">No rooms for particular ward type.</p>`;
+        } else {
+          el.innerHTML = `<p style="color:var(--slate-light)">No ward types configured yet.${isAdminTier ? ' Click "Manage Wards" to create one.' : ''}</p>`;
+        }
+        return;
+      }
+
+      const cards = [];
+      for (const w of configuredWards) {
+        const rooms = w.rooms || [];
+        if (!rooms.length) continue;
+        for (const r of rooms) {
+          cards.push(`
+            <div class="card" style="margin-bottom:0;border-left:4px solid ${wardCategoryColor(w.category)}">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                <div>
+                  <div style="font-weight:600;color:var(--navy)">${sanitize(w.name)}</div>
+                  <div style="font-size:12px;color:var(--slate-light)">Room ${sanitize(r.room_number)}</div>
+                </div>
+                ${isAdminTier ? `<div style="display:flex;gap:6px;flex-shrink:0">
+                  <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick='openManageWardsModal();editWardType(${JSON.stringify(w)})'>Edit</button>
+                </div>` : ''}
+              </div>
+              <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin:4px 0">${r.occupied}/${r.beds_count}</div>
+              <div style="font-size:12px;color:var(--slate-light)">${r.vacant} bed${r.vacant === 1 ? '' : 's'} free · ₹${w.daily_charge}/bed/day</div>
+            </div>
+          `);
+        }
+      }
+
+      if (!cards.length) {
+        el.innerHTML = filterId
+          ? `<p style="color:var(--slate-light)">No rooms for particular ward type.</p>`
+          : `<p style="color:var(--slate-light)">No rooms configured yet.${isAdminTier ? ' Click "+ Add Rooms" to add one.' : ''}</p>`;
+        return;
+      }
+      el.innerHTML = cards.join('');
     }
 
     function populateAdmitWardDropdown() {
@@ -608,7 +876,7 @@
         return;
       }
       sel.innerHTML = wardTypesCache.map(w =>
-        `<option value="${w.id}" data-charge="${w.daily_charge}" data-deposit="${w.default_deposit || 0}" data-vacant="${w.vacant}">${sanitize(w.name)} (${w.vacant} free)</option>`
+        `<option value="${w.id}" data-charge="${w.daily_charge}" data-deposit="${w.default_deposit || 0}" data-vacant="${w.vacant}">${sanitize(w.name)}</option>`
       ).join('');
       onAdmitWardTypeChange();
     }
@@ -625,29 +893,54 @@
       document.getElementById("admit-deposit").value = opt ? (opt.dataset.deposit || 0) : 0;
       onAdmitDepositChange();
 
+      const roomSel = document.getElementById("admit-room");
       const bedSel = document.getElementById("admit-bed");
-      if (!sel.value) { bedSel.innerHTML = `<option value="">Select a ward first...</option>`; return; }
+      bedSel.innerHTML = `<option value="">Select a room first...</option>`;
+      if (!sel.value) { roomSel.innerHTML = `<option value="">Select a ward first...</option>`; return; }
+
+      const wt = wardTypesCache.find(w => String(w.id) === String(sel.value));
+      const roomsWithBeds = (wt && wt.rooms ? wt.rooms : []).filter(r => r.vacant > 0);
+      if (!roomsWithBeds.length) {
+        roomSel.innerHTML = `<option value="">No rooms with a free bed in this ward</option>`;
+        return;
+      }
+      roomSel.innerHTML = `<option value="">Select room...</option>` + roomsWithBeds.map(r =>
+        `<option value="${r.id}" data-room-number="${sanitize(r.room_number)}">${sanitize(r.room_number)} (${r.vacant} free)</option>`
+      ).join('');
+      onAdmitRoomChange();
+    }
+
+    function onAdmitRoomChange() {
+      const roomSel = document.getElementById("admit-room");
+      const opt = roomSel.selectedOptions[0];
+      const bedSel = document.getElementById("admit-bed");
+      if (!roomSel.value || !opt) { bedSel.innerHTML = `<option value="">Select a room first...</option>`; return; }
+
+      const wt = wardTypesCache.find(w => String(w.id) === String(document.getElementById("admit-ward-type").value));
+      const room = wt && wt.rooms ? wt.rooms.find(r => String(r.id) === String(roomSel.value)) : null;
+      if (!room) { bedSel.innerHTML = `<option value="">Room not found</option>`; return; }
+
+      // occupied beds carry an "occupied" count but not which numbers are free,
+      // so ask the ward-wide beds endpoint and filter to just this room's prefix.
       bedSel.innerHTML = `<option value="">Loading beds...</option>`;
-      try {
-        const beds = await api("GET", `/admissions/ward-types/${sel.value}/beds`);
-        const available = beds.filter(b => !b.occupied);
+      api("GET", `/admissions/ward-types/${document.getElementById("admit-ward-type").value}/beds`).then(allBeds => {
+        const available = allBeds.filter(b => !b.occupied && b.label.startsWith(`${room.room_number}-`));
         if (!available.length) {
           bedSel.innerHTML = `<option value="">No beds available</option>`;
           return;
         }
         bedSel.innerHTML = available.map(b => `<option value="${b.label}">${b.label}</option>`).join('');
-      } catch (e) {
-        bedSel.innerHTML = `<option value="">Could not load beds</option>`;
-      }
+      }).catch(() => { bedSel.innerHTML = `<option value="">Could not load beds</option>`; });
     }
 
     // ---- Rooms / ward types management ----
     let editingWardTypeId = null;
 
+    // ---- Manage Rooms (rooms only — filter by ward type, add/edit/delete rooms) ----
     function openRoomsModal() {
-      resetWardTypeForm();
-      document.getElementById("wt-search").value = "";
-      renderWardTypesList();
+      populateRoomsWardTabs();
+      const firstId = wardTypesCache.length ? wardTypesCache[0].id : null;
+      selectRoomsWard(firstId != null ? String(firstId) : "");
       document.getElementById("modal-rooms").classList.add("open");
     }
     function closeRoomsModal() {
@@ -655,28 +948,79 @@
       loadVacancyOverview().then(() => { populateAdmitWardDropdown(); populateAdmissionsWardFilter(); });
     }
 
-    // Only wards that already have at least one room are listed here — an
-    // empty ward (created but never given rooms) is deliberately hidden, per
-    // how "Manage Rooms" is meant to work. Use "+ Add Rooms" to add the first
-    // room to a ward that doesn't show up here yet.
-    function renderWardTypesList(search) {
-      const el = document.getElementById("ward-types-list");
-      const withRooms = wardTypesCache.filter(w => (w.rooms || []).length > 0);
-      if (!withRooms.length) {
-        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No wards with rooms configured yet. Use "+ Add Rooms" to add the first room to a ward.</p>`;
+    function populateRoomsWardTabs() {
+      const tabs = document.getElementById("mr-ward-tabs");
+      const select = document.getElementById("mr-ward-select");
+      if (!wardTypesCache.length) {
+        tabs.innerHTML = "";
+        select.innerHTML = "";
+        document.getElementById("mr-empty").style.display = "";
+        document.getElementById("mr-rooms-block").style.display = "none";
+        return;
+      }
+      document.getElementById("mr-empty").style.display = "none";
+      tabs.innerHTML = wardTypesCache.map(w =>
+        `<button class="btn btn-outline btn-sm" id="mr-tab-${w.id}" onclick="selectRoomsWard('${w.id}')">${sanitize(w.name)}</button>`
+      ).join('');
+      select.innerHTML = wardTypesCache.map(w => `<option value="${w.id}">${sanitize(w.name)}</option>`).join('');
+    }
+
+    function selectRoomsWard(wardId) {
+      document.getElementById("mr-ward-select").value = wardId || "";
+      wardTypesCache.forEach(w => {
+        const btn = document.getElementById(`mr-tab-${w.id}`);
+        if (!btn) return;
+        const active = String(w.id) === String(wardId);
+        btn.style.background = active ? "var(--teal)" : "";
+        btn.style.color = active ? "white" : "";
+        btn.style.borderColor = active ? "var(--teal)" : "";
+      });
+      const w = wardTypesCache.find(x => String(x.id) === String(wardId));
+      if (!w) {
+        document.getElementById("mr-rooms-block").style.display = "none";
+        return;
+      }
+      document.getElementById("mr-rooms-block").style.display = "";
+      showWardRoomsPanel(w);
+    }
+
+    // ---- Manage Wards (ward-type list + full edit form) ----
+    function openManageWardsModal() {
+      document.getElementById("mw-search").value = "";
+      showManageWardsList();
+      renderManageWardsList();
+      document.getElementById("modal-manage-wards").classList.add("open");
+    }
+    function closeManageWardsModal() {
+      document.getElementById("modal-manage-wards").classList.remove("open");
+      loadVacancyOverview().then(() => { populateAdmitWardDropdown(); populateAdmissionsWardFilter(); });
+    }
+    function showManageWardsList() {
+      document.getElementById("mw-list-view").style.display = "";
+      document.getElementById("mw-edit-view").style.display = "none";
+    }
+    function backToManageWardsList() {
+      showManageWardsList();
+      renderManageWardsList(document.getElementById("mw-search").value);
+    }
+
+    function renderManageWardsList(search) {
+      const el = document.getElementById("mw-ward-list");
+      if (!wardTypesCache.length) {
+        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No ward types yet — click "+ Add Ward Type" above.</p>`;
         return;
       }
       const q = (search || "").trim().toLowerCase();
-      const filtered = q ? withRooms.filter(w => w.name.toLowerCase().includes(q)) : withRooms;
+      const filtered = q ? wardTypesCache.filter(w => w.name.toLowerCase().includes(q)) : wardTypesCache;
       if (!filtered.length) {
-        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No rooms match "${sanitize(search)}".</p>`;
+        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No ward types match "${sanitize(search)}".</p>`;
         return;
       }
       el.innerHTML = filtered.map(w => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
           <div>
             <div style="font-weight:600">${sanitize(w.name)}</div>
-            <div style="font-size:12px;color:var(--slate-light)"><span class="badge badge-grey" style="text-transform:capitalize">${sanitize((w.category || 'general').replace('_', ' '))}</span> · ${w.rooms.length} room${w.rooms.length === 1 ? '' : 's'}, ${w.total_beds} beds · ₹${w.daily_charge}/day · ₹${w.default_deposit || 0} default deposit${w.is_icu ? ' · <strong>ICU (GST-exempt)</strong>' : ''}${w.is_ot ? ` · <strong>OT (₹${w.ot_charge || 0}/use)</strong>` : ''} · ${w.occupied} occupied</div>
+            <div style="font-size:12px;color:var(--slate-light)"><span class="badge badge-grey" style="text-transform:capitalize">${sanitize((w.category || 'general').replace('_', ' '))}</span> · ${(w.rooms||[]).length} room${(w.rooms||[]).length === 1 ? '' : 's'}, ${w.total_beds} beds · ₹${w.daily_charge}/day · ₹${w.default_deposit || 0} default deposit${w.is_icu ? ' · <strong>ICU (GST-exempt)</strong>' : ''}${w.is_ot ? ` · <strong>OT (₹${w.ot_charge || 0}/use)</strong>` : ''}${w.is_emergency_ward ? ' · <strong>🚨 Emergency Ward</strong>' : ''}</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick='editWardType(${JSON.stringify(w)})'>Edit</button>
@@ -700,6 +1044,40 @@
       }
     }
 
+    // ---- Quick "Add Ward Type" (name + daily charge only) ----
+    let addWardTypeThenOpenAddRoom = false;
+
+    function openAddWardTypeModal(fromAddRoom) {
+      addWardTypeThenOpenAddRoom = !!fromAddRoom;
+      document.getElementById("awt-name").value = "";
+      document.getElementById("awt-charge").value = "";
+      document.getElementById("awt-err").textContent = "";
+      document.getElementById("modal-add-ward-type").classList.add("open");
+    }
+    function closeAddWardTypeModal() {
+      document.getElementById("modal-add-ward-type").classList.remove("open");
+    }
+    async function submitAddWardType() {
+      const err = document.getElementById("awt-err");
+      err.textContent = "";
+      const name = document.getElementById("awt-name").value.trim();
+      const charge = parseFloat(document.getElementById("awt-charge").value);
+      if (!name) { err.textContent = "Ward/room type name is required"; return; }
+      if (isNaN(charge) || charge < 0) { err.textContent = "Enter a valid daily charge"; return; }
+      try {
+        const saved = await api("POST", "/admissions/ward-types", { name, daily_charge: charge, default_deposit: 0, is_icu: false, is_ot: false, ot_charge: null, category: "general", is_emergency_ward: false });
+        toast("Ward type added", "success");
+        closeAddWardTypeModal();
+        wardTypesCache = await api("GET", "/admissions/ward-types");
+        if (addWardTypeThenOpenAddRoom) {
+          openAddRoomModal();
+          document.getElementById("add-room-ward-select").value = saved.id;
+        } else {
+          renderManageWardsList(document.getElementById("mw-search").value);
+        }
+      } catch (e) { err.textContent = e.message; }
+    }
+
     function editWardType(w) {
       editingWardTypeId = w.id;
       document.getElementById("ward-form-title").textContent = `Edit ${w.name}`;
@@ -715,35 +1093,15 @@
       document.getElementById("wt-ot-charge-group").style.display = w.is_ot ? '' : 'none';
       document.getElementById("wt-category").value = w.category || 'general';
       document.getElementById("wt-is-emergency").checked = !!w.is_emergency_ward;
-      document.getElementById("wt-submit-btn").textContent = "Save Changes";
-      document.getElementById("wt-cancel-edit-btn").style.display = "block";
       document.getElementById("wt-err").textContent = "";
-      showWardRoomsPanel(w);
-    }
-
-    function resetWardTypeForm() {
-      editingWardTypeId = null;
-      document.getElementById("ward-form-title").textContent = "Add Ward Type";
-      document.getElementById("wt-name-select").value = "General";
-      document.getElementById("wt-name").value = "General";
-      document.getElementById("wt-name").style.display = "none";
-      document.getElementById("wt-charge").value = "";
-      document.getElementById("wt-deposit").value = "";
-      document.getElementById("wt-is-icu").checked = false;
-      document.getElementById("wt-is-ot").checked = false;
-      document.getElementById("wt-ot-charge").value = "";
-      document.getElementById("wt-ot-charge-group").style.display = 'none';
-      document.getElementById("wt-category").value = "general";
-      document.getElementById("wt-is-emergency").checked = false;
-      document.getElementById("wt-submit-btn").textContent = "Add Ward Type";
-      document.getElementById("wt-cancel-edit-btn").style.display = "none";
-      document.getElementById("wt-err").textContent = "";
-      document.getElementById("wt-rooms-panel").style.display = "none";
+      document.getElementById("mw-list-view").style.display = "none";
+      document.getElementById("mw-edit-view").style.display = "";
     }
 
     async function submitWardType() {
       const err = document.getElementById("wt-err");
       err.textContent = "";
+      if (!editingWardTypeId) { err.textContent = "No ward selected"; return; }
       const name = document.getElementById("wt-name").value.trim();
       const charge = parseFloat(document.getElementById("wt-charge").value);
       const deposit = parseFloat(document.getElementById("wt-deposit").value || "0");
@@ -761,21 +1119,10 @@
         return;
       }
       try {
-        let saved;
-        if (editingWardTypeId) {
-          saved = await api("PUT", `/admissions/ward-types/${editingWardTypeId}`, { name, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category, is_emergency_ward: isEmergency });
-          toast("Ward type updated", "success");
-        } else {
-          saved = await api("POST", "/admissions/ward-types", { name, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category, is_emergency_ward: isEmergency });
-          toast("Ward type added — now add its first room below", "success");
-        }
+        await api("PUT", `/admissions/ward-types/${editingWardTypeId}`, { name, daily_charge: charge, default_deposit: deposit, is_icu: isIcu, is_ot: isOt, ot_charge: otCharge, category, is_emergency_ward: isEmergency });
+        toast("Ward type updated", "success");
         wardTypesCache = await api("GET", "/admissions/ward-types");
-        renderWardTypesList();
-        // A brand-new ward type has 0 rooms — jump straight into editing it
-        // so the admin can add rooms immediately instead of hunting for it
-        // in the list (which deliberately hides zero-room wards).
-        const fresh = wardTypesCache.find(w => w.id === saved.id);
-        if (fresh) editWardType(fresh); else resetWardTypeForm();
+        backToManageWardsList();
       } catch (e) { err.textContent = e.message; }
     }
 
@@ -785,8 +1132,7 @@
     function showWardRoomsPanel(w) {
       roomsPanelWardTypeId = w.id;
       editingRoomId = null;
-      document.getElementById("wt-rooms-panel").style.display = "";
-      document.getElementById("wt-rooms-panel-ward-name").textContent = w.name;
+      document.getElementById("mr-ward-name").textContent = w.name;
       document.getElementById("wt-room-number").value = "";
       document.getElementById("wt-room-beds").value = "1";
       document.getElementById("wt-room-err").textContent = "";
@@ -837,7 +1183,6 @@
         wardTypesCache = await api("GET", "/admissions/ward-types");
         const fresh = wardTypesCache.find(w => w.id === roomsPanelWardTypeId);
         if (fresh) showWardRoomsPanel(fresh);
-        renderWardTypesList();
       } catch (e) { err.textContent = e.message; }
     }
 
@@ -849,7 +1194,6 @@
         wardTypesCache = await api("GET", "/admissions/ward-types");
         const fresh = wardTypesCache.find(w => w.id === roomsPanelWardTypeId);
         if (fresh) showWardRoomsPanel(fresh);
-        renderWardTypesList();
       } catch (e) { toast(e.message, "error"); }
     }
 
@@ -900,7 +1244,15 @@
       try {
         await api("DELETE", `/admissions/ward-types/${id}`);
         wardTypesCache = await api("GET", "/admissions/ward-types");
-        renderWardTypesList();
+        if (document.getElementById("modal-manage-wards").classList.contains("open")) {
+          showManageWardsList();
+          renderManageWardsList(document.getElementById("mw-search").value);
+        }
+        if (document.getElementById("modal-rooms").classList.contains("open")) {
+          populateRoomsWardTabs();
+          const firstId = wardTypesCache.length ? wardTypesCache[0].id : null;
+          selectRoomsWard(firstId != null ? String(firstId) : "");
+        }
         loadVacancyOverview().then(() => { populateAdmitWardDropdown(); populateAdmissionsWardFilter(); });
         toast("Ward type deleted", "success");
       } catch (e) { toast(e.message, "error"); }
@@ -947,7 +1299,7 @@
         }
         list.innerHTML = admissions.map(a => `
           <div class="ward-card" onclick="location.href='admission-detail.html?id=${a.id}'">
-            <div style="display:flex;gap:14px;align-items:center">
+            <div class="ward-card-main" style="display:flex;gap:14px;align-items:center">
               <div class="ward-avatar">${a.patient_name.trim().split(/\s+/).slice(0,2).map(w=>w[0].toUpperCase()).join('')}</div>
               <div>
                 <div style="font-weight:700;color:var(--navy)">${sanitize(a.patient_name)}</div>
@@ -955,7 +1307,7 @@
                 ${(admissionsView === 'history' ? a.discharge_diagnosis : a.diagnosis) ? `<div style="font-size:12.5px;color:var(--slate-light);margin-top:2px">${sanitize(admissionsView === 'history' ? a.discharge_diagnosis : a.diagnosis)}</div>` : ''}
               </div>
             </div>
-            <div style="text-align:right">
+            <div class="ward-card-side" style="text-align:right">
               ${admissionsView === 'history'
                 ? `<span class="badge badge-grey">${sanitize((a.discharge_type || 'planned').replace('_', '/'))}</span><div style="font-size:11px;color:var(--slate-light);margin-top:4px">Discharged ${a.discharge_date ? new Date(a.discharge_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</div>`
                 : `<span class="badge badge-teal">${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'}</span><div style="font-size:11px;color:var(--slate-light);margin-top:4px">Since ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>`}

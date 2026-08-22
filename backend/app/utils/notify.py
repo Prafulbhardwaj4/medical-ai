@@ -145,6 +145,38 @@ def notify_admission_sample_overdue(db: Session, hospital_id: int, order_id: int
     ))
 
 
+def notify_admission_medicines_ordered(db: Session, hospital_id: int, admission_id: int, order_batch_id: str,
+                                        patient_name: str, ward: str, bed_number: str, count: int):
+    """One notification per 'advise medicine(s)' action, no matter how many
+    medicines were in it. Every item in the same batch calls this again
+    with an updated count — _upsert refreshes that one row instead of
+    stacking a duplicate per medicine, and leaves is_read alone so pharmacy
+    doesn't lose the unread flag mid-batch."""
+    key = f"admission_medicine_order_batch:{admission_id}:{order_batch_id}" if order_batch_id else \
+        f"admission_medicine_order:{admission_id}:{now_ist_naive().isoformat()}"
+    plural = "medicine" if count == 1 else "medicines"
+    _upsert(db, hospital_id, key, "admission_medicine_order", "info",
+            f"Medicines ordered — {patient_name}",
+            f"{count} {plural} ordered for {patient_name} — check your dashboard/queue. {ward}, Bed {bed_number}.",
+            "admission_medicine_order", admission_id)
+
+
+def notify_admission_tests_ordered(db: Session, hospital_id: int, admission_id: int, order_batch_id: str,
+                                    order_id: int, patient_name: str, ward: str, bed_number: str, count: int):
+    """Same one-per-batch rule as notify_admission_medicines_ordered, for
+    tests ordered together on one admitted patient. The separate
+    notify_admission_sample_overdue notification (fired later if the
+    sample still hasn't been collected) is untouched — this only covers
+    the initial 'ordered' ping."""
+    key = f"admission_test_sample_batch:{admission_id}:{order_batch_id}" if order_batch_id else \
+        f"admission_test_sample:{order_id}"
+    plural = "test" if count == 1 else "tests"
+    _upsert(db, hospital_id, key, "admission_test_sample", "info",
+            "Sample Collection Needed — Ward",
+            f"{count} {plural} ordered for {patient_name} — collect from {ward}, Bed {bed_number}.",
+            "admission_test", order_id)
+
+
 def notify_critical_result_escalation(db: Session, hospital_id: int, order_id: int, patient_name: str,
                                        test_name: str, critical_note: str, stage: str,
                                        ward: str = None, bed_number: str = None):

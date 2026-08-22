@@ -336,18 +336,30 @@
 
         <div class="avail-section">
           <h4 class="avail-section-title">Available Times</h4>
-          <p class="avail-section-hint">Tap a slot to turn it on or off.</p>
+          <p class="avail-section-hint">Tap a slot to turn it on or off. Don't see the time you need? Add it below.</p>
           <div class="avail-time-group">
             <div class="avail-time-label">Morning</div>
             <div class="avail-chip-row" id="am-preset-morning"></div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <input type="time" class="form-control" id="am-add-time-morning" style="max-width:140px" />
+              <button type="button" class="btn btn-outline btn-sm" onclick="addAmCustomTime('morning')">+ Add Time</button>
+            </div>
           </div>
           <div class="avail-time-group">
             <div class="avail-time-label">Afternoon</div>
             <div class="avail-chip-row" id="am-preset-afternoon"></div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <input type="time" class="form-control" id="am-add-time-afternoon" style="max-width:140px" />
+              <button type="button" class="btn btn-outline btn-sm" onclick="addAmCustomTime('afternoon')">+ Add Time</button>
+            </div>
           </div>
           <div class="avail-time-group avail-time-group-last">
             <div class="avail-time-label">Evening</div>
             <div class="avail-chip-row" id="am-preset-evening"></div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <input type="time" class="form-control" id="am-add-time-evening" style="max-width:140px" />
+              <button type="button" class="btn btn-outline btn-sm" onclick="addAmCustomTime('evening')">+ Add Time</button>
+            </div>
           </div>
         </div>
 
@@ -482,12 +494,6 @@
         </svg>
         Add Patient
       </div>
-      <div class="nav-item" onclick="openQuickLookupModal()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        Quick Lookup
-      </div>
       <div class="nav-item" onclick="openDayEndModal()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -548,34 +554,6 @@
           </svg>
           Manage Availability
         </a>
-        <div class="avail-section">
-          <h4 class="avail-section-title">Available Times</h4>
-          <p class="avail-section-hint">Tap a slot to turn it on or off. Don't see the time you need? Add it below.</p>
-          <div class="avail-time-group">
-            <div class="avail-time-label">Morning</div>
-            <div class="avail-chip-row" id="am-preset-morning"></div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <input type="time" class="form-control" id="am-add-time-morning" style="max-width:140px" />
-              <button type="button" class="btn btn-outline btn-sm" onclick="addAmCustomTime('morning')">+ Add Time</button>
-            </div>
-          </div>
-          <div class="avail-time-group">
-            <div class="avail-time-label">Afternoon</div>
-            <div class="avail-chip-row" id="am-preset-afternoon"></div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <input type="time" class="form-control" id="am-add-time-afternoon" style="max-width:140px" />
-              <button type="button" class="btn btn-outline btn-sm" onclick="addAmCustomTime('afternoon')">+ Add Time</button>
-            </div>
-          </div>
-          <div class="avail-time-group avail-time-group-last">
-            <div class="avail-time-label">Evening</div>
-            <div class="avail-chip-row" id="am-preset-evening"></div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <input type="time" class="form-control" id="am-add-time-evening" style="max-width:140px" />
-              <button type="button" class="btn btn-outline btn-sm" onclick="addAmCustomTime('evening')">+ Add Time</button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -622,8 +600,8 @@
             <button class="btn btn-outline" style="width:100%" onclick="openNewPatient()">+ Add as New Patient</button>
             <button class="btn btn-outline" style="width:100%;margin-top:8px;border-color:var(--teal);color:var(--teal)" onclick="openPhoneBookingModal()">📅 Book Appointment</button>
             <button class="btn btn-sm" id="btn-emergency-intake"
-              style="width:100%;margin-top:8px;background:#dc2626;color:#fff;border-color:#dc2626;display:none"
-              onclick="openEmergencyIntakeModal()">🚨 Emergency Intake</button>
+              style="width:100%;margin-top:8px;background:#dc2626;color:#fff;border-color:#dc2626"
+              onclick="onEmergencyIntakeBtnClick()">🚨 Emergency Intake</button>
           </div>
 
           <!-- STEP 2: Room -->
@@ -827,16 +805,19 @@
       </div>
 
       <div class="mobile-section" id="section-portal">
-        <div class="card" id="pending-review-card">
+        <div class="card" id="expected-today-card">
           <div class="card-header" style="flex-wrap:wrap;gap:10px">
-            <h2>Pending Appointment Reviews <span class="badge badge-red" id="pending-review-count"
-                style="margin-left:8px">0</span></h2>
+            <h2>Expected Today <span class="badge badge-teal" id="expected-today-count" style="margin-left:8px">0</span>
+            </h2>
+            <select class="form-control" id="expected-today-doctor-filter" style="max-width:220px">
+              <option value="">All doctors</option>
+            </select>
           </div>
           <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
-            Paid bookings that need a human decision — usually because the doctor went unavailable after the patient
-            booked.
+            Patients who paid for a booked appointment or a queue-from-home slot for today. This does not change how you
+            check anyone in — it's just a heads-up.
           </p>
-          <div id="pending-review-list">
+          <div id="expected-today-list">
             <p style="color:var(--slate-light);font-size:13px">Loading...</p>
           </div>
         </div>
@@ -874,19 +855,16 @@
           <div id="slot-preview-list"><p style="color:var(--slate-light);font-size:13px">Pick a doctor to see their slots.</p></div>
         </div>
 
-        <div class="card" style="margin-top:20px">
+        <div class="card" style="margin-top:20px" id="pending-review-card">
           <div class="card-header" style="flex-wrap:wrap;gap:10px">
-            <h2>Expected Today <span class="badge badge-teal" id="expected-today-count" style="margin-left:8px">0</span>
-            </h2>
-            <select class="form-control" id="expected-today-doctor-filter" style="max-width:220px">
-              <option value="">All doctors</option>
-            </select>
+            <h2>Pending Appointment Reviews <span class="badge badge-red" id="pending-review-count"
+                style="margin-left:8px">0</span></h2>
           </div>
           <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
-            Patients who paid for a booked appointment or a queue-from-home slot for today. This does not change how you
-            check anyone in — it's just a heads-up.
+            Paid bookings that need a human decision — usually because the doctor went unavailable after the patient
+            booked.
           </p>
-          <div id="expected-today-list">
+          <div id="pending-review-list">
             <p style="color:var(--slate-light);font-size:13px">Loading...</p>
           </div>
         </div>
@@ -1017,18 +995,30 @@
       </div>
       <p style="font-size:13px;color:var(--slate);margin-bottom:14px">Same slots and daily limits as online booking — this fills a real slot, not a separate queue.</p>
 
-      <div id="pb-step-slot">
+      <div id="pb-step-1">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Doctor *</label>
-            <select class="form-control" id="pb-doctor" onchange="loadPhoneBookingSlots()"></select>
+            <select class="form-control" id="pb-doctor"></select>
           </div>
           <div class="form-group">
             <label class="form-label">Date *</label>
-            <input class="form-control" type="date" id="pb-date" onchange="loadPhoneBookingSlots()" />
+            <input class="form-control" type="date" id="pb-date" />
           </div>
         </div>
+        <div class="err-msg" id="pb-err-1"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="pbGoToSlotStep()">Next: Choose Slot</button>
+      </div>
+
+      <div id="pb-step-2" style="display:none">
+        <div id="pb-step2-summary" style="font-size:13px;color:var(--slate);margin-bottom:12px"></div>
         <div id="pb-slots-preview" style="margin:10px 0 16px"><p style="color:var(--slate-light);font-size:13px">Pick a doctor and date to see that day's slots.</p></div>
+        <div class="err-msg" id="pb-err-2"></div>
+        <button class="btn btn-outline" style="width:100%" onclick="pbBackToDoctorStep()">&larr; Back</button>
+      </div>
+
+      <div id="pb-step-3" style="display:none">
+        <div id="pb-step3-summary" style="font-size:13px;color:var(--slate);margin-bottom:12px"></div>
 
         <div class="form-group">
           <label class="form-label">Caller's Phone Number *</label>
@@ -1060,7 +1050,10 @@
         </div>
 
         <div class="err-msg" id="pb-err"></div>
-        <button class="btn btn-primary" style="width:100%" onclick="submitPhoneBooking()">Book This Slot</button>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline" style="flex:1" onclick="pbBackToSlotStep()">&larr; Back</button>
+          <button class="btn btn-primary" style="flex:2" onclick="submitPhoneBooking()">Book This Slot</button>
+        </div>
       </div>
 
       <div id="pb-step-done" style="display:none;text-align:center;padding:10px 0">
@@ -1283,22 +1276,6 @@
         <button class="btn btn-outline" onclick="resolvePaymentMethod('card')">💳 Card</button>
         <button class="btn btn-outline" onclick="resolvePaymentMethod('upi')">📱 UPI</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Quick Lookup Modal (C2 — single entry point) -->
-  <div class="modal-overlay" id="modal-quick-lookup">
-    <div class="modal" style="max-width:480px">
-      <div class="modal-header">
-        <h2>Quick Lookup</h2><button class="modal-close" onclick="closeModal('modal-quick-lookup')">×</button>
-      </div>
-      <p class="ql-help">Search one patient across admission, pending payment, refund, and follow-up situations.</p>
-      <div class="ql-search-row">
-        <input class="form-control" id="ql-query" placeholder="Phone, Patient ID, or Token"
-          oninput="quickLookupTyping()" onkeydown="if(event.key==='Enter')runQuickLookup()">
-        <button class="btn btn-primary" onclick="runQuickLookup()">Search</button>
-      </div>
-      <div id="ql-results"></div>
     </div>
   </div>
 
@@ -1762,7 +1739,7 @@
               <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
                 <div>
                   ${d.doctor_name ? `<span style="font-size:12.5px;font-weight:600;color:var(--slate)">${d.doctor_name}</span>` : ''}
-                  ${d.visit_time ? `<span style="font-size:11.5px;color:var(--slate-light);margin-left:6px">${d.is_online ? 'Booked for' : 'Checked in'} ${new Date(d.visit_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}</span>` : ''}
+                  ${d.visit_time ? `<span style="font-size:11.5px;color:var(--slate-light);margin-left:6px">${d.is_online ? 'Booked for' : 'Checked in'} ${new Date(d.visit_time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true })}</span>` : ''}
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="confirmGenerateBill(${d.checkin_id}, this)" ${d.needs_regenerate ? '' : 'disabled title="Nothing new to bill since it was generated"'}>🧾 Generate Bill</button>
               </div>
@@ -1774,10 +1751,15 @@
             </div>
           `;
         }).join('');
+        // Checked-in time only, no date — this list is always today's
+        // check-ins, so a date is dead weight next to the patient's name.
+        const firstVisitTime = (r.doctors && r.doctors[0] && r.doctors[0].visit_time)
+          ? new Date(r.doctors[0].visit_time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true })
+          : null;
         return `
           <div style="padding:12px 0;border-bottom:1px solid var(--border)">
             <div>
-              <strong>${r.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${r.patient_uid || ''}</span>
+              <strong>${r.patient_name}</strong> ${firstVisitTime ? `<span style="font-size:12px;color:var(--slate-light)">Checked in ${firstVisitTime}</span>` : ''}
               <span class="badge ${r.is_finalized ? 'badge-green' : 'badge-amber'}" style="margin-left:6px">${r.is_finalized ? 'Generated' : 'Pending'}</span>
             </div>
             ${doctorBlocks}
@@ -2590,60 +2572,6 @@
       if (_paymentMethodResolve) { _paymentMethodResolve(method); _paymentMethodResolve = null; }
     }
 
-    // ---------- Quick Lookup (C2) ----------
-    const SITUATION_LABELS = {
-      pending_opd_payment: 'Consultation unpaid',
-      pending_opd_charges: 'Ad-hoc charges pending',
-      pending_test_payment: 'Test payment pending',
-      active_admission: 'Currently admitted',
-      pending_topup_request: 'Deposit top-up pending',
-      open_tpa_case: 'TPA case open',
-      refund_settling: 'Refund settling',
-    };
-
-    function openQuickLookupModal() {
-      document.getElementById('ql-query').value = '';
-      document.getElementById('ql-results').innerHTML = '';
-      openModal('modal-quick-lookup');
-      setTimeout(() => document.getElementById('ql-query').focus(), 100);
-    }
-
-    let qlTimer;
-    function quickLookupTyping() {
-      clearTimeout(qlTimer);
-      qlTimer = setTimeout(runQuickLookup, 300);
-    }
-
-    async function runQuickLookup() {
-      const q = document.getElementById('ql-query').value.trim();
-      const results = document.getElementById('ql-results');
-      if (!q) { results.innerHTML = ''; return; }
-      results.innerHTML = '<p style="color:var(--slate-light)">Searching…</p>';
-      try {
-        const patients = await api("GET", `/patients/lookup?query=${encodeURIComponent(q)}`);
-        if (!patients.length) { results.innerHTML = '<p style="color:var(--slate-light)">No matches found.</p>'; return; }
-        results.innerHTML = patients.map(p => `
-          <div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div>
-                <div style="font-weight:600">${sanitize(p.name)}</div>
-                <div style="font-size:12px;color:var(--slate-light)">${sanitize(p.patient_uid || '')} · ${sanitize(p.phone || '')}</div>
-              </div>
-              <button class="btn btn-outline btn-sm" onclick="openRecordRefundModal(${p.id}, ${JSON.stringify(p.name)})">Record Refund</button>
-            </div>
-            <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
-              ${p.situations.length
-            ? p.situations.map(s => `<span class="badge badge-orange">${SITUATION_LABELS[s] || s}</span>`).join('')
-            : '<span class="badge badge-grey">Nothing pending</span>'}
-            </div>
-            ${p.active_admission_token ? `<a class="btn btn-outline btn-sm" style="margin-top:8px;display:inline-block" href="admission-detail.html?id=${p.active_admission_token}">Open Admission</a>` : ''}
-          </div>
-        `).join('');
-      } catch (e) {
-        results.innerHTML = `<p style="color:var(--red,#c0392b)">${e.message}</p>`;
-      }
-    }
-
     // ---------- Refunds ----------
     let refundPatientId = null;
 
@@ -2808,32 +2736,50 @@
       document.getElementById('modal-add').classList.add('open');
     }
 
+    let emergencyWardAvailable = false;
+
     async function checkEmergencyWardAvailable() {
       const btn = document.getElementById('btn-emergency-intake');
       try {
         const status = await api("GET", "/admissions/emergency-ward-status", null, false, true);
-        btn.style.display = status.available ? '' : 'none';
+        emergencyWardAvailable = !!status.available;
       } catch (e) {
-        btn.style.display = 'none';  // fail closed — never show the option if the check itself failed
+        emergencyWardAvailable = false;  // fail closed — never treat it as available if the check itself failed
       }
+      btn.style.opacity = emergencyWardAvailable ? '1' : '0.5';
+      btn.style.cursor = emergencyWardAvailable ? 'pointer' : 'not-allowed';
+    }
+
+    function onEmergencyIntakeBtnClick() {
+      if (!emergencyWardAvailable) {
+        toast("There is no emergency ward in your hospital, create it first.", "info");
+        return;
+      }
+      openEmergencyIntakeModal();
     }
 
     let phoneBookingSelectedSlotId = null;
+    let phoneBookingSelectedSlotTime = null;
     let phoneBookingHospitalId = null;
     let pbCurrentMatches = [];
     let pbSelectedPatientId = null;
     let pbLastSearchedPhone = null;
 
     async function openPhoneBookingModal() {
-      document.getElementById('pb-step-slot').style.display = '';
+      document.getElementById('pb-step-1').style.display = '';
+      document.getElementById('pb-step-2').style.display = 'none';
+      document.getElementById('pb-step-3').style.display = 'none';
       document.getElementById('pb-step-done').style.display = 'none';
       document.getElementById('pb-phone').value = '';
       document.getElementById('pb-patient-matches').innerHTML = '';
       resetPhoneBookingPatientFields();
       showPhoneBookingPatientFields(false, false);
+      document.getElementById('pb-err-1').textContent = '';
+      document.getElementById('pb-err-2').textContent = '';
       document.getElementById('pb-err').textContent = '';
       document.getElementById('pb-date').value = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       phoneBookingSelectedSlotId = null;
+      phoneBookingSelectedSlotTime = null;
       pbCurrentMatches = [];
       pbSelectedPatientId = null;
       pbLastSearchedPhone = null;
@@ -2855,6 +2801,49 @@
 
     function closePhoneBookingModal() {
       document.getElementById('modal-phone-booking').classList.remove('open');
+    }
+
+    function pbSelectedDoctorDateLabel() {
+      const doctorSel = document.getElementById('pb-doctor');
+      const doctorLabel = doctorSel.selectedOptions.length ? doctorSel.selectedOptions[0].textContent : '';
+      const dateVal = document.getElementById('pb-date').value;
+      const dateLabel = dateVal ? new Date(dateVal + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+      return { doctorLabel, dateLabel };
+    }
+
+    async function pbGoToSlotStep() {
+      const err = document.getElementById('pb-err-1');
+      err.textContent = '';
+      const doctorId = document.getElementById('pb-doctor').value;
+      const date = document.getElementById('pb-date').value;
+      if (!doctorId) { err.textContent = 'Pick a doctor.'; return; }
+      if (!date) { err.textContent = 'Pick a date.'; return; }
+
+      const { doctorLabel, dateLabel } = pbSelectedDoctorDateLabel();
+      document.getElementById('pb-step2-summary').innerHTML =
+        `<strong>${sanitize(doctorLabel)}</strong> — ${dateLabel}`;
+
+      document.getElementById('pb-step-1').style.display = 'none';
+      document.getElementById('pb-step-2').style.display = '';
+      await loadPhoneBookingSlots();
+    }
+
+    function pbBackToDoctorStep() {
+      document.getElementById('pb-step-2').style.display = 'none';
+      document.getElementById('pb-step-1').style.display = '';
+    }
+
+    function pbGoToPhoneStep() {
+      const { doctorLabel, dateLabel } = pbSelectedDoctorDateLabel();
+      document.getElementById('pb-step3-summary').innerHTML =
+        `<strong>${sanitize(doctorLabel)}</strong> — ${dateLabel} — ${sanitize(phoneBookingSelectedSlotTime || '')}`;
+      document.getElementById('pb-step-2').style.display = 'none';
+      document.getElementById('pb-step-3').style.display = '';
+    }
+
+    function pbBackToSlotStep() {
+      document.getElementById('pb-step-3').style.display = 'none';
+      document.getElementById('pb-step-2').style.display = '';
     }
 
     function onPhoneBookingPhoneInput() {
@@ -2981,8 +2970,10 @@
 
     function selectPhoneBookingSlot(slotId, el) {
       phoneBookingSelectedSlotId = slotId;
+      phoneBookingSelectedSlotTime = el.textContent.trim();
       document.querySelectorAll('#pb-slots-preview .slot-chip').forEach(c => c.classList.remove('selected'));
       el.classList.add('selected');
+      pbGoToPhoneStep();
     }
 
     async function submitPhoneBooking() {
@@ -3268,7 +3259,6 @@
             <div class="row-actions">
               <button class="btn btn-outline btn-sm" onclick='openEditPatient(${JSON.stringify(p)})'>Edit</button>
               <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>Select</button>
-              <button class="btn btn-outline btn-sm" onclick='openMergeModal(${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.patient_uid)})'>Merge</button>
             </div>
           </td>
         </tr>
@@ -3422,7 +3412,7 @@
         <div class="avail-doctor-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick="openAvailModal(${d.id}, '${(d.title + ' ' + d.name).replace(/'/g, "\\'")}')">
           <div>
             <div style="font-weight:600;color:var(--navy)">${d.title} ${d.name}</div>
-            <div style="font-size:12.5px;color:var(--slate-light)">ID: ${d.doctor_uid || d.id}${d.specialization ? ' · ' + d.specialization : ''}</div>
+            <div style="font-size:12.5px;color:var(--slate-light)">${d.specialization || 'No specialization on file'}</div>
           </div>
           <span class="badge badge-teal">Manage</span>
         </div>`).join('');
@@ -3597,8 +3587,13 @@
     async function loadUpcomingBookings() {
       const el = document.getElementById("upcoming-list");
       const doctorId = document.getElementById("upcoming-doctor-filter").value;
+      if (!doctorId) {
+        document.getElementById("upcoming-count").textContent = "0";
+        el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Select a particular doctor to see their upcoming bookings.</p>';
+        return;
+      }
       try {
-        const data = await api("GET", `/portal-appointments-staff/upcoming${doctorId ? '?doctor_id=' + doctorId : ''}`, null, false, true);
+        const data = await api("GET", `/portal-appointments-staff/upcoming?doctor_id=${doctorId}`, null, false, true);
         document.getElementById("upcoming-count").textContent = data.count;
         if (!data.appointments.length) { el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Nothing booked in the next 15 days.</p>'; return; }
         el.innerHTML = data.appointments.map(a => {
@@ -3709,6 +3704,7 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <span class="badge badge-teal">${a.status}</span>
+              ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick="collectAppointmentPayment(${a.id})">Collect Payment</button>` : ''}
               ${(a.status === 'confirmed' && !a.arrived_at) ? `<button class="btn btn-outline btn-sm" onclick="markArrived(${a.id})">Mark Arrived</button>` : ''}
               ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
               ${(a.arrived_at && a.doctor_id && coverageByDoctor[a.doctor_id] === false) ? `<button class="btn btn-outline btn-sm" onclick="notifyDoctorNoAssistant(${a.doctor_id}, this)">Notify Doctor</button>` : ''}
@@ -3737,6 +3733,18 @@
       try {
         await api("POST", `/portal-appointments-staff/${id}/mark-arrived`);
         toast("Marked arrived", "success");
+        loadExpectedToday();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function collectAppointmentPayment(id) {
+      try {
+        const result = await api("POST", `/portal-appointments-staff/${id}/collect-payment`);
+        if (result.reassigned) {
+          toast(`Payment collected — original slot had passed, moved to ${new Date(result.estimated_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}`, "success");
+        } else {
+          toast("Payment collected", "success");
+        }
         loadExpectedToday();
       } catch (e) { toast(e.message, "error"); }
     }

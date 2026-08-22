@@ -129,6 +129,7 @@ def get_pharmacy_admission_queue(
             "prescriber_role": prescriber.role.value if prescriber else None,
             "ordered_at": o.created_at.isoformat() if o.created_at else None,
             "dispensed_at": o.dispensed_at.isoformat() if o.dispensed_at else None,
+            "is_out_of_stock": o.is_out_of_stock,
         })
     return result
 
@@ -139,14 +140,14 @@ def dispense_admission_medicine(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    """This is the real billable moment for an admission medicine — a full
-    strip/bottle physically leaves pharmacy stock right here, once, so the
-    bill and stock deduction both happen here instead of at order time.
-    If a relative never comes to collect it, this never fires and the
-    medicine never appears on the bill."""
+    """Marks a medicine order as physically handed to the ward. Billing and
+    stock deduction now happen upfront at ORDER time (see add_medication_order
+    in admissions.py) — this endpoint used to also bill and deduct stock here,
+    which meant every dispensed admission medicine was charged twice and
+    double-deducted from stock once the order-time billing was added. This
+    just records who/when it was physically sent, nothing financial."""
     require_pharmacy(current_doctor)
-    from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionCharge
-    from app.utils.inventory import deduct_stock_fefo
+    from app.models.admission import Admission, AdmissionMedicationOrder
 
     order = (
         db.query(AdmissionMedicationOrder)
@@ -159,26 +160,171 @@ def dispense_admission_medicine(
     if order.dispensed_at:
         raise HTTPException(status_code=400, detail="Already dispensed")
 
-    unit_price = 0.0
-    medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.medicine_id).first() if order.medicine_id else None
-    if medicine:
-        unit_price = medicine.price_per_pack if medicine.price_per_pack else (medicine.price or 0) * (medicine.pack_size or 1)
-        deduct_stock_fefo(db, order.medicine_id, order.quantity * (medicine.pack_size or 1), round_to_pack=True)
-    else:
-        # Not in the catalog — no stock to deduct, bill whatever price was entered when the order was placed.
-        unit_price = order.manual_unit_price or 0.0
-
-    db.add(AdmissionCharge(
-        admission_id=order.admission_id, charge_type="medicine",
-        description=f"{order.medicine_name} — {order.quantity} unit(s) dispensed",
-        amount=unit_price, quantity=order.quantity, added_by=current_doctor.id, charged_at=now_ist_naive(),
-    ))
-
     order.dispensed_at = now_ist_naive()
     order.dispensed_by = current_doctor.id
     db.commit()
-    return {"message": "Marked as dispensed to ward — billed to the admission"}
+    return {"message": "Marked as sent to ward"}
 
+class SubstituteAdmissionMedIn(BaseModel):
+    medicine_id: Optional[int] = None
+    medicine_name: str
+    manual_unit_price: Optional[float] = None
+
+
+@router.post("/admission-orders/{order_id}/mark-out-of-stock")
+def mark_admission_medicine_out_of_stock(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Flags an already-ordered/billed admission medicine as unavailable at
+    the pharmacy counter. This never touches billing or stock — those
+    already happened upfront at order time — it just hides the normal
+    Sent/Dispensed action on this order and opens up the Substitute flow."""
+    require_pharmacy(current_doctor)
+    from app.models.admission import Admission, AdmissionMedicationOrder
+
+    order = (
+        db.query(AdmissionMedicationOrder)
+        .join(Admission, AdmissionMedicationOrder.admission_id == Admission.id)
+        .filter(AdmissionMedicationOrder.id == order_id, Admission.hospital_id == current_doctor.hospital_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.dispensed_at:
+        raise HTTPException(status_code=400, detail="Already dispensed")
+
+    order.is_out_of_stock = True
+    db.commit()
+    return {"message": "Marked out of stock"}
+
+
+@router.post("/admission-orders/{order_id}/substitute")
+def substitute_admission_medicine(
+    order_id: int,
+    body: SubstituteAdmissionMedIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Replaces an out-of-stock admission medicine order with a substitute.
+    The original was already billed and stock-deducted upfront at order
+    time, before the shortage was found, so this reverses that charge with
+    a negative line (same pattern as a medication return) and bills/stock-
+    deducts the substitute in its place. The admitting doctor is notified
+    by name, naming both the substitute medicine and the staff member who
+    made the call, since they never approved this specific swap."""
+    require_pharmacy(current_doctor)
+    from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionCharge
+    from app.models.notification import Notification
+    from app.utils.inventory import deduct_stock_fefo
+
+    original = (
+        db.query(AdmissionMedicationOrder)
+        .join(Admission, AdmissionMedicationOrder.admission_id == Admission.id)
+        .filter(AdmissionMedicationOrder.id == order_id, Admission.hospital_id == current_doctor.hospital_id)
+        .first()
+    )
+    if not original:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if not original.is_out_of_stock:
+        raise HTTPException(status_code=400, detail="Only an order marked out of stock can be substituted")
+    if original.dispensed_at:
+        raise HTTPException(status_code=400, detail="Already dispensed")
+
+    a = db.query(Admission).filter(Admission.id == original.admission_id).first()
+
+    medicine = None
+    unit_price = 0.0
+    if body.medicine_id:
+        medicine = db.query(HospitalMedicine).filter(
+            HospitalMedicine.id == body.medicine_id, HospitalMedicine.hospital_id == current_doctor.hospital_id
+        ).first()
+        if not medicine:
+            raise HTTPException(status_code=404, detail="Medicine not found in catalog")
+        unit_price = medicine.price_per_pack if medicine.price_per_pack else (medicine.price or 0) * (medicine.pack_size or 1)
+    else:
+        unit_price = body.manual_unit_price or 0.0
+
+    if not original.sourced_outside:
+        original_medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == original.medicine_id).first() if original.medicine_id else None
+        original_unit_price = original.manual_unit_price if original.manual_unit_price is not None else (
+            (original_medicine.price_per_pack if original_medicine and original_medicine.price_per_pack else ((original_medicine.price or 0) * (original_medicine.pack_size or 1)) if original_medicine else 0) or 0
+        )
+        db.add(AdmissionCharge(
+            admission_id=a.id, charge_type="medicine",
+            description=f"{original.medicine_name} — reversed, out of stock",
+            amount=-original_unit_price, quantity=original.quantity, added_by=current_doctor.id, charged_at=now_ist_naive(),
+        ))
+
+    new_order = AdmissionMedicationOrder(
+        admission_id=a.id, medicine_id=body.medicine_id, medicine_name=body.medicine_name,
+        quantity=original.quantity,
+        manual_unit_price=(body.manual_unit_price if not body.medicine_id else None),
+        prescribed_by=original.prescribed_by,
+        substitute_for_id=original.id,
+    )
+    db.add(new_order)
+
+    if not original.sourced_outside:
+        if body.medicine_id:
+            deduct_stock_fefo(db, body.medicine_id, original.quantity * (medicine.pack_size or 1), round_to_pack=True)
+        db.add(AdmissionCharge(
+            admission_id=a.id, charge_type="medicine", description=body.medicine_name,
+            amount=unit_price, quantity=original.quantity, added_by=current_doctor.id, charged_at=now_ist_naive(),
+        ))
+
+    original.is_active = False
+    db.flush()
+
+    patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+    db.add(Notification(
+        hospital_id=a.hospital_id, target_doctor_id=original.prescribed_by,
+        source_key=f"admission_med_substitute:{new_order.id}:{now_ist_naive().isoformat()}",
+        type="admission_medicine_substitute", severity="info",
+        title=f"Medicine substituted — {patient.name if patient else 'patient'}",
+        message=f"{original.medicine_name} was out of stock and substituted with {body.medicine_name} by {current_doctor.title} {current_doctor.name}.",
+        link_type="admission_medicine_order", link_id=a.id, is_read=False,
+    ))
+
+    db.commit()
+    db.refresh(new_order)
+    return {"id": new_order.id, "message": "Substituted"}
+
+
+@router.get("/admission-orders-history/{admission_id}")
+def get_admission_medicine_dispense_history(
+    admission_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Every medicine actually handed over to this admission's ward, most
+    recent first — this data is never purged, so it stays available for the
+    rest of the stay and beyond (including after discharge)."""
+    require_pharmacy(current_doctor)
+    from app.models.admission import Admission, AdmissionMedicationOrder
+
+    a = db.query(Admission).filter(Admission.id == admission_id, Admission.hospital_id == current_doctor.hospital_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Admission not found")
+
+    orders = (
+        db.query(AdmissionMedicationOrder)
+        .filter(AdmissionMedicationOrder.admission_id == a.id, AdmissionMedicationOrder.dispensed_at.isnot(None))
+        .order_by(AdmissionMedicationOrder.dispensed_at.desc())
+        .all()
+    )
+    result = []
+    for o in orders:
+        dispenser = db.query(Doctor).filter(Doctor.id == o.dispensed_by).first() if o.dispensed_by else None
+        result.append({
+            "id": o.id,
+            "medicine_name": o.medicine_name,
+            "quantity": o.quantity,
+            "dispensed_at": o.dispensed_at.isoformat() if o.dispensed_at else None,
+            "dispensed_by": f"{dispenser.title} {dispenser.name}" if dispenser else None,
+        })
+    return result
 
 @router.get("/queue")
 def get_pharmacy_queue(

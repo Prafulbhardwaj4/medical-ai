@@ -116,6 +116,104 @@ def book_appointment_for_caller(
     }
 
 
+@router.post("/{appointment_id}/collect-payment")
+def collect_payment_at_reception(
+    appointment_id: int,
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Reception collects payment in person once the caller/walk-in for a
+    phone-booked (or portal-booked) appointment actually shows up — there's
+    no live payment gateway, so this is the counterpart to the patient
+    portal's own mark_paid. If they're paying after their originally
+    estimated slot time has already passed, their old slot is released and
+    they're bumped to the next available slot for the same doctor today,
+    instead of keeping a time that's already gone by."""
+    if current_doctor.role.value not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    appt = db.query(Appointment).filter(
+        Appointment.id == appointment_id, Appointment.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if appt.status == AppointmentStatus.cancelled:
+        raise HTTPException(status_code=400, detail="Cannot collect payment for a cancelled appointment")
+    if appt.payment_status == "paid":
+        raise HTTPException(status_code=400, detail="Payment already collected for this appointment")
+
+    now = now_ist_naive()
+    reassigned = False
+
+    if appt.slot_id and now > appt.requested_time:
+        old_slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.slot_id).with_for_update().first()
+        candidates = db.query(DoctorSlot).filter(
+            DoctorSlot.doctor_id == appt.doctor_id,
+            DoctorSlot.hospital_id == current_doctor.hospital_id,
+            DoctorSlot.slot_date == now.date(),
+            DoctorSlot.id != appt.slot_id,
+        ).order_by(DoctorSlot.slot_time).all()
+
+        new_slot = None
+        for c in candidates:
+            if c.booked_count >= c.capacity:
+                continue
+            if _estimated_slot_datetime(c, c.booked_count + 1) < now:
+                continue
+            new_slot = c
+            break
+
+        if new_slot:
+            new_slot = db.query(DoctorSlot).filter(DoctorSlot.id == new_slot.id).with_for_update().first()
+            if old_slot and old_slot.booked_count > 0:
+                old_slot.booked_count -= 1
+            new_slot.booked_count += 1
+            appt.slot_id = new_slot.id
+            appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
+            appt.arrived_at = None  # fresh grace-window/arrival cycle applies to the new slot
+            reassigned = True
+        # else: no later slot free today — proceed on the original slot/time,
+        # reception handles the wait in person.
+
+    from app.utils.portal_billing import current_doctor_fee
+    if appt.doctor_id:
+        appt.fee_amount = current_doctor_fee(db, appt.doctor_id)
+
+    appt.payment_status = "paid"
+
+    needs_review = False
+    if appt.doctor_id:
+        from app.models.doctor_availability import DoctorUnavailability
+        needs_review = db.query(DoctorUnavailability).filter(
+            DoctorUnavailability.doctor_id == appt.doctor_id,
+            DoctorUnavailability.date == appt.requested_time.date(),
+        ).first() is not None
+
+    if needs_review:
+        appt.status = AppointmentStatus.pending_review
+        appt.review_deadline_at = now + timedelta(minutes=settings.PORTAL_REVIEW_RESPONSE_MINUTES)
+        db.add(Notification(
+            hospital_id=appt.hospital_id,
+            source_key=f"appointment_needs_review:{appt.id}",
+            type="appointment_needs_review",
+            severity="warning",
+            title="Appointment needs review",
+            message=f"Appointment #{appt.id}'s doctor became unavailable after booking. Accept, suggest a change, or decline.",
+            link_type="portal_appointment", link_id=appt.id,
+        ))
+    else:
+        appt.status = AppointmentStatus.confirmed
+
+    db.commit()
+    db.refresh(appt)
+
+    return {
+        "message": "Payment collected",
+        "reassigned": reassigned,
+        "estimated_time": appt.requested_time.isoformat(),
+    }
+
+
 @router.post("/notify-doctor/{doctor_id}")
 def notify_doctor_no_assistant(
     doctor_id: int,
@@ -320,7 +418,6 @@ def list_expected_today(
         # here, every appointment that had just been correctly converted
         # vanished from its own "Expected Today" list on the very next line.
         Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed, AppointmentStatus.completed]),
-        Appointment.payment_status == "paid",  # only paid appointments show up in the queue view
         Appointment.requested_time >= today_start,
         Appointment.requested_time < today_end,
     )
@@ -351,6 +448,7 @@ def list_expected_today(
             "doctor_id": a.doctor_id,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
             "arrived_at": a.arrived_at.isoformat() if a.arrived_at else None,
+            "payment_status": a.payment_status,
         })
     return {"count": len(result), "appointments": result}
 
@@ -370,7 +468,6 @@ def list_upcoming_bookings(
     q = db.query(Appointment).filter(
         Appointment.hospital_id == current_doctor.hospital_id,
         Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed]),
-        Appointment.payment_status == "paid",
         Appointment.requested_time >= today_start + timedelta(days=1),  # today itself stays on the Expected Today card
         Appointment.requested_time < window_end,
     )

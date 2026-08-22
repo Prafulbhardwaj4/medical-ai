@@ -185,17 +185,33 @@
         <div class="topbar-divider"></div>
         <button class="btn-logout" onclick="logout()">Sign out</button>
       </div>
+      <button class="notif-bell-btn" id="notif-bell-btn" onclick="toggleNotifPanel()" aria-label="Notifications">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        <span class="notif-badge" id="notif-badge">0</span>
+      </button>
       <button class="topbar-profile-btn" onclick="toggleProfileMenu()" aria-label="Profile">
         <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="8" r="4" />
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
+        <span class="profile-dot" id="profile-dot"></span>
       </button>
     </header>
 
     <div class="sidebar-backdrop" id="profile-menu-backdrop" onclick="closeProfileMenu()" style="display:none"></div>
     <div class="profile-menu" id="profile-menu">
       <div class="profile-menu-header"><strong id="profile-menu-name"></strong></div>
+      <button class="profile-menu-item" onclick="closeProfileMenu(); toggleNotifPanel()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        Notifications
+        <span class="profile-menu-badge" id="profile-menu-notif-badge" style="display:none">0</span>
+      </button>
       <button class="profile-menu-item" onclick="openEditDetailsModal()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -210,6 +226,20 @@
         </svg>
         Sign out
       </button>
+    </div>
+
+    <div class="notif-backdrop" id="notif-backdrop" onclick="closeNotifPanel()"></div>
+    <div class="notif-panel" id="notif-panel">
+      <div class="notif-panel-header">
+        <h3 style="margin:0;font-size:15px">Notifications</h3>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-outline btn-sm" onclick="markAllNotifsRead()">Mark all read</button>
+          <button class="modal-close" onclick="closeNotifPanel()">×</button>
+        </div>
+      </div>
+      <div class="notif-panel-body" id="notif-panel-body">
+        <p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">Loading…</p>
+      </div>
     </div>
 
     <nav class="sidebar" id="sidebar-doctor">
@@ -240,13 +270,6 @@
       </a>
       <div class="nav-divider"></div>
       <div class="sidebar-section-label">Quick Actions</div>
-      <div class="nav-item" onclick="location.href='dashboard.html?openAddPatient=1'">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-        </svg>
-        Add Patient
-      </div>
       <a class="nav-item" href="doctor-slots.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -528,12 +551,11 @@
           <div class="card" style="margin-bottom:20px">
             <div class="card-header">
               <h2>Progress Notes</h2>
+              <button class="btn btn-primary btn-sm" id="btn-add-progress-note" style="display:none" onclick="submitProgressNote()">Add Note</button>
             </div>
             <div id="progress-notes-form" style="display:none;margin-bottom:14px">
               <textarea class="form-control" id="progress-note-input" rows="3"
                 placeholder="Today's findings, plan, changes to treatment…"></textarea>
-              <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="submitProgressNote()">Add
-                Note</button>
             </div>
             <div id="progress-notes-list">
               <p>Loading...</p>
@@ -544,20 +566,11 @@
         </div>
 
         <div>
-          <div class="card" style="margin-bottom:20px" id="tpa-card">
-            <div class="card-header">
-              <h2>TPA / Insurance</h2>
-            </div>
-            <div id="tpa-body">
-              <p>Loading...</p>
-            </div>
-          </div>
-
           <div class="card" style="margin-bottom:20px" id="running-bill-card">
             <div class="card-header">
               <h2>Running Bill</h2>
               <div style="display:flex;gap:8px">
-                <button class="btn btn-outline btn-sm" onclick="openWaiverModal()">Waiver / Discount</button>
+                <button class="btn btn-outline btn-sm" id="btn-waiver-discount" onclick="openWaiverModal()">Waiver / Discount</button>
               </div>
             </div>
             <div id="bill-body">
@@ -574,6 +587,18 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- TPA / Insurance modal (moved out of the main grid, same pattern as Deposit & Balance — opened from the patient header button) -->
+  <div class="modal-overlay" id="modal-tpa">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h2>TPA / Insurance</h2><button class="modal-close" onclick="closeModal('modal-tpa')">&times;</button>
+      </div>
+      <div id="tpa-body">
+        <p>Loading...</p>
+      </div>
+    </div>
   </div>
 
   <!-- Deposit & Balance modal (moved out of the main grid — opened from the patient header button, was a scroll-target card before) -->
@@ -648,6 +673,17 @@
       <div id="med-rows" style="margin-top:12px"></div>
       <div class="err-msg" id="med-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitAddMed()">Add</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-record-vitals">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h2>Record Vitals</h2><button class="modal-close" onclick="closeRecordVitalsModal()">&times;</button>
+      </div>
+      <div id="record-vitals-fields"></div>
+      <button class="btn btn-outline btn-sm" style="margin:6px 0 18px" onclick="addRecordVitalsField()">+ Add Field</button>
+      <button class="btn btn-primary" style="width:100%" onclick="submitRecordVitals()">Save Vitals</button>
     </div>
   </div>
 
@@ -1068,13 +1104,13 @@
       document.getElementById("app-bottom-nav").style.display = "";
       renderAdminNav("admissions");
     }
-    function canManageClinicalOrders() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    function canManageClinicalOrders() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
     function canGiveDose() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
     function canManageMedOrders() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
     function canReturnMed() { return ["assistant"].includes(getDoctor()?.role); }
     function isNurseViewer() { return ["nurse", "assistant"].includes(getDoctor()?.role); }
     function canManageAllergies() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
-    function canAddProgressNote() { return ["doctor", "admin", "sub_admin"].includes(getDoctor()?.role); }
+    function canAddProgressNote() { return ["doctor", "nurse", "admin", "sub_admin"].includes(getDoctor()?.role); }
     const isAdminViewer = ["admin", "sub_admin"].includes(getDoctor()?.role);
     const isDoctorViewer = getDoctor()?.role === "doctor";
     if (!canManageMedOrders()) {
@@ -1093,15 +1129,97 @@
     if (!canSeeBilling) {
       document.getElementById("discharge-card").style.display = "none";
       document.getElementById("running-bill-card").style.display = "none";
-      document.getElementById("tpa-card").style.display = "none";
       // Every card in the right column is billing-only, hidden for this role —
       // collapse the whole column via CSS rather than leaving a dead gap.
       document.getElementById("main-grid").classList.add("financial-hidden");
     }
     if (canAddProgressNote()) {
       document.getElementById("progress-notes-form").style.display = "block";
+      document.getElementById("btn-add-progress-note").style.display = "inline-flex";
     }
     fillTopbar();
+
+    async function toggleNotifPanel() {
+      const panel = document.getElementById('notif-panel');
+      const backdrop = document.getElementById('notif-backdrop');
+      if (panel.classList.contains('open')) {
+        closeNotifPanel();
+      } else {
+        panel.classList.add('open');
+        backdrop.classList.add('open');
+        await loadNotifList();
+      }
+    }
+
+    function closeNotifPanel() {
+      document.getElementById('notif-panel').classList.remove('open');
+      document.getElementById('notif-backdrop').classList.remove('open');
+    }
+
+    const NOTIF_ICON = { critical: 'critical', warning: 'warning', info: 'info' };
+
+    async function loadNotifList() {
+      const body = document.getElementById('notif-panel-body');
+      try {
+        const data = await api("GET", "/notifications");
+        loadNotifUnreadCount();
+        if (!data.notifications.length) {
+          body.innerHTML = '<p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">You\'re all caught up.</p>';
+          return;
+        }
+        body.innerHTML = data.notifications.map(n => `
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
+            <div class="notif-item-title">
+              <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
+              ${sanitize(n.title)}
+            </div>
+            <div class="notif-item-message">${sanitize(n.message)}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        body.innerHTML = '<p style="color:var(--danger);padding:20px;text-align:center;font-size:13px">Could not load notifications.</p>';
+      }
+    }
+
+    async function onNotifClick(id, linkType, linkId) {
+      try {
+        await api("PATCH", `/notifications/${id}/read`, {});
+        loadNotifUnreadCount();
+        closeNotifPanel();
+        if (linkType === 'admission' && linkId) {
+          const { token } = await api("GET", `/admissions/token-for/${linkId}`);
+          location.href = `admission-detail.html?id=${token}`;
+        }
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function markAllNotifsRead() {
+      try {
+        await api("POST", "/notifications/mark-all-read", {});
+        loadNotifList();
+      } catch (e) { }
+    }
+
+    async function loadNotifUnreadCount() {
+      try {
+        const data = await api("GET", "/notifications/unread-count");
+        const badge = document.getElementById('notif-badge');
+        const dot = document.getElementById('profile-dot');
+        const pmBadge = document.getElementById('profile-menu-notif-badge');
+        if (data.unread_count > 0) {
+          badge.textContent = data.unread_count > 9 ? '9+' : data.unread_count;
+          badge.style.display = 'flex';
+          if (dot) dot.style.display = 'block';
+          if (pmBadge) { pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count; pmBadge.style.display = 'inline-block'; }
+        } else {
+          badge.style.display = 'none';
+          if (dot) dot.style.display = 'none';
+          if (pmBadge) pmBadge.style.display = 'none';
+        }
+      } catch (e) { }
+    }
+    loadNotifUnreadCount();
+    setInterval(loadNotifUnreadCount, 30000);
     document.getElementById("profile-menu-name").textContent = `${getDoctor()?.title || ''} ${getDoctor()?.name || ''}`.trim();
 
     const admissionId = new URLSearchParams(window.location.search).get("id");
@@ -1118,32 +1236,45 @@
     let admissionData = null;
     let tpaData = null;
     let progressNotesData = [];
+    let vitalsData = [];
 
     async function loadAdmission() {
-      // Core admission data loads and renders independently — a hiccup in
-      // any one secondary card (deposit/TPA/consents) should never take
-      // down the whole page, which is what the combined Promise.all used
-      // to do (one failed fetch rejected everything, including Medications
-      // and Tests that had nothing to do with the failure).
       try {
         admissionData = await api("GET", `/admissions/${admissionId}`);
+        if (admissionData.status === 'discharged') {
+          const addMedBtn = document.getElementById("btn-add-med");
+          if (addMedBtn) addMedBtn.style.display = "none";
+          const addTestBtn = document.getElementById("btn-add-test");
+          if (addTestBtn) addTestBtn.style.display = "none";
+          const noteForm = document.getElementById("progress-notes-form");
+          if (noteForm) noteForm.style.display = "none";
+          const addNoteBtn = document.getElementById("btn-add-progress-note");
+          if (addNoteBtn) addNoteBtn.style.display = "none";
+        }
         renderHeader();
         renderMeds();
         renderTests();
         renderCharges();
         renderBill();
+        applyDischargedReadOnly();
         renderDischargeCard();
       } catch (e) {
         document.getElementById("patient-header").innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
         return;
       }
 
-      // Progress notes are a clinical safety record everyone on the ward
-      // should be able to read, unlike billing — loaded for every role.
+
       try {
         progressNotesData = await api("GET", `/admissions/${admissionId}/progress-notes`);
         renderProgressNotes();
       } catch (e) { console.error("Progress notes load failed:", e); }
+
+      // Vitals: same visibility rule as progress notes — everyone with page
+      // access can read them, only nurse can record (item 49).
+      try {
+        vitalsData = await api("GET", `/admissions/${admissionId}/vitals`);
+        renderVitalsSummary();
+      } catch (e) { console.error("Vitals load failed:", e); }
 
       // Deposit/TPA/consents are billing- and legal-facing — nurses and
       // assistants don't need them and shouldn't fetch them at all.
@@ -1169,6 +1300,21 @@
       }
     }
 
+    function applyDischargedReadOnly() {
+      // Once discharged, nothing on this page should be addable/editable —
+      // the bill is final and the stay is over. Everything that's still
+      // gated purely by role (not by a.status === 'admitted' already) needs
+      // an explicit hide here.
+      if (admissionData.status !== 'discharged') return;
+      const ids = ["btn-add-med", "btn-add-test", "btn-waiver-discount"];
+      ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = "none";
+      });
+      const noteForm = document.getElementById("progress-notes-form");
+      if (noteForm) noteForm.style.display = "none";
+    }
+
     function renderProgressNotes() {
       const list = document.getElementById("progress-notes-list");
       if (!progressNotesData.length) {
@@ -1192,6 +1338,79 @@
         progressNotesData = await api("GET", `/admissions/${admissionId}/progress-notes`);
         renderProgressNotes();
         toast("Progress note added", "success");
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function renderVitalsSummary() {
+      const line = document.getElementById("vitals-summary-line");
+      if (!line) return;
+      if (!vitalsData.length) {
+        line.textContent = "No vitals recorded yet";
+        return;
+      }
+      const latest = vitalsData[0];
+      const pairs = Object.entries(latest.data || {}).map(([k, v]) => `${sanitize(k)}: ${sanitize(String(v))}`).join(' · ');
+      const when = new Date(latest.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      line.innerHTML = `${pairs} <span style="color:var(--slate-light);font-size:12px">· ${when} by ${sanitize(latest.recorded_by_name)}</span>`;
+    }
+
+    function toggleVitalsHistory() {
+      const el = document.getElementById("vitals-history-list");
+      const btn = document.getElementById("btn-toggle-vitals-history");
+      if (el.style.display === "block") { el.style.display = "none"; btn.textContent = "View History"; return; }
+      if (!vitalsData.length) {
+        el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No vitals recorded yet.</p>`;
+      } else {
+        el.innerHTML = vitalsData.map(v => {
+          const pairs = Object.entries(v.data || {}).map(([k, val]) => `${sanitize(k)}: ${sanitize(String(val))}`).join(' · ');
+          const when = new Date(v.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+          return `<div style="border-bottom:1px solid var(--border);padding:8px 0;font-size:13px">
+            <div>${pairs}</div>
+            <div style="color:var(--slate-light);font-size:11.5px;margin-top:2px">${when} · ${sanitize(v.recorded_by_name)}</div>
+          </div>`;
+        }).join('');
+      }
+      el.style.display = "block";
+      btn.textContent = "Hide History";
+    }
+
+    function openRecordVitalsModal() {
+      document.getElementById("record-vitals-fields").innerHTML = "";
+      addRecordVitalsField();
+      addRecordVitalsField();
+      document.getElementById("modal-record-vitals").classList.add("open");
+    }
+    function closeRecordVitalsModal() {
+      document.getElementById("modal-record-vitals").classList.remove("open");
+    }
+    function addRecordVitalsField() {
+      document.getElementById("record-vitals-fields").insertAdjacentHTML("beforeend", `
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input class="form-control" placeholder="Label (e.g. BP)" style="flex:1">
+          <input class="form-control" placeholder="Value (e.g. 120/80)" style="flex:1">
+        </div>`);
+    }
+    async function submitRecordVitals() {
+      const rows = document.getElementById("record-vitals-fields").children;
+      const data = {};
+      for (const row of rows) {
+        const inputs = row.querySelectorAll("input");
+        const label = inputs[0].value.trim();
+        const value = inputs[1].value.trim();
+        if (label && value) data[label] = value;
+      }
+      if (!Object.keys(data).length) { toast("Enter at least one vitals value", "error"); return; }
+      try {
+        await api("POST", `/admissions/${admissionId}/vitals`, { data });
+        toast("Vitals recorded", "success");
+        closeRecordVitalsModal();
+        vitalsData = await api("GET", `/admissions/${admissionId}/vitals`);
+        renderVitalsSummary();
+        const historyEl = document.getElementById("vitals-history-list");
+        if (historyEl.style.display === "block") {
+          historyEl.style.display = "none";
+          toggleVitalsHistory();
+        }
       } catch (e) { toast(e.message, "error"); }
     }
 
@@ -1224,7 +1443,7 @@
               ${hasAllergies ? '⚠ Allergic to: ' + allergies.map(al => `${sanitize(al.allergen)} (${sanitize(al.severity)})`).join(', ') : 'No known drug allergies recorded'}
             </div>
           </div>
-          ${canManageAllergies() ? `<button class="btn btn-outline btn-sm" onclick="openManageAllergiesModal()">Manage Allergies</button>` : ''}
+          ${canManageAllergies() && a.status === 'admitted' ? `<button class="btn btn-outline btn-sm" onclick="openManageAllergiesModal()">Manage Allergies</button>` : ''}
         </div>
         <div class="ph-top-row">
           <div>
@@ -1237,6 +1456,7 @@
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             ${a.status === 'admitted' ? `
+              ${canManageTpa ? `<button class="btn btn-outline btn-sm" onclick="openModal('modal-tpa')">TPA &amp; Insurance</button>` : ''}
               ${canSeeBilling ? `<button class="btn btn-outline btn-sm" onclick="openModal('modal-deposit-balance')">Deposit &amp; Balance</button>` : ''}
               <button class="btn btn-outline btn-sm" onclick="openModal('modal-other-charges')">Other Charges</button>
               ${canSeeBilling ? `<button class="btn btn-outline btn-sm" onclick="openDischargeModal()">Discharge</button>` : ''}
@@ -1276,6 +1496,16 @@
             <button class="btn btn-primary btn-sm" onclick="saveDiagnosis()">Save</button>
             <button class="btn btn-outline btn-sm" onclick="closeEditDiagnosis()">Cancel</button>
           </div>
+        </div>
+
+        <div>
+          <div class="ph-info-label">Vitals</div>
+          <div id="vitals-summary-line" style="font-size:13.5px;color:var(--slate)">Loading…</div>
+          <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" id="btn-toggle-vitals-history" onclick="toggleVitalsHistory()">View History</button>
+            ${getDoctor()?.role === 'nurse' ? `<button class="btn btn-primary btn-sm" onclick="openRecordVitalsModal()">Record</button>` : ''}
+          </div>
+          <div id="vitals-history-list" style="display:none;margin-top:8px;max-width:420px"></div>
         </div>`;
     }
 
@@ -1388,7 +1618,7 @@
               ${t.queued_at ? 'Ordered ' + fmt(t.queued_at) : ''}
             </div>
             <button class="btn btn-sm" ${reportReady
-              ? `style="background:var(--teal-subtle);color:var(--teal);border-color:var(--teal)" onclick="openReportsModal(admissionData.patient.id)"`
+              ? `style="background:var(--teal);color:var(--white);border-color:var(--teal)" onclick="openReportsModal(admissionData.patient.id)"`
               : `style="background:var(--smoke-mid);color:var(--slate-light);border-color:var(--border);cursor:not-allowed" disabled title="Report not generated yet"`}>Report</button>
           </span>
         </div>`;
@@ -1420,7 +1650,7 @@
       const medRows = meds.length
         ? meds.map(c => `
             <div class="bill-row" style="font-size:12.5px">
-              <span>${sanitize(c.description)}</span>
+              <span>${sanitize(c.description)}${c.quantity > 1 ? ` × ${c.quantity}` : ''}</span>
               <span>₹${(c.amount * c.quantity).toFixed(2)} <span style="color:var(--slate-light);font-size:11px">· ${new Date(c.charged_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span></span>
             </div>`).join('')
         : `<div class="bill-row" style="font-size:12.5px;color:var(--slate-light)">No doses given yet</div>`;
@@ -1871,6 +2101,11 @@
         if (!name || !units || units < 1) { err.textContent = "Each row needs a medicine name and at least 1 unit"; return; }
       }
 
+      // One batch id shared by every row in this submission — lets pharmacy
+      // get a single "N medicine(s) ordered" notification instead of one
+      // per medicine (same pattern as submitAddTest's batchId).
+      const batchId = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
       try {
         for (const row of rows) {
           const medicineId = row.dataset.medicineId ? parseInt(row.dataset.medicineId) : null;
@@ -1881,6 +2116,7 @@
           const payload = {
             medicine_id: medicineId, medicine_name: name, units,
             manual_unit_price: medicineId ? null : manualPrice,
+            order_batch_id: batchId,
           };
           await api("POST", `/admissions/${admissionId}/medications`, payload);
         }
@@ -2023,6 +2259,20 @@
         if (!name) { err.textContent = "Each row needs a test name"; return; }
       }
 
+      const pendingTestNames = new Set(
+        admissionData.tests
+          .filter(t => !["verified_released", "rejected"].includes(t.status))
+          .map(t => t.test_name.trim().toLowerCase())
+      );
+      for (const row of rows) {
+        const name = row.querySelector(".am-test-name input").value.trim();
+        if (pendingTestNames.has(name.toLowerCase())) {
+          closeModal("modal-add-test");
+          toast("this test's report is pending.", "info");
+          return;
+        }
+      }
+
       const clinicalIndication = document.getElementById("test-clinical-indication").value.trim() || null;
       // One batch id shared by every row in this submission — this is what
       // ties them together into a single report on the patient portal.
@@ -2145,12 +2395,13 @@
         // Collect Payment / Discharge Patient sequence: amount_due of 0 skips
         // straight to being able to discharge, same as balance already collected.
         const alreadyCollected = preview.amount_due <= 0 || preview.balance_collected;
+        const orderPlaced = !!admissionData.discharge_order_at;
         document.getElementById("discharge-payment-row").style.display = alreadyCollected ? "none" : "block";
         document.getElementById("discharge-payment-method").value = "";
         document.getElementById("discharge-payment-collected-note").style.display = alreadyCollected && preview.amount_due > 0 ? "block" : "none";
         document.getElementById("discharge-payment-collected-method").textContent = preview.balance_payment_method || "";
-        document.getElementById("btn-discharge-patient").disabled = !alreadyCollected;
-        document.getElementById("btn-discharge-patient").title = alreadyCollected ? "" : "Collect payment first";
+        document.getElementById("btn-discharge-patient").disabled = !alreadyCollected || !orderPlaced;
+        document.getElementById("btn-discharge-patient").title = !orderPlaced ? "Waiting on the doctor's discharge order" : (alreadyCollected ? "" : "Collect payment first");
       } catch (e) {
         document.getElementById("discharge-amount-due").textContent = "—";
         document.getElementById("discharge-err").textContent = e.message;
@@ -2187,7 +2438,11 @@
       const refundChannel = document.getElementById("discharge-refund-channel").value;
 
       if (document.getElementById("btn-discharge-patient").disabled) {
-        alert(`Payment of ₹${dischargeAmountDue.toFixed(2)} is still pending. Collect payment before discharge can proceed.`);
+        if (!admissionData.discharge_order_at) {
+          alert("A doctor must place the discharge order before this patient can be discharged.");
+        } else {
+          alert(`Payment of ₹${dischargeAmountDue.toFixed(2)} is still pending. Collect payment before discharge can proceed.`);
+        }
         return;
       }
       if (dischargeRefundDue > 0 && !refundChannel) {
@@ -2202,7 +2457,13 @@
         if (!document.getElementById("discharge-cause-of-death").value.trim()) { err.textContent = "Cause of death is required."; return; }
       }
 
-      if (!confirm("Discharge this patient? This finalizes the bill and can't be undone.")) return;
+      openModal("modal-discharge-confirm");
+    }
+
+    async function finalizeDischarge() {
+      const err = document.getElementById("discharge-err");
+      const refundChannel = document.getElementById("discharge-refund-channel").value;
+      const dischargeType = document.getElementById("discharge-type").value;
 
       try {
         await api("POST", `/admissions/${admissionId}/discharge`, {

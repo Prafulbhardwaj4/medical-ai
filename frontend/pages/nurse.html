@@ -79,11 +79,8 @@
         <span id="profile-menu-clinic"></span>
       </div>
       <button class="profile-menu-item" onclick="openEditDetailsModal()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
-        Settings
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        Edit My Details
       </button>
       <button class="profile-menu-item danger" onclick="logout()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -155,11 +152,9 @@
           </div>
           <div class="staff-att-status">
             <span class="badge badge-grey" id="nurse-attendance-badge">Not marked</span>
-            <div id="nurse-room-display" style="margin-top:6px;font-size:13px;color:var(--slate)"></div>
           </div>
           <div class="staff-att-actions" id="nurse-attendance-btns">
             <div id="nurse-off-duty-time-line" style="display:none;font-size:13px;color:var(--slate)"></div>
-            <select class="form-control" id="nurse-room-select" style="display:none" onchange="markNurseAttendance(nurseCurrentStatus)"></select>
             <button class="btn btn-primary" id="nurse-btn-present" onclick="markNurseAttendance('present')">Mark Present</button>
             <button class="btn btn-outline" id="nurse-btn-break" onclick="markNurseAttendance('on_break')" style="display:none">On Break</button>
             <button class="btn btn-outline" id="nurse-btn-offduty" onclick="markNurseAttendance('off_duty')" style="display:none;color:var(--danger);border-color:var(--danger)">Off Duty</button>
@@ -544,20 +539,10 @@
     let nurseCurrentStatus = 'not_marked';
     let nurseSelectedDoctorIds = [];
 
-    async function loadNurseRoomOptions(selectedId) {
-      try {
-        const rooms = await api("GET", "/admin/rooms?for_picker=nurse");
-        document.getElementById('nurse-room-select').innerHTML =
-          '<option value="">No room</option>' +
-          rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.display || r.name || r.room_number}</option>`).join('');
-      } catch (e) { }
-    }
-
     async function loadNurseAttendance() {
       try {
         const data = await api("GET", "/doctors/attendance/my-status");
         renderNurseBadge(data.status);
-        await loadNurseRoomOptions(data.room_id);
         await loadNurseCoverageChips(data.coverage?.ward_ids || [], data.coverage?.doctor_ids || []);
         renderOffDutyTimeLine('nurse-off-duty-time-line', data.expected_off_duty_at);
       } catch(e) {}
@@ -569,7 +554,6 @@
       const btnPresent = document.getElementById('nurse-btn-present');
       const btnBreak = document.getElementById('nurse-btn-break');
       const btnOffDuty = document.getElementById('nurse-btn-offduty');
-      document.getElementById('nurse-room-select').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       document.getElementById('nurse-off-duty-time-line').style.display = (status === 'present' || status === 'on_break') ? '' : 'none';
       if (status === 'present') {
         badge.className = 'badge badge-green'; badge.textContent = 'Present';
@@ -588,8 +572,6 @@
 
     async function markNurseAttendance(status) {
       try {
-        const roomVal = document.getElementById('nurse-room-select').value;
-        const room_id = roomVal ? parseInt(roomVal) : null;
         const wasAlreadyPresent = nurseCurrentStatus === status;
         const alreadyActive = nurseCurrentStatus === "present" || nurseCurrentStatus === "on_break";
         let expected_off_duty_at;
@@ -597,7 +579,7 @@
           expected_off_duty_at = await openOffDutyTimeModal();
           if (!expected_off_duty_at) return;
         }
-        await markAttendanceCommon(status, room_id, { expected_off_duty_at });
+        await markAttendanceCommon(status, null, { expected_off_duty_at });
         renderNurseBadge(status);
         if (status === 'present' || status === 'on_break') {
           try {
@@ -608,8 +590,6 @@
         if (!wasAlreadyPresent) {
           const labels = { present: "Marked present.", on_break: "On break.", off_duty: "Marked off duty." };
           toast(labels[status] || "Status updated.", "success");
-        } else {
-          toast("Room updated.", "success");
         }
       } catch (e) { toast(e.message, "error"); }
     }

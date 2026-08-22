@@ -23,6 +23,7 @@ from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopup
 from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.admission_consent import AdmissionConsent
 from app.models.admission_progress_note import AdmissionProgressNote
+from app.models.admission_vitals import AdmissionVitals
 from app.models.patient_allergy import PatientAllergy
 from app.models.credit_debit_note import CreditDebitNote
 from app.models.refund import Refund
@@ -32,6 +33,7 @@ from app.schemas.admission import (
     TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, EmergencyAlertIn,
     ProfessionalFeeIn, VALID_ADMISSION_TYPES, AdmissionConsentIn, VALID_CONSENT_TYPES, VALID_DISCHARGE_TYPES,
     VALID_WARD_CATEGORIES, TpaSettleIn, ProgressNoteIn, EmergencyAdmitIn, RoomCreateIn, RoomOut,
+    AdmissionVitalsIn,
 )
 from app.models.consultation import Consultation
 from app.models.doctor import UserRole
@@ -41,7 +43,7 @@ from app.utils.audit import log_action
 from app.routers.patients import generate_patient_uid, generate_url_token
 from sqlalchemy.exc import IntegrityError
 from app.utils.inventory import deduct_stock_fefo
-from app.utils.notify import notify_ward_change_request, notify_emergency_alert
+from app.utils.notify import notify_ward_change_request, notify_emergency_alert, notify_admission_medicines_ordered, notify_admission_tests_ordered
 from app.utils.receipts import next_receipt_number, next_note_number
 from app.utils.gst import apply_gst
 from app.services.pdf_service import generate_invoice_pdf
@@ -141,6 +143,21 @@ def _recompute_total_beds(db: Session, wt: AdmissionWardType):
         sa_func.coalesce(sa_func.sum(AdmissionRoom.beds_count), 0)
     ).scalar()
     wt.total_beds = total or 0
+
+
+def _room_out(db: Session, room: AdmissionRoom) -> RoomOut:
+    """Per-room occupied/vacant, computed from bed labels ("{room_number}-{n}")
+    on currently-admitted patients in this room's ward type — each room needs
+    its own vacancy count so the Ward Vacancy overview can show one card per
+    room instead of one merged card per ward type."""
+    occupied = db.query(Admission).filter(
+        Admission.ward_type_id == room.ward_type_id, Admission.status == "admitted",
+        Admission.bed_number.like(f"{room.room_number}-%"),
+    ).count()
+    return RoomOut(
+        id=room.id, ward_type_id=room.ward_type_id, room_number=room.room_number,
+        beds_count=room.beds_count, occupied=occupied, vacant=max(room.beds_count - occupied, 0),
+    )
 
 
 def _get_admission_or_404(db: Session, admission_token: str, hospital_id: int) -> Admission:
@@ -286,6 +303,11 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
     )
     db.add(admission)
     referral.status = "admitted"
+    db.query(Notification).filter(
+        Notification.hospital_id == current_doctor.hospital_id,
+        Notification.link_type == "admission_referral",
+        Notification.link_id == patient.id,
+    ).update({"is_read": True})
     db.commit()
     db.refresh(admission)
 
@@ -665,7 +687,8 @@ def list_ward_types(current_doctor: Doctor = Depends(get_current_doctor), db: Se
     out = []
     for t in types:
         occupied = db.query(Admission).filter(Admission.ward_type_id == t.id, Admission.status == "admitted").count()
-        rooms = db.query(AdmissionRoom).filter(AdmissionRoom.ward_type_id == t.id).order_by(AdmissionRoom.id).all()
+        room_rows = db.query(AdmissionRoom).filter(AdmissionRoom.ward_type_id == t.id).order_by(AdmissionRoom.id).all()
+        rooms = [_room_out(db, r) for r in room_rows]
         out.append(WardTypeOut(id=t.id, name=t.name, total_beds=t.total_beds, daily_charge=t.daily_charge, default_deposit=t.default_deposit, is_icu=t.is_icu, is_ot=t.is_ot, ot_charge=t.ot_charge, category=t.category, is_emergency_ward=t.is_emergency_ward, occupied=occupied, vacant=max(t.total_beds - occupied, 0), rooms=rooms))
     return out
 
@@ -730,7 +753,8 @@ def update_ward_type(ward_type_id: int, body: WardTypeCreateIn, current_doctor: 
     if body.is_emergency_ward:
         _clear_other_emergency_ward_flags(db, current_doctor.hospital_id, keep_id=wt.id)
     db.commit()
-    rooms = db.query(AdmissionRoom).filter(AdmissionRoom.ward_type_id == wt.id).order_by(AdmissionRoom.id).all()
+    room_rows = db.query(AdmissionRoom).filter(AdmissionRoom.ward_type_id == wt.id).order_by(AdmissionRoom.id).all()
+    rooms = [_room_out(db, r) for r in room_rows]
     return WardTypeOut(id=wt.id, name=wt.name, total_beds=wt.total_beds, daily_charge=wt.daily_charge, default_deposit=wt.default_deposit, is_icu=wt.is_icu, is_ot=wt.is_ot, ot_charge=wt.ot_charge, category=wt.category, is_emergency_ward=wt.is_emergency_ward, occupied=occupied, vacant=max(wt.total_beds - occupied, 0), rooms=rooms)
 
 
@@ -773,7 +797,7 @@ def add_room(ward_type_id: int, body: RoomCreateIn, current_doctor: Doctor = Dep
     _recompute_total_beds(db, wt)
     db.commit()
     db.refresh(room)
-    return room
+    return _room_out(db, room)
 
 
 @router.put("/ward-types/{ward_type_id}/rooms/{room_id}", response_model=RoomOut)
@@ -810,7 +834,7 @@ def update_room(ward_type_id: int, room_id: int, body: RoomCreateIn, current_doc
     _recompute_total_beds(db, wt)
     db.commit()
     db.refresh(room)
-    return room
+    return _room_out(db, room)
 
 
 @router.delete("/ward-types/{ward_type_id}/rooms/{room_id}")
@@ -1097,12 +1121,59 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
     else:
         unit_price = body.manual_unit_price or 0.0
 
+    # If this exact medicine already has a still-pending (undispensed) active
+    # order on this admission, this is a repeat advise of the same thing —
+    # increase the existing card's unit count instead of creating a second
+    # one. Once an order has been dispensed it's "closed" for merging: a
+    # fresh advise after that starts its own order, which is what gives it
+    # its own distinct dispense timestamp later.
+    existing = None
+    if body.medicine_id:
+        existing = db.query(AdmissionMedicationOrder).filter(
+            AdmissionMedicationOrder.admission_id == a.id,
+            AdmissionMedicationOrder.medicine_id == body.medicine_id,
+            AdmissionMedicationOrder.is_active == True,  # noqa: E712
+            AdmissionMedicationOrder.dispensed_at == None,  # noqa: E711
+        ).first()
+    else:
+        existing = db.query(AdmissionMedicationOrder).filter(
+            AdmissionMedicationOrder.admission_id == a.id,
+            AdmissionMedicationOrder.medicine_id == None,  # noqa: E711
+            AdmissionMedicationOrder.is_active == True,  # noqa: E712
+            AdmissionMedicationOrder.dispensed_at == None,  # noqa: E711
+            sa_func.lower(AdmissionMedicationOrder.medicine_name) == body.medicine_name.strip().lower(),
+        ).first()
+
+    if existing:
+        existing.quantity += units
+        existing.order_batch_id = body.order_batch_id or existing.order_batch_id
+        if not existing.sourced_outside:
+            if body.medicine_id:
+                deduct_stock_fefo(db, body.medicine_id, units * (medicine.pack_size or 1), round_to_pack=True)
+            db.add(AdmissionCharge(
+                admission_id=a.id, charge_type="medicine", description=body.medicine_name,
+                amount=unit_price, quantity=units, added_by=current_doctor.id, charged_at=now_ist_naive(),
+            ))
+            patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+            batch_count = db.query(AdmissionMedicationOrder).filter(
+                AdmissionMedicationOrder.admission_id == a.id,
+                AdmissionMedicationOrder.order_batch_id == body.order_batch_id,
+            ).count() if body.order_batch_id else 1
+            notify_admission_medicines_ordered(
+                db, a.hospital_id, a.id, body.order_batch_id,
+                patient.name if patient else "patient", a.ward, a.bed_number, batch_count,
+            )
+        db.commit()
+        db.refresh(existing)
+        return {"id": existing.id, "message": "Existing order updated — units increased"}
+
     order = AdmissionMedicationOrder(
         admission_id=a.id, medicine_id=body.medicine_id, medicine_name=body.medicine_name,
         quantity=units,
         manual_unit_price=(body.manual_unit_price if not body.medicine_id else None),
         sourced_outside=body.sourced_outside,
         prescribed_by=current_doctor.id,
+        order_batch_id=body.order_batch_id,
     )
     db.add(order)
 
@@ -1111,18 +1182,23 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
             deduct_stock_fefo(db, body.medicine_id, units * (medicine.pack_size or 1), round_to_pack=True)
         db.add(AdmissionCharge(
             admission_id=a.id, charge_type="medicine",
-            description=f"{body.medicine_name} — {units} unit(s) dispensed",
+            # Just the medicine name — units already live in `quantity`, and
+            # "dispensed at pharmacy" is surfaced separately on the invoice
+            # (see _build_discharge_bill's _dispensed_at_pharmacy flag)
+            # rather than being baked into this text.
+            description=body.medicine_name,
             amount=unit_price, quantity=units, added_by=current_doctor.id, charged_at=now_ist_naive(),
         ))
         patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
-        db.add(Notification(
-            hospital_id=a.hospital_id,
-            source_key=f"admission_medicine_order:{a.id}:{now_ist_naive().isoformat()}",
-            type="admission_medicine_order", severity="info",
-            title=f"Medicine ordered — {patient.name if patient else 'patient'}",
-            message=f"{body.medicine_name} ({units} unit(s)) ordered for {a.ward}, Bed {a.bed_number}.",
-            link_type="admission_medicine_order", link_id=a.id, is_read=False,
-        ))
+        db.flush()  # assign order.id before the batch-count query below
+        batch_count = db.query(AdmissionMedicationOrder).filter(
+            AdmissionMedicationOrder.admission_id == a.id,
+            AdmissionMedicationOrder.order_batch_id == body.order_batch_id,
+        ).count() if body.order_batch_id else 1
+        notify_admission_medicines_ordered(
+            db, a.hospital_id, a.id, body.order_batch_id,
+            patient.name if patient else "patient", a.ward, a.bed_number, batch_count,
+        )
 
     db.commit()
     db.refresh(order)
@@ -1330,8 +1406,8 @@ def raise_emergency_alert(admission_id: str, body: EmergencyAlertIn, current_doc
 
 @router.post("/{admission_id}/tests")
 def order_admission_test(admission_id: str, body: AddAdmissionTestIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only a doctor can order tests")
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor or nurse can order tests")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Cannot order tests for a discharged admission")
@@ -1355,16 +1431,14 @@ def order_admission_test(admission_id: str, body: AddAdmissionTestIn, current_do
     db.flush()  # assign test.id before it's used below — was None, colliding on the notifications unique constraint
 
     patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
-    db.add(Notification(
-        hospital_id=a.hospital_id,
-        source_key=f"admission_test_sample:{test.id}",
-        type="admission_test_sample",
-        severity="info",
-        title="Sample Collection Needed — Ward",
-        message=f"{body.test_name} ordered for {patient.name if patient else 'patient'} — collect from {a.ward}, Bed {a.bed_number}.",
-        link_type="admission_test",
-        link_id=test.id,
-    ))
+    batch_count = db.query(TestOrder).filter(
+        TestOrder.admission_id == a.id,
+        TestOrder.order_batch_id == body.order_batch_id,
+    ).count() if body.order_batch_id else 1
+    notify_admission_tests_ordered(
+        db, a.hospital_id, a.id, body.order_batch_id, test.id,
+        patient.name if patient else "patient", a.ward, a.bed_number, batch_count,
+    )
     db.commit()
     return {"message": "Test ordered"}
 
@@ -1378,16 +1452,31 @@ def _build_discharge_bill(db: Session, a: Admission):
     items = []
     if a.admission_type != "day_care":
         # Day-care/short-stay never accrues overnight bed-night charges.
-        items.append({"type": "room", "name": f"Room charges — {a.ward}, Bed {a.bed_number} ({_days_admitted(a)} day(s))",
+        # Description kept as a plain category label ("Room Charges") — the
+        # ward/bed/day-count detail lives in qty (days) and unit_price
+        # (rate/day) instead of being baked into the text.
+        items.append({"type": "room", "name": "Room Charges",
                       "qty": _days_admitted(a), "unit_price": current_rate, "line_total": _days_admitted(a) * current_rate, "payable_here": True,
                       "_is_icu": bool(ward_type and ward_type.is_icu)})
 
     for c in charges:
         # Pharmacy (medicine) charges are settled only at the pharmacy counter, never at
         # reception — still listed here as a reference so the total bill picture is visible.
+        # Description is just the medicine/charge name — no boilerplate text appended;
+        # the "settled at pharmacy" fact is carried as its own flag (_dispensed_at_pharmacy)
+        # so the PDF can render it as a small separate note instead of jamming it into
+        # every medicine line's description.
         payable_here = c.charge_type != "medicine"
-        name = c.description if payable_here else f"{c.description} (Settled at Pharmacy Counter — not included in this total)"
-        items.append({"type": c.charge_type, "name": name, "qty": c.quantity, "unit_price": c.amount, "line_total": c.amount * c.quantity, "payable_here": payable_here})
+        # OT charges were stored with "— {ward name}" baked into the description at
+        # creation time (see change_ward) — strip that suffix here so the invoice shows
+        # a plain "OT Charge" label, consistent with Room Charges.
+        name = c.description
+        if c.charge_type == "other" and name and name.startswith("OT Charge —"):
+            name = "OT Charge"
+        item = {"type": c.charge_type, "name": name, "qty": c.quantity, "unit_price": c.amount, "line_total": c.amount * c.quantity, "payable_here": payable_here}
+        if c.charge_type == "medicine":
+            item["_dispensed_at_pharmacy"] = True
+        items.append(item)
     grand_total = sum(i["line_total"] for i in items if i["payable_here"])
     return items, grand_total
 
@@ -1778,6 +1867,8 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Already discharged")
+    if not a.discharge_order_at:
+        raise HTTPException(status_code=400, detail="A doctor must place the discharge order before this patient can be discharged")
 
     discharge_type = (body.discharge_type or "planned").strip().lower()
     if discharge_type not in VALID_DISCHARGE_TYPES:
@@ -1897,6 +1988,44 @@ def download_discharge_invoice(admission_id: str, current_doctor: Doctor = Depen
     return FileResponse(invoice.pdf_path, media_type="application/pdf", filename=f"discharge_invoice_{admission_id}.pdf")
 
 
+@router.get("/{admission_id}/vitals")
+def list_admission_vitals(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    # Visible to everyone with access to admission-detail.html (item 49) —
+    # no role check beyond the usual hospital-scoped admission lookup.
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    rows = db.query(AdmissionVitals).filter(AdmissionVitals.admission_id == a.id).order_by(AdmissionVitals.recorded_at.desc()).all()
+    out = []
+    for v in rows:
+        recorder = db.query(Doctor).filter(Doctor.id == v.recorded_by).first()
+        try:
+            data = json.loads(v.data)
+        except (TypeError, ValueError):
+            data = {}
+        out.append({
+            "id": v.id, "data": data,
+            "recorded_by_name": f"{recorder.title} {recorder.name}" if recorder else "Unknown",
+            "recorded_at": v.recorded_at.isoformat() if v.recorded_at else None,
+        })
+    return out
+
+
+@router.post("/{admission_id}/vitals")
+def add_admission_vitals(admission_id: str, body: AdmissionVitalsIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    # Nurse-only, and always allowed — whether or not vitals were already
+    # recorded today (item 49: "any time, whether or not already recorded").
+    if current_doctor.role.value != "nurse":
+        raise HTTPException(status_code=403, detail="Only a nurse can record vitals here")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    cleaned = {k: v for k, v in (body.data or {}).items() if str(k).strip() and str(v).strip()}
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="At least one vitals value is required")
+    row = AdmissionVitals(admission_id=a.id, recorded_by=current_doctor.id, data=json.dumps(cleaned))
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "message": "Vitals recorded"}
+
+
 @router.get("/{admission_id}/progress-notes")
 def list_progress_notes(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
@@ -1914,8 +2043,8 @@ def list_progress_notes(admission_id: str, current_doctor: Doctor = Depends(get_
 
 @router.post("/{admission_id}/progress-notes")
 def add_progress_note(admission_id: str, body: ProgressNoteIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Only a doctor can add a progress note")
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor or nurse can add a progress note")
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if not (body.note or "").strip():
         raise HTTPException(status_code=400, detail="Note cannot be empty")

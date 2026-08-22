@@ -10,10 +10,17 @@ from app.utils.notify import sync_stock_notifications, sync_room_classification_
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 PHARMACY_VISIBLE_TYPES = ["low_stock", "expiring_stock", "admission_medicine_order"]
-RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request", "sample_rejected"]
+RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request", "sample_rejected", "admission_referral"]
 LAB_VISIBLE_TYPES = ["admission_test_sample", "admission_sample_overdue"]
-DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "no_assistant_alert", "emergency_ward_intake"]
+DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "no_assistant_alert", "emergency_ward_intake", "admission_medicine_substitute"]
 NURSE_VISIBLE_TYPES = ["critical_result_escalation", "sample_rejected"]
+
+# Types that belong to a specific role's queue (reception / pharmacy / lab)
+# and should NOT also clutter the admin feed, even though they carry no
+# target_doctor_id. (Items 1-3: admin was getting these by default.)
+ADMIN_EXCLUDED_TYPES = list(set(
+    RECEPTIONIST_VISIBLE_TYPES + ["admission_medicine_order"] + LAB_VISIBLE_TYPES
+))
 
 
 def serialize(n: Notification):
@@ -56,10 +63,11 @@ def list_notifications(
         # target_doctor_id marks a notification as meant for one specific
         # individual (e.g. a staff member's suggestion reply) — admin/
         # sub_admin should only see it if they ARE that individual, not
-        # every such notification hospital-wide.
+        # every such notification hospital-wide. Also strip out types that
+        # belong to reception/pharmacy/lab's own queues (items 1-3).
         query = query.filter(
             (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)
-        )
+        ).filter(~Notification.type.in_(ADMIN_EXCLUDED_TYPES))
     notifications = query.order_by(Notification.is_read.asc(), Notification.updated_at.desc()).limit(100).all()
 
     unread_query = db.query(Notification).filter(
@@ -79,7 +87,7 @@ def list_notifications(
     if current_doctor.role.value in ("admin", "sub_admin"):
         unread_query = unread_query.filter(
             (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)
-        )
+        ).filter(~Notification.type.in_(ADMIN_EXCLUDED_TYPES))
     unread_count = unread_query.count()
 
     return {"notifications": [serialize(n) for n in notifications], "unread_count": unread_count}
@@ -113,7 +121,7 @@ def get_unread_count(
     if current_doctor.role.value in ("admin", "sub_admin"):
         query = query.filter(
             (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)
-        )
+        ).filter(~Notification.type.in_(ADMIN_EXCLUDED_TYPES))
     count = query.count()
     return {"unread_count": count}
 
@@ -153,7 +161,7 @@ def mark_all_read(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab"]:
+    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor", "nurse", "assistant"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     query = db.query(Notification).filter(
@@ -166,10 +174,14 @@ def mark_all_read(
         query = query.filter(Notification.type.in_(RECEPTIONIST_VISIBLE_TYPES))
     if current_doctor.role.value == "lab":
         query = query.filter(Notification.type.in_(LAB_VISIBLE_TYPES))
+    if current_doctor.role.value == "doctor":
+        query = query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
+    if current_doctor.role.value in ("nurse", "assistant"):
+        query = query.filter(Notification.type.in_(NURSE_VISIBLE_TYPES))
     if current_doctor.role.value in ("admin", "sub_admin"):
         query = query.filter(
             (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)
-        )
+        ).filter(~Notification.type.in_(ADMIN_EXCLUDED_TYPES))
     query.update({"is_read": True})
     db.commit()
     return {"marked": True}

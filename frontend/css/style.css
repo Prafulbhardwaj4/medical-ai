@@ -819,6 +819,16 @@ textarea.form-control {
     min-height: 42px;
     background-color: var(--white);
   }
+
+  .admissions-search-field {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .admissions-search-field .form-control {
+    min-height: 42px;
+    font-size: 16px;
+  }
 }
 
 .form-row {
@@ -2219,6 +2229,11 @@ tbody tr:hover {
 
   .topbar-profile-btn {
     display: flex;
+    margin-left: auto;
+  }
+
+  .topbar-right-group {
+    margin-left: auto;
   }
 
   .topbar-brand {
@@ -2822,7 +2837,7 @@ tbody tr:hover {
 .avail-unavail-section {
   border-top: 1px solid var(--border);
   background: transparent;
-  padding: 16px 0 0;
+  padding: 16px 18px 18px;
   margin-top: 4px;
 }
 

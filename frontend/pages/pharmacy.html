@@ -116,6 +116,7 @@
           <circle cx="12" cy="8" r="4" />
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
+        <span class="profile-dot" id="profile-dot"></span>
       </button>
     </header>
 
@@ -285,7 +286,7 @@
         <div class="card">
           <div class="card-header"
             style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-            <h2 style="margin:0">Queue</h2>
+            <h2 style="margin:0">Waiting Queue</h2>
           </div>
 
           <div style="display:grid;grid-template-columns:1fr 200px;gap:10px;margin:16px 0 14px">
@@ -305,7 +306,16 @@
 
         <div class="card desktop-only-block" style="margin-top:16px">
           <div class="card-header">
-            <h2 style="margin:0">Admitted Patients — Medicines to Send</h2>
+            <h2 style="margin:0">Admitted Patients</h2>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 200px;gap:10px;margin:16px 0 14px">
+            <input class="form-control" id="home-admission-pharm-search" placeholder="Search by patient name or ward…"
+              oninput="renderAdmissionPharmQueue()" />
+            <select class="form-control" id="home-admission-pharm-filter" onchange="renderAdmissionPharmQueue()">
+              <option value="all">All</option>
+              <option value="pending">To Send</option>
+              <option value="sent">All Sent</option>
+            </select>
           </div>
           <div id="home-admission-pharm-queue" style="margin-top:12px">
             <p style="color:var(--slate)">Loading…</p>
@@ -316,7 +326,16 @@
       <div id="pharmacy-admission-view" class="mobile-section">
         <div class="card">
           <div class="card-header">
-            <h2 style="margin:0">Admitted Patients — Medicines to Send</h2>
+            <h2 style="margin:0">Admitted Patients</h2>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 130px;gap:10px;margin:16px 0 14px">
+            <input class="form-control" id="admission-pharm-search" placeholder="Search by patient name or ward…"
+              oninput="renderAdmissionPharmQueue()" />
+            <select class="form-control" id="admission-pharm-filter" onchange="renderAdmissionPharmQueue()">
+              <option value="all">All</option>
+              <option value="pending">To Send</option>
+              <option value="sent">All Sent</option>
+            </select>
           </div>
           <div id="admission-pharm-queue" style="margin-top:12px">
             <p style="color:var(--slate)">Loading…</p>
@@ -642,7 +661,26 @@
         <button class="modal-close" onclick="closeAdmissionMedModal()">×</button>
       </div>
       <p style="font-size:12.5px;color:var(--slate-light);margin-bottom:10px">Billed automatically to the admission — no payment to collect here.</p>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-sm" id="adm-med-tab-send" style="flex:1;background:var(--teal);color:#fff;border-color:var(--teal)" onclick="switchAdmMedTab('send')">To Send</button>
+        <button class="btn btn-outline btn-sm" id="adm-med-tab-history" style="flex:1" onclick="switchAdmMedTab('history')">Dispense History</button>
+      </div>
       <div id="adm-med-list" style="max-height:60vh;overflow-y:auto"></div>
+      <div id="adm-med-history-list" style="max-height:60vh;overflow-y:auto;display:none"></div>
+    </div>
+  </div>
+
+  <!-- Admission Medicine Substitute Modal -->
+  <div class="modal-overlay" id="modal-adm-substitute">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h2>Substitute Medicine</h2>
+        <button class="modal-close" onclick="closeAdmSubstituteModal()">×</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--slate-light);margin-bottom:10px">Replacing <strong id="adm-sub-original-name"></strong>. This bills and deducts stock for the substitute, and reverses the original's charge. The admitting doctor will be notified.</p>
+      <input class="form-control" id="adm-sub-search" placeholder="Search catalog…" oninput="searchAdmSubstitute()" style="margin-bottom:10px" />
+      <div id="adm-sub-results" style="max-height:220px;overflow-y:auto;margin-bottom:10px"></div>
+      <div class="err-msg" id="adm-sub-err"></div>
     </div>
   </div>
 
@@ -812,10 +850,15 @@
             </div>
           `;
         }).join('');
+        // Checked-in time only, no date — this list is always today's
+        // check-ins, so a date is dead weight next to the patient's name.
+        const firstVisitTime = (r.doctors && r.doctors[0] && r.doctors[0].visit_time)
+          ? new Date(r.doctors[0].visit_time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true })
+          : null;
         return `
           <div style="padding:12px 0;border-bottom:1px solid var(--border)">
             <div>
-              <strong>${r.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${r.patient_uid || ''}</span>
+              <strong>${r.patient_name}</strong> ${firstVisitTime ? `<span style="font-size:12px;color:var(--slate-light)">Checked in ${firstVisitTime}</span>` : ''}
               <span class="badge ${r.is_finalized ? 'badge-green' : 'badge-amber'}" style="margin-left:6px">${r.is_finalized ? 'Generated' : 'Pending'}</span>
             </div>
             ${doctorBlocks}
@@ -851,11 +894,17 @@
       try {
         const data = await api("GET", "/notifications/unread-count");
         const badge = document.getElementById('notif-badge');
+        const dot = document.getElementById('profile-dot');
+        const pmBadge = document.getElementById('profile-menu-notif-badge');
         if (data.unread_count > 0) {
           badge.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
           badge.style.display = 'flex';
+          if (dot) dot.style.display = 'block';
+          if (pmBadge) { pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count; pmBadge.style.display = 'inline-block'; }
         } else {
           badge.style.display = 'none';
+          if (dot) dot.style.display = 'none';
+          if (pmBadge) pmBadge.style.display = 'none';
         }
       } catch (e) { }
     }
@@ -1005,12 +1054,17 @@
     }
 
     function renderAdmissionPharmQueue() {
-      const targets = ['admission-pharm-queue', 'home-admission-pharm-queue']
-        .map(id => document.getElementById(id)).filter(Boolean);
+      // Desktop (home view) and mobile (admission view) each get their own
+      // search box + filter dropdown, so they're filtered independently
+      // rather than sharing one query across both surfaces.
+      const targets = [
+        { el: document.getElementById('admission-pharm-queue'), searchId: 'admission-pharm-search', filterId: 'admission-pharm-filter' },
+        { el: document.getElementById('home-admission-pharm-queue'), searchId: 'home-admission-pharm-search', filterId: 'home-admission-pharm-filter' },
+      ].filter(t => t.el);
       if (!targets.length) return;
 
       if (!admissionPharmQueueData.length) {
-        targets.forEach(el => el.innerHTML = `<p style="color:var(--slate-light)">Nothing waiting to be sent to a ward.</p>`);
+        targets.forEach(t => t.el.innerHTML = `<p style="color:var(--slate-light)">Nothing waiting to be sent to a ward.</p>`);
         return;
       }
 
@@ -1019,54 +1073,131 @@
         if (!byPatient.has(i.admission_id)) byPatient.set(i.admission_id, []);
         byPatient.get(i.admission_id).push(i);
       });
+      const allGroups = [...byPatient.values()];
 
-      const html = [...byPatient.values()].map(items => {
-        const first = items[0];
-        const pendingCount = items.filter(i => !i.dispensed_at).length;
-        const orderer = first.prescriber_name
-          ? `${first.prescriber_role === 'nurse' ? 'Nurse' : ''} ${first.prescriber_name}`.trim()
-          : null;
-        return `
-          <div class="item-card" style="cursor:pointer" onclick="openAdmissionMedModal(${first.admission_id})">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-              <div>
-                <strong>${sanitize(first.patient_name)}</strong>
-                <div style="font-size:12.5px;color:var(--slate)">${sanitize(first.ward)}, Bed ${sanitize(first.bed_number)}</div>
-                ${orderer ? `<div style="font-size:12.5px;color:var(--slate-light)">Ordered by ${sanitize(orderer)}</div>` : ''}
+      targets.forEach(t => {
+        const searchEl = document.getElementById(t.searchId);
+        const filterEl = document.getElementById(t.filterId);
+        const search = searchEl ? searchEl.value.trim().toLowerCase() : '';
+        const filter = filterEl ? filterEl.value : 'all';
+
+        const groups = allGroups.filter(items => {
+          const first = items[0];
+          const pendingCount = items.filter(i => !i.dispensed_at).length;
+          if (filter === 'pending' && pendingCount === 0) return false;
+          if (filter === 'sent' && pendingCount > 0) return false;
+          if (search) {
+            const haystack = `${first.patient_name} ${first.ward} ${first.bed_number}`.toLowerCase();
+            if (!haystack.includes(search)) return false;
+          }
+          return true;
+        });
+
+        if (!groups.length) {
+          t.el.innerHTML = `<p style="color:var(--slate-light)">No matching patients.</p>`;
+          return;
+        }
+
+        t.el.innerHTML = groups.map(items => {
+          const first = items[0];
+          const pendingCount = items.filter(i => !i.dispensed_at).length;
+          const orderer = first.prescriber_name
+            ? `${first.prescriber_role === 'nurse' ? 'Nurse' : ''} ${first.prescriber_name}`.trim()
+            : null;
+          return `
+            <div class="item-card" style="cursor:pointer" onclick="openAdmissionMedModal(${first.admission_id})">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+                <div>
+                  <strong>${sanitize(first.patient_name)}</strong>
+                  <div style="font-size:12.5px;color:var(--slate)">${sanitize(first.ward)}, Bed ${sanitize(first.bed_number)}</div>
+                  ${orderer ? `<div style="font-size:12.5px;color:var(--slate-light)">Ordered by ${sanitize(orderer)}</div>` : ''}
+                </div>
+                <span class="badge ${pendingCount ? 'badge-amber' : 'badge-green'}">${pendingCount ? pendingCount + ' to send' : 'All sent'}</span>
               </div>
-              <span class="badge ${pendingCount ? 'badge-amber' : 'badge-green'}">${pendingCount ? pendingCount + ' to send' : 'All sent'}</span>
             </div>
-          </div>
-        `;
-      }).join('');
-
-      targets.forEach(el => el.innerHTML = html);
+          `;
+        }).join('');
+      });
     }
+
+    let currentAdmMedAdmissionId = null;
 
     function openAdmissionMedModal(admissionId) {
       const items = admissionPharmQueueData.filter(i => i.admission_id === admissionId);
       if (!items.length) return;
+      currentAdmMedAdmissionId = admissionId;
       const first = items[0];
       document.getElementById('adm-med-patient').textContent = `${first.patient_name} — ${first.ward}, Bed ${first.bed_number}`;
       document.getElementById('adm-med-list').innerHTML = items.map(i => {
         const orderer = i.prescriber_name ? `${i.prescriber_role === 'nurse' ? 'Nurse' : ''} ${i.prescriber_name}`.trim() : 'Unrecorded';
+        const actionHtml = i.is_out_of_stock
+          ? `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+               <span class="badge badge-amber">Out of stock</span>
+               <button class="btn btn-outline btn-sm" onclick="openAdmSubstituteModal(${i.id}, ${JSON.stringify(i.medicine_name)})">Substitute</button>
+             </div>`
+          : i.dispensed_at
+            ? '<span class="badge badge-green">Sent</span>'
+            : `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+                 <button class="btn btn-primary btn-sm" onclick="dispenseAdmissionMed(${i.id})">Mark Sent</button>
+                 <button class="btn btn-outline btn-sm" onclick="markAdmMedOutOfStock(${i.id})">Out of Stock</button>
+               </div>`;
         return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px">
             <div>
-              <strong>${sanitize(i.medicine_name)}</strong>${i.strength ? ` <span style="color:var(--slate-light)">(${sanitize(i.strength)})</span>` : ''}
+              <strong>${sanitize(i.medicine_name)}</strong>
               <div style="font-size:12.5px;color:var(--slate)">${i.quantity ?? 1} strip(s) · Ordered by ${sanitize(orderer)}</div>
             </div>
-            ${i.dispensed_at
-              ? '<span class="badge badge-green">Sent</span>'
-              : `<button class="btn btn-primary btn-sm" onclick="dispenseAdmissionMed(${i.id})">Mark Sent</button>`}
+            ${actionHtml}
           </div>
         `;
       }).join('');
+      switchAdmMedTab('send');
       document.getElementById('modal-admission-meds').classList.add('open');
     }
 
     function closeAdmissionMedModal() {
       document.getElementById('modal-admission-meds').classList.remove('open');
+      currentAdmMedAdmissionId = null;
+    }
+
+    function switchAdmMedTab(tab) {
+      const sendBtn = document.getElementById('adm-med-tab-send');
+      const historyBtn = document.getElementById('adm-med-tab-history');
+      const sendList = document.getElementById('adm-med-list');
+      const historyList = document.getElementById('adm-med-history-list');
+      if (tab === 'history') {
+        sendBtn.className = 'btn btn-outline btn-sm';
+        sendBtn.style.cssText = 'flex:1';
+        historyBtn.className = 'btn btn-sm';
+        historyBtn.style.cssText = 'flex:1;background:var(--teal);color:#fff;border-color:var(--teal)';
+        sendList.style.display = 'none';
+        historyList.style.display = 'block';
+        loadAdmMedHistory();
+      } else {
+        historyBtn.className = 'btn btn-outline btn-sm';
+        historyBtn.style.cssText = 'flex:1';
+        sendBtn.className = 'btn btn-sm';
+        sendBtn.style.cssText = 'flex:1;background:var(--teal);color:#fff;border-color:var(--teal)';
+        historyList.style.display = 'none';
+        sendList.style.display = 'block';
+      }
+    }
+
+    async function loadAdmMedHistory() {
+      const el = document.getElementById('adm-med-history-list');
+      if (!currentAdmMedAdmissionId) return;
+      el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Loading…</p>';
+      try {
+        const history = await api("GET", `/pharmacy/admission-orders-history/${currentAdmMedAdmissionId}`);
+        el.innerHTML = history.length
+          ? history.map(h => `
+              <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+                <strong>${sanitize(h.medicine_name)}</strong>
+                <div style="font-size:12.5px;color:var(--slate)">${h.quantity ?? 1} strip(s) · Sent by ${sanitize(h.dispensed_by || 'Unrecorded')} · ${timeSince(h.dispensed_at)}</div>
+              </div>
+            `).join('')
+          : '<p style="color:var(--slate-light);font-size:13px">No dispenses recorded yet for this visit.</p>';
+      } catch (e) { el.innerHTML = `<p style="color:var(--danger);font-size:13px">${sanitize(e.message)}</p>`; }
     }
 
     async function dispenseAdmissionMed(orderId) {
@@ -1077,6 +1208,65 @@
         await loadAdmissionPharmQueue();
         if (admissionId) openAdmissionMedModal(admissionId);
       } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function markAdmMedOutOfStock(orderId) {
+      try {
+        await api("POST", `/pharmacy/admission-orders/${orderId}/mark-out-of-stock`, {});
+        toast("Marked out of stock", "success");
+        const admissionId = admissionPharmQueueData.find(i => i.id === orderId)?.admission_id;
+        await loadAdmissionPharmQueue();
+        if (admissionId) openAdmissionMedModal(admissionId);
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    let admSubOrderId = null;
+    let admSubSearchTimeout = null;
+
+    function openAdmSubstituteModal(orderId, medicineName) {
+      admSubOrderId = orderId;
+      document.getElementById('adm-sub-original-name').textContent = medicineName;
+      document.getElementById('adm-sub-search').value = '';
+      document.getElementById('adm-sub-results').innerHTML = '';
+      document.getElementById('adm-sub-err').textContent = '';
+      document.getElementById('modal-adm-substitute').classList.add('open');
+    }
+
+    function closeAdmSubstituteModal() {
+      document.getElementById('modal-adm-substitute').classList.remove('open');
+      admSubOrderId = null;
+    }
+
+    async function searchAdmSubstitute() {
+      clearTimeout(admSubSearchTimeout);
+      admSubSearchTimeout = setTimeout(async () => {
+        const q = document.getElementById('adm-sub-search').value.trim();
+        try {
+          const results = await api("GET", `/pharmacy/medicines/search?q=${encodeURIComponent(q)}`);
+          document.getElementById('adm-sub-results').innerHTML = results.length
+            ? results.map(r => `
+                <div style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;cursor:pointer"
+                  onclick="confirmAdmSubstitute(${r.id}, ${JSON.stringify(`${r.generic_name}${r.strength ? ' ' + r.strength : ''}`)})">
+                  <span>${sanitize(r.generic_name)}${r.strength ? ' ' + sanitize(r.strength) : ''} ${r.brand_names ? `<span style="color:var(--slate);font-size:12px">(${sanitize(r.brand_names)})</span>` : ''}</span>
+                  <span style="font-size:13px;color:var(--slate)">${r.price != null ? '₹' + r.price : 'no price'}</span>
+                </div>
+              `).join('')
+            : '<p style="color:var(--slate-light);font-size:13px">No matches.</p>';
+        } catch (e) { }
+      }, 250);
+    }
+
+    async function confirmAdmSubstitute(catalogId, name) {
+      const err = document.getElementById('adm-sub-err');
+      err.textContent = '';
+      try {
+        await api("POST", `/pharmacy/admission-orders/${admSubOrderId}/substitute`, { medicine_id: catalogId, medicine_name: name });
+        toast("Substituted — the admitting doctor has been notified", "success");
+        const admissionId = admissionPharmQueueData.find(i => i.id === admSubOrderId)?.admission_id;
+        closeAdmSubstituteModal();
+        await loadAdmissionPharmQueue();
+        if (admissionId) openAdmissionMedModal(admissionId);
+      } catch (e) { err.textContent = e.message; }
     }
 
     function timeSince(iso) {

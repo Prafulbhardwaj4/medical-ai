@@ -89,6 +89,9 @@ class AdmissionMedicationOrder(Base):
     dispensed_at = Column(DateTime, nullable=True)   # last time pharmacy dispensed against this order — see AdmissionMedicationDispense for the full, billable history (an order can be re-dispensed on refill)
     dispensed_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     manual_unit_price = Column(Float, nullable=True)  # per-strip/unit price entered at order time — only used when medicine_id is null (not in catalog), since there's no HospitalMedicine row to price from
+    is_out_of_stock = Column(Boolean, default=False, nullable=False)  # flagged by pharmacy at the counter — never touches billing/stock, those already happened at order time
+    substitute_for_id = Column(Integer, ForeignKey("admission_medication_orders.id"), nullable=True)  # set on the replacement order once pharmacy substitutes an out-of-stock one
+    order_batch_id = Column(String, nullable=True, index=True)  # shared across every medicine submitted in the same "Advise Medicine(s)" action — lets one notification cover the whole batch instead of one per medicine
     created_at = Column(DateTime, default=now_ist_naive)
 
     admission = relationship("Admission", back_populates="medication_orders")
