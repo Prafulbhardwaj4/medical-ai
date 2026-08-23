@@ -1005,7 +1005,7 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         doses = db.query(AdmissionMedicationAdministration).filter(AdmissionMedicationAdministration.order_id == m.id).order_by(AdmissionMedicationAdministration.administered_at.desc()).all()
         returned_qty = sum(r.quantity for r in db.query(AdmissionMedicationReturn).filter(AdmissionMedicationReturn.order_id == m.id).all())
         med_out.append({
-            "id": m.id, "medicine_name": m.medicine_name, "quantity": m.quantity, "dosage": m.dosage, "route": m.route,
+            "id": m.id, "medicine_id": m.medicine_id, "medicine_name": m.medicine_name, "quantity": m.quantity, "dosage": m.dosage, "route": m.route,
             "frequency_note": m.frequency_note, "is_active": m.is_active, "sourced_outside": m.sourced_outside,
             "doses": [{"id": d.id, "administered_at": d.administered_at.isoformat(), "notes": d.notes} for d in doses],
             "returned_quantity": returned_qty,

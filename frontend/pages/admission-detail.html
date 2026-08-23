@@ -662,6 +662,7 @@
       <div class="modal-header">
         <h2>Add Medication(s)</h2><button class="modal-close" onclick="closeModal('modal-add-med')">&times;</button>
       </div>
+      <button type="button" class="btn btn-outline btn-sm" id="btn-repeat-meds" style="margin-bottom:10px" onclick="repeatAdmMeds()">↻ Repeat Current Medicines</button>
       <div style="position:relative">
         <input class="form-control" id="med-catalog-search" placeholder="Search medicines to add…" autocomplete="off"
           oninput="renderAdmMedSuggestions()" onfocus="renderAdmMedSuggestions()" />
@@ -2019,6 +2020,9 @@
       document.getElementById("med-rows").innerHTML = "";
       document.getElementById("med-catalog-search").value = "";
       document.getElementById("med-suggestions").style.display = "none";
+      const repeatBtn = document.getElementById("btn-repeat-meds");
+      const hasActiveMeds = admissionData.medications.some(m => m.is_active);
+      repeatBtn.style.display = hasActiveMeds ? "" : "none";
       openModal("modal-add-med");
       if (!medCatalogLoaded) {
         try {
@@ -2026,6 +2030,29 @@
           medCatalogLoaded = true;
         } catch (e) { medCatalogCache = []; }
       }
+    }
+
+    // Repeats the patient's currently active medicine orders (what doctor/nurse
+    // told to give — AdmissionMedicationOrder rows, never pharmacy-dispense
+    // charges) into the Add Medication(s) rows, one row per distinct medicine
+    // at 1 unit each, ready for staff to adjust or remove before submitting.
+    function repeatAdmMeds() {
+      const seen = new Set();
+      const active = admissionData.medications.filter(m => m.is_active);
+      for (const m of active) {
+        const key = m.medicine_id != null ? `id:${m.medicine_id}` : `name:${m.medicine_name.trim().toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (m.medicine_id != null) {
+          const cat = medCatalogCache.find(c => c.id === m.medicine_id);
+          addAdmMedRow(cat
+            ? { medicine_id: cat.id, medicine_name: cat.display_name, dosage_forms: cat.dosage_forms, pack_size: cat.pack_size }
+            : { medicine_id: m.medicine_id, medicine_name: m.medicine_name });
+        } else {
+          addAdmMedRow({ medicine_id: null, medicine_name: m.medicine_name, manual: true });
+        }
+      }
+      if (!active.length) toast("No active medicines to repeat", "error");
     }
 
     function renderAdmMedSuggestions() {
