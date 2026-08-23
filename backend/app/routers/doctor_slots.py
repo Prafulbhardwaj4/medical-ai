@@ -2,6 +2,7 @@ import json
 from datetime import datetime as dt, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -94,12 +95,27 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
         DoctorSlot.slot_date >= today, DoctorSlot.slot_date <= window_end,
         DoctorSlot.booked_count == 0,
     ).delete(synchronize_session=False)
-    db.commit()
+    # NOT committed here on purpose — kept in the same transaction as the
+    # inserts below, so if anything fails, the delete rolls back too and we
+    # never leave the doctor with slots wiped and nothing rebuilt in their place.
+    db.flush()
 
     unavailable_dates = {
         u.date for u in db.query(DoctorUnavailability).filter(
             DoctorUnavailability.doctor_id == target.id,
             DoctorUnavailability.date >= today, DoctorUnavailability.date <= window_end,
+        ).all()
+    }
+
+    # Slots that already have real bookings were deliberately left alone by
+    # the delete above. The regenerated pattern must skip these exact
+    # (date, time) pairs too, or it tries to INSERT a second row into the
+    # same (doctor_id, slot_date, slot_time) unique slot and crashes.
+    booked_keys = {
+        (s.slot_date, s.slot_time) for s in db.query(DoctorSlot).filter(
+            DoctorSlot.doctor_id == target.id,
+            DoctorSlot.slot_date >= today, DoctorSlot.slot_date <= window_end,
+            DoctorSlot.booked_count > 0,
         ).all()
     }
 
@@ -135,6 +151,8 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
                 if t in times_seen_today:
                     continue
                 times_seen_today.add(t)
+                if (current_date, t) in booked_keys:
+                    continue  # an already-booked slot occupies this exact date/time
                 if t in (body.custom_windows or {}) and body.custom_windows[t]:
                     window = int(body.custom_windows[t])  # explicit From/To duration wins over any inferred gap
                 elif idx + 1 < len(sorted_times):
@@ -150,7 +168,14 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
                 )
                 db.add(slot)
                 created.append(slot)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Couldn't save availability — it conflicts with an existing booked slot. Please refresh and try again."
+        )
     return created
 
 

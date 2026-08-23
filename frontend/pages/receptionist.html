@@ -1387,6 +1387,22 @@
     </div>
   </div>
 
+  <!-- Discard Unsaved Availability Changes confirm — replaces the native browser confirm() -->
+  <div class="modal-overlay" id="modal-avail-discard-confirm">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <h2>Unsaved Changes</h2><button class="modal-close" onclick="closeModal('modal-avail-discard-confirm')">&times;</button>
+      </div>
+      <p style="color:var(--slate);margin-bottom:20px">
+        You have unsaved changes to this doctor's availability. Close without saving?
+      </p>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-avail-discard-confirm')">Keep Editing</button>
+        <button class="btn btn-primary" style="flex:1" onclick="closeModal('modal-avail-discard-confirm');closeAvailModal(true)">Discard Changes</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Record Refund Modal -->
   <div class="modal-overlay" id="modal-record-refund">
     <div class="modal" style="max-width:400px">
@@ -3711,8 +3727,8 @@
 
     function closeAvailModal(skipConfirm) {
       if (amDirty && !skipConfirm) {
-        const discard = confirm("You have unsaved changes to this doctor's availability. Close without saving?");
-        if (!discard) return;
+        openModal("modal-avail-discard-confirm");
+        return;
       }
       amDirty = false;
       document.getElementById("modal-avail-editor").classList.remove("open");

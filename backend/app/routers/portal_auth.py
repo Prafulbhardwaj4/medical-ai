@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -33,7 +34,8 @@ def _link_all_hospital_records(db: Session, account: PatientAccount, phone: str)
     of them get auto-tagged. They're linked as "pending_confirmation" instead
     and stay excluded from the account's medical history until the patient
     explicitly confirms who each one is from inside the portal."""
-    candidates = db.query(Patient).filter(Patient.phone.like(f"%{phone}")).all()
+    digits_only = func.regexp_replace(Patient.phone, '\\D', '', 'g')
+    candidates = db.query(Patient).filter(func.right(digits_only, 10) == phone).all()
     patients = [p for p in candidates if normalize_phone(p.phone) == phone]
     relation = "self" if len(patients) == 1 else "pending_confirmation"
     for p in patients:

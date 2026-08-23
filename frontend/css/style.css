@@ -2005,6 +2005,7 @@ tbody tr:hover {
 
   .app-shell {
     grid-template-columns: 1fr;
+    height: 100dvh;
   }
 
   .hamburger-btn {
@@ -2037,7 +2038,7 @@ tbody tr:hover {
     top: 56px;
     left: 0;
     width: 260px;
-    height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
     transform: translateX(-100%);
     transition: transform 0.25s ease;
     z-index: 200;
