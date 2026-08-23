@@ -41,6 +41,7 @@ html {
 html,
 body {
   overflow-x: hidden;
+  overscroll-behavior-y: none;
 }
 
 body {
