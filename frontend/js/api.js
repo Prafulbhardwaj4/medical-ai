@@ -1,5 +1,12 @@
 const BASE = window.MEDSCRIBE_API_BASE || "https://medical-ai-mvv1.onrender.com";
 
+function setRealVhUnit() {
+  document.documentElement.style.setProperty('--real-vh', (window.innerHeight * 0.01) + 'px');
+}
+setRealVhUnit();
+window.addEventListener('resize', setRealVhUnit);
+window.addEventListener('orientationchange', setRealVhUnit);
+
 function getToken() {
   try { return localStorage.getItem("ms_token"); }
   catch { return null; }

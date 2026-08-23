@@ -2347,8 +2347,29 @@
     function renderPendingPaymentsList() {
       const rows = pendingPaymentRows;
       const list = document.getElementById('pending-payments-list');
+
+      // Every 15s poll fully replaces this list's contents. That destroys
+      // every DOM node inside it — even when the data barely changed —
+      // which breaks the browser's scroll anchoring (it needs the same
+      // node to survive to keep the view visually stable). If this list
+      // grows/shrinks while the user is scrolled below it, everything under
+      // it shifts at a fixed scroll position, landing them somewhere
+      // different than where they were. Compensating scrollTop by the exact
+      // height delta keeps what they were looking at in the same place.
+      const scroller = document.querySelector('.main-content') || document.scrollingElement;
+      const prevHeight = list.offsetHeight;
+      const prevScrollTop = scroller ? scroller.scrollTop : 0;
+      const listWasAboveViewport = scroller ? list.getBoundingClientRect().top < scroller.getBoundingClientRect().top : false;
+
+      const finishRender = () => {
+        if (!scroller || !listWasAboveViewport) return;
+        const delta = list.offsetHeight - prevHeight;
+        if (delta !== 0) scroller.scrollTop = prevScrollTop + delta;
+      };
+
       if (!rows.length) {
         list.innerHTML = `<p style="color:var(--slate-light);padding:12px 0">No pending payments right now.</p>`;
+        finishRender();
         return;
       }
 
@@ -2361,6 +2382,7 @@
 
       if (!filtered.length) {
         list.innerHTML = `<p style="color:var(--slate-light);padding:12px 0">No matching patients.</p>`;
+        finishRender();
         return;
       }
 
@@ -2387,6 +2409,7 @@
           </div>
         `;
       }).join('');
+      finishRender();
     }
 
     function openPaymentToggleModal(idx) {
