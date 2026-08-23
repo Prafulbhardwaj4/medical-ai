@@ -1012,7 +1012,16 @@ tbody tr:hover {
   inset: 0;
   background: rgba(15, 31, 61, 0.4);
   backdrop-filter: blur(4px);
-  display: flex;
+  /* display:none when closed — not just opacity:0 — so a closed modal is
+     fully removed from the render/paint tree. A page like
+     admission-detail.html has ~20 of these; leaving them all permanently
+     display:flex (even invisible) meant 20 backdrop-filter layers were
+     continuously composited by the GPU at all times. On Android Chrome
+     this is a known trigger for a compositor glitch that paints a flat
+     grey wash over the screen instead of correctly hiding the layer —
+     visible-but-non-interactive, since pointer-events:none still worked
+     correctly underneath. */
+  display: none;
   align-items: center;
   justify-content: center;
   z-index: 1000;
@@ -1023,6 +1032,7 @@ tbody tr:hover {
 }
 
 .modal-overlay.open {
+  display: flex;
   opacity: 1;
   pointer-events: all;
 }
@@ -3181,13 +3191,14 @@ tbody tr:hover {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   padding: 20px;
 }
 
 .suggestion-backdrop.open {
+  display: flex;
   opacity: 1;
   pointer-events: all;
 }
@@ -3232,13 +3243,14 @@ tbody tr:hover {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   padding: 20px;
 }
 
 .chat-backdrop.open {
+  display: flex;
   opacity: 1;
   pointer-events: all;
 }
