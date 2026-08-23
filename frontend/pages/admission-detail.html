@@ -2523,11 +2523,28 @@
 
     loadAdmission();
 
+    // Auto-refresh so anyone viewing this page (doctor, nurse, reception,
+    // pharmacy, lab, assistant) sees updates without a manual reload —
+    // skipped while any modal is open so a periodic refresh can't wipe out
+    // something the person is mid-typing (a new progress note, an edit, a
+    // form in progress).
     setInterval(() => {
       if (document.querySelector(".modal-overlay.open")) return;
       loadAdmission();
     }, 20000);
+
+    // Every bottom-nav button here navigates away via location.href — that
+    // destroys this page's DOM, so a leftover open overlay can't get
+    // "stuck" the way it could on an in-page tab switch. But if the
+    // notification panel or profile menu was open at the moment of the
+    // tap, its full-screen dimmed backdrop would still flash on screen for
+    // the brief moment before the browser actually unloads the page.
+    // Closing overlays first avoids that visible flash.
+    document.querySelectorAll(".bottom-nav").forEach(nav => {
+      nav.addEventListener("click", () => closeAllOverlays(), true);
+    });
   </script>
+</body>
 </body>
 
 </html>
