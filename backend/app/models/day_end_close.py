@@ -18,5 +18,5 @@ class DayEndClose(Base):
     counted_card = Column(Float, nullable=False, default=0)
     counted_upi = Column(Float, nullable=False, default=0)
     notes = Column(String, nullable=True)
-    closed_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
+    closed_by = Column(Integer, ForeignKey("doctors.id"), nullable=True) 
     closed_at = Column(DateTime, default=now_ist_naive)

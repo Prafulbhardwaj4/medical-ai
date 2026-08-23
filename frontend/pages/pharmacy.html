@@ -955,10 +955,18 @@
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
-        if (linkType === 'medicine') {
+        closeNotifPanel();
+        if (linkType === 'admission_medicine_order' && linkId) {
+          // Desktop shows the admitted-patient queue inside Home; mobile has
+          // its own "Admission" tab — flip both so whichever is active shows it.
+          if (typeof showPharmDesktopTab === 'function') showPharmDesktopTab('home');
+          showPharmSection('admission');
+          await loadAdmissionPharmQueue();
+          openAdmissionMedModal(linkId);
+        } else if (linkType === 'medicine') {
           window.location.href = 'medicines.html';
         }
-      } catch (e) { }
+      } catch (e) { toast(e.message, "error"); }
     }
 
     async function markAllNotifsRead() {
@@ -1132,15 +1140,12 @@
         const orderer = i.prescriber_name ? `${i.prescriber_role === 'nurse' ? 'Nurse' : ''} ${i.prescriber_name}`.trim() : 'Unrecorded';
         const actionHtml = i.is_out_of_stock
           ? `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-               <span class="badge badge-amber">Out of stock</span>
-               <button class="btn btn-outline btn-sm" onclick="openAdmSubstituteModal(${i.id}, ${JSON.stringify(i.medicine_name)})">Substitute</button>
+               <span style="color:var(--danger);font-weight:600;font-size:13px">Out of stock</span>
+               <button class="btn btn-outline btn-sm" onclick="openAdmSubstituteModal(${i.id}, ${JSON.stringify(i.medicine_name)})">Add Substitute</button>
              </div>`
           : i.dispensed_at
             ? '<span class="badge badge-green">Sent</span>'
-            : `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-                 <button class="btn btn-primary btn-sm" onclick="dispenseAdmissionMed(${i.id})">Mark Sent</button>
-                 <button class="btn btn-outline btn-sm" onclick="markAdmMedOutOfStock(${i.id})">Out of Stock</button>
-               </div>`;
+            : `<button class="btn btn-primary btn-sm" onclick="dispenseAdmissionMed(${i.id})">Mark Sent</button>`;
         return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px">
             <div>
@@ -1204,16 +1209,6 @@
       try {
         await api("POST", `/pharmacy/admission-orders/${orderId}/dispense`, {});
         toast("Marked as sent to ward — billed automatically to the admission", "success");
-        const admissionId = admissionPharmQueueData.find(i => i.id === orderId)?.admission_id;
-        await loadAdmissionPharmQueue();
-        if (admissionId) openAdmissionMedModal(admissionId);
-      } catch (e) { toast(e.message, "error"); }
-    }
-
-    async function markAdmMedOutOfStock(orderId) {
-      try {
-        await api("POST", `/pharmacy/admission-orders/${orderId}/mark-out-of-stock`, {});
-        toast("Marked out of stock", "success");
         const admissionId = admissionPharmQueueData.find(i => i.id === orderId)?.admission_id;
         await loadAdmissionPharmQueue();
         if (admissionId) openAdmissionMedModal(admissionId);

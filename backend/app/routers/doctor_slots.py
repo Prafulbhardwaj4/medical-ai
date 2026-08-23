@@ -121,10 +121,20 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
         current_date = today + timedelta(days=offset)
         if current_date.weekday() not in body.weekdays or current_date in unavailable_dates:
             continue
+        # slot_time is unique per (doctor, date) regardless of which period
+        # it's filed under — the same HH:MM picked in two different periods
+        # (e.g. a stray custom time colliding with another period's preset)
+        # used to reach the INSERT twice and blow up on the unique
+        # constraint. Track what's already been queued for this date and
+        # skip a repeat rather than crashing the whole save.
+        times_seen_today = set()
         for period, times in periods.items():
             cap = capacity_for(period)
             sorted_times = sorted(times)
             for idx, t in enumerate(sorted_times):
+                if t in times_seen_today:
+                    continue
+                times_seen_today.add(t)
                 if t in (body.custom_windows or {}) and body.custom_windows[t]:
                     window = int(body.custom_windows[t])  # explicit From/To duration wins over any inferred gap
                 elif idx + 1 < len(sorted_times):

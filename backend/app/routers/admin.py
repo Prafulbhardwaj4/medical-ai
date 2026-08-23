@@ -36,28 +36,6 @@ def validate_fields(name, email, phone, password):
 
 VALID_HOSPITAL_TYPES = {"government", "private"}
 
-def _seed_default_ward_types(db: Session, hospital_id: int):
-    """Starting presets for a new hospital — not a fixed enum, admin can
-    rename/add/remove freely afterward. total_beds/daily_charge are left at
-    0 for admin to actually configure; is_icu is pre-set on the ICU/NICU
-    presets since that also drives GST-exemption logic."""
-    from app.models.admission_ward_type import AdmissionWardType
-    presets = [
-        ("General Ward", "general", False),
-        ("ICU", "icu", True),
-        ("Private Room", "private", False),
-        ("Maternity Ward", "maternity", False),
-        ("NICU", "nicu", True),
-        ("Isolation Ward", "isolation", False),
-        ("Day-care / Short-stay", "day_care", False),
-    ]
-    for name, category, is_icu in presets:
-        db.add(AdmissionWardType(
-            hospital_id=hospital_id, name=name, category=category, is_icu=is_icu,
-            total_beds=0, daily_charge=0, default_deposit=0,
-        ))
-    db.commit()
-
 @router.post("/hospitals", status_code=201)
 def create_hospital(
     name: str,
@@ -93,7 +71,6 @@ def create_hospital(
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
-    _seed_default_ward_types(db, hospital.id)
     return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type, "billing_enabled": hospital.billing_enabled}
 
 @router.post("/create-admin", status_code=201)
@@ -990,7 +967,6 @@ def create_hospital_jwt(
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
-    _seed_default_ward_types(db, hospital.id)
 
     log_action(
         db, current_doctor,

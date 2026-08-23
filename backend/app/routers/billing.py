@@ -729,12 +729,38 @@ def revenue_history_monthly(
     }
 
 
+def close_day_for_hospital(db: Session, hospital_id: int, d, closed_by: int = None, note: str = None):
+    """Shared close-one-day logic — used both by the lazy per-request
+    catch-up below and by the midnight scheduler in app/scheduler.py.
+    closed_by is nullable: the scheduled midnight run has no logged-in staff
+    member to attribute it to."""
+    day_start, day_end = ist_day_bounds(d)
+    has_activity = db.query(Checkin.id).filter(
+        Checkin.hospital_id == hospital_id, Checkin.visit_date == d
+    ).first()
+    if not has_activity:
+        return False  # nothing happened that day — nothing to close
+
+    summary = _day_end_summary_core(db, hospital_id, d)
+    totals = summary["system_totals"]
+    db.add(DayEndClose(
+        hospital_id=hospital_id,
+        close_date=d,
+        system_cash=totals.get("cash", 0), system_card=totals.get("card", 0), system_upi=totals.get("upi", 0),
+        counted_cash=totals.get("cash", 0), counted_card=totals.get("card", 0), counted_upi=totals.get("upi", 0),
+        notes=note or "Auto-closed by system — no manual count was entered before day rollover.",
+        closed_by=closed_by,
+    ))
+    db.commit()
+    return True
+
+
 def auto_close_past_days(db: Session, current_doctor: Doctor):
     """Any day before today that reception never manually closed gets closed
     automatically, using system totals as the counted totals (i.e. assuming
     no variance was ever reported). Runs lazily whenever day-end data is
-    read, the same self-healing pattern as auto_close_stale_shifts for
-    attendance — no background job/cron needed. Capped at 14 days back so a
+    read (a safety net alongside the midnight scheduler in app/scheduler.py,
+    in case the process was down at midnight). Capped at 14 days back so a
     brand-new hospital with no history doesn't walk further than it needs to."""
     today = ist_today()
     for days_back in range(1, 15):
@@ -744,25 +770,9 @@ def auto_close_past_days(db: Session, current_doctor: Doctor):
         ).first()
         if existing:
             break  # everything older than this was already caught by a previous run
-
-        day_start, day_end = ist_day_bounds(d)
-        has_activity = db.query(Checkin.id).filter(
-            Checkin.hospital_id == current_doctor.hospital_id, Checkin.visit_date == d
-        ).first()
-        if not has_activity:
-            continue  # nothing happened that day (e.g. before the hospital onboarded) — nothing to close
-
-        summary = day_end_summary(date=d.isoformat(), db=db, current_doctor=current_doctor)
-        totals = summary["system_totals"]
-        db.add(DayEndClose(
-            hospital_id=current_doctor.hospital_id,
-            close_date=d,
-            system_cash=totals.get("cash", 0), system_card=totals.get("card", 0), system_upi=totals.get("upi", 0),
-            counted_cash=totals.get("cash", 0), counted_card=totals.get("card", 0), counted_upi=totals.get("upi", 0),
-            notes="Auto-closed by system — no manual count was entered before day rollover.",
-            closed_by=current_doctor.id,
-        ))
-        db.commit()
+        closed = close_day_for_hospital(db, current_doctor.hospital_id, d, closed_by=current_doctor.id)
+        if not closed:
+            continue
 
 
 @router.get("/day-end-summary")
@@ -781,6 +791,14 @@ def day_end_summary(
         auto_close_past_days(db, current_doctor)
 
     target_date = datetime.fromisoformat(date).date() if date else ist_today()
+    return _day_end_summary_core(db, current_doctor.hospital_id, target_date)
+
+
+def _day_end_summary_core(db: Session, hospital_id: int, target_date):
+    """Plain, request-independent version of the day-end totals computation
+    — used by the /day-end-summary endpoint above and by the midnight
+    scheduler (app/scheduler.py), neither of which needs an authenticated
+    current_doctor to run this."""
     day_start, day_end = ist_day_bounds(target_date)
 
     by_mode = {}
@@ -792,28 +810,28 @@ def day_end_summary(
         by_mode[mode][category] = round(by_mode[mode].get(category, 0) + amount, 2)
 
     checkins = db.query(Checkin).filter(
-        Checkin.hospital_id == current_doctor.hospital_id, Checkin.is_paid == True,
+        Checkin.hospital_id == hospital_id, Checkin.is_paid == True,
         Checkin.paid_at >= day_start, Checkin.paid_at < day_end
     ).all()
     for c in checkins:
         add(c.payment_method, "consultation", c.consultation_fee or 0)
 
     tests = db.query(TestOrder).filter(
-        TestOrder.hospital_id == current_doctor.hospital_id, TestOrder.status != "payment_pending",
+        TestOrder.hospital_id == hospital_id, TestOrder.status != "payment_pending",
         TestOrder.paid_at >= day_start, TestOrder.paid_at < day_end
     ).all()
     for t in tests:
         add(t.payment_method, "tests", t.price or 0)
 
     charges = db.query(OpdCharge).filter(
-        OpdCharge.hospital_id == current_doctor.hospital_id, OpdCharge.status == "paid",
+        OpdCharge.hospital_id == hospital_id, OpdCharge.status == "paid",
         OpdCharge.paid_at >= day_start, OpdCharge.paid_at < day_end
     ).all()
     for ch in charges:
         add(ch.payment_method, "opd_charges", (ch.amount or 0) * (ch.quantity or 1))
 
     deposits = db.query(AdmissionDeposit).join(Admission, AdmissionDeposit.admission_id == Admission.id).filter(
-        Admission.hospital_id == current_doctor.hospital_id,
+        Admission.hospital_id == hospital_id,
         AdmissionDeposit.collected_at >= day_start, AdmissionDeposit.collected_at < day_end
     ).all()
     for d in deposits:
@@ -821,14 +839,14 @@ def day_end_summary(
         add(d.payment_method, category, d.amount or 0)
 
     settlements = db.query(Invoice).filter(
-        Invoice.hospital_id == current_doctor.hospital_id, Invoice.generated_from == "admission_discharge",
+        Invoice.hospital_id == hospital_id, Invoice.generated_from == "admission_discharge",
         Invoice.generated_at >= day_start, Invoice.generated_at < day_end
     ).all()
     for inv in settlements:
         add(inv.payment_method, "ipd_settlements", inv.amount_collected or 0)
 
     cash_refunds = db.query(Refund).filter(
-        Refund.hospital_id == current_doctor.hospital_id, Refund.channel == "cash",
+        Refund.hospital_id == hospital_id, Refund.channel == "cash",
         Refund.processed_at >= day_start, Refund.processed_at < day_end
     ).all()
     total_cash_refunds = round(sum(r.amount for r in cash_refunds), 2)
@@ -837,7 +855,7 @@ def day_end_summary(
     system_totals["cash"] = round(system_totals.get("cash", 0) - total_cash_refunds, 2)
 
     existing_close = db.query(DayEndClose).filter(
-        DayEndClose.hospital_id == current_doctor.hospital_id, DayEndClose.close_date == target_date
+        DayEndClose.hospital_id == hospital_id, DayEndClose.close_date == target_date
     ).first()
 
     return {

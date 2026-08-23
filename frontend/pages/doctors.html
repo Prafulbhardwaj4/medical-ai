@@ -427,8 +427,19 @@
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
-        if (linkType === 'medicine') window.location.href = 'medicines.html';
-      } catch (e) { }
+        closeNotifPanel();
+        if (!linkId) return;
+        if (linkType === 'admission' || linkType === 'admission_medicine_order') {
+          const { token } = await api("GET", `/admissions/token-for/${linkId}`);
+          window.location.href = `admission-detail.html?id=${token}`;
+        } else if (linkType === 'checkin') {
+          const { token } = await api("GET", `/patients/token-for-checkin/${linkId}`);
+          window.location.href = `patient.html?${token}`;
+        } else if (linkType === 'test_order') {
+          const { token } = await api("GET", `/patients/token-for-test-order/${linkId}`);
+          window.location.href = `patient.html?${token}`;
+        }
+      } catch (e) { toast(e.message, "error"); }
     }
 
     async function markAllNotifsRead() {

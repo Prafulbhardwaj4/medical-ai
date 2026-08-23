@@ -57,7 +57,10 @@ class WardTypeCreateIn(BaseModel):
 
 
 class RoomCreateIn(BaseModel):
-    room_number: str
+    room_number: Optional[str] = None
+    room_name: Optional[str] = None
+    room_type: Optional[str] = None 
+    daily_charge: Optional[float] = None
     beds_count: int
 
 
@@ -65,6 +68,9 @@ class RoomOut(BaseModel):
     id: int
     ward_type_id: int
     room_number: str
+    room_name: Optional[str] = None
+    room_type: str = "general"
+    daily_charge: Optional[float] = None
     beds_count: int
     occupied: int = 0
     vacant: int = 0

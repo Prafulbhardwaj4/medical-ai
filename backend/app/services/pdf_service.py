@@ -687,7 +687,7 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     doc.build(elements)
     return filepath
 
-def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None, receipt_number=None, place_of_supply=None) -> str:
+def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None, receipt_number=None, place_of_supply=None, admission_date=None, discharge_date=None) -> str:
     ensure_reports_dir()
     invoices_dir = os.path.join(os.path.dirname(__file__), "..", "..", "invoices")
     os.makedirs(invoices_dir, exist_ok=True)
@@ -720,6 +720,12 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
         elements.append(Paragraph(f"<b>Invoice #:</b> INV-{invoice_hash} &nbsp;&nbsp; <b>Date:</b> {now_ist().strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     if doctor:
         elements.append(Paragraph(f"<b>Consulting Doctor:</b> {doctor.title} {doctor.name}", styles["Normal"]))
+    # Only present on IPD (admission/discharge) invoices — admission_date and
+    # discharge_date are passed in only from that call site.
+    if admission_date:
+        elements.append(Paragraph(f"<b>Admission Date:</b> {admission_date.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
+    if discharge_date:
+        elements.append(Paragraph(f"<b>Discharge Date:</b> {discharge_date.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     elements.append(Spacer(1, 5*mm))
 
     # By design, the printed invoice never shows GST/HSN-SAC/tax breakdown —

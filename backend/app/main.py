@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+import asyncio
 import logging
 import traceback
 import re
@@ -171,6 +172,12 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.on_event("startup")
+async def _start_midnight_scheduler():
+    from app.scheduler import midnight_close_loop
+    asyncio.create_task(midnight_close_loop())
 
 app.add_middleware(
     CORSMiddleware,

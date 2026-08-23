@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 from datetime import date, datetime, timedelta
 from pydantic import BaseModel
 from typing import Optional
@@ -534,18 +535,35 @@ def get_admission_lab_queue(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    """Separate queue for admitted (IPD) patients' tests — deliberately not
-    day-bounded like the main OPD queue, since a ward test ordered on day 2
-    of a stay is still valid to collect on day 3. Lab staff get pinged
-    separately (see _escalate_uncollected_admission_samples) if a sample
-    sits uncollected for 2+ hours."""
+    """Separate queue for admitted (IPD) patients' tests. Still-open work
+    (paid/sample_collected/processing/result_entered) is deliberately not
+    day-bounded, since a ward test ordered on day 2 of a stay is still
+    valid to collect on day 3. Once an order reaches a terminal state
+    (verified_released/rejected) though, it only needs to stay in this
+    live queue until 11:59 PM of the day it finished — same cutoff as the
+    OPD waiting queue — since the full record is still there in Reports
+    afterwards. Lab staff get pinged separately (see
+    _escalate_uncollected_admission_samples) if a sample sits uncollected
+    for 2+ hours."""
     require_lab(current_doctor)
     _escalate_uncollected_admission_samples(db, current_doctor.hospital_id)
+
+    today_start, today_end = ist_day_bounds()
 
     orders = db.query(TestOrder).filter(
         TestOrder.hospital_id == current_doctor.hospital_id,
         TestOrder.admission_id.isnot(None),
-        TestOrder.status.in_(["paid", "sample_collected", "processing", "result_entered", "verified_released", "rejected"]),
+        or_(
+            TestOrder.status.in_(["paid", "sample_collected", "processing", "result_entered"]),
+            and_(
+                TestOrder.status == "verified_released",
+                TestOrder.verified_at >= today_start, TestOrder.verified_at <= today_end,
+            ),
+            and_(
+                TestOrder.status == "rejected",
+                TestOrder.rejected_at >= today_start, TestOrder.rejected_at <= today_end,
+            ),
+        ),
     ).order_by(TestOrder.queued_at).all()
 
     _priority_rank = {"stat": 0, "urgent": 1, "routine": 2}

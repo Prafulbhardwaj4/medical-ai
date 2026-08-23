@@ -596,6 +596,7 @@ def list_referrals(current_doctor: Doctor = Depends(get_current_doctor), db: Ses
         out.append({
             "referral_id": r.id, "patient_id": patient.id, "patient_name": patient.name,
             "patient_uid": patient.patient_uid, "phone": patient.phone,
+            "referred_by": r.referred_by,
             "referred_by_name": f"{doctor.title} {doctor.name}" if doctor else "Unknown",
             "reason": r.reason, "created_at": r.created_at.isoformat(),
         })
@@ -774,6 +775,23 @@ def delete_ward_type(ward_type_id: int, current_doctor: Doctor = Depends(get_cur
     return {"message": "Ward type deleted"}
 
 
+def _next_auto_room_number(db: Session, ward_type_id: int) -> str:
+    """Room number is left blank on the form in the common case — it's still
+    the key bed labels are built from ("{room_number}-{n}"), so one gets
+    generated here rather than leaving it empty. Picks the next unused small
+    integer so auto-numbered rooms read as plain "1", "2", "3"..."""
+    existing = {
+        r.room_number for r in db.query(AdmissionRoom.room_number).filter(AdmissionRoom.ward_type_id == ward_type_id).all()
+    }
+    n = 1
+    while str(n) in existing:
+        n += 1
+    return str(n)
+
+
+VALID_ROOM_TYPES = {"general", "private"}
+
+
 @router.post("/ward-types/{ward_type_id}/rooms", response_model=RoomOut, status_code=201)
 def add_room(ward_type_id: int, body: RoomCreateIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     if current_doctor.role.value not in ["admin", "sub_admin"]:
@@ -781,17 +799,44 @@ def add_room(ward_type_id: int, body: RoomCreateIn, current_doctor: Doctor = Dep
     wt = db.query(AdmissionWardType).filter(AdmissionWardType.id == ward_type_id, AdmissionWardType.hospital_id == current_doctor.hospital_id).first()
     if not wt:
         raise HTTPException(status_code=404, detail="Ward type not found")
+
+    room_type = (body.room_type or "general").strip().lower()
+    if room_type not in VALID_ROOM_TYPES:
+        raise HTTPException(status_code=400, detail="Room type must be 'general' or 'private'")
+
     room_number = (body.room_number or "").strip()
+    room_name = (body.room_name or "").strip() or None
     if not room_number:
-        raise HTTPException(status_code=400, detail="Room number/name is required")
+        room_number = _next_auto_room_number(db, ward_type_id)
+
     if body.beds_count < 1:
         raise HTTPException(status_code=400, detail="A room needs at least 1 bed")
-    dup = db.query(AdmissionRoom).filter(
+
+    dup_number = db.query(AdmissionRoom).filter(
         AdmissionRoom.ward_type_id == ward_type_id, AdmissionRoom.room_number == room_number
     ).first()
-    if dup:
-        raise HTTPException(status_code=400, detail=f"Room {room_number} already exists in this ward")
-    room = AdmissionRoom(hospital_id=current_doctor.hospital_id, ward_type_id=ward_type_id, room_number=room_number, beds_count=body.beds_count)
+    if dup_number:
+        raise HTTPException(status_code=400, detail=f"Room number {room_number} already exists in this ward")
+    if room_name:
+        dup_name = db.query(AdmissionRoom).filter(
+            AdmissionRoom.ward_type_id == ward_type_id, AdmissionRoom.room_name == room_name
+        ).first()
+        if dup_name:
+            raise HTTPException(status_code=400, detail=f"Room name '{room_name}' already exists in this ward")
+
+    daily_charge = body.daily_charge
+    if room_type == "private":
+        if daily_charge is None or daily_charge < 0:
+            raise HTTPException(status_code=400, detail="Private rooms need their own daily charge")
+    else:
+        if daily_charge is not None and daily_charge < 0:
+            raise HTTPException(status_code=400, detail="Daily charge cannot be negative")
+
+    room = AdmissionRoom(
+        hospital_id=current_doctor.hospital_id, ward_type_id=ward_type_id,
+        room_number=room_number, room_name=room_name, room_type=room_type,
+        daily_charge=daily_charge, beds_count=body.beds_count,
+    )
     db.add(room)
     db.flush()
     _recompute_total_beds(db, wt)
@@ -810,16 +855,43 @@ def update_room(ward_type_id: int, room_id: int, body: RoomCreateIn, current_doc
     room = db.query(AdmissionRoom).filter(AdmissionRoom.id == room_id, AdmissionRoom.ward_type_id == ward_type_id).first()
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
+
+    # room_type/room_name/daily_charge are None when the caller didn't send
+    # them (e.g. the older quick-add panel inside Manage Rooms only ever
+    # sends room_number/beds_count) — fall back to the room's existing
+    # values rather than clobbering them with a schema default.
+    room_type = (body.room_type if body.room_type is not None else room.room_type) or "general"
+    room_type = room_type.strip().lower()
+    if room_type not in VALID_ROOM_TYPES:
+        raise HTTPException(status_code=400, detail="Room type must be 'general' or 'private'")
+
     room_number = (body.room_number or "").strip()
     if not room_number:
-        raise HTTPException(status_code=400, detail="Room number/name is required")
+        room_number = room.room_number
+    room_name = (body.room_name or "").strip() or None if "room_name" in body.model_fields_set else room.room_name
+
     if body.beds_count < 1:
         raise HTTPException(status_code=400, detail="A room needs at least 1 bed")
-    dup = db.query(AdmissionRoom).filter(
+    dup_number = db.query(AdmissionRoom).filter(
         AdmissionRoom.ward_type_id == ward_type_id, AdmissionRoom.room_number == room_number, AdmissionRoom.id != room_id
     ).first()
-    if dup:
-        raise HTTPException(status_code=400, detail=f"Room {room_number} already exists in this ward")
+    if dup_number:
+        raise HTTPException(status_code=400, detail=f"Room number {room_number} already exists in this ward")
+    if room_name:
+        dup_name = db.query(AdmissionRoom).filter(
+            AdmissionRoom.ward_type_id == ward_type_id, AdmissionRoom.room_name == room_name, AdmissionRoom.id != room_id
+        ).first()
+        if dup_name:
+            raise HTTPException(status_code=400, detail=f"Room name '{room_name}' already exists in this ward")
+
+    daily_charge = body.daily_charge if "daily_charge" in body.model_fields_set else room.daily_charge
+    if room_type == "private":
+        if daily_charge is None or daily_charge < 0:
+            raise HTTPException(status_code=400, detail="Private rooms need their own daily charge")
+    else:
+        if daily_charge is not None and daily_charge < 0:
+            raise HTTPException(status_code=400, detail="Daily charge cannot be negative")
+
     # A shrink can't cut below beds that are currently occupied *in this specific room*
     occupied_in_room = db.query(Admission).filter(
         Admission.ward_type_id == ward_type_id, Admission.status == "admitted",
@@ -830,6 +902,9 @@ def update_room(ward_type_id: int, room_id: int, body: RoomCreateIn, current_doc
     if room_number != room.room_number and occupied_in_room > 0:
         raise HTTPException(status_code=400, detail="Cannot rename a room with patients currently in it — discharge/move them first")
     room.room_number = room_number
+    room.room_name = room_name
+    room.room_type = room_type
+    room.daily_charge = daily_charge
     room.beds_count = body.beds_count
     _recompute_total_beds(db, wt)
     db.commit()
@@ -1104,29 +1179,14 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
 
     units = body.units if body.units and body.units > 0 else 1
 
-    # Billed and stock-deducted once, right here, upfront — a full strip/bottle
-    # physically leaves stock the moment it's ordered for the ward, not each
-    # time a dose is given from it. Catalog price is authoritative when the
-    # medicine is in the catalog; manual_unit_price only applies to free-text
-    # entries the client can't otherwise price.
     medicine = None
-    unit_price = 0.0
     if body.medicine_id:
         medicine = db.query(HospitalMedicine).filter(
             HospitalMedicine.id == body.medicine_id, HospitalMedicine.hospital_id == current_doctor.hospital_id
         ).first()
         if not medicine:
             raise HTTPException(status_code=404, detail="Medicine not found in catalog")
-        unit_price = medicine.price_per_pack if medicine.price_per_pack else (medicine.price or 0) * (medicine.pack_size or 1)
-    else:
-        unit_price = body.manual_unit_price or 0.0
 
-    # If this exact medicine already has a still-pending (undispensed) active
-    # order on this admission, this is a repeat advise of the same thing —
-    # increase the existing card's unit count instead of creating a second
-    # one. Once an order has been dispensed it's "closed" for merging: a
-    # fresh advise after that starts its own order, which is what gives it
-    # its own distinct dispense timestamp later.
     existing = None
     if body.medicine_id:
         existing = db.query(AdmissionMedicationOrder).filter(
@@ -1149,11 +1209,17 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
         existing.order_batch_id = body.order_batch_id or existing.order_batch_id
         if not existing.sourced_outside:
             if body.medicine_id:
-                deduct_stock_fefo(db, body.medicine_id, units * (medicine.pack_size or 1), round_to_pack=True)
-            db.add(AdmissionCharge(
-                admission_id=a.id, charge_type="medicine", description=body.medicine_name,
-                amount=unit_price, quantity=units, added_by=current_doctor.id, charged_at=now_ist_naive(),
-            ))
+                # Out-of-stock detection is automatic, not a manual pharmacy
+                # action — check what's actually on the shelf for THIS
+                # increment before deducting it, so an order that can't
+                # really be filled (e.g. 1 strip on hand, 2-3 needed) is
+                # flagged the moment it's placed, not discovered later at
+                # "Mark Sent".
+                required_units = units * (medicine.pack_size or 1)
+                available_units = medicine.stock_quantity or 0
+                if available_units < required_units:
+                    existing.is_out_of_stock = True
+                deduct_stock_fefo(db, body.medicine_id, required_units, round_to_pack=True)
             patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
             batch_count = db.query(AdmissionMedicationOrder).filter(
                 AdmissionMedicationOrder.admission_id == a.id,
@@ -1179,16 +1245,12 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
 
     if not order.sourced_outside:
         if body.medicine_id:
-            deduct_stock_fefo(db, body.medicine_id, units * (medicine.pack_size or 1), round_to_pack=True)
-        db.add(AdmissionCharge(
-            admission_id=a.id, charge_type="medicine",
-            # Just the medicine name — units already live in `quantity`, and
-            # "dispensed at pharmacy" is surfaced separately on the invoice
-            # (see _build_discharge_bill's _dispensed_at_pharmacy flag)
-            # rather than being baked into this text.
-            description=body.medicine_name,
-            amount=unit_price, quantity=units, added_by=current_doctor.id, charged_at=now_ist_naive(),
-        ))
+            # Same automatic check as the merge branch above, for a brand-new order.
+            required_units = units * (medicine.pack_size or 1)
+            available_units = medicine.stock_quantity or 0
+            if available_units < required_units:
+                order.is_out_of_stock = True
+            deduct_stock_fefo(db, body.medicine_id, required_units, round_to_pack=True)
         patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
         db.flush()  # assign order.id before the batch-count query below
         batch_count = db.query(AdmissionMedicationOrder).filter(
@@ -1956,7 +2018,11 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     db.refresh(invoice)
 
     admitting_doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, charges_total, patient, admitting_doctor, receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply)
+    pdf_path = generate_invoice_pdf(
+        invoice.id, hospital, items, charges_total, patient, admitting_doctor,
+        receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply,
+        admission_date=a.admission_date, discharge_date=a.discharge_date,
+    )
     invoice.pdf_path = pdf_path
     a.discharge_invoice_id = invoice.id
 

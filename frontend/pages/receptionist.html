@@ -8,6 +8,13 @@
   <script src="../js/custom-select.js" defer></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
+    /* "Age" in the Book Appointment modal was changing value on scroll
+       because the native number-input spinner keeps scroll focus even
+       after the page has scrolled past it — drop the spinner entirely. */
+    #pb-patient-age::-webkit-outer-spin-button,
+    #pb-patient-age::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    #pb-patient-age { -moz-appearance: textfield; }
+
     .option-card {
       border: 1.5px solid var(--border);
       border-radius: 12px;
@@ -261,21 +268,74 @@
     /* Slot availability chips — mirrors the patient portal's own picker
        (my-appointments.html) so reception sees the same green/amber/red
        read, not a raw booked/capacity count. */
-    .slot-period-title { font-size: 13.5px; font-weight: 700; color: var(--slate); margin: 14px 0 8px; }
-    .slot-grid { display: flex; flex-wrap: wrap; gap: 9px; }
-    .slot-chip {
-      padding: 9px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer;
-      border: 1.5px solid transparent; display: flex; align-items: center; gap: 6px;
+    .slot-period-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--slate);
+      margin: 14px 0 8px;
     }
-    .slot-chip .dot { width: 8px; height: 8px; border-radius: 50%; }
-    .slot-chip.green { background: #e8f8f0; color: #16794f; }
-    .slot-chip.green .dot { background: #16a34a; }
-    .slot-chip.yellow { background: #fff8e6; color: #92650a; }
-    .slot-chip.yellow .dot { background: #eab308; }
-    .slot-chip.red { background: #fdecec; color: #b91c1c; cursor: not-allowed; opacity: .75; }
-    .slot-chip.red .dot { background: #dc2626; }
-    .slot-chip:not(.red):hover { border-color: currentColor; }
-    .slot-chip.selected { outline: 2px solid var(--teal); outline-offset: 1px; }
+
+    .slot-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
+
+    .slot-chip {
+      padding: 9px 14px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid transparent;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .slot-chip .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .slot-chip.green {
+      background: #e8f8f0;
+      color: #16794f;
+    }
+
+    .slot-chip.green .dot {
+      background: #16a34a;
+    }
+
+    .slot-chip.yellow {
+      background: #fff8e6;
+      color: #92650a;
+    }
+
+    .slot-chip.yellow .dot {
+      background: #eab308;
+    }
+
+    .slot-chip.red {
+      background: #fdecec;
+      color: #b91c1c;
+      cursor: not-allowed;
+      opacity: .75;
+    }
+
+    .slot-chip.red .dot {
+      background: #dc2626;
+    }
+
+    .slot-chip:not(.red):hover {
+      border-color: currentColor;
+    }
+
+    .slot-chip.selected {
+      outline: 2px solid var(--teal);
+      outline-offset: 1px;
+    }
   </style>
 </head>
 
@@ -291,6 +351,10 @@
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
 
+      <!-- Merged into one .topbar-doctor block — two separate elements with
+           this class each got margin-left:auto on desktop, so the leftover
+           header space split between them and pulled Bills/name toward the
+           center instead of sitting flush right next to Suggest/Profile. -->
       <div class="topbar-doctor">
         <button class="btn btn-outline btn-sm" id="bills-header-btn" onclick="openBillsModal()">
           🧾 Bills
@@ -298,9 +362,6 @@
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <span id="topbar-clinic" style="color:var(--slate)"></span>
-      </div>
-
-      <div class="topbar-doctor">
         <button class="notif-bell-btn" id="notif-bell-btn" onclick="toggleNotifPanel()">
           <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -336,30 +397,52 @@
 
         <div class="avail-section">
           <h4 class="avail-section-title">Available Times</h4>
-          <p class="avail-section-hint">Tap a slot to turn it on or off. Don't see the time you need? Add it below.</p>
+          <p class="avail-section-hint">Tap a slot to turn it on or off. Don't see the time you need? Enter a start and
+            end time below.</p>
           <div class="avail-time-group">
             <div class="avail-time-label">Morning</div>
             <div class="avail-chip-row" id="am-preset-morning"></div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <input type="time" class="form-control" id="am-add-time-morning" style="max-width:140px" />
-              <button type="button" class="btn btn-outline btn-sm" onclick="addAmCustomTime('morning')">+ Add Time</button>
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" class="form-control" id="am-add-start-morning" placeholder="Start (HH:MM)"
+                style="max-width:130px" />
+              <span style="color:var(--slate-light);font-size:13px">to</span>
+              <input type="text" class="form-control" id="am-add-end-morning" placeholder="End (HH:MM)"
+                style="max-width:130px" />
+              <button type="button" class="btn btn-sm"
+                style="background:var(--teal);border-color:var(--teal);color:#fff"
+                onclick="addAmCustomTime('morning')">Add Time</button>
             </div>
+            <div class="err-msg" id="am-add-err-morning"></div>
           </div>
           <div class="avail-time-group">
             <div class="avail-time-label">Afternoon</div>
             <div class="avail-chip-row" id="am-preset-afternoon"></div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <input type="time" class="form-control" id="am-add-time-afternoon" style="max-width:140px" />
-              <button type="button" class="btn btn-outline btn-sm" onclick="addAmCustomTime('afternoon')">+ Add Time</button>
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" class="form-control" id="am-add-start-afternoon" placeholder="Start (HH:MM)"
+                style="max-width:130px" />
+              <span style="color:var(--slate-light);font-size:13px">to</span>
+              <input type="text" class="form-control" id="am-add-end-afternoon" placeholder="End (HH:MM)"
+                style="max-width:130px" />
+              <button type="button" class="btn btn-sm"
+                style="background:var(--teal);border-color:var(--teal);color:#fff"
+                onclick="addAmCustomTime('afternoon')">Add Time</button>
             </div>
+            <div class="err-msg" id="am-add-err-afternoon"></div>
           </div>
           <div class="avail-time-group avail-time-group-last">
             <div class="avail-time-label">Evening</div>
             <div class="avail-chip-row" id="am-preset-evening"></div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <input type="time" class="form-control" id="am-add-time-evening" style="max-width:140px" />
-              <button type="button" class="btn btn-outline btn-sm" onclick="addAmCustomTime('evening')">+ Add Time</button>
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+              <input type="text" class="form-control" id="am-add-start-evening" placeholder="Start (HH:MM)"
+                style="max-width:130px" />
+              <span style="color:var(--slate-light);font-size:13px">to</span>
+              <input type="text" class="form-control" id="am-add-end-evening" placeholder="End (HH:MM)"
+                style="max-width:130px" />
+              <button type="button" class="btn btn-sm"
+                style="background:var(--teal);border-color:var(--teal);color:#fff"
+                onclick="addAmCustomTime('evening')">Add Time</button>
             </div>
+            <div class="err-msg" id="am-add-err-evening"></div>
           </div>
         </div>
 
@@ -374,21 +457,24 @@
             </div>
           </div>
           <div id="am-capacity-same-input" class="form-group" style="max-width:200px">
-            <input class="form-control" type="number" min="1" id="am-capacity" value="1" />
+            <input class="form-control" type="number" min="1" id="am-capacity" value="1" oninput="markAmDirty()" />
           </div>
           <div id="am-capacity-period-inputs"
             style="display:none;grid-template-columns:repeat(3,1fr);gap:12px;max-width:480px">
             <div class="form-group"><label class="form-label">Morning</label><input class="form-control" type="number"
-                min="1" id="am-cap-morning" value="1" /></div>
+                min="1" id="am-cap-morning" value="1" oninput="markAmDirty()" /></div>
             <div class="form-group"><label class="form-label">Afternoon</label><input class="form-control" type="number"
-                min="1" id="am-cap-afternoon" value="1" /></div>
+                min="1" id="am-cap-afternoon" value="1" oninput="markAmDirty()" /></div>
             <div class="form-group"><label class="form-label">Evening</label><input class="form-control" type="number"
-                min="1" id="am-cap-evening" value="1" /></div>
+                min="1" id="am-cap-evening" value="1" oninput="markAmDirty()" /></div>
           </div>
+          <div class="err-msg" id="am-err"></div>
+          <p id="am-unsaved-indicator"
+            style="display:none;color:var(--danger,#c0392b);font-size:13px;font-weight:600;margin:10px 0 0">Unsaved
+            Changes</p>
+          <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="saveAvailModal()">Save
+            Availability</button>
         </div>
-
-        <div class="err-msg" id="am-err"></div>
-        <button class="btn btn-primary" style="width:100%" onclick="saveAvailModal()">Save Availability</button>
 
         <div class="avail-section avail-unavail-section">
           <h4 class="avail-section-title">Mark a Day Unavailable</h4>
@@ -598,7 +684,8 @@
             </div>
             <div id="search-results" style="margin-bottom:14px"></div>
             <button class="btn btn-outline" style="width:100%" onclick="openNewPatient()">+ Add as New Patient</button>
-            <button class="btn btn-outline" style="width:100%;margin-top:8px;border-color:var(--teal);color:var(--teal)" onclick="openPhoneBookingModal()">📅 Book Appointment</button>
+            <button class="btn btn-outline" style="width:100%;margin-top:8px;border-color:var(--teal);color:var(--teal)"
+              onclick="openPhoneBookingModal()">📅 Book Appointment</button>
             <button class="btn btn-sm" id="btn-emergency-intake"
               style="width:100%;margin-top:8px;background:#dc2626;color:#fff;border-color:#dc2626"
               onclick="onEmergencyIntakeBtnClick()">🚨 Emergency Intake</button>
@@ -631,7 +718,8 @@
             <div class="card-header">
               <h2>Assign Doctor</h2>
               <div style="display:flex;gap:8px">
-                <button class="btn btn-sm" style="background:#0d9488;color:#fff" onclick="openAddDoctorModal()">+ Add Doctor</button>
+                <button class="btn btn-sm" style="background:#0d9488;color:#fff" onclick="openAddDoctorModal()">+ Add
+                  Doctor</button>
                 <button class="btn btn-outline btn-sm" onclick="goToStep('room')">← Back</button>
               </div>
             </div>
@@ -677,17 +765,21 @@
 
           <!-- Add Doctor Modal (item 7) -->
           <div class="modal-overlay" id="modal-add-doctor">
-            <div class="modal" style="max-width:460px;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:85vh">
+            <div class="modal"
+              style="max-width:460px;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:85vh">
               <div style="background:var(--navy);color:#fff;padding:18px 22px">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
                   <h2 style="margin:0;font-size:17px">Add Doctor(s) to This Visit</h2>
-                  <button onclick="closeModal('modal-add-doctor')" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:26px;height:26px;border-radius:50%;font-size:16px;line-height:1;cursor:pointer;flex-shrink:0">×</button>
+                  <button onclick="closeModal('modal-add-doctor')"
+                    style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:26px;height:26px;border-radius:50%;font-size:16px;line-height:1;cursor:pointer;flex-shrink:0">×</button>
                 </div>
-                <p style="font-size:12.5px;color:rgba(255,255,255,0.75);margin:6px 0 0">Check every doctor this patient is seeing today. Fee is pre-filled from each doctor's default — edit if needed.</p>
+                <p style="font-size:12.5px;color:rgba(255,255,255,0.75);margin:6px 0 0">Check every doctor this patient
+                  is seeing today. Fee is pre-filled from each doctor's default — edit if needed.</p>
               </div>
               <div id="add-doctor-checklist" style="padding:8px 22px;overflow-y:auto;flex:1"></div>
               <div style="padding:14px 22px;border-top:1px solid var(--border)">
-                <button class="btn btn-primary" style="width:100%" onclick="closeModal('modal-add-doctor')">Done</button>
+                <button class="btn btn-primary" style="width:100%"
+                  onclick="closeModal('modal-add-doctor')">Done</button>
               </div>
             </div>
           </div>
@@ -837,11 +929,14 @@
         <div class="card" style="margin-top:20px">
           <div class="card-header" style="flex-wrap:wrap;gap:10px">
             <h2>Next 15 Days <span class="badge badge-teal" id="upcoming-count" style="margin-left:8px">0</span></h2>
-            <select class="form-control" id="upcoming-doctor-filter" style="max-width:220px" onchange="loadUpcomingBookings()">
+            <select class="form-control" id="upcoming-doctor-filter" style="max-width:220px"
+              onchange="loadUpcomingBookings()">
               <option value="">All doctors</option>
             </select>
           </div>
-          <div id="upcoming-list"><p style="color:var(--slate-light);font-size:13px">Loading...</p></div>
+          <div id="upcoming-list">
+            <p style="color:var(--slate-light);font-size:13px">Loading...</p>
+          </div>
         </div>
 
         <div class="card" style="margin-top:20px">
@@ -849,10 +944,13 @@
             <h2>Slot Preview</h2>
             <div style="display:flex;gap:8px">
               <select class="form-control" id="slot-preview-doctor" style="max-width:200px"></select>
-              <input type="date" class="form-control" id="slot-preview-date" style="max-width:160px" onchange="loadSlotPreview()" />
+              <input type="date" class="form-control" id="slot-preview-date" style="max-width:160px"
+                onchange="loadSlotPreview()" />
             </div>
           </div>
-          <div id="slot-preview-list"><p style="color:var(--slate-light);font-size:13px">Pick a doctor to see their slots.</p></div>
+          <div id="slot-preview-list">
+            <p style="color:var(--slate-light);font-size:13px">Pick a doctor to see their slots.</p>
+          </div>
         </div>
 
         <div class="card" style="margin-top:20px" id="pending-review-card">
@@ -988,12 +1086,13 @@
 
   <!-- Emergency Intake Modal (admits directly into the Emergency Ward) -->
   <div class="modal-overlay" id="modal-phone-booking">
-    <div class="modal" style="max-width:640px;width:92vw;max-height:88vh;overflow-y:auto">
+    <div class="modal" style="max-width:640px;width:92vw;max-height:94vh;overflow-y:auto">
       <div class="modal-header">
         <h2>📅 Book Appointment</h2>
         <button class="modal-close" onclick="closePhoneBookingModal()">×</button>
       </div>
-      <p style="font-size:13px;color:var(--slate);margin-bottom:14px">Same slots and daily limits as online booking — this fills a real slot, not a separate queue.</p>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:14px">Same slots and daily limits as online booking —
+        this fills a real slot, not a separate queue.</p>
 
       <div id="pb-step-1">
         <div class="form-row">
@@ -1007,12 +1106,14 @@
           </div>
         </div>
         <div class="err-msg" id="pb-err-1"></div>
-        <button class="btn btn-primary" style="width:100%" onclick="pbGoToSlotStep()">Next: Choose Slot</button>
+        <button class="btn btn-primary" style="width:100%" onclick="pbGoToSlotStep()">Choose Slot</button>
       </div>
 
       <div id="pb-step-2" style="display:none">
         <div id="pb-step2-summary" style="font-size:13px;color:var(--slate);margin-bottom:12px"></div>
-        <div id="pb-slots-preview" style="margin:10px 0 16px"><p style="color:var(--slate-light);font-size:13px">Pick a doctor and date to see that day's slots.</p></div>
+        <div id="pb-slots-preview" style="margin:10px 0 16px">
+          <p style="color:var(--slate-light);font-size:13px">Pick a doctor and date to see that day's slots.</p>
+        </div>
         <div class="err-msg" id="pb-err-2"></div>
         <button class="btn btn-outline" style="width:100%" onclick="pbBackToDoctorStep()">&larr; Back</button>
       </div>
@@ -1033,10 +1134,13 @@
         <div id="pb-patient-matches"></div>
 
         <div id="pb-patient-fields" style="display:none">
-          <div class="form-group"><label class="form-label">Address *</label><input class="form-control" id="pb-address" /></div>
+          <div class="form-group"><label class="form-label">Address *</label><input class="form-control"
+              id="pb-address" /></div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">Patient Name *</label><input class="form-control" id="pb-patient-name" /></div>
-            <div class="form-group"><label class="form-label">Age *</label><input class="form-control" type="number" min="0" id="pb-patient-age" /></div>
+            <div class="form-group"><label class="form-label">Patient Name *</label><input class="form-control"
+                id="pb-patient-name" /></div>
+            <div class="form-group"><label class="form-label">Age *</label><input class="form-control" type="number"
+                min="0" id="pb-patient-age" /></div>
           </div>
           <div class="form-group">
             <label class="form-label">Gender *</label>
@@ -1052,7 +1156,8 @@
         <div class="err-msg" id="pb-err"></div>
         <div style="display:flex;gap:10px">
           <button class="btn btn-outline" style="flex:1" onclick="pbBackToSlotStep()">&larr; Back</button>
-          <button class="btn btn-primary" style="flex:2" onclick="submitPhoneBooking()">Book This Slot</button>
+          <button class="btn btn-primary" style="flex:2" id="pb-submit-btn" onclick="submitPhoneBooking()">Book This
+            Slot</button>
         </div>
       </div>
 
@@ -1130,7 +1235,8 @@
         </div>
       </div>
       <div class="err-msg" id="em-err"></div>
-      <button class="btn btn-primary" style="width:100%" onclick="submitEmergencyIntake()">Admit to Emergency Ward</button>
+      <button class="btn btn-primary" style="width:100%" onclick="submitEmergencyIntake()">Admit to Emergency
+        Ward</button>
     </div>
 
     <!-- Success screen — shown in place of the form after a successful admit -->
@@ -1138,12 +1244,14 @@
       <div class="modal-header" style="border-bottom:none;justify-content:center">
         <h2 style="margin:0">Patient Admitted</h2>
       </div>
-      <div id="em-overflow-warning" style="display:none;background:#fef2f2;color:#dc2626;border-radius:var(--radius);padding:10px;font-size:13px;margin-bottom:14px;font-weight:600">
+      <div id="em-overflow-warning"
+        style="display:none;background:#fef2f2;color:#dc2626;border-radius:var(--radius);padding:10px;font-size:13px;margin-bottom:14px;font-weight:600">
         ⚠️ Emergency Ward is at capacity — admitted to an overflow bed
       </div>
       <div style="font-size:1.4rem;font-weight:700;color:var(--navy);margin-bottom:6px" id="em-success-ward"></div>
       <div style="font-size:2rem;font-weight:700;color:var(--navy);margin-bottom:14px" id="em-success-bed"></div>
-      <div style="font-size:14px;color:var(--slate);margin-bottom:20px">Assigned to <strong id="em-success-doctor"></strong></div>
+      <div style="font-size:14px;color:var(--slate);margin-bottom:20px">Assigned to <strong
+          id="em-success-doctor"></strong></div>
       <button class="btn btn-primary" style="width:100%" onclick="closeEmergencyIntakeModal()">Done</button>
     </div>
   </div>
@@ -1342,7 +1450,7 @@
   <script src="../js/chat-widget.js?v=1"></script>
   <script src="../js/suggestion-widget.js?v=1"></script>
   <script>
-    let expectedTodayFilterLoaded = false;  
+    let expectedTodayFilterLoaded = false;
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
 
@@ -2999,33 +3107,46 @@
       if (!gender) { err.textContent = 'Gender is required.'; return; }
       if (!address) { err.textContent = 'Address is required.'; return; }
 
-      let patientId = pbSelectedPatientId;
-      if (!patientId) {
-        const verr = validatePatient(name, phone, age);
-        if (verr) { err.textContent = verr; return; }
-        try {
-          const patient = await createPatientWithDedupCheck({
-            name, phone, age: parseInt(age), gender,
-            blood_group: null, abha_number: null, address,
-          });
-          if (!patient) return; // reception cancelled out of the duplicate prompt
-          patientId = patient.id;
-        } catch (e) { err.textContent = e.message; return; }
-      }
+      // Guard against a double-submit (e.g. an accidental second click)
+      // re-creating the patient or double-booking the slot.
+      const submitBtn = document.getElementById('pb-submit-btn');
+      submitBtn.disabled = true;
 
       try {
+        let patientId = pbSelectedPatientId;
+        if (!patientId) {
+          const verr = validatePatient(name, phone, age);
+          if (verr) { err.textContent = verr; return; }
+          try {
+            // The phone number was already checked against existing patients
+            // in the previous step (searchPhoneBookingPatients) — if we got
+            // this far, reception has already confirmed this is a new
+            // patient, so the backend's separate name/age duplicate check
+            // would only be showing a redundant "Possible Duplicate" prompt.
+            // force:true skips straight to creating the new patient.
+            const patient = await api("POST", "/patients/", {
+              name, phone, age: parseInt(age), gender,
+              blood_group: null, abha_number: null, address, force: true,
+            });
+            patientId = patient.id;
+            pbSelectedPatientId = patient.id;
+          } catch (e) { err.textContent = e.message; return; }
+        }
+
         const result = await api("POST", "/portal-appointments-staff/book-for-caller", {
           phone,
           patient_id: patientId,
           slot_id: phoneBookingSelectedSlotId,
           address,
         });
-        document.getElementById('pb-step-slot').style.display = 'none';
+        document.getElementById('pb-step-3').style.display = 'none';
         document.getElementById('pb-step-done').style.display = 'block';
         document.getElementById('pb-done-summary').textContent =
           `${result.patient_name} is booked for ${new Date(result.estimated_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}.`;
       } catch (e) {
         err.textContent = e.message;
+      } finally {
+        submitBtn.disabled = false;
       }
     }
 
@@ -3424,19 +3545,41 @@
     });
 
     const AM_WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    const AM_PRESETS = { morning: ["07:00", "09:00", "11:00"], afternoon: ["12:00", "14:00", "16:00"], evening: ["17:00", "19:00", "21:00"] };
+    const AM_DEFAULT_PRESETS = { morning: ["07:00", "09:00", "11:00"], afternoon: ["12:00", "14:00", "16:00"], evening: ["17:00", "19:00", "21:00"] };
+    // Fresh copy per modal open — this used to be mutated in place, so a
+    // custom time added for one doctor permanently leaked into every other
+    // doctor's preset list for the rest of the session.
+    let AM_PRESETS = { morning: [...AM_DEFAULT_PRESETS.morning], afternoon: [...AM_DEFAULT_PRESETS.afternoon], evening: [...AM_DEFAULT_PRESETS.evening] };
     let amSelectedDays = new Set([0, 1, 2, 3, 4, 5]);
     let amSelectedTimes = { morning: new Set(), afternoon: new Set(), evening: new Set() };
+    let amCustomWindows = {}; // {"HH:MM": durationMinutes} for explicit start/end entries
     let amCapacityMode = "same";
+    let amDirty = false;
+    let amSuppressDirty = false; // true while we're programmatically loading a template, not while the receptionist is editing
+
+    function markAmDirty() {
+      if (amSuppressDirty) return;
+      amDirty = true;
+      const ind = document.getElementById("am-unsaved-indicator");
+      if (ind) ind.style.display = "block";
+    }
+
     function setAmCapacityMode(mode) {
       amCapacityMode = mode;
       document.getElementById("am-cap-mode-same").classList.toggle("selected", mode === "same");
       document.getElementById("am-cap-mode-period").classList.toggle("selected", mode === "per_period");
       document.getElementById("am-capacity-same-input").style.display = mode === "same" ? "block" : "none";
       document.getElementById("am-capacity-period-inputs").style.display = mode === "per_period" ? "grid" : "none";
+      markAmDirty();
     }
 
     function amRangeLabel(t) {
+      if (amCustomWindows[t]) {
+        const [h, m] = t.split(':').map(Number);
+        const totalMin = h * 60 + m + amCustomWindows[t];
+        const endH = Math.floor(totalMin / 60) % 24, endM = totalMin % 60;
+        return `${t} - ${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+      }
       const [h, m] = t.split(':').map(Number);
       const endH = (h + 2) % 24;
       return `${t} - ${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -3449,6 +3592,7 @@
     function toggleAmDay(i, el) {
       if (amSelectedDays.has(i)) amSelectedDays.delete(i); else amSelectedDays.add(i);
       renderAmDayChips();
+      markAmDirty();
     }
 
     function renderAmPresets() {
@@ -3460,19 +3604,51 @@
     function toggleAmTime(period, t, el) {
       if (amSelectedTimes[period].has(t)) amSelectedTimes[period].delete(t); else amSelectedTimes[period].add(t);
       renderAmPresets();
+      markAmDirty();
+    }
+
+    // Every HH:MM currently selected across all three periods — slot_time is
+    // unique per (doctor, date) regardless of period, so the same time can't
+    // be added twice anywhere in the template.
+    function amAllSelectedTimes() {
+      return new Set([...amSelectedTimes.morning, ...amSelectedTimes.afternoon, ...amSelectedTimes.evening]);
     }
 
     function addAmCustomTime(period) {
-      const input = document.getElementById(`am-add-time-${period}`);
-      const t = input.value;
-      if (!t) return;
-      if (!AM_PRESETS[period].includes(t)) {
-        AM_PRESETS[period].push(t);
+      const errEl = document.getElementById(`am-add-err-${period}`);
+      errEl.textContent = "";
+      const startInput = document.getElementById(`am-add-start-${period}`);
+      const endInput = document.getElementById(`am-add-end-${period}`);
+      const start = startInput.value.trim();
+      const end = endInput.value.trim();
+      const timeRe = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+      if (!timeRe.test(start) || !timeRe.test(end)) {
+        errEl.textContent = "Enter times as HH:MM (24-hour), e.g. 09:00";
+        return;
+      }
+      const [sh, sm] = start.split(':').map(Number);
+      const [eh, em] = end.split(':').map(Number);
+      const startMin = sh * 60 + sm, endMin = eh * 60 + em;
+      if (endMin <= startMin) {
+        errEl.textContent = "End time must be after the start time";
+        return;
+      }
+      if (amAllSelectedTimes().has(start)) {
+        errEl.textContent = "That start time is already in the schedule";
+        return;
+      }
+
+      if (!AM_PRESETS[period].includes(start)) {
+        AM_PRESETS[period].push(start);
         AM_PRESETS[period].sort();
       }
-      amSelectedTimes[period].add(t);
-      input.value = "";
+      amSelectedTimes[period].add(start);
+      amCustomWindows[start] = endMin - startMin;
+      startInput.value = "";
+      endInput.value = "";
       renderAmPresets();
+      markAmDirty();
     }
 
     async function openAvailModal(doctorId, doctorName) {
@@ -3480,7 +3656,20 @@
       document.getElementById("avail-modal-doctor-name").textContent = doctorName;
       document.getElementById("am-err").textContent = "";
       document.getElementById("am-unavail-date").valueAsDate = new Date();
+      ['morning', 'afternoon', 'evening'].forEach(p => {
+        document.getElementById(`am-add-start-${p}`).value = "";
+        document.getElementById(`am-add-end-${p}`).value = "";
+        document.getElementById(`am-add-err-${p}`).textContent = "";
+      });
 
+      // Loading a saved template shouldn't itself count as an edit —
+      // suppress the dirty flag until the fetch below has finished.
+      amSuppressDirty = true;
+      amDirty = false;
+      document.getElementById("am-unsaved-indicator").style.display = "none";
+
+      AM_PRESETS = { morning: [...AM_DEFAULT_PRESETS.morning], afternoon: [...AM_DEFAULT_PRESETS.afternoon], evening: [...AM_DEFAULT_PRESETS.evening] };
+      amCustomWindows = {};
       amSelectedDays = new Set([0, 1, 2, 3, 4, 5]);
       amSelectedTimes = { morning: new Set(), afternoon: new Set(), evening: new Set() };
       setAmCapacityMode("same");
@@ -3495,6 +3684,15 @@
         amSelectedTimes.morning = new Set(t.morning_times);
         amSelectedTimes.afternoon = new Set(t.afternoon_times);
         amSelectedTimes.evening = new Set(t.evening_times);
+        amCustomWindows = t.custom_windows || {};
+        // Any saved time that isn't one of the hardcoded defaults needs to
+        // show up as a chip too, so it can be reviewed/toggled next time.
+        ['morning', 'afternoon', 'evening'].forEach(p => {
+          amSelectedTimes[p].forEach(time => {
+            if (!AM_PRESETS[p].includes(time)) AM_PRESETS[p].push(time);
+          });
+          AM_PRESETS[p].sort();
+        });
         setAmCapacityMode(t.capacity_mode || "same");
         document.getElementById("am-capacity").value = t.capacity_same || 1;
         document.getElementById("am-cap-morning").value = t.capacity_morning || 1;
@@ -3505,10 +3703,18 @@
       renderAmDayChips();
       renderAmPresets();
       loadAmUnavailable();
+      amSuppressDirty = false;
+      amDirty = false;
+      document.getElementById("am-unsaved-indicator").style.display = "none";
       document.getElementById("modal-avail-editor").classList.add("open");
     }
 
-    function closeAvailModal() {
+    function closeAvailModal(skipConfirm) {
+      if (amDirty && !skipConfirm) {
+        const discard = confirm("You have unsaved changes to this doctor's availability. Close without saving?");
+        if (!discard) return;
+      }
+      amDirty = false;
       document.getElementById("modal-avail-editor").classList.remove("open");
     }
 
@@ -3524,6 +3730,7 @@
           doctor_id: currentAvailDoctorId,
           weekdays: [...amSelectedDays],
           morning_times: morning, afternoon_times: afternoon, evening_times: evening,
+          custom_windows: amCustomWindows,
           capacity_mode: amCapacityMode,
           capacity_same: parseInt(document.getElementById("am-capacity").value) || 1,
           capacity_morning: parseInt(document.getElementById("am-cap-morning").value) || 1,
@@ -3531,7 +3738,9 @@
           capacity_evening: parseInt(document.getElementById("am-cap-evening").value) || 1,
         });
         toast("Availability saved", "success");
-        closeAvailModal();
+        amDirty = false;
+        document.getElementById("am-unsaved-indicator").style.display = "none";
+        closeAvailModal(true);
       } catch (e) { err.textContent = e.message; }
     }
 
@@ -3607,7 +3816,7 @@
               <strong>${sanitize(a.patient_name || 'New Patient')}</strong> — ${sanitize(a.doctor_name)}
               ${details ? `<br><span style="color:var(--slate-light);font-size:12px">${sanitize(details)}</span>` : ''}
             </span>
-            <span style="color:var(--slate);white-space:nowrap">${d.toLocaleDateString('en-IN', {day:'numeric', month:'short'})}, ${d.toLocaleTimeString('en-IN', {hour:'numeric', minute:'2-digit', hour12:true})}</span>
+            <span style="color:var(--slate);white-space:nowrap">${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
           </div>`;
         }).join('');
       } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
@@ -3698,7 +3907,7 @@
             <div>
               <div style="font-weight:500">${sanitize(a.patient_name || 'Name not linked yet')}</div>
               <div style="font-size:12px;color:var(--slate-light)">
-                ${sanitize(a.doctor_name)} · ${a.type === 'queue_home' ? 'Queue from home' : 'Booked appointment'} · ${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
+                ${sanitize(a.doctor_name)} · ${a.type === 'queue_home' ? 'Queue from home' : 'Booked appointment'} · ${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                 ${a.notes ? ' · ' + sanitize(a.notes) : ''}
               </div>
             </div>

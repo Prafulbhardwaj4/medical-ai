@@ -140,14 +140,14 @@ def dispense_admission_medicine(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    """Marks a medicine order as physically handed to the ward. Billing and
-    stock deduction now happen upfront at ORDER time (see add_medication_order
-    in admissions.py) — this endpoint used to also bill and deduct stock here,
-    which meant every dispensed admission medicine was charged twice and
-    double-deducted from stock once the order-time billing was added. This
-    just records who/when it was physically sent, nothing financial."""
+    """Marks a medicine order as physically handed to the ward. Stock is
+    deducted upfront at ORDER time (see add_medication_order in
+    admissions.py) — that part is unchanged. Billing, however, now happens
+    right here, at the moment pharmacy actually sends it, not when the
+    doctor/nurse advised it — advising a medicine that's later stopped or
+    never picked up before discharge should never show up on the bill."""
     require_pharmacy(current_doctor)
-    from app.models.admission import Admission, AdmissionMedicationOrder
+    from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionCharge
 
     order = (
         db.query(AdmissionMedicationOrder)
@@ -159,6 +159,22 @@ def dispense_admission_medicine(
         raise HTTPException(status_code=404, detail="Order not found")
     if order.dispensed_at:
         raise HTTPException(status_code=400, detail="Already dispensed")
+    if order.is_out_of_stock:
+        raise HTTPException(status_code=400, detail="Out of stock — substitute this medicine instead of marking it sent")
+
+    if not order.sourced_outside:
+        if order.medicine_id:
+            medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.medicine_id).first()
+            unit_price = (medicine.price_per_pack if medicine and medicine.price_per_pack
+                          else ((medicine.price or 0) * (medicine.pack_size or 1)) if medicine else 0)
+        else:
+            unit_price = order.manual_unit_price or 0.0
+        a = db.query(Admission).filter(Admission.id == order.admission_id).first()
+        db.add(AdmissionCharge(
+            admission_id=a.id, charge_type="medicine",
+            description=order.medicine_name,
+            amount=unit_price, quantity=order.quantity, added_by=current_doctor.id, charged_at=now_ist_naive(),
+        ))
 
     order.dispensed_at = now_ist_naive()
     order.dispensed_by = current_doctor.id
@@ -208,12 +224,13 @@ def substitute_admission_medicine(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     """Replaces an out-of-stock admission medicine order with a substitute.
-    The original was already billed and stock-deducted upfront at order
-    time, before the shortage was found, so this reverses that charge with
-    a negative line (same pattern as a medication return) and bills/stock-
-    deducts the substitute in its place. The admitting doctor is notified
-    by name, naming both the substitute medicine and the staff member who
-    made the call, since they never approved this specific swap."""
+    Billing now happens at dispense time (not order time), and this
+    original order was never dispensed — checked below — so it was never
+    billed in the first place and there's nothing to reverse. Stock for the
+    substitute is still deducted upfront here, same as a normal order. The
+    admitting doctor is notified by name, naming both the substitute
+    medicine and the staff member who made the call, since they never
+    approved this specific swap."""
     require_pharmacy(current_doctor)
     from app.models.admission import Admission, AdmissionMedicationOrder, AdmissionCharge
     from app.models.notification import Notification
@@ -235,27 +252,12 @@ def substitute_admission_medicine(
     a = db.query(Admission).filter(Admission.id == original.admission_id).first()
 
     medicine = None
-    unit_price = 0.0
     if body.medicine_id:
         medicine = db.query(HospitalMedicine).filter(
             HospitalMedicine.id == body.medicine_id, HospitalMedicine.hospital_id == current_doctor.hospital_id
         ).first()
         if not medicine:
             raise HTTPException(status_code=404, detail="Medicine not found in catalog")
-        unit_price = medicine.price_per_pack if medicine.price_per_pack else (medicine.price or 0) * (medicine.pack_size or 1)
-    else:
-        unit_price = body.manual_unit_price or 0.0
-
-    if not original.sourced_outside:
-        original_medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == original.medicine_id).first() if original.medicine_id else None
-        original_unit_price = original.manual_unit_price if original.manual_unit_price is not None else (
-            (original_medicine.price_per_pack if original_medicine and original_medicine.price_per_pack else ((original_medicine.price or 0) * (original_medicine.pack_size or 1)) if original_medicine else 0) or 0
-        )
-        db.add(AdmissionCharge(
-            admission_id=a.id, charge_type="medicine",
-            description=f"{original.medicine_name} — reversed, out of stock",
-            amount=-original_unit_price, quantity=original.quantity, added_by=current_doctor.id, charged_at=now_ist_naive(),
-        ))
 
     new_order = AdmissionMedicationOrder(
         admission_id=a.id, medicine_id=body.medicine_id, medicine_name=body.medicine_name,
@@ -266,13 +268,8 @@ def substitute_admission_medicine(
     )
     db.add(new_order)
 
-    if not original.sourced_outside:
-        if body.medicine_id:
-            deduct_stock_fefo(db, body.medicine_id, original.quantity * (medicine.pack_size or 1), round_to_pack=True)
-        db.add(AdmissionCharge(
-            admission_id=a.id, charge_type="medicine", description=body.medicine_name,
-            amount=unit_price, quantity=original.quantity, added_by=current_doctor.id, charged_at=now_ist_naive(),
-        ))
+    if not original.sourced_outside and body.medicine_id:
+        deduct_stock_fefo(db, body.medicine_id, original.quantity * (medicine.pack_size or 1), round_to_pack=True)
 
     original.is_active = False
     db.flush()
