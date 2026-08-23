@@ -662,7 +662,7 @@
       <div class="modal-header">
         <h2>Add Medication(s)</h2><button class="modal-close" onclick="closeModal('modal-add-med')">&times;</button>
       </div>
-      <button type="button" class="btn btn-outline btn-sm" id="btn-repeat-meds" style="margin-bottom:10px" onclick="repeatAdmMeds()">↻ Repeat Current Medicines</button>
+      <button type="button" class="btn btn-sm" id="btn-repeat-meds" style="margin-bottom:10px;background:var(--teal);color:var(--white);border-color:var(--teal)" onclick="repeatAdmMeds()">↻ Repeat Current Medicines</button>
       <div style="position:relative">
         <input class="form-control" id="med-catalog-search" placeholder="Search medicines to add…" autocomplete="off"
           oninput="renderAdmMedSuggestions()" onfocus="renderAdmMedSuggestions()" />
@@ -1387,32 +1387,90 @@
       document.getElementById("modal-vitals-history").classList.remove("open");
     }
 
+    // Same standard vitals set, ranges, and label/value/unit row layout as
+    // the OPD nurse "Record Vitals" modal (nurse.html) — pre-filled locked
+    // labels, a value box, the unit shown alongside, and the same
+    // out-of-range warning behaviour.
+    const IPD_STANDARD_VITALS = ["Blood Pressure", "Pulse", "Temperature", "SpO2", "Respiratory Rate", "Weight", "Height", "Blood Sugar (GRBS)"];
+    const IPD_VITALS_RULES = {
+      "Blood Pressure": { type: "bp", unit: "mmHg" },
+      "Pulse": { type: "number", min: 30, max: 220, unit: "bpm" },
+      "Temperature": { type: "number", min: 90, max: 110, unit: "°F" },
+      "SpO2": { type: "number", min: 50, max: 100, unit: "%" },
+      "Respiratory Rate": { type: "number", min: 8, max: 60, unit: "/min" },
+      "Weight": { type: "number", min: 1, max: 300, unit: "kg" },
+      "Height": { type: "number", min: 30, max: 250, unit: "cm" },
+      "Blood Sugar (GRBS)": { type: "number", min: 20, max: 600, unit: "mg/dL" }
+    };
+
+    function validateIpdVitalInput(input) {
+      const row = input.closest('[data-row]');
+      const warnEl = row.querySelector('[data-warn]');
+      const ruleStr = input.getAttribute('data-rule');
+      if (!ruleStr || !warnEl) return;
+      const rule = JSON.parse(ruleStr.replace(/&#39;/g, "'"));
+      const val = input.value.trim();
+      if (!val) { warnEl.style.display = 'none'; input.style.borderColor = ''; return; }
+
+      let msg = '';
+      if (rule.type === 'bp') {
+        if (!/^\d{2,3}\/\d{2,3}$/.test(val)) {
+          msg = 'Enter as systolic/diastolic, numbers only — e.g. 120/80';
+        } else {
+          const [sys, dia] = val.split('/').map(Number);
+          if (sys < 60 || sys > 260 || dia < 30 || dia > 160) msg = 'Outside the usual range — please double-check';
+        }
+      } else if (rule.type === 'number') {
+        if (!/^\d+(\.\d+)?$/.test(val)) {
+          msg = 'Numbers only';
+        } else {
+          const n = parseFloat(val);
+          if (n < rule.min || n > rule.max) msg = `Outside the usual ${rule.min}–${rule.max} ${rule.unit} range — please double-check`;
+        }
+      }
+      warnEl.textContent = msg;
+      warnEl.style.display = msg ? 'block' : 'none';
+      input.style.borderColor = msg ? 'var(--danger)' : '';
+    }
+
+    function ipdVitalFieldRow(label, value, locked, rule) {
+      const ruleAttr = rule ? ` data-rule='${JSON.stringify(rule).replace(/'/g, "&#39;")}'` : '';
+      const unitHtml = `<span style="font-size:12px;color:var(--slate);white-space:nowrap;align-self:center;width:44px;flex:0 0 44px">${rule && rule.unit ? rule.unit : ''}</span>`;
+      return `
+        <div style="margin-bottom:8px" data-row>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-control" placeholder="Field" value="${(label || '').replace(/"/g, '&quot;')}" style="flex:1;min-width:0${locked ? ';background:var(--smoke,#f5f5f5);color:var(--navy);font-weight:600' : ''}" data-label ${locked ? 'readonly' : ''} />
+            <input class="form-control" placeholder="Value" value="${(value || '').replace(/"/g, '&quot;')}" style="flex:1;min-width:0" data-value${ruleAttr} oninput="validateIpdVitalInput(this)" />
+            ${unitHtml}
+          </div>
+          <div style="font-size:12px;color:var(--danger);margin-top:2px;display:none" data-warn></div>
+        </div>`;
+    }
+
     function openRecordVitalsModal() {
       closeAllOverlays();
-      document.getElementById("record-vitals-fields").innerHTML = "";
-      addRecordVitalsField();
-      addRecordVitalsField();
+      document.getElementById("record-vitals-fields").innerHTML = IPD_STANDARD_VITALS.map(label =>
+        ipdVitalFieldRow(label, '', true, IPD_VITALS_RULES[label])
+      ).join('');
       document.getElementById("modal-record-vitals").classList.add("open");
     }
     function closeRecordVitalsModal() {
       document.getElementById("modal-record-vitals").classList.remove("open");
     }
     function addRecordVitalsField() {
-      document.getElementById("record-vitals-fields").insertAdjacentHTML("beforeend", `
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <input class="form-control" placeholder="Label (e.g. BP)" style="flex:1">
-          <input class="form-control" placeholder="Value (e.g. 120/80)" style="flex:1">
-        </div>`);
+      document.getElementById("record-vitals-fields").insertAdjacentHTML("beforeend", ipdVitalFieldRow('', ''));
     }
     async function submitRecordVitals() {
-      const rows = document.getElementById("record-vitals-fields").children;
       const data = {};
-      for (const row of rows) {
-        const inputs = row.querySelectorAll("input");
-        const label = inputs[0].value.trim();
-        const value = inputs[1].value.trim();
-        if (label && value) data[label] = value;
-      }
+      document.querySelectorAll('#record-vitals-fields [data-row]').forEach(row => {
+        const label = row.querySelector('[data-label]').value.trim();
+        let value = row.querySelector('[data-value]').value.trim();
+        if (label && value) {
+          const unit = IPD_VITALS_RULES[label]?.unit;
+          if (unit && !value.includes(unit)) value = `${value} ${unit}`;
+          data[label] = value;
+        }
+      });
       if (!Object.keys(data).length) { toast("Enter at least one vitals value", "error"); return; }
       try {
         await api("POST", `/admissions/${admissionId}/vitals`, { data });
