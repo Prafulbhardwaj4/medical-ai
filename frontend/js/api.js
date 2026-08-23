@@ -190,6 +190,20 @@ function fillTopbar() {
   if (pmClinic) pmClinic.textContent = doc.clinic_name || "";
 }
 
+// Some Android Chrome/WebView builds fail to repaint the area under a
+// position:fixed, opacity/transform-transitioning overlay once it closes —
+// the content is still there in the DOM, it just doesn't get redrawn until
+// something else forces a repaint (e.g. switching tabs). Nudging a reflow
+// on the scrollable content area right after closing works around it.
+function forceContentRepaint() {
+  const el = document.querySelector(".main-content") || document.body;
+  if (!el) return;
+  const prevDisplay = el.style.display;
+  el.style.display = "none";
+  void el.offsetHeight; // forces the browser to actually apply the change above before we undo it
+  el.style.display = prevDisplay;
+}
+
 // Mobile profile dropdown (header)
 function toggleProfileMenu() {
   const menu = document.getElementById("profile-menu");
@@ -197,13 +211,24 @@ function toggleProfileMenu() {
   if (!menu) return;
   const opening = !menu.classList.contains("open");
   menu.classList.toggle("open", opening);
-  if (backdrop) backdrop.style.display = opening ? "block" : "none";
+  // This used to set backdrop.style.display directly, but the shared
+  // .sidebar-backdrop CSS only lights up (opacity 1) via the .open class —
+  // display:block alone left an invisible-but-still-click-blocking
+  // full-screen layer sitting over the page with no visible dimming.
+  if (backdrop) backdrop.classList.toggle("open", opening);
 }
 
 function closeProfileMenu() {
   document.getElementById("profile-menu")?.classList.remove("open");
-  const backdrop = document.getElementById("profile-menu-backdrop");
-  if (backdrop) backdrop.style.display = "none";
+  document.getElementById("profile-menu-backdrop")?.classList.remove("open");
+}
+
+function closeAllOverlays() {
+  closeProfileMenu();
+  if (typeof closeNotifPanel === "function") closeNotifPanel();
+  document.querySelector(".sidebar")?.classList.remove("open");
+  document.getElementById("sidebar-backdrop")?.classList.remove("open");
+  document.getElementById("mobile-menu-sheet")?.classList.remove("open");
 }
 
 // Mobile full-screen "More" menu

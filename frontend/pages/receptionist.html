@@ -1571,6 +1571,7 @@
     let selectedCategory = null;
 
     function showRecSection(id) {
+      closeAllOverlays();
       ['home', 'attendance', 'patients', 'portal', 'availability'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
         const mobileBtn = document.getElementById('tab-btn-' + s);

@@ -1239,7 +1239,10 @@
     };
 
     function closeModal(id) { document.getElementById(id).classList.remove("open"); }
-    function openModal(id) { document.getElementById(id).classList.add("open"); }
+    function openModal(id) {
+      closeAllOverlays();
+      document.getElementById(id).classList.add("open");
+    }
 
     let admissionData = null;
     let tpaData = null;
@@ -1376,6 +1379,7 @@
           </div>`;
         }).join('');
       }
+      closeAllOverlays();
       document.getElementById("modal-vitals-history").classList.add("open");
     }
     function closeVitalsHistoryModal() {
@@ -1383,6 +1387,7 @@
     }
 
     function openRecordVitalsModal() {
+      closeAllOverlays();
       document.getElementById("record-vitals-fields").innerHTML = "";
       addRecordVitalsField();
       addRecordVitalsField();
