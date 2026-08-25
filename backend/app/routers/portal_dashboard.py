@@ -266,6 +266,8 @@ def list_all_visits(account: PatientAccount = Depends(get_current_patient_accoun
             consultation = db.query(Consultation).filter(
                 Consultation.token_number == c.token_number, Consultation.is_voided == False  # noqa: E712
             ).first()
+            if not consultation:
+                continue
             test_count = db.query(TestOrder).filter(TestOrder.consultation_id == consultation.id).count() if consultation else 0
             out.append(VisitOut(
                 checkin_id=c.id, token_number=c.token_number,
@@ -306,6 +308,8 @@ def list_visits(
         consultation = db.query(Consultation).filter(
             Consultation.token_number == c.token_number, Consultation.is_voided == False  # noqa: E712
         ).first()
+        if not consultation:
+            continue
         test_count = db.query(TestOrder).filter(TestOrder.consultation_id == consultation.id).count() if consultation else 0
 
         out.append(VisitOut(

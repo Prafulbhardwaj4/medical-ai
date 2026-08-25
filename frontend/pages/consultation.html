@@ -549,6 +549,7 @@
               ${sanitize(n.title)}
             </div>
             <div class="notif-item-message">${sanitize(n.message)}</div>
+            <div class="notif-item-time" style="font-size:11px;color:var(--slate-light);margin-top:2px">${formatNotifTimestamp(n.created_at)}</div>
           </div>
         `).join('');
       } catch (e) {

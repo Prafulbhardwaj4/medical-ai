@@ -245,17 +245,21 @@ def create_patient(
     )
 
     _auto_link_portal_profile(db, patient)
-    _auto_complete_matching_appointment(db, patient, current_doctor.hospital_id)
+    auto_checkin = _auto_complete_matching_appointment(db, patient, current_doctor.hospital_id)
+    patient.auto_checked_in_token = auto_checkin.token_number if auto_checkin else None
 
     return patient
 
 
-def _auto_complete_matching_appointment(db: Session, patient: Patient, hospital_id: int) -> None:
+def _auto_complete_matching_appointment(db: Session, patient: Patient, hospital_id: int):
     """If this patient had booked ahead or reserved a queue-from-home slot
     for today at this hospital, generate their real day-of Checkin/token now
     that reception has created their actual Patient record — the same
     conversion the lazy sweep does for already-linked returning patients,
-    see utils/portal_checkin.py."""
+    see utils/portal_checkin.py. Returns the resulting Checkin (so the
+    caller can skip the usual walk-in doctor-selection step — this patient's
+    doctor was already chosen when they booked online), or None if there
+    was no matching booking."""
     from datetime import datetime, timedelta
     from app.models.portal import Appointment, AppointmentStatus, PatientProfileLink
     from app.utils.portal_checkin import convert_appointment_to_checkin
@@ -267,8 +271,9 @@ def _auto_complete_matching_appointment(db: Session, patient: Patient, hospital_
     from app.utils.phone import normalize_phone
     account = db.query(PatientAccount).filter(PatientAccount.phone == normalize_phone(patient.phone)).first()
     if not account:
-        return
+        return None
 
+    checkin = None
     for a in db.query(Appointment).filter(
         Appointment.account_id == account.id,
         Appointment.hospital_id == hospital_id,
@@ -281,12 +286,10 @@ def _auto_complete_matching_appointment(db: Session, patient: Patient, hospital_
             link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == patient.id).first()
             if link:
                 a.profile_link_id = link.id
-        # Reception is creating the Patient record right now because this
-        # person just walked in — that IS the arrival moment for a
-        # genuinely new patient who never got to tap "I've arrived" first.
         if not a.arrived_at:
             a.arrived_at = now_ist_naive()
-        convert_appointment_to_checkin(db, a, patient)
+        checkin = convert_appointment_to_checkin(db, a, patient)
+    return checkin
 
 
 def _auto_link_portal_profile(db: Session, patient: Patient) -> None:

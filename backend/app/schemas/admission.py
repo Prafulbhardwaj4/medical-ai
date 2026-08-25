@@ -170,6 +170,10 @@ class RequestWardChangeIn(BaseModel):
 class ChangeWardIn(BaseModel):
     ward_type_id: int
     bed_number: str
+    patient_name: Optional[str] = None
+    patient_phone: Optional[str] = None
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
 
 
 VALID_DISCHARGE_TYPES = {"planned", "lama_dama", "death"}

@@ -8,6 +8,22 @@
   <link rel="stylesheet" href="../css/style.css?v=4" />
   <script src="../js/custom-select.js" defer></script>
   <style>
+    /* Select Patient modal (Docs / Feedback chooser) */
+    .sel-patient-option {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      font-weight: 600;
+    }
+
+    .sel-patient-option-sub {
+      font-weight: 400;
+      font-size: 12.5px;
+      color: var(--slate);
+    }
+
     /* Desktop-only tab layout (Home / Patients), scoped to this page only */
     @media (min-width: 901px) {
       .desktop-tab {
@@ -59,13 +75,6 @@
         <span id="topbar-clinic" style="color:var(--slate)"></span>
         <button class="btn-logout" onclick="logout()">Sign out</button>
       </div>
-      <button class="notif-bell-btn" id="notif-bell-btn" onclick="toggleNotifPanel()" aria-label="Notifications">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-        </svg>
-        <span class="notif-badge" id="notif-badge">0</span>
-      </button>
       <button class="topbar-profile-btn" onclick="toggleProfileMenu()" aria-label="Profile">
         <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="8" r="4" />
@@ -509,6 +518,54 @@
     </div>
   </div>
 
+  <!-- Select Patient Modal (Docs / Feedback chooser) -->
+  <div class="modal-overlay" id="modal-select-patient">
+    <div class="modal" style="max-width:360px">
+      <div class="modal-header">
+        <h2 id="sel-patient-name">Patient</h2>
+        <button class="modal-close" onclick="closeSelectPatientModal()">×</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-outline sel-patient-option" onclick="selectPatientOpenDocs()">
+          <span>📄 Docs</span><span class="sel-patient-option-sub">Prescriptions &amp; reports</span>
+        </button>
+        <button class="btn btn-outline sel-patient-option" onclick="selectPatientOpenFeedback()">
+          <span>⭐ Feedback</span><span class="sel-patient-option-sub">Ratings &amp; notes</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Documents modal (doctor: prescriptions & test reports only, no billing) -->
+  <div class="modal-overlay" id="modal-documents">
+    <div class="modal" style="max-width:600px">
+      <div class="modal-header">
+        <h2>Documents — <span id="doc-patient-name"></span></h2>
+        <button class="modal-close" onclick="closeDocumentsModal()">×</button>
+      </div>
+      <div class="doc-filter-chips" id="doc-filter-chips"
+        style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="doc-filter-chip active" data-type="all" onclick="setDocFilter('all')">All</button>
+        <button class="doc-filter-chip" data-type="prescription"
+          onclick="setDocFilter('prescription')">Prescriptions</button>
+        <button class="doc-filter-chip" data-type="test_report" onclick="setDocFilter('test_report')">Test
+          Reports</button>
+      </div>
+      <div id="documents-list" style="max-height:60vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- Patient Feedback modal -->
+  <div class="modal-overlay" id="modal-patient-feedback">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h2>Feedback — <span id="pf-patient-name"></span></h2>
+        <button class="modal-close" onclick="closeModal('modal-patient-feedback')">×</button>
+      </div>
+      <div id="pf-body"><p style="color:var(--slate)">Loading…</p></div>
+    </div>
+  </div>
+
   <!-- Fee Pending Modal -->
   <div class="modal-overlay" id="modal-fee-pending">
     <div class="modal">
@@ -549,6 +606,85 @@
   <script src="../js/chat-widget.js?v=1"></script>
   <script src="../js/suggestion-widget.js?v=1"></script>
   <script>
+
+    async function toggleNotifPanel() {
+      const panel = document.getElementById('notif-panel');
+      const backdrop = document.getElementById('notif-backdrop');
+      if (panel.classList.contains('open')) {
+        closeNotifPanel();
+      } else {
+        panel.classList.add('open');
+        backdrop.classList.add('open');
+        await loadNotifList();
+      }
+    }
+
+    function closeNotifPanel() {
+      document.getElementById('notif-panel').classList.remove('open');
+      document.getElementById('notif-backdrop').classList.remove('open');
+    }
+
+    const NOTIF_ICON = { critical: 'critical', warning: 'warning', info: 'info' };
+
+    async function loadNotifList() {
+      const body = document.getElementById('notif-panel-body');
+      try {
+        const data = await api("GET", "/notifications");
+        loadNotifUnreadCount();
+        if (!data.notifications.length) {
+          body.innerHTML = '<p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">You\'re all caught up.</p>';
+          return;
+        }
+        body.innerHTML = data.notifications.map(n => `
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
+            <div class="notif-item-title">
+              <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
+              ${sanitize(n.title)}
+            </div>
+            <div class="notif-item-message">${sanitize(n.message)}</div>
+            <div class="notif-item-time" style="font-size:11px;color:var(--slate-light);margin-top:2px">${formatNotifTimestamp(n.created_at)}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        body.innerHTML = '<p style="color:var(--danger);padding:20px;text-align:center;font-size:13px">Could not load notifications.</p>';
+      }
+    }
+
+    async function onNotifClick(id, linkType, linkId) {
+      try {
+        await api("PATCH", `/notifications/${id}/read`, {});
+        loadNotifUnreadCount();
+        closeNotifPanel();
+        if (linkType === 'admission' && linkId) {
+          const { token } = await api("GET", `/admissions/token-for/${linkId}`);
+          location.href = `admission-detail.html?id=${token}`;
+        }
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function markAllNotifsRead() {
+      try {
+        await api("POST", "/notifications/mark-all-read", {});
+        loadNotifList();
+      } catch (e) { }
+    }
+
+    async function loadNotifUnreadCount() {
+      try {
+        const data = await api("GET", "/notifications/unread-count");
+        const dot = document.getElementById('profile-dot');
+        const pmBadge = document.getElementById('profile-menu-notif-badge');
+        if (data.unread_count > 0) {
+          if (dot) dot.style.display = 'block';
+          if (pmBadge) { pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count; pmBadge.style.display = 'inline-block'; }
+        } else {
+          if (dot) dot.style.display = 'none';
+          if (pmBadge) pmBadge.style.display = 'none';
+        }
+      } catch (e) { }
+    }
+    loadNotifUnreadCount();
+    setInterval(loadNotifUnreadCount, 30000);
 
     function showMobileSection(id) {
       ['home', 'patients', 'attendance', 'stats'].forEach(s => {
@@ -861,12 +997,139 @@
           <td data-label="Last Token">${p.last_token ? `<span class="badge badge-teal">${p.last_token}</span>` : '<span style="color:var(--slate-light)">—</span>'}</td>
           <td data-label="">
             <div style="display:flex;gap:6px;align-items:center">
-              <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();goToPatient(${p.id}, '${p.url_token}')">Open →</button>
+              <button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openSelectPatientModal(${p.id}, ${JSON.stringify(p.name)})'>Select</button>
               ${p.currently_admitted ? '<span class="badge badge-amber">Already Admitted</span>' : `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openSendToAdmissionModal(${p.id}, ${JSON.stringify(p.name)})">Send to Admission</button>`}
             </div>
           </td>
         </tr>
       `).join("");
+    }
+
+    // ---------- Select Patient (Docs / Feedback) ----------
+    const DOC_TYPE_LABEL = {
+      prescription: "📋 Prescription",
+      test_report: "🧪 Test Report"
+    };
+    let allDocuments = [];
+    let currentDocFilter = 'all';
+    let selectPatientCtx = null;
+
+    function parseDocDate(d) {
+      return new Date(d.date && /[+-]\d\d:\d\d$|Z$/.test(d.date) ? d.date : d.date + "+05:30");
+    }
+
+    function openSelectPatientModal(patientId, patientName) {
+      selectPatientCtx = { patientId, patientName };
+      document.getElementById('sel-patient-name').textContent = patientName;
+      document.getElementById('modal-select-patient').classList.add('open');
+    }
+    function closeSelectPatientModal() {
+      document.getElementById('modal-select-patient').classList.remove('open');
+      selectPatientCtx = null;
+    }
+    function selectPatientOpenDocs() {
+      const ctx = selectPatientCtx;
+      closeSelectPatientModal();
+      if (ctx) openDocumentsModal(ctx.patientId, ctx.patientName);
+    }
+    function selectPatientOpenFeedback() {
+      const ctx = selectPatientCtx;
+      closeSelectPatientModal();
+      if (ctx) openPatientFeedbackModal(ctx.patientId, ctx.patientName);
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+
+    async function openDocumentsModal(patientId, patientName) {
+      window._docModalPatientId = patientId;
+      document.getElementById('doc-patient-name').textContent = patientName;
+      document.getElementById('documents-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+      document.getElementById('modal-documents').classList.add('open');
+      currentDocFilter = 'all';
+      document.querySelectorAll('.doc-filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === 'all'));
+      try {
+        const docs = await api("GET", `/patients/${patientId}/documents`);
+        // Doctor's Docs view is prescriptions & reports only — no bills/invoices/token slips.
+        allDocuments = docs.filter(d => d.type === 'prescription' || d.type === 'test_report')
+          .sort((a, b) => parseDocDate(b) - parseDocDate(a));
+        renderDocuments(allDocuments);
+      } catch (e) {
+        document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+      }
+    }
+
+    function setDocFilter(type) {
+      currentDocFilter = type;
+      document.querySelectorAll('.doc-filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === type));
+      renderDocuments(type === 'all' ? allDocuments : allDocuments.filter(d => d.type === type));
+    }
+
+    function closeDocumentsModal() {
+      document.getElementById('modal-documents').classList.remove('open');
+    }
+
+    function renderDocuments(docs) {
+      const el = document.getElementById('documents-list');
+      if (!docs.length) {
+        el.innerHTML = currentDocFilter === 'all'
+          ? '<p style="color:var(--slate-light);padding:12px 0">No documents yet for this patient.</p>'
+          : '<p style="color:var(--slate-light);padding:12px 0">No documents match this filter.</p>';
+        return;
+      }
+      el.innerHTML = docs.map(d => {
+        const dt = parseDocDate(d);
+        const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+            <div>
+              <strong>${DOC_TYPE_LABEL[d.type] || d.label}</strong>
+              <div style="font-size:12px;color:var(--slate)">${dateStr} · ${timeStr}</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', '${d.type === 'test_report' && d.order_ids ? d.order_ids.join(',') : d.ref_id}')">View / Print</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function viewDocument(type, refId) {
+      try {
+        let url = null;
+        if (type === 'prescription') url = `${BASE}/patients/prescriptions/${refId}/download`;
+        else if (type === 'test_report') url = `${BASE}/lab/reports/combined?order_ids=${refId}`;
+        else return;
+
+        const response = await fetch(url, { headers: { "Authorization": `Bearer ${getToken()}` } });
+        if (!response.ok) throw new Error("Could not load document");
+        const blob = await response.blob();
+        window.open(URL.createObjectURL(blob), "_blank");
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function openPatientFeedbackModal(patientId, patientName) {
+      document.getElementById('pf-patient-name').textContent = patientName || '';
+      const body = document.getElementById('pf-body');
+      body.innerHTML = `<p style="color:var(--slate)">Loading…</p>`;
+      document.getElementById('modal-patient-feedback').classList.add('open');
+      try {
+        const entries = await api("GET", `/consultations/patient-feedback/${patientId}`);
+        if (!entries.length) {
+          body.innerHTML = `<p style="color:var(--slate-light)">No feedback left yet.</p>`;
+          return;
+        }
+        body.innerHTML = entries.map(f => `
+          <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+            <div style="font-weight:600">${f.rating}/5 stars</div>
+            <div style="font-size:12px;color:var(--slate-light);margin:2px 0 6px">${f.created_at ? new Date(f.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : ''}</div>
+            <div style="color:var(--slate);white-space:pre-wrap">${f.comment ? sanitize(f.comment) : '<span style="color:var(--slate-light)">No notes left.</span>'}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        body.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
     }
 
     let searchTimer;

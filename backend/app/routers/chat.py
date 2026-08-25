@@ -191,6 +191,44 @@ def send_as_admin(
     return _serialize(m, current_doctor)
 
 
+@router.post("/broadcast")
+def broadcast_to_all_staff(
+    payload: dict,
+    hospital_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Sends the same message into every staff member's own admin thread —
+    each staff member sees it as a normal message from admin in their
+    existing chat, not a separate broadcast inbox."""
+    if current_doctor.role.value not in ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    body = (payload.get("message") or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    scoped_hospital_id = _hospital_scope(current_doctor, hospital_id)
+    staff = db.query(Doctor).filter(
+        Doctor.hospital_id == scoped_hospital_id,
+        Doctor.role.in_([UserRole.doctor, UserRole.receptionist, UserRole.nurse, UserRole.assistant, UserRole.lab, UserRole.pharmacy])
+    ).all()
+
+    now = now_ist_naive()
+    for s in staff:
+        db.add(ChatMessage(
+            hospital_id=s.hospital_id,
+            staff_id=s.id,
+            sender_id=current_doctor.id,
+            body=body,
+            is_read_by_admin=True,
+            is_read_by_staff=False,
+            created_at=now,
+        ))
+    db.commit()
+    return {"message": f"Sent to {len(staff)} staff member(s)"}
+
+
 @router.get("/messages")
 def get_my_thread(
     db: Session = Depends(get_db),

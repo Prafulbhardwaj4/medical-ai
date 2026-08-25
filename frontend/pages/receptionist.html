@@ -584,7 +584,7 @@
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        Day-End Close
+        Day-End Summary
       </div>
     </nav>
 
@@ -1368,7 +1368,21 @@
         <button class="btn btn-outline sel-patient-option" onclick="selectPatientOpenPending()">
           <span>⏳ Pending</span><span class="sel-patient-option-sub">Pending payments</span>
         </button>
+        <button class="btn btn-outline sel-patient-option" onclick="selectPatientOpenFeedback()">
+          <span>⭐ Feedback</span><span class="sel-patient-option-sub">Ratings &amp; notes</span>
+        </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Patient Feedback modal -->
+  <div class="modal-overlay" id="modal-patient-feedback">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h2>Feedback — <span id="pf-patient-name"></span></h2>
+        <button class="modal-close" onclick="closeModal('modal-patient-feedback')">×</button>
+      </div>
+      <div id="pf-body"><p style="color:var(--slate)">Loading…</p></div>
     </div>
   </div>
 
@@ -1448,11 +1462,11 @@
     </div>
   </div>
 
-  <!-- Day-End Close Modal -->
+  <!-- Day-End Summary Modal (view-only — closing itself is automatic) -->
   <div class="modal-overlay" id="modal-day-end">
     <div class="modal" style="max-width:480px">
       <div class="modal-header">
-        <h2>Day-End Reconciliation</h2><button class="modal-close" onclick="closeModal('modal-day-end')">×</button>
+        <h2>Day-End Summary</h2><button class="modal-close" onclick="closeModal('modal-day-end')">×</button>
       </div>
       <div id="day-end-body">
         <p>Loading…</p>
@@ -1505,6 +1519,7 @@
               ${sanitize(n.title)}
             </div>
             <div class="notif-item-message">${sanitize(n.message)}</div>
+            <div class="notif-item-time" style="font-size:11px;color:var(--slate-light);margin-top:2px">${formatNotifTimestamp(n.created_at)}</div>
           </div>
         `).join('');
       } catch (e) {
@@ -2709,6 +2724,36 @@
       closeSelectPatientModal();
       if (ctx) openPendingTasksModal(ctx.patientId, ctx.patientName);
     }
+    function selectPatientOpenFeedback() {
+      const ctx = selectPatientCtx;
+      closeSelectPatientModal();
+      if (ctx) openPatientFeedbackModal(ctx.patientId, ctx.patientName);
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+    async function openPatientFeedbackModal(patientId, patientName) {
+      document.getElementById('pf-patient-name').textContent = patientName || '';
+      const body = document.getElementById('pf-body');
+      body.innerHTML = `<p style="color:var(--slate)">Loading…</p>`;
+      document.getElementById('modal-patient-feedback').classList.add('open');
+      try {
+        const entries = await api("GET", `/consultations/patient-feedback/${patientId}`);
+        if (!entries.length) {
+          body.innerHTML = `<p style="color:var(--slate-light)">No feedback left yet.</p>`;
+          return;
+        }
+        body.innerHTML = entries.map(f => `
+          <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+            <div style="font-weight:600">${f.rating}/5 stars</div>
+            <div style="font-size:12px;color:var(--slate-light);margin:2px 0 6px">${f.created_at ? new Date(f.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : ''}</div>
+            <div style="color:var(--slate);white-space:pre-wrap">${f.comment ? sanitize(f.comment) : '<span style="color:var(--slate-light)">No notes left.</span>'}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        body.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
 
     let _paymentMethodResolve = null;
     function askPaymentMethod() {
@@ -2794,51 +2839,23 @@
         return `<p style="font-weight:600;margin:10px 0 4px">${modeLabel[m]} — System Total: ₹${(summary.system_totals[m] || 0).toFixed(2)}</p>${rows || '<p style="color:var(--slate-light);font-size:12px">Nothing logged.</p>'}`;
       }).join('');
 
+      // Day-end closing itself is fully automatic now — the midnight
+      // scheduler (or the lazy catch-up if the server was down) closes
+      // every day using these same system totals, with no manual count
+      // step. This view is read-only either way, whether the day shown is
+      // already closed (a past day) or still in progress (today).
       if (summary.already_closed) {
         body.innerHTML = `
-          <p style="color:var(--teal);font-weight:600;margin-bottom:10px">Already closed for ${summary.date}.</p>
+          <p style="color:var(--teal);font-weight:600;margin-bottom:10px">Closed for ${summary.date}.</p>
           ${breakdownHtml}
-          <div class="bill-row"><span>Counted Cash</span><span>₹${summary.close.counted_cash.toFixed(2)}</span></div>
-          <div class="bill-row"><span>Counted Card</span><span>₹${summary.close.counted_card.toFixed(2)}</span></div>
-          <div class="bill-row"><span>Counted UPI</span><span>₹${summary.close.counted_upi.toFixed(2)}</span></div>
           ${summary.close.notes ? `<p style="font-size:12.5px;color:var(--slate);margin-top:8px">${sanitize(summary.close.notes)}</p>` : ''}`;
         return;
       }
 
       body.innerHTML = `
+        <p style="font-size:12.5px;color:var(--slate);margin-bottom:8px">Today's collections so far — closes automatically at midnight.</p>
         ${summary.cash_refunds > 0 ? `<p style="font-size:12.5px;color:var(--slate)">Cash refunds today: −₹${summary.cash_refunds.toFixed(2)} (already netted out below)</p>` : ''}
-        ${breakdownHtml}
-        <div style="border-top:1.5px solid var(--border);margin:14px 0;padding-top:14px">
-          <p style="font-weight:600;margin-bottom:8px">Enter Counted Amounts</p>
-          <div class="form-group"><label class="form-label">Cash in Hand (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="de-counted-cash"></div>
-          <div class="form-group"><label class="form-label">Card Total (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="de-counted-card"></div>
-          <div class="form-group"><label class="form-label">UPI Total (₹)</label><input class="form-control" type="number" min="0" step="0.01" id="de-counted-upi"></div>
-          <div class="form-group"><label class="form-label">Notes (optional)</label><input class="form-control" id="de-notes"></div>
-          <div class="err-msg" id="de-err"></div>
-          <button class="btn btn-primary" style="width:100%" id="btn-de-submit" onclick="submitDayEndClose()">Close Day</button>
-        </div>`;
-    }
-
-    async function submitDayEndClose() {
-      const err = document.getElementById('de-err');
-      err.textContent = '';
-      const counted_cash = parseFloat(document.getElementById('de-counted-cash').value) || 0;
-      const counted_card = parseFloat(document.getElementById('de-counted-card').value) || 0;
-      const counted_upi = parseFloat(document.getElementById('de-counted-upi').value) || 0;
-      const notes = document.getElementById('de-notes').value.trim() || null;
-      const btn = document.getElementById('btn-de-submit');
-      btn.disabled = true;
-      try {
-        const result = await api("POST", "/billing/day-end-close", { counted_cash, counted_card, counted_upi, notes });
-        const v = result.variance;
-        const varianceLines = Object.keys(v).map(k => `${k.toUpperCase()}: ${v[k] >= 0 ? '+' : ''}₹${v[k].toFixed(2)}`).join(' · ');
-        toast(`Day closed. Variance — ${varianceLines}`, v.cash === 0 && v.card === 0 && v.upi === 0 ? 'success' : 'info');
-        closeModal('modal-day-end');
-      } catch (e) {
-        err.textContent = e.message;
-      } finally {
-        btn.disabled = false;
-      }
+        ${breakdownHtml}`;
     }
 
     async function markPaid() {
@@ -3300,14 +3317,19 @@
           loadAllPatients();
         } else {
           const patient = await createPatientWithDedupCheck(payload);
-          if (!patient) return; // reception cancelled out of the duplicate prompt
-          toast("Patient added", "success");
+          if (!patient) return;
           closeAddPatient();
+          loadAllPatients();
+          if (patient.auto_checked_in_token) {
+            toast(`Patient added — already checked in for today's booking (Token ${patient.auto_checked_in_token})`, "success");
+            goToStep('search');
+            return;
+          }
+          toast("Patient added", "success");
           selectedPatient = patient;
           preferredDoctorId = null;
           document.getElementById('cat-patient-name').textContent = `${patient.name} (${patient.patient_uid})`;
           goToStepRoom();
-          loadAllPatients();
         }
       } catch (e) {
         toast(e.message, "error");
@@ -3317,9 +3339,6 @@
       }
     }
 
-    // Tries to create the patient; if the backend flags a same-phone duplicate
-    // (409), asks reception whether to use the existing record or create a new
-    // one anyway. Returns the resulting patient, or null if reception cancelled.
     async function createPatientWithDedupCheck(payload) {
       try {
         return await api("POST", "/patients/", payload);
@@ -3952,9 +3971,13 @@
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:8px">
-              <span class="badge badge-teal">${a.status}</span>
+              <!-- a.status becomes "completed" the instant a token is generated for a
+                   paid appointment (see sweep_todays_online_checkins) — that's an
+                   internal "booking's job is done" state, not the patient's visit
+                   being done, so it's never shown verbatim here. -->
+              ${a.status !== 'completed' ? `<span class="badge badge-teal">${a.status}</span>` : ''}
               ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick="collectAppointmentPayment(${a.id})">Collect Payment</button>` : ''}
-              ${(a.status === 'confirmed' && !a.arrived_at) ? `<button class="btn btn-outline btn-sm" onclick="markArrived(${a.id})">Mark Arrived</button>` : ''}
+              ${((a.status === 'confirmed' || a.status === 'completed') && !a.arrived_at) ? `<button class="btn btn-outline btn-sm" onclick="markArrived(${a.id})">Mark Arrived</button>` : ''}
               ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
               ${(a.arrived_at && a.doctor_id && coverageByDoctor[a.doctor_id] === false) ? `<button class="btn btn-outline btn-sm" onclick="notifyDoctorNoAssistant(${a.doctor_id}, this)">Notify Doctor</button>` : ''}
               ${(a.arrived_at && a.patient_id) ? `<button class="btn btn-outline btn-sm" onclick="addAnotherDoctorForOnlinePatient(${a.patient_id}, ${JSON.stringify(a.patient_name || '')}, ${JSON.stringify(a.patient_uid || '')})">Add Another Doctor</button>` : ''}
@@ -3995,6 +4018,7 @@
           toast("Payment collected", "success");
         }
         loadExpectedToday();
+        loadPendingReview();
       } catch (e) { toast(e.message, "error"); }
     }
 
@@ -4014,12 +4038,19 @@
               <div>
                 <div style="font-weight:500">${sanitize(a.patient_name || 'Name not linked yet')}</div>
                 <div style="font-size:12px;color:var(--slate-light)">
-                  ${sanitize(a.doctor_name)} · ${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
+                  ${sanitize(a.doctor_name)} · ${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   ${a.fee_amount != null ? ' · Rs.' + a.fee_amount : ''}
                 </div>
               </div>
-              <span class="badge ${a.followup_sent ? 'badge-red' : 'badge-amber'}">${a.followup_sent ? 'Overdue' : 'Awaiting review'}</span>
+              ${a.reason === 'awaiting_payment'
+                ? `<span class="badge badge-amber">Unpaid</span>`
+                : `<span class="badge ${a.followup_sent ? 'badge-red' : 'badge-amber'}">${a.followup_sent ? 'Overdue' : 'Awaiting review'}</span>`}
             </div>
+            ${a.reason === 'awaiting_payment' ? `
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="collectAppointmentPayment(${a.id})">Collect Payment</button>
+            </div>
+            ` : `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
               <button class="btn btn-primary btn-sm" onclick="acceptReview(${a.id})">Accept</button>
               <button class="btn btn-outline btn-sm" onclick="toggleReviewPanel('suggest', ${a.id})">Suggest new slot/doctor</button>
@@ -4034,6 +4065,7 @@
               <input class="form-control" style="max-width:260px;display:inline-block" id="pr-reason-${a.id}" placeholder="Reason (optional)" />
               <button class="btn btn-danger btn-sm" onclick="submitDecline(${a.id})">Confirm decline &amp; refund</button>
             </div>
+            `}
           </div>`).join('');
       } catch (e) {
         el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;

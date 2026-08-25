@@ -730,6 +730,7 @@
               ${sanitize(n.title)}
             </div>
             <div class="notif-item-message">${sanitize(n.message)}</div>
+            <div class="notif-item-time" style="font-size:11px;color:var(--slate-light);margin-top:2px">${formatNotifTimestamp(n.created_at)}</div>
           </div>
         `).join('');
             } catch (e) {
@@ -1398,6 +1399,15 @@
             loadConsultations(1);
         }
 
+        function openFeedbackNotesModal(patientName, comment) {
+            document.getElementById('fbn-patient-name').textContent = patientName || '';
+            document.getElementById('fbn-comment').textContent = comment && comment.trim() ? comment : 'No notes were left with this rating.';
+            document.getElementById('modal-feedback-notes').classList.add('open');
+        }
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('open');
+        }
+
         async function loadConsultations(page) {
             const from = document.getElementById('filter-from')?.value || '';
             const to = document.getElementById('filter-to')?.value || '';
@@ -1432,8 +1442,12 @@
           <td data-label="Doctor" style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
           <td data-label="Diagnosis">${sanitize(c.diagnosis)}</td>
           <td data-label="Date" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(c.date)}</td>
+          <td data-label="Feedback" style="white-space:nowrap">
+            ${c.feedback_rating ? `${c.feedback_rating}/5 stars` : '<span style="color:var(--slate-light)">No feedback</span>'}
+            ${c.feedback_rating ? `<button class="btn btn-outline btn-sm" style="margin-left:8px" onclick='openFeedbackNotesModal(${JSON.stringify(c.patient_name)}, ${JSON.stringify(c.feedback_comment)})'>Notes</button>` : ''}
+          </td>
         </tr>`).join('');
-                table.innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis', 'Date'], rows);
+                table.innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis', 'Date', 'Feedback'], rows);
                 pagination.innerHTML = `
           <span style="color:var(--slate);font-size:13px">Page ${data.page} of ${data.pages} · ${data.total} total</span>
           <div style="display:flex;gap:8px">
@@ -1728,6 +1742,16 @@
             </div>
             <div class="err-msg" id="merge-confirm-err"></div>
             <button class="btn btn-primary" style="width:100%" onclick="submitConfirmMerge()">Save Confirmation</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-feedback-notes">
+        <div class="modal" style="max-width:480px">
+            <div class="modal-header">
+                <h2>Patient Feedback — <span id="fbn-patient-name"></span></h2>
+                <button class="modal-close" onclick="closeModal('modal-feedback-notes')">×</button>
+            </div>
+            <p id="fbn-comment" style="white-space:pre-wrap;color:var(--slate)"></p>
         </div>
     </div>
 

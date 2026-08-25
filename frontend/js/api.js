@@ -7,6 +7,21 @@ setRealVhUnit();
 window.addEventListener('resize', setRealVhUnit);
 window.addEventListener('orientationchange', setRealVhUnit);
 
+// Today's notifications show just the time; anything older shows the date
+// (and year, if it's not this year) — used by every page's notification panel.
+function formatNotifTimestamp(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  if (isToday) {
+    return d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+  }
+  const opts = { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' };
+  if (d.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+  return d.toLocaleDateString('en-IN', opts);
+}
+
 function getToken() {
   try { return localStorage.getItem("ms_token"); }
   catch { return null; }

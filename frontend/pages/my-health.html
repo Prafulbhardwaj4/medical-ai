@@ -449,7 +449,7 @@
           html += `
             <div style="padding-top:14px;border-top:1px solid var(--border);margin-top:8px">
               <div style="font-weight:500;margin-bottom:6px">How was your visit?</div>
-              <div id="feedback-stars-${v.checkin_id}" style="font-size:22px;letter-spacing:4px;cursor:pointer;margin-bottom:8px">☆☆☆☆☆</div>
+              <div id="feedback-stars-${v.checkin_id}" style="display:inline-block;font-size:22px;letter-spacing:4px;cursor:pointer;margin-bottom:8px">☆☆☆☆☆</div>
               <textarea class="form-control" id="feedback-comment-${v.checkin_id}" placeholder="Anything you'd like to share (optional)" rows="2"></textarea>
               <div style="display:flex;gap:8px;margin-top:8px">
                 <button class="btn btn-primary btn-sm" onclick="submitVisitFeedback(${v.checkin_id})">Submit</button>

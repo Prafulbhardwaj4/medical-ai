@@ -1071,8 +1071,23 @@
         <h2>Change Ward / Bed</h2>
         <button class="modal-close" onclick="closeModal('modal-change-ward')">&times;</button>
       </div>
-      <p style="color:var(--slate);font-size:13px;margin-bottom:14px">Billing splits automatically — days already spent
+      <p style="color:var(--slate);font-size:13px;margin-bottom:14px" id="cw-billing-note">Billing splits automatically — days already spent
         in the current ward stay at the current rate, days from now on at the new rate.</p>
+      <div id="cw-identity-fields" style="display:none">
+        <p style="color:var(--danger);font-size:13px;margin-bottom:12px;font-weight:600">This patient was admitted via Emergency Intake with placeholder details — enter their actual details now. Room billing for this new ward starts from this moment.</p>
+        <div class="form-group"><label class="form-label">Patient's Actual Name</label><input class="form-control" id="cw-patient-name" placeholder="Full name" /></div>
+        <div class="form-group"><label class="form-label">Patient's Actual Phone</label><input class="form-control" id="cw-patient-phone" placeholder="10-digit phone number" /></div>
+        <div style="display:flex;gap:10px">
+          <div class="form-group" style="flex:1"><label class="form-label">Age</label><input class="form-control" type="number" min="0" id="cw-patient-age" /></div>
+          <div class="form-group" style="flex:1"><label class="form-label">Gender</label>
+            <select class="form-control" id="cw-patient-gender">
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+      </div>
       <div class="form-group">
         <label class="form-label">New Ward</label>
         <select class="form-control" id="cw-ward-type"></select>
@@ -1187,6 +1202,7 @@
               ${sanitize(n.title)}
             </div>
             <div class="notif-item-message">${sanitize(n.message)}</div>
+            <div class="notif-item-time" style="font-size:11px;color:var(--slate-light);margin-top:2px">${formatNotifTimestamp(n.created_at)}</div>
           </div>
         `).join('');
       } catch (e) {
@@ -1638,6 +1654,18 @@
         : `<option value="">No other wards configured</option>`;
       document.getElementById("cw-bed").value = "";
       document.getElementById("cw-err").textContent = "";
+
+      // Leaving Emergency with a still-unverified patient — capture their
+      // real details here, since this is also the moment billing starts.
+      const needsIdentity = admissionData.ward_is_emergency && admissionData.patient?.is_emergency_unverified;
+      document.getElementById("cw-identity-fields").style.display = needsIdentity ? "" : "none";
+      document.getElementById("cw-billing-note").style.display = needsIdentity ? "none" : "";
+      if (needsIdentity) {
+        document.getElementById("cw-patient-name").value = "";
+        document.getElementById("cw-patient-phone").value = "";
+        document.getElementById("cw-patient-age").value = admissionData.patient.age || "";
+        document.getElementById("cw-patient-gender").value = admissionData.patient.gender || "Male";
+      }
       openModal("modal-change-ward");
     }
 
@@ -1647,8 +1675,23 @@
       const bed = document.getElementById("cw-bed").value.trim();
       if (!wardTypeId) { err.textContent = "Select a ward"; return; }
       if (!bed) { err.textContent = "Bed number is required"; return; }
+      const payload = { ward_type_id: parseInt(wardTypeId, 10), bed_number: bed };
+      const needsIdentity = admissionData.ward_is_emergency && admissionData.patient?.is_emergency_unverified;
+      if (needsIdentity) {
+        const name = document.getElementById("cw-patient-name").value.trim();
+        const phone = document.getElementById("cw-patient-phone").value.trim();
+        const age = parseInt(document.getElementById("cw-patient-age").value, 10);
+        const gender = document.getElementById("cw-patient-gender").value;
+        if (!name) { err.textContent = "Patient's actual name is required"; return; }
+        if (!/^\d{10}$/.test(phone)) { err.textContent = "Enter a valid 10-digit phone number"; return; }
+        if (!age || age <= 0) { err.textContent = "Enter the patient's actual age"; return; }
+        payload.patient_name = name;
+        payload.patient_phone = phone;
+        payload.patient_age = age;
+        payload.patient_gender = gender;
+      }
       try {
-        await api("POST", `/admissions/${admissionId}/change-ward`, { ward_type_id: parseInt(wardTypeId, 10), bed_number: bed });
+        await api("POST", `/admissions/${admissionId}/change-ward`, payload);
         closeModal("modal-change-ward");
         toast("Patient moved", "success");
         loadAdmission();

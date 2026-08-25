@@ -91,7 +91,19 @@ def _room_charge_breakdown(db: Session, admission: Admission):
         rate = _current_daily_rate(db, admission)
         return [{"ward": admission.ward, "bed_number": admission.bed_number, "days": days,
                  "daily_charge": rate, "amount": days * rate, "start_date": admission.admission_date.isoformat(),
-                 "end_date": admission.discharge_date.isoformat() if admission.discharge_date else None}], days * rate
+                 "end_date": admission.discharge_date.isoformat() if admission.discharge_date else None,
+                 "ward_type_id": admission.ward_type_id}], days * rate
+
+    # Emergency Ward is never billed by the day — a patient there has NO
+    # room charge at all until they're actually moved into a real ward
+    # (see change_ward). Resolved from each segment's ward type at billing
+    # time (not just admission.ward_type_id) so this is correct per-segment
+    # even across several ward changes in one stay.
+    ward_type_ids = {s.ward_type_id for s in stays if s.ward_type_id}
+    emergency_ward_type_ids = {
+        wt.id for wt in db.query(AdmissionWardType).filter(AdmissionWardType.id.in_(ward_type_ids)).all()
+        if wt.is_emergency_ward
+    } if ward_type_ids else set()
 
     breakdown = []
     total = 0.0
@@ -102,10 +114,13 @@ def _room_charge_breakdown(db: Session, admission: Admission):
         if i == last_index:
             days += 1  # the current/last segment's start day counts as a full day, same convention as before
         days = max(days, 0)
-        amount = days * s.daily_charge
+        is_emergency_segment = s.ward_type_id in emergency_ward_type_ids
+        amount = 0.0 if is_emergency_segment else days * s.daily_charge
         breakdown.append({
-            "ward": s.ward_name, "bed_number": s.bed_number, "days": days, "daily_charge": s.daily_charge,
+            "ward": s.ward_name, "bed_number": s.bed_number, "days": days,
+            "daily_charge": 0.0 if is_emergency_segment else s.daily_charge,
             "amount": amount, "start_date": s.start_date.isoformat(), "end_date": s.end_date.isoformat() if s.end_date else None,
+            "ward_type_id": s.ward_type_id,
         })
         total += amount
     return breakdown, total
@@ -998,6 +1013,7 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
     doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
+    current_ward_type = db.query(AdmissionWardType).filter(AdmissionWardType.id == a.ward_type_id).first() if a.ward_type_id else None
 
     meds = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.admission_id == a.id).order_by(AdmissionMedicationOrder.created_at.desc()).all()
     med_out = []
@@ -1034,6 +1050,7 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
     return {
         "id": a.public_token, "status": a.status, "ward": a.ward, "bed_number": a.bed_number,
         "diagnosis": a.diagnosis, "daily_room_charge": _current_daily_rate(db, a),
+        "ward_is_emergency": bool(current_ward_type and current_ward_type.is_emergency_ward),
         "admission_date": a.admission_date.isoformat(), "discharge_date": a.discharge_date.isoformat() if a.discharge_date else None,
         "days_admitted": _days_admitted(a), "discharge_summary": a.discharge_summary,
         "discharge_type": a.discharge_type, "capacity_evaluation_note": a.capacity_evaluation_note,
@@ -1047,6 +1064,7 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         "medications_on_discharge": a.medications_on_discharge, "follow_up_instructions": a.follow_up_instructions,
         "discharge_invoice_id": a.discharge_invoice_id,
         "patient": {"id": patient.id, "name": patient.name, "age": patient.age, "gender": patient.gender, "phone": patient.phone, "patient_uid": patient.patient_uid,
+                    "is_emergency_unverified": patient.is_emergency_unverified,
                     "allergies": [{"id": al.id, "allergen": al.allergen, "reaction": al.reaction, "severity": al.severity}
                                   for al in db.query(PatientAllergy).filter(PatientAllergy.patient_id == patient.id, PatientAllergy.is_active == True).all()]} if patient else None,
         "admitting_doctor_name": f"{doctor.title} {doctor.name}" if doctor else None,
@@ -1128,6 +1146,26 @@ def change_ward(admission_id: str, body: ChangeWardIn, current_doctor: Doctor = 
         raise HTTPException(status_code=400, detail="Please select a valid bed")
     if body.bed_number in occupied_labels:
         raise HTTPException(status_code=400, detail=f"Bed {body.bed_number} is already occupied — pick another")
+
+    # Moving OUT of Emergency Ward with a still-unverified patient is the
+    # one moment their real identity has to be captured — this is where
+    # daily billing starts too, so it can't be skipped or done later.
+    current_ward_type = db.query(AdmissionWardType).filter(AdmissionWardType.id == a.ward_type_id).first() if a.ward_type_id else None
+    patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+    if current_ward_type and current_ward_type.is_emergency_ward and patient and patient.is_emergency_unverified:
+        if not (body.patient_name or "").strip():
+            raise HTTPException(status_code=400, detail="Patient's actual name is required to move them out of Emergency")
+        if not (body.patient_phone or "").strip():
+            raise HTTPException(status_code=400, detail="Patient's actual phone number is required to move them out of Emergency")
+        if not body.patient_age or body.patient_age <= 0:
+            raise HTTPException(status_code=400, detail="Patient's actual age is required to move them out of Emergency")
+        if (body.patient_gender or "").strip().capitalize() not in ["Male", "Female", "Other"]:
+            raise HTTPException(status_code=400, detail="Please select the patient's actual gender")
+        patient.name = body.patient_name.strip()
+        patient.phone = body.patient_phone.strip()
+        patient.age = body.patient_age
+        patient.gender = body.patient_gender.strip().capitalize()
+        patient.is_emergency_unverified = False
 
     now = now_ist_naive()
     current_stay = db.query(AdmissionWardStay).filter(
@@ -1509,17 +1547,30 @@ def order_admission_test(admission_id: str, body: AddAdmissionTestIn, current_do
 
 def _build_discharge_bill(db: Session, a: Admission):
     charges = db.query(AdmissionCharge).filter(AdmissionCharge.admission_id == a.id).all()
-    current_rate = _current_daily_rate(db, a)
-    ward_type = db.query(AdmissionWardType).filter(AdmissionWardType.id == a.ward_type_id).first() if a.ward_type_id else None
     items = []
     if a.admission_type != "day_care":
         # Day-care/short-stay never accrues overnight bed-night charges.
-        # Description kept as a plain category label ("Room Charges") — the
-        # ward/bed/day-count detail lives in qty (days) and unit_price
-        # (rate/day) instead of being baked into the text.
-        items.append({"type": "room", "name": "Room Charges",
-                      "qty": _days_admitted(a), "unit_price": current_rate, "line_total": _days_admitted(a) * current_rate, "payable_here": True,
-                      "_is_icu": bool(ward_type and ward_type.is_icu)})
+        # One line item per ward-stay segment — not a single flattened
+        # "Room Charges" row at today's rate — so a mid-stay ward change
+        # (e.g. Emergency → General, or General → ICU) bills each period at
+        # ITS OWN rate over ITS OWN days, and the actual invoice shows
+        # hospital entry time, each ward-shift time, and discharge time
+        # instead of silently applying the current ward's rate to the whole stay.
+        room_breakdown, _room_total = _room_charge_breakdown(db, a)
+        ward_type_cache = {
+            wt.id: wt for wt in db.query(AdmissionWardType).filter(
+                AdmissionWardType.id.in_({seg["ward_type_id"] for seg in room_breakdown if seg.get("ward_type_id")})
+            ).all()
+        } if room_breakdown else {}
+        for seg in room_breakdown:
+            start_str = datetime.fromisoformat(seg["start_date"]).strftime("%d %b, %I:%M %p")
+            end_str = datetime.fromisoformat(seg["end_date"]).strftime("%d %b, %I:%M %p") if seg["end_date"] else "discharge"
+            seg_ward_type = ward_type_cache.get(seg.get("ward_type_id"))
+            items.append({
+                "type": "room", "name": f"Room Charges — {seg['ward']} ({start_str} to {end_str})",
+                "qty": seg["days"], "unit_price": seg["daily_charge"], "line_total": seg["amount"], "payable_here": True,
+                "_is_icu": bool(seg_ward_type and seg_ward_type.is_icu),
+            })
 
     for c in charges:
         # Pharmacy (medicine) charges are settled only at the pharmacy counter, never at

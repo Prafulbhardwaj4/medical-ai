@@ -9,7 +9,8 @@
   const ADMIN_ROLES = ["admin", "sub_admin"];
   const STAFF_ROLES = ["doctor", "receptionist", "nurse", "assistant", "lab", "pharmacy"];
 
-  let currentThreadStaffId = null; // admin-side: which staff thread is open
+  let currentThreadStaffId = null;
+  let inBroadcastMode = false; 
 
   function mount() {
     const doctor = getDoctor();
@@ -52,7 +53,10 @@
           <button class="chat-back-btn" id="chat-back-btn" style="display:none">&larr;</button>
           <strong id="chat-panel-title">${ADMIN_ROLES.includes(doctor.role) ? "Staff Chats" : "Chat with Admin"}</strong>
         </div>
-        <button class="chat-back-btn" onclick="window.__chatWidget.close()">&times;</button>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${ADMIN_ROLES.includes(doctor.role) ? `<button class="chat-back-btn" id="chat-broadcast-btn" title="Broadcast to all staff">${iconBroadcast()}</button>` : ''}
+          <button class="chat-back-btn" onclick="window.__chatWidget.close()">&times;</button>
+        </div>
       </div>
       <div class="chat-panel-body" id="chat-panel-body"></div>
     `;
@@ -60,11 +64,16 @@
     document.body.appendChild(backdrop);
     document.body.appendChild(panel);
 
+    if (ADMIN_ROLES.includes(doctor.role)) {
+      document.getElementById("chat-broadcast-btn").addEventListener("click", renderBroadcastCompose);
+    }
+
     trigger.addEventListener("click", open);
     backdrop.addEventListener("click", close);
     document.getElementById("chat-back-btn").addEventListener("click", () => {
-      if (ADMIN_ROLES.includes(doctor.role) && currentThreadStaffId !== null) {
+      if (ADMIN_ROLES.includes(doctor.role) && (currentThreadStaffId !== null || inBroadcastMode)) {
         currentThreadStaffId = null;
+        inBroadcastMode = false;
         renderAdminThreadList();
       }
     });
@@ -122,6 +131,42 @@
 
   function iconAttach() {
     return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path></svg>`;
+  }
+
+  function iconBroadcast() {
+    return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 14v-3z"></path><path d="M11.6 16.8L13 21l2-1-1.3-3.8"></path></svg>`;
+  }
+
+  function renderBroadcastCompose() {
+    currentThreadStaffId = null;
+    inBroadcastMode = true;
+    document.getElementById("chat-panel-title").textContent = "Broadcast to all staff";
+    document.getElementById("chat-back-btn").style.display = "";
+    const body = document.getElementById("chat-panel-body");
+    body.innerHTML = `
+      <div style="padding:16px">
+        <p style="font-size:13px;color:var(--slate);margin-bottom:10px">This sends the same message to every staff member's chat with you — doctors, reception, nurses, assistants, lab, and pharmacy.</p>
+        <textarea id="chat-broadcast-input" class="form-control" rows="5" maxlength="2000" placeholder="Type a message to send to everyone..."></textarea>
+        <div class="err-msg" id="chat-broadcast-err"></div>
+        <button class="btn btn-primary" style="width:100%;margin-top:10px" id="chat-broadcast-send-btn">Send to All Staff</button>
+      </div>
+    `;
+    document.getElementById("chat-broadcast-send-btn").addEventListener("click", sendBroadcast);
+  }
+
+  async function sendBroadcast() {
+    const input = document.getElementById("chat-broadcast-input");
+    const err = document.getElementById("chat-broadcast-err");
+    const msg = input.value.trim();
+    err.textContent = "";
+    if (!msg) { err.textContent = "Message cannot be empty"; return; }
+    try {
+      const result = await api("POST", "/chat/broadcast", { message: msg });
+      toast(result.message || "Broadcast sent", "success");
+      renderAdminThreadList();
+    } catch (e) {
+      err.textContent = e.message || "Could not send broadcast.";
+    }
   }
 
   async function pickAndSendAttachment(sendFn) {
@@ -273,6 +318,7 @@
 
   window.__chatWidgetOpenThread = async function (staffId) {
     currentThreadStaffId = staffId;
+    inBroadcastMode = false;
     document.getElementById("chat-back-btn").style.display = "";
     const body = document.getElementById("chat-panel-body");
     body.innerHTML = `

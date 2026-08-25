@@ -95,7 +95,7 @@ class PatientOut(BaseModel):
     hospital_id: Optional[int] = None
     created_by: int
     created_at: datetime
-
+    auto_checked_in_token: Optional[str] = None  
     class Config:
         from_attributes = True
 

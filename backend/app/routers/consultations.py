@@ -1693,6 +1693,34 @@ def admin_dashboard(
         "daily_consultations": daily_counts
     }
 
+@router.get("/patient-feedback/{patient_id}")
+def get_patient_feedback(
+    patient_id: int,
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """All visit-feedback entries a patient has left, most recent first —
+    used by the Feedback button reception/doctor see alongside the
+    docs/reports view in the Patients tab. Any staff at the hospital can
+    view this (not admin-only, unlike /admin-consultations)."""
+    from app.models.feedback import VisitFeedback
+
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id, Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    rows = db.query(VisitFeedback).filter(
+        VisitFeedback.patient_id == patient_id, VisitFeedback.hospital_id == current_doctor.hospital_id
+    ).order_by(VisitFeedback.created_at.desc()).all()
+
+    return [{
+        "rating": r.rating, "comment": r.comment,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    } for r in rows]
+
+
 @router.get("/admin-consultations")
 def admin_consultations(
     from_date: str = None,
@@ -1740,11 +1768,19 @@ def admin_consultations(
     if doctor_id:
         query = query.filter(Consultation.doctor_id == doctor_id)
 
+    from app.models.checkin import Checkin
+    from app.models.feedback import VisitFeedback
+
     total = query.count()
     consults = (
         query
         .join(Patient, Consultation.patient_id == Patient.id)
         .join(DoctorModel, Consultation.doctor_id == DoctorModel.id)
+        # Both outer joins: most consultations won't have a matching Checkin
+        # row void of a token, and most won't have feedback at all (it's
+        # entirely optional/skippable on the patient's side).
+        .outerjoin(Checkin, Checkin.token_number == Consultation.token_number)
+        .outerjoin(VisitFeedback, VisitFeedback.checkin_id == Checkin.id)
         .with_entities(
             Consultation.token_number,
             Consultation.diagnosis,
@@ -1753,7 +1789,9 @@ def admin_consultations(
             Patient.name.label("patient_name"),
             Patient.patient_uid.label("patient_uid"),
             DoctorModel.title.label("doctor_title"),
-            DoctorModel.name.label("doctor_name")
+            DoctorModel.name.label("doctor_name"),
+            VisitFeedback.rating.label("feedback_rating"),
+            VisitFeedback.comment.label("feedback_comment"),
         )
         .order_by(Consultation.created_at.desc())
         .offset((page - 1) * limit)
@@ -1770,7 +1808,9 @@ def admin_consultations(
             "doctor_name": f"{c.doctor_title} {c.doctor_name}" if c.doctor_name else "—",
             "diagnosis": c.diagnosis or "—",
             "date": c.created_at.strftime("%d %b %Y %I:%M %p"),
-            "is_voided": c.is_voided
+            "is_voided": c.is_voided,
+            "feedback_rating": c.feedback_rating,
+            "feedback_comment": c.feedback_comment,
         })
 
     return {

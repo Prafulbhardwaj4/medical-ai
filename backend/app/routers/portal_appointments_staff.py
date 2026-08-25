@@ -410,14 +410,7 @@ def list_expected_today(
 
     q = db.query(Appointment).filter(
         Appointment.hospital_id == current_doctor.hospital_id,
-        # "completed" is included here deliberately: convert_appointment_to_checkin
-        # (called by the sweep two lines above, on every load of this same
-        # endpoint) flips status to "completed" the instant a token is
-        # generated for a paid appointment — which, since token generation no
-        # longer waits on arrival, is almost immediately. Without "completed"
-        # here, every appointment that had just been correctly converted
-        # vanished from its own "Expected Today" list on the very next line.
-        Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed, AppointmentStatus.completed]),
+        Appointment.status.in_([AppointmentStatus.confirmed, AppointmentStatus.completed]),
         Appointment.requested_time >= today_start,
         Appointment.requested_time < today_end,
     )
@@ -512,24 +505,41 @@ def list_pending_review(
     current_doctor=Depends(get_current_doctor),
     db: Session = Depends(get_db),
 ):
+    """Two different reasons an appointment can sit here, distinguished by
+    `reason` in the response: 'doctor_unavailable' (the original case — the
+    doctor went unavailable after booking, needs accept/suggest/decline)
+    and 'awaiting_payment' (a phone booking reception took via Book
+    Appointment — status stays "booked"/unpaid until reception actually
+    collects payment from the caller, at which point it moves to Expected
+    Today). Keeping "awaiting_payment" rows at status=booked rather than
+    reusing pending_review means the accept/suggest/decline endpoints below
+    — which all gate on status == pending_review — can't accidentally act
+    on a plain unpaid booking."""
     if current_doctor.role.value not in _STAFF_ROLES:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     _expire_stale_pending_reviews(db, current_doctor.hospital_id)
 
-    appts = db.query(Appointment).filter(
+    needs_review = db.query(Appointment).filter(
         Appointment.hospital_id == current_doctor.hospital_id,
         Appointment.status == AppointmentStatus.pending_review,
     ).order_by(Appointment.review_deadline_at).all()
 
+    awaiting_payment = db.query(Appointment).filter(
+        Appointment.hospital_id == current_doctor.hospital_id,
+        Appointment.status == AppointmentStatus.booked,
+        Appointment.payment_status == "unpaid",
+    ).order_by(Appointment.requested_time).all()
+
     result = []
-    for a in appts:
+    for a in needs_review:
         patient_name = a.new_patient_name
         if a.profile_link_id and a.profile_link and a.profile_link.patient:
             patient_name = a.profile_link.patient.name
         doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
         result.append({
             "id": a.id,
+            "reason": "doctor_unavailable",
             "patient_name": patient_name,
             "doctor_id": a.doctor_id,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
@@ -537,6 +547,22 @@ def list_pending_review(
             "fee_amount": a.fee_amount,
             "review_deadline_at": a.review_deadline_at.isoformat() if a.review_deadline_at else None,
             "followup_sent": a.review_followup_sent_at is not None,
+        })
+    for a in awaiting_payment:
+        patient_name = a.new_patient_name
+        if a.profile_link_id and a.profile_link and a.profile_link.patient:
+            patient_name = a.profile_link.patient.name
+        doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
+        result.append({
+            "id": a.id,
+            "reason": "awaiting_payment",
+            "patient_name": patient_name,
+            "doctor_id": a.doctor_id,
+            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
+            "requested_time": a.requested_time.isoformat(),
+            "fee_amount": a.fee_amount,
+            "review_deadline_at": None,
+            "followup_sent": False,
         })
     return {"count": len(result), "appointments": result}
 
