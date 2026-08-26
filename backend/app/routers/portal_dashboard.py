@@ -200,13 +200,14 @@ def download_admission_report_pdf(
                 TestCatalogParameter.test_catalog_item_id == catalog_item.id,
                 TestCatalogParameter.is_active == True  # noqa: E712
             ).order_by(TestCatalogParameter.display_order).all()
+            # Fall back to whichever gender's range is actually filled in.
             rows = [{
                 "name": p.name, "unit": p.unit or "",
-                "range": (p.reference_range_male if is_male else p.reference_range_female) or "",
+                "range": ((p.reference_range_male if is_male else p.reference_range_female) or p.reference_range_male or p.reference_range_female) or "",
                 "value": result_data.get(p.name, "")
             } for p in params if result_data.get(p.name)]
         else:
-            range_str = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) if catalog_item else ""
+            range_str = ((catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) or catalog_item.reference_range_male or catalog_item.reference_range_female) if catalog_item else ""
             unit = catalog_item.unit if catalog_item else ""
             rows = [{"name": order.test_name, "unit": unit or "", "range": range_str or "", "value": result_data.get("value", "")}]
 
@@ -481,11 +482,11 @@ def download_consultation_test_report(
             ).order_by(TestCatalogParameter.display_order).all()
             rows = [{
                 "name": p.name, "unit": p.unit or "",
-                "range": (p.reference_range_male if is_male else p.reference_range_female) or "",
+                "range": ((p.reference_range_male if is_male else p.reference_range_female) or p.reference_range_male or p.reference_range_female) or "",
                 "value": result_data.get(p.name, "")
             } for p in params if result_data.get(p.name)]  # untested subtests excluded, not just blanked
         else:
-            range_str = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) if catalog_item else ""
+            range_str = ((catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) or catalog_item.reference_range_male or catalog_item.reference_range_female) if catalog_item else ""
             unit = catalog_item.unit if catalog_item else ""
             rows = [{"name": order.test_name, "unit": unit or "", "range": range_str or "", "value": result_data.get("value", "")}]
 

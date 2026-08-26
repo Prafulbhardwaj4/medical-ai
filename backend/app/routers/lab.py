@@ -1265,7 +1265,10 @@ def get_patient_reports(
 
     visits = {}
     for o in visible_orders:
-        key = o.consultation_id
+        if o.admission_id:
+            key = ("batch", o.order_batch_id or f"order-{o.id}")
+        else:
+            key = ("consultation", o.consultation_id)
         if key not in visits:
             consultation = db.query(Consultation).filter(Consultation.id == o.consultation_id).first()
             visits[key] = {
@@ -1298,19 +1301,25 @@ def get_patient_reports(
             for p in params:
                 if p.name not in raw_results:
                     continue
+                # Fall back to whichever gender's range is actually filled
+                # in — a range entered under just one gender shouldn't read
+                # as "no range set" for a patient of the other gender.
+                gender_range = (p.reference_range_male if is_male else p.reference_range_female) or ""
+                fallback_range = p.reference_range_female if is_male else p.reference_range_male
                 rows.append({
                     "name": p.name,
                     "value": raw_results.get(p.name, ""),
                     "unit": p.unit or "",
-                    "range": (p.reference_range_male if is_male else p.reference_range_female) or "",
+                    "range": gender_range or fallback_range or "",
                 })
         elif raw_results:
-            range_str = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) if catalog_item else ""
+            gender_range = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) if catalog_item else ""
+            fallback_range = (catalog_item.reference_range_female if is_male else catalog_item.reference_range_male) if catalog_item else ""
             rows.append({
                 "name": o.test_name,
                 "value": raw_results.get("value", ""),
                 "unit": (catalog_item.unit if catalog_item else "") or "",
-                "range": range_str or "",
+                "range": gender_range or fallback_range or "",
             })
 
         v["tests"].append({
@@ -1416,8 +1425,18 @@ def get_combined_test_report(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    consultation = db.query(Consultation).filter(Consultation.id == orders[0].consultation_id).first()
-    ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first() if consultation else None
+    # "Ordering doctor" must be the admitting doctor for an admission order —
+    # never resolved via consultation, which admission orders aren't tied to
+    # (same fix as get_test_report above).
+    ordering_doctor = None
+    if orders[0].admission_id:
+        from app.models.admission import Admission
+        admission = db.query(Admission).filter(Admission.id == orders[0].admission_id).first()
+        if admission and admission.admitting_doctor_id:
+            ordering_doctor = db.query(Doctor).filter(Doctor.id == admission.admitting_doctor_id).first()
+    else:
+        consultation = db.query(Consultation).filter(Consultation.id == orders[0].consultation_id).first()
+        ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first() if consultation else None
 
     for o in orders:
         if _is_hiv_order(db, o):
@@ -1442,17 +1461,18 @@ def get_combined_test_report(
                 TestCatalogParameter.test_catalog_item_id == catalog_item.id,
                 TestCatalogParameter.is_active == True
             ).order_by(TestCatalogParameter.display_order).all()
+            # Fall back to whichever gender's range is actually filled in.
             rows = [{
                 "name": p.name,
                 "unit": p.unit or "",
-                "range": (p.reference_range_male if is_male else p.reference_range_female) or "",
+                "range": ((p.reference_range_male if is_male else p.reference_range_female) or p.reference_range_male or p.reference_range_female) or "",
                 "value": result_data.get(p.name, "")
             } for p in params if result_data.get(p.name)]  # untested subtests are excluded from the final report entirely
         else:
             range_str = ""
             unit = ""
             if catalog_item:
-                range_str = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) or ""
+                range_str = ((catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) or catalog_item.reference_range_male or catalog_item.reference_range_female) or ""
                 unit = catalog_item.unit or ""
             rows = [{
                 "name": order.test_name,

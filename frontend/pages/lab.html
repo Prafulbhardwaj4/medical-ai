@@ -1769,9 +1769,13 @@
             orderId: t.id,
             testName: t.test_name,
             mode: 'panel',
+            // Fall back to whichever gender's range is actually filled in —
+            // if the hospital only entered one (e.g. only Male), showing
+            // nothing for the other gender was hiding a range that does
+            // exist, not correctly reflecting "no range set at all".
             params: detail.parameters.map(p => ({
               id: p.id, name: p.name, unit: p.unit,
-              range: isMale ? p.reference_range_male : p.reference_range_female
+              range: (isMale ? p.reference_range_male : p.reference_range_female) || p.reference_range_male || p.reference_range_female
             }))
           });
         } else {
@@ -1780,7 +1784,7 @@
             testName: t.test_name,
             mode: 'single',
             unit: detail ? detail.unit : '',
-            range: detail ? (isMale ? detail.reference_range_male : detail.reference_range_female) : ''
+            range: detail ? ((isMale ? detail.reference_range_male : detail.reference_range_female) || detail.reference_range_male || detail.reference_range_female) : ''
           });
         }
       }
