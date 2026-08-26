@@ -81,9 +81,9 @@ def get_pharmacy_admission_queue(
     """Medicines doctors have ordered for currently-admitted patients — visibility
     only, no payment collected here (billed automatically at order time, in
     admissions.py). Pharmacy just needs to see what to send to the ward and
-    mark it sent. A still-pending order shows regardless of age; once
-    dispensed, it stays visible for the rest of the day it was sent (so the
-    "sent" confirmation doesn't vanish mid-shift) and drops off the next day."""
+    mark it sent. Same same-day cutoff as the Waiting Queue: an order only
+    shows if it was placed today or dispensed today — it drops off at
+    midnight either way, fresh list next day."""
     require_pharmacy(current_doctor)
     from app.models.admission import Admission, AdmissionMedicationOrder
 
@@ -98,7 +98,7 @@ def get_pharmacy_admission_queue(
             AdmissionMedicationOrder.is_active == True,  # noqa: E712
             AdmissionMedicationOrder.sourced_outside == False,  # noqa: E712
             or_(
-                AdmissionMedicationOrder.dispensed_at == None,  # noqa: E711
+                AdmissionMedicationOrder.created_at.between(today_start, today_end),
                 AdmissionMedicationOrder.dispensed_at.between(today_start, today_end),
             ),
         )

@@ -24,14 +24,16 @@ def _upsert(db: Session, hospital_id: int, source_key: str, type_: str, severity
 
 
 def notify_emergency_alert(db: Session, hospital_id: int, admission_id: int, patient_name: str,
-                            doctor_id: int, raised_by_name: str, ward: str, bed_number: str, message: str = None):
+                            doctor_id: int, raised_by_name: str, ward: str, bed_number: str,
+                            raised_by_role: str = None, message: str = None):
     """Urgent ping for an existing IPD patient — NOT a queue entry. Fires two
     notifications: one targeted at the assigned doctor (so it can be pulled
-    into a banner instead of a list) and one hospital-wide for admin
+    into a modal instead of a list) and one hospital-wide for admin
     visibility. Always a fresh timestamped row — every alert is its own
     event, never deduped/overwritten."""
     key = f"emergency_alert:{admission_id}:{now_ist_naive().isoformat()}"
-    base_message = f"{raised_by_name} raised an emergency alert for {patient_name} — {ward}, Bed {bed_number}."
+    role_part = f" ({raised_by_role})" if raised_by_role else ""
+    base_message = f"{raised_by_name}{role_part} raised an emergency alert for {patient_name} — {ward}, Bed {bed_number}."
     if message:
         base_message += f" {message}"
 
@@ -45,6 +47,25 @@ def notify_emergency_alert(db: Session, hospital_id: int, admission_id: int, pat
         hospital_id=hospital_id, source_key=key + ":admin", type="emergency_alert", severity="critical",
         title=f"🚨 Emergency — {patient_name}", message=base_message,
         link_type="admission", link_id=admission_id, is_read=False,
+    ))
+
+
+def notify_emergency_alert_for_assistant(db: Session, hospital_id: int, admission_id: int, patient_name: str,
+                                          assistant_id: int, admitting_doctor_name: str, raised_by_name: str,
+                                          ward: str, bed_number: str, raised_by_role: str = None, message: str = None):
+    """Same emergency alert, mirrored to a covering assistant — titled with
+    the admitting doctor's name so the assistant immediately knows whose
+    patient it's for. Fresh timestamped row per alert, same as
+    notify_emergency_alert."""
+    key = f"emergency_alert:{admission_id}:{assistant_id}:{now_ist_naive().isoformat()}"
+    role_part = f" ({raised_by_role})" if raised_by_role else ""
+    base_message = f"{raised_by_name}{role_part} raised an emergency alert for {patient_name} — {ward}, Bed {bed_number}."
+    if message:
+        base_message += f" {message}"
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key + ":assistant", type="emergency_alert_for_assistant", severity="critical",
+        title=f"🚨 Alert for {admitting_doctor_name}", message=base_message,
+        link_type="admission", link_id=admission_id, is_read=False, target_doctor_id=assistant_id,
     ))
 
 
@@ -103,6 +124,61 @@ def notify_emergency_assistant_hold(db: Session, hospital_id: int, admission_id:
         message=f"{patient_name} (Bed {bed_number}) is an emergency admission for their doctor. Hold off sending regular queue patients in until this one's been seen.",
         link_type="admission", link_id=admission_id, is_read=False, target_doctor_id=assistant_id,
     ))
+
+
+def sync_admission_action_notifications(db: Session, hospital_id: int):
+    """Auto-marks read (not deleted — these stay visible in notification
+    history, unlike the ephemeral stock/room alerts) any admission_referral,
+    ward_change_request, or admission_medicine_order notification whose
+    underlying task has already been completed by someone else — so tapping
+    a stale one doesn't try to reopen something that's already done."""
+    from app.models.admission_referral import AdmissionReferral
+    from app.models.admission import Admission, AdmissionMedicationOrder
+    from app.models.admission_ward_stay import AdmissionWardStay
+
+    unread = db.query(Notification).filter(
+        Notification.hospital_id == hospital_id,
+        Notification.is_read == False,  # noqa: E712
+        Notification.type.in_(["admission_referral", "ward_change_request", "admission_medicine_order"]),
+    ).all()
+    if not unread:
+        return
+
+    for n in unread:
+        if n.type == "admission_referral":
+            # link_id is the patient_id (see notify_admission_referral)
+            still_pending = db.query(AdmissionReferral).filter(
+                AdmissionReferral.hospital_id == hospital_id,
+                AdmissionReferral.patient_id == n.link_id,
+                AdmissionReferral.status == "pending",
+            ).first()
+            if not still_pending:
+                n.is_read = True
+        elif n.type == "ward_change_request":
+            # link_id is the admission_id
+            admission = db.query(Admission).filter(Admission.id == n.link_id).first()
+            if not admission or admission.status != "admitted":
+                n.is_read = True
+            else:
+                moved_since = db.query(AdmissionWardStay).filter(
+                    AdmissionWardStay.admission_id == n.link_id,
+                    AdmissionWardStay.start_date > n.created_at,
+                ).first()
+                if moved_since:
+                    n.is_read = True
+        elif n.type == "admission_medicine_order":
+            # link_id is the admission_id — resolved once nothing sendable is
+            # left pending (mirrors the pharmacy queue's own "fully sent" check)
+            still_pending = db.query(AdmissionMedicationOrder).filter(
+                AdmissionMedicationOrder.admission_id == n.link_id,
+                AdmissionMedicationOrder.is_active == True,  # noqa: E712
+                AdmissionMedicationOrder.dispensed_at == None,  # noqa: E711
+                AdmissionMedicationOrder.is_out_of_stock == False,  # noqa: E712
+            ).first()
+            if not still_pending:
+                n.is_read = True
+
+    db.commit()
 
 
 def notify_critical_result(db: Session, hospital_id: int, order_id: int, patient_name: str,

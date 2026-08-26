@@ -938,7 +938,7 @@
           return;
         }
         body.innerHTML = data.notifications.map(n => `
-          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'}, ${n.is_read})">
             <div class="notif-item-title">
               <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
               ${sanitize(n.title)}
@@ -952,14 +952,16 @@
       }
     }
 
-    async function onNotifClick(id, linkType, linkId) {
+    async function onNotifClick(id, linkType, linkId, wasAlreadyRead) {
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
         closeNotifPanel();
+        if (wasAlreadyRead && linkType === 'admission_medicine_order') {
+          toast("Already fully sent — nothing pending for this patient.", "info");
+          return;
+        }
         if (linkType === 'admission_medicine_order' && linkId) {
-          // Desktop shows the admitted-patient queue inside Home; mobile has
-          // its own "Admission" tab — flip both so whichever is active shows it.
           if (typeof showPharmDesktopTab === 'function') showPharmDesktopTab('home');
           showPharmSection('admission');
           await loadAdmissionPharmQueue();
@@ -1092,7 +1094,7 @@
 
         const groups = allGroups.filter(items => {
           const first = items[0];
-          const pendingCount = items.filter(i => !i.dispensed_at).length;
+          const pendingCount = items.filter(i => !i.dispensed_at && !i.is_out_of_stock).length;
           if (filter === 'pending' && pendingCount === 0) return false;
           if (filter === 'sent' && pendingCount > 0) return false;
           if (search) {
@@ -1109,7 +1111,7 @@
 
         t.el.innerHTML = groups.map(items => {
           const first = items[0];
-          const pendingCount = items.filter(i => !i.dispensed_at).length;
+          const pendingCount = items.filter(i => !i.dispensed_at && !i.is_out_of_stock).length;
           const orderer = first.prescriber_name
             ? `${first.prescriber_role === 'nurse' ? 'Nurse' : ''} ${first.prescriber_name}`.trim()
             : null;
@@ -2516,6 +2518,20 @@
     loadQueue();
     setInterval(loadQueue, 15000);
     if (window.innerWidth >= 901) showPharmDesktopTab('home');
+
+    const deepLinkAdmissionId = new URLSearchParams(window.location.search).get("admission_id");
+    if (deepLinkAdmissionId) {
+      if (window.innerWidth >= 901) showPharmDesktopTab('admission');
+      loadAdmissionPharmQueue().then(() => {
+        const match = admissionPharmQueueData.find(i => String(i.admission_id) === String(deepLinkAdmissionId));
+        if (match) {
+          openAdmissionMedModal(match.admission_id);
+        } else {
+          toast("Nothing pending for that patient — it may already be fully sent.", "info");
+        }
+      });
+      history.replaceState(null, "", "pharmacy.html");
+    }
   </script>
 </body>
 

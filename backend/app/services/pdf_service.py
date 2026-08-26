@@ -437,12 +437,9 @@ def generate_test_report_pdf(
     elements.append(Paragraph(f"<b>Report Date:</b> {report_dt.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     elements.append(Spacer(1, 4*mm))
 
-    accreditation_style = ParagraphStyle("accreditation", fontSize=8.5, fontName="Helvetica-Oblique", textColor=colors.HexColor("#065f46"))
-    non_scope_style = ParagraphStyle("non_scope", fontSize=8.5, fontName="Helvetica-Oblique", textColor=colors.grey)
     if getattr(catalog_item, "is_nabl_accredited", False):
+        accreditation_style = ParagraphStyle("accreditation", fontSize=8.5, fontName="Helvetica-Oblique", textColor=colors.HexColor("#065f46"))
         elements.append(Paragraph("This test is performed within our NABL-accredited scope.", accreditation_style))
-    else:
-        elements.append(Paragraph("This test is not within our current NABL-accredited scope.", non_scope_style))
     elements.append(Spacer(1, 2*mm))
     elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
     elements.append(Spacer(1, 4*mm))
@@ -626,19 +623,9 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
         if test.get("sample_condition_caveat"):
             elements.append(Paragraph(f"⚠ Sample condition note: {test['sample_condition_caveat']} — reported as-is per irreplaceable-sample policy.", caveat_style))
 
-        accreditation_style = ParagraphStyle("accreditation", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.HexColor("#065f46"))
-        non_scope_style = ParagraphStyle("non_scope", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.grey)
         if test.get("is_nabl_accredited"):
+            accreditation_style = ParagraphStyle("accreditation", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.HexColor("#065f46"))
             elements.append(Paragraph("Within our NABL-accredited scope.", accreditation_style))
-        else:
-            elements.append(Paragraph("Not within our current NABL-accredited scope.", non_scope_style))
-
-        accreditation_style = ParagraphStyle("accreditation", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.HexColor("#065f46"))
-        non_scope_style = ParagraphStyle("non_scope", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.grey)
-        if test.get("is_nabl_accredited"):
-            elements.append(Paragraph("Within our NABL-accredited scope.", accreditation_style))
-        else:
-            elements.append(Paragraph("Not within our current NABL-accredited scope.", non_scope_style))
 
         table_data = [["Parameter", "Result", "Unit", "Reference Range"]]
         row_styles = []

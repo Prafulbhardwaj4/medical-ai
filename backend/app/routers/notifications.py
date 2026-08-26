@@ -5,19 +5,16 @@ from app.database import get_db
 from app.models.doctor import Doctor
 from app.models.notification import Notification
 from app.utils.auth import get_current_doctor
-from app.utils.notify import sync_stock_notifications, sync_room_classification_notifications
+from app.utils.notify import sync_stock_notifications, sync_room_classification_notifications, sync_admission_action_notifications
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 PHARMACY_VISIBLE_TYPES = ["low_stock", "expiring_stock", "admission_medicine_order"]
 RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request", "sample_rejected", "admission_referral"]
 LAB_VISIBLE_TYPES = ["admission_test_sample", "admission_sample_overdue"]
-DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "no_assistant_alert", "emergency_ward_intake", "admission_medicine_substitute"]
-NURSE_VISIBLE_TYPES = ["critical_result_escalation", "sample_rejected"]
+DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "no_assistant_alert", "emergency_ward_intake", "admission_medicine_substitute", "emergency_admission"]
+NURSE_VISIBLE_TYPES = ["critical_result_escalation", "sample_rejected", "emergency_assistant_hold", "emergency_alert_for_assistant"]
 
-# Types that belong to a specific role's queue (reception / pharmacy / lab)
-# and should NOT also clutter the admin feed, even though they carry no
-# target_doctor_id. (Items 1-3: admin was getting these by default.)
 ADMIN_EXCLUDED_TYPES = list(set(
     RECEPTIONIST_VISIBLE_TYPES + ["admission_medicine_order"] + LAB_VISIBLE_TYPES
 ))
@@ -47,6 +44,7 @@ def list_notifications(
 
     sync_stock_notifications(db, current_doctor.hospital_id)
     sync_room_classification_notifications(db, current_doctor.hospital_id)
+    sync_admission_action_notifications(db, current_doctor.hospital_id)
 
     query = db.query(Notification).filter(Notification.hospital_id == current_doctor.hospital_id)
     if current_doctor.role.value == "pharmacy":
@@ -103,6 +101,7 @@ def get_unread_count(
 
     sync_stock_notifications(db, current_doctor.hospital_id)
     sync_room_classification_notifications(db, current_doctor.hospital_id)
+    sync_admission_action_notifications(db, current_doctor.hospital_id)
 
     query = db.query(Notification).filter(
         Notification.hospital_id == current_doctor.hospital_id,

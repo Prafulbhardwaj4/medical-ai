@@ -235,7 +235,6 @@
 
     <main class="main-content">
 
-      <div id="emergency-banner" style="display:none;background:#dc2626;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
       <div id="staff-alert-banner" style="display:none;background:#d97706;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
 
       <div id="resume-draft-banner" style="display:none;background:var(--slate-light,#475569);color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
@@ -636,7 +635,7 @@
           return;
         }
         body.innerHTML = data.notifications.map(n => `
-          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'}, ${n.is_read})">
             <div class="notif-item-title">
               <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
               ${sanitize(n.title)}
@@ -650,14 +649,22 @@
       }
     }
 
-    async function onNotifClick(id, linkType, linkId) {
+    async function onNotifClick(id, linkType, linkId, wasAlreadyRead) {
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
         closeNotifPanel();
-        if (linkType === 'admission' && linkId) {
+        if (wasAlreadyRead) {
+          toast("This has already been taken care of.", "info");
+          return;
+        }
+        if ((linkType === 'admission' || linkType === 'ward_change_request') && linkId) {
           const { token } = await api("GET", `/admissions/token-for/${linkId}`);
           location.href = `admission-detail.html?id=${token}`;
+        } else if (linkType === 'admission_referral' && linkId) {
+          location.href = `admissions.html?admit_patient_id=${linkId}`;
+        } else if (linkType === 'admission_medicine_order' && linkId) {
+          location.href = `pharmacy.html?admission_id=${linkId}`;
         }
       } catch (e) { toast(e.message, "error"); }
     }
@@ -869,6 +876,14 @@
       markAttendance(currentAttendanceStatus);
     }
 
+    function enterEmergencyStatus() {
+      if (currentDoctorLocation === 'emergency') return;
+      preEmergencyLocation = currentDoctorLocation;
+      currentDoctorLocation = 'emergency';
+      renderLocationToggleBtn();
+      markAttendance(currentAttendanceStatus);
+    }
+
     function openRoomSelectModal() {
       return new Promise((resolve) => {
         const overlay = document.createElement("div");
@@ -997,8 +1012,8 @@
           <td data-label="Last Token">${p.last_token ? `<span class="badge badge-teal">${p.last_token}</span>` : '<span style="color:var(--slate-light)">—</span>'}</td>
           <td data-label="">
             <div style="display:flex;gap:6px;align-items:center">
-              <button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openSelectPatientModal(${p.id}, ${JSON.stringify(p.name)})'>Select</button>
-              ${p.currently_admitted ? '<span class="badge badge-amber">Already Admitted</span>' : `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openSendToAdmissionModal(${p.id}, ${JSON.stringify(p.name)})">Send to Admission</button>`}
+              <button class="btn btn-sm" style="background:var(--teal);color:#fff;border:none" onclick='event.stopPropagation();openSelectPatientModal(${p.id}, ${JSON.stringify(p.name)})'>Select</button>
+              ${p.currently_admitted ? '<span class="badge badge-amber">Already Admitted</span>' : `<button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openSendToAdmissionModal(${p.id}, ${JSON.stringify(p.name)})'>Send to Admission</button>`}
             </div>
           </td>
         </tr>
@@ -1399,12 +1414,8 @@
         const notifs = data.notifications || [];
 
         const alerts = notifs.filter(n => n.type === 'emergency_alert' && !n.is_read);
-        const banner = document.getElementById('emergency-banner');
-        if (!alerts.length) { banner.style.display = 'none'; }
-        else {
-          const n = alerts[0];
-          banner.style.display = 'flex';
-          banner.innerHTML = `<span>${n.message}</span><button class="btn btn-sm" style="background:#fff;color:#dc2626" onclick="dismissEmergencyAlert(${n.id})">Acknowledge</button>`;
+        if (alerts.length && !document.getElementById('modal-emergency-alert')) {
+          openEmergencyAlertModal(alerts[0]);
         }
 
         const staffAlerts = notifs.filter(n => n.type === 'no_assistant_alert' && !n.is_read);
@@ -1430,6 +1441,36 @@
       } catch (e) { }
     }
 
+    function openEmergencyAlertModal(n) {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay open";
+      overlay.id = "modal-emergency-alert";
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:400px;text-align:center">
+          <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:center">
+            <h2 style="margin:0;font-size:18px;color:#dc2626">🚨 Emergency Alert</h2>
+          </div>
+          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${n.message}</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button type="button" class="btn btn-primary" id="ea-alert-ack-btn" style="background:#dc2626;border-color:#dc2626">Acknowledge</button>
+            <button type="button" class="btn btn-outline" id="ea-alert-later-btn">Later</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      overlay.querySelector("#ea-alert-ack-btn").addEventListener("click", () => acknowledgeEmergencyAlert(n, overlay));
+      overlay.querySelector("#ea-alert-later-btn").addEventListener("click", async () => {
+        try { await api("PATCH", `/notifications/${n.id}/read`); } catch (e) { }
+        overlay.remove();
+      });
+    }
+
+    async function acknowledgeEmergencyAlert(n, overlay) {
+      enterEmergencyStatus();
+      try { await api("PATCH", `/notifications/${n.id}/read`); } catch (e) { }
+      overlay.remove();
+    }
+
     function openEmergencyAdmissionModal(n) {
       const overlay = document.createElement("div");
       overlay.className = "modal-overlay open";
@@ -1452,16 +1493,12 @@
     }
 
     async function acceptEmergencyAdmission(n) {
-      // There's no OPD queue involved for an admitted emergency patient —
-      // this just marks the notification read and takes the doctor straight
-      // to the admission. admission-detail.html is addressed by public_token,
-      // not the internal id carried on the notification (same id->token
-      // resolution already used for ward_change_request notifications).
       const btn = document.getElementById('ea-accept-btn');
       if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
       try {
         await api("PATCH", `/notifications/${n.id}/read`, {});
         const { token } = await api("GET", `/admissions/token-for/${n.link_id}`);
+        enterEmergencyStatus();
         document.getElementById('modal-emergency-admission')?.remove();
         location.href = `admission-detail.html?id=${token}`;
       } catch (e) {

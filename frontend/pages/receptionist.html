@@ -1513,7 +1513,7 @@
           return;
         }
         body.innerHTML = data.notifications.map(n => `
-          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'}, ${n.is_read})">
             <div class="notif-item-title">
               <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
               ${sanitize(n.title)}
@@ -1527,11 +1527,15 @@
       }
     }
 
-    async function onNotifClick(id, linkType, linkId) {
+    async function onNotifClick(id, linkType, linkId, wasAlreadyRead) {
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
         closeNotifPanel();
+        if (wasAlreadyRead && (linkType === 'ward_change_request' || linkType === 'admission_referral')) {
+          toast("This has already been taken care of.", "info");
+          return;
+        }
         if (linkType === 'portal_appointment') {
           const prefill = await api("GET", `/portal-appointments-staff/${linkId}/new-patient-prefill`);
           openNewPatient();
@@ -3552,24 +3556,6 @@
     }
 
     loadRecAttendance();
-    checkDayEndReminder();
-    setInterval(checkDayEndReminder, 15 * 60 * 1000); // re-check every 15 min in case the shift runs long
-
-    async function checkDayEndReminder() {
-      const DAY_END_REMINDER_HOUR_IST = 20; // 8 PM IST — adjust to your hospital's actual closing time
-      try {
-        // also silently sweeps up any past day nobody closed, as before — no click required
-        const summary = await api("GET", "/billing/day-end-summary", null, false, true);
-        const banner = document.getElementById('day-end-reminder-banner');
-        const nowIstHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false }));
-        if (!summary.already_closed && nowIstHour >= DAY_END_REMINDER_HOUR_IST) {
-          banner.style.display = 'flex';
-          banner.innerHTML = `<span>⏰ Today's day-end reconciliation hasn't been closed yet.</span><button class="btn btn-sm" style="background:#fff;color:#d97706" onclick="openDayEndModal()">Close Day</button>`;
-        } else {
-          banner.style.display = 'none';
-        }
-      } catch (e) { }
-    }
     document.getElementById("expected-today-doctor-filter").addEventListener("change", loadExpectedToday);
 
     // ---------- Manage Availability ----------

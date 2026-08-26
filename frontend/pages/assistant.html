@@ -71,6 +71,9 @@
       .att-card .doc-picker { margin-left: auto; flex: 0 0 auto; }
       .att-card .staff-att-actions { margin-left: 0; }
     }
+    @media (max-width: 900px) {
+      #up-next-btn { width: 100%; }
+    }
     @media (min-width: 901px) {
       #up-next-btn { width: auto; display: block; margin-left: auto; }
     }
@@ -88,6 +91,7 @@
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
       <div class="topbar-doctor">
+        <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <span id="topbar-clinic" style="color:var(--slate)"></span>
         <button class="btn-logout" onclick="logout()">Sign out</button>
@@ -204,7 +208,7 @@
               <div style="font-size:13px;color:var(--slate);margin-top:2px" id="up-next-type"></div>
             </div>
           </div>
-          <button class="btn" id="up-next-btn" style="width:100%;margin-top:12px;background:var(--teal);color:#fff;border:none" onclick="skipUpNext()">Next</button>
+          <button class="btn" id="up-next-btn" style="margin-top:12px;background:var(--teal);color:#fff;border:none" onclick="skipUpNext()">Next</button>
         </div>
 
         <div class="card" id="queue-card-walkin">
@@ -657,7 +661,42 @@
       await loadQueues();
       renderDoctorRoster();
       loadEmergencyHoldAlerts();
+      loadEmergencyAlertForAssistant();
       loadQueues();
+    }
+
+    async function loadEmergencyAlertForAssistant() {
+      try {
+        const data = await api("GET", "/notifications");
+        const notifs = data.notifications || [];
+        const alerts = notifs.filter(n => n.type === 'emergency_alert_for_assistant' && !n.is_read);
+        if (alerts.length && !document.getElementById('modal-assistant-emergency-alert')) {
+          openAssistantEmergencyAlertModal(alerts[0]);
+        }
+      } catch (e) { }
+    }
+
+    function openAssistantEmergencyAlertModal(n) {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay open";
+      overlay.id = "modal-assistant-emergency-alert";
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:400px;text-align:center">
+          <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:center">
+            <h2 style="margin:0;font-size:18px;color:#dc2626">${n.title.replace('🚨 ', '🚨 ')}</h2>
+            <button class="modal-close" id="aea-close-btn">&times;</button>
+          </div>
+          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${n.message}</p>
+          <button type="button" class="btn btn-primary" id="aea-ack-btn" style="background:#dc2626;border-color:#dc2626;width:100%">Acknowledge</button>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      const dismiss = async () => {
+        try { await api("PATCH", `/notifications/${n.id}/read`); } catch (e) { }
+        overlay.remove();
+      };
+      overlay.querySelector("#aea-close-btn").addEventListener("click", dismiss);
+      overlay.querySelector("#aea-ack-btn").addEventListener("click", dismiss);
     }
 
     async function loadEmergencyHoldAlerts() {

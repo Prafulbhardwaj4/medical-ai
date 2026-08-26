@@ -688,9 +688,9 @@
   </div>
 
   <div class="modal-overlay" id="modal-vitals-history">
-    <div class="modal" style="max-width:460px;max-height:80vh;overflow-y:auto">
+    <div class="modal" style="max-width:760px;width:92vw;max-height:88vh;overflow-y:auto">
       <div class="modal-header">
-        <h2>Vitals History</h2><button class="modal-close" onclick="closeVitalsHistoryModal()">&times;</button>
+        <h2>Vitals</h2><button class="modal-close" onclick="closeVitalsHistoryModal()">&times;</button>
       </div>
       <div id="vitals-history-list"></div>
     </div>
@@ -1088,14 +1088,57 @@
           </div>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">New Ward</label>
-        <select class="form-control" id="cw-ward-type"></select>
+
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <span style="font-size:12px;font-weight:700;color:var(--teal);background:var(--teal-subtle);padding:4px 10px;border-radius:12px;white-space:nowrap" id="cw-step-badge">Step 1 of 4</span>
+        <span style="font-size:13px;font-weight:600;color:var(--navy)" id="cw-step-label">Select Ward Type</span>
       </div>
-      <div class="form-group"><label class="form-label">New Bed Number</label><input class="form-control" id="cw-bed"
-          placeholder="e.g. B-12" /></div>
-      <div class="err-msg" id="cw-err"></div>
-      <button class="btn btn-primary" style="width:100%" onclick="submitChangeWard()">Move Patient</button>
+
+      <div id="cw-step-1">
+        <div class="form-group">
+          <label class="form-label">New Ward</label>
+          <select class="form-control" id="cw-ward-type"></select>
+        </div>
+        <div class="err-msg" id="cw-err-1"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="cwGoToStep2()">Next</button>
+      </div>
+
+      <div id="cw-step-2" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Room Type</label>
+          <select class="form-control" id="cw-room-type">
+            <option value="general">General</option>
+            <option value="private">Private</option>
+          </select>
+        </div>
+        <div class="err-msg" id="cw-err-2"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline" style="flex:1" onclick="cwBackToStep(1)">Back</button>
+          <button class="btn btn-primary" style="flex:1" onclick="cwGoToStep3()">Next</button>
+        </div>
+      </div>
+
+      <div id="cw-step-3" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Room Number</label>
+          <select class="form-control" id="cw-room-select"></select>
+        </div>
+        <div class="err-msg" id="cw-err-3"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline" style="flex:1" onclick="cwBackToStep(2)">Back</button>
+          <button class="btn btn-primary" style="flex:1" onclick="cwGoToStep4()">Next</button>
+        </div>
+      </div>
+
+      <div id="cw-step-4" style="display:none">
+        <label class="form-label" style="display:block;margin-bottom:8px">Select an Available Bed</label>
+        <div id="cw-bed-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+        <div class="err-msg" id="cw-err-4"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline" style="flex:1" onclick="cwBackToStep(3)">Back</button>
+          <button class="btn btn-primary" style="flex:1" id="cw-move-btn" disabled onclick="submitChangeWard()">Move Patient</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1377,9 +1420,8 @@
         return;
       }
       const latest = vitalsData[0];
-      const pairs = Object.entries(latest.data || {}).map(([k, v]) => `${sanitize(k)}: ${sanitize(String(v))}`).join(' · ');
       const when = new Date(latest.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-      line.innerHTML = `${pairs} <span style="color:var(--slate-light);font-size:12px">· ${when} by ${sanitize(latest.recorded_by_name)}</span>`;
+      line.innerHTML = `${when} <span style="color:var(--slate-light)">by</span> ${sanitize(latest.recorded_by_name)}`;
     }
 
     function openVitalsHistoryModal() {
@@ -1387,12 +1429,28 @@
       if (!vitalsData.length) {
         el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No vitals recorded yet.</p>`;
       } else {
-        el.innerHTML = vitalsData.map(v => {
-          const pairs = Object.entries(v.data || {}).map(([k, val]) => `${sanitize(k)}: ${sanitize(String(val))}`).join(' · ');
-          const when = new Date(v.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-          return `<div style="border-bottom:1px solid var(--border);padding:8px 0;font-size:13px">
-            <div>${pairs}</div>
-            <div style="color:var(--slate-light);font-size:11.5px;margin-top:2px">${when} · recorded by ${sanitize(v.recorded_by_name)}</div>
+        el.innerHTML = vitalsData.map((v, i) => {
+          const when = new Date(v.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          const pairs = Object.entries(v.data || {}).map(([k, val]) => `
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:5px 8px 5px 0">${sanitize(k)}</td>
+              <td style="padding:5px 0 5px 8px;font-weight:600">${sanitize(String(val))}</td>
+            </tr>`).join('');
+          return `
+          <div style="border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:10px">
+            <button type="button" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'"
+              style="width:100%;text-align:left;background:none;border:none;padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+              <span><strong>${when}</strong>
+                <span style="color:var(--slate);font-size:13px"> · by ${sanitize(v.recorded_by_name)}</span></span>
+              <span style="color:var(--slate)">▾</span>
+            </button>
+            <div style="display:${i === 0 ? '' : 'none'};padding:0 14px 14px">
+              ${pairs ? `
+                <table style="width:100%;border-collapse:collapse;font-size:13px">
+                  <tbody>${pairs}</tbody>
+                </table>
+              ` : `<p style="font-size:13px;color:var(--slate-light)">No values recorded.</p>`}
+            </div>
           </div>`;
         }).join('');
       }
@@ -1508,12 +1566,33 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
-    async function sendEmergencyAlert() {
-      if (!confirm("Send an urgent emergency alert to this patient's doctor and admin?")) return;
+    function sendEmergencyAlert() {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay open";
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:380px">
+          <div class="modal-header"><h2>Send Emergency Alert?</h2></div>
+          <p style="font-size:13.5px;color:var(--slate);margin-bottom:16px">This sends an urgent emergency alert to this patient's doctor and admin. Confirm?</p>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-outline" style="flex:1" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+            <button class="btn btn-primary" style="flex:1;background:#dc2626;border-color:#dc2626" id="confirm-emergency-alert-btn">Yes, Send</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#confirm-emergency-alert-btn').addEventListener('click', () => doSendEmergencyAlert(overlay));
+    }
+
+    async function doSendEmergencyAlert(overlay) {
+      const btn = overlay.querySelector('#confirm-emergency-alert-btn');
+      btn.disabled = true; btn.textContent = 'Sending...';
       try {
         await api("POST", `/admissions/${admissionId}/emergency-alert`, {});
         toast("Emergency alert sent", "success");
-      } catch (e) { toast(e.message, "error"); }
+        overlay.remove();
+      } catch (e) {
+        toast(e.message, "error");
+        btn.disabled = false; btn.textContent = 'Yes, Send';
+      }
     }
 
     function renderHeader() {
@@ -1589,7 +1668,7 @@
             <div class="ph-info-label">Vitals</div>
             <div id="vitals-summary-line" style="font-size:13.5px;color:var(--slate)">Loading…</div>
             <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
-              <button class="btn btn-outline btn-sm" onclick="openVitalsHistoryModal()">View History</button>
+              <button class="btn btn-outline btn-sm" onclick="openVitalsHistoryModal()">View</button>
               ${getDoctor()?.role === 'nurse' ? `<button class="btn btn-primary btn-sm" onclick="openRecordVitalsModal()">Record</button>` : ''}
             </div>
           </div>
@@ -1645,6 +1724,24 @@
       } catch (e) { err.textContent = e.message; }
     }
 
+    let cwSelectedWardTypeId = null;
+    let cwSelectedRoomType = "general";
+    let cwSelectedRoomNumber = null;
+    let cwSelectedBed = null;
+
+    function cwSetStep(n, label) {
+      for (let i = 1; i <= 4; i++) {
+        document.getElementById(`cw-step-${i}`).style.display = i === n ? "" : "none";
+      }
+      document.getElementById("cw-step-badge").textContent = `Step ${n} of 4`;
+      document.getElementById("cw-step-label").textContent = label;
+    }
+
+    function cwBackToStep(n) {
+      const labels = { 1: "Select Ward Type", 2: "Select Room Type", 3: "Select Room Number", 4: "Select a Bed" };
+      cwSetStep(n, labels[n]);
+    }
+
     async function openChangeWardModal() {
       await loadWardTypesForMove();
       const sel = document.getElementById("cw-ward-type");
@@ -1652,8 +1749,13 @@
       sel.innerHTML = others.length
         ? others.map(w => `<option value="${w.id}">${sanitize(w.name)} (${w.vacant} free)</option>`).join('')
         : `<option value="">No other wards configured</option>`;
-      document.getElementById("cw-bed").value = "";
-      document.getElementById("cw-err").textContent = "";
+      document.getElementById("cw-room-type").value = "general";
+      ["cw-err-1", "cw-err-2", "cw-err-3", "cw-err-4"].forEach(id => document.getElementById(id).textContent = "");
+      cwSelectedWardTypeId = null;
+      cwSelectedRoomType = "general";
+      cwSelectedRoomNumber = null;
+      cwSelectedBed = null;
+      document.getElementById("cw-move-btn").disabled = true;
 
       // Leaving Emergency with a still-unverified patient — capture their
       // real details here, since this is also the moment billing starts.
@@ -1666,16 +1768,79 @@
         document.getElementById("cw-patient-age").value = admissionData.patient.age || "";
         document.getElementById("cw-patient-gender").value = admissionData.patient.gender || "Male";
       }
+      cwSetStep(1, "Select Ward Type");
       openModal("modal-change-ward");
     }
 
-    async function submitChangeWard() {
-      const err = document.getElementById("cw-err");
+    function cwGoToStep2() {
+      const err = document.getElementById("cw-err-1");
+      err.textContent = "";
       const wardTypeId = document.getElementById("cw-ward-type").value;
-      const bed = document.getElementById("cw-bed").value.trim();
       if (!wardTypeId) { err.textContent = "Select a ward"; return; }
-      if (!bed) { err.textContent = "Bed number is required"; return; }
-      const payload = { ward_type_id: parseInt(wardTypeId, 10), bed_number: bed };
+      cwSelectedWardTypeId = parseInt(wardTypeId, 10);
+      document.getElementById("cw-room-type").value = "general";
+      cwSetStep(2, "Select Room Type");
+    }
+
+    function cwGoToStep3() {
+      const err = document.getElementById("cw-err-2");
+      err.textContent = "";
+      cwSelectedRoomType = document.getElementById("cw-room-type").value;
+      const wardType = wardTypesForMove.find(w => w.id === cwSelectedWardTypeId);
+      const rooms = ((wardType && wardType.rooms) || []).filter(r => (r.room_type || "general") === cwSelectedRoomType && r.vacant > 0);
+      const roomSel = document.getElementById("cw-room-select");
+      if (!rooms.length) {
+        err.textContent = `No ${cwSelectedRoomType} rooms with a free bed in this ward — try a different room type.`;
+        roomSel.innerHTML = `<option value="">No rooms available</option>`;
+        return;
+      }
+      roomSel.innerHTML = rooms.map(r =>
+        `<option value="${sanitize(r.room_number)}">${sanitize(r.room_name ? `${r.room_number} (${r.room_name})` : r.room_number)} — ${r.vacant} free</option>`
+      ).join('');
+      cwSetStep(3, "Select Room Number");
+    }
+
+    async function cwGoToStep4() {
+      const err = document.getElementById("cw-err-3");
+      err.textContent = "";
+      const roomSel = document.getElementById("cw-room-select");
+      if (!roomSel.value) { err.textContent = "Select a room"; return; }
+      cwSelectedRoomNumber = roomSel.value;
+      cwSelectedBed = null;
+      document.getElementById("cw-move-btn").disabled = true;
+      const bedList = document.getElementById("cw-bed-list");
+      bedList.innerHTML = `<p style="color:var(--slate);font-size:13px">Loading beds…</p>`;
+      cwSetStep(4, "Select a Bed");
+      try {
+        const beds = await api("GET", `/admissions/ward-types/${cwSelectedWardTypeId}/beds`);
+        const roomBeds = beds.filter(b => b.label.startsWith(`${cwSelectedRoomNumber}-`));
+        if (!roomBeds.some(b => !b.occupied)) {
+          bedList.innerHTML = `<p style="color:var(--slate);font-size:13px">No free beds in this room right now.</p>`;
+          return;
+        }
+        bedList.innerHTML = roomBeds.map(b => `
+          <button type="button" class="btn btn-outline btn-sm cw-bed-btn" data-label="${sanitize(b.label)}"
+            ${b.occupied ? 'disabled style="opacity:.4"' : ''}
+            onclick="cwSelectBed('${sanitize(b.label)}', this)">${sanitize(b.label)}</button>
+        `).join('');
+      } catch (e) {
+        document.getElementById("cw-err-4").textContent = e.message;
+      }
+    }
+
+    function cwSelectBed(label, btn) {
+      cwSelectedBed = label;
+      document.querySelectorAll("#cw-bed-list .cw-bed-btn").forEach(b => b.classList.remove("btn-primary"));
+      btn.classList.add("btn-primary");
+      document.getElementById("cw-move-btn").disabled = false;
+    }
+
+    async function submitChangeWard() {
+      const err = document.getElementById("cw-err-4");
+      err.textContent = "";
+      if (!cwSelectedWardTypeId) { err.textContent = "Select a ward"; return; }
+      if (!cwSelectedBed) { err.textContent = "Select a bed"; return; }
+      const payload = { ward_type_id: cwSelectedWardTypeId, bed_number: cwSelectedBed };
       const needsIdentity = admissionData.ward_is_emergency && admissionData.patient?.is_emergency_unverified;
       if (needsIdentity) {
         const name = document.getElementById("cw-patient-name").value.trim();
@@ -2650,24 +2815,6 @@
     }
 
     loadAdmission();
-
-    // Auto-refresh so anyone viewing this page (doctor, nurse, reception,
-    // pharmacy, lab, assistant) sees updates without a manual reload —
-    // skipped while any modal is open so a periodic refresh can't wipe out
-    // something the person is mid-typing (a new progress note, an edit, a
-    // form in progress).
-    setInterval(() => {
-      if (document.querySelector(".modal-overlay.open")) return;
-      loadAdmission();
-    }, 20000);
-
-    // Every bottom-nav button here navigates away via location.href — that
-    // destroys this page's DOM, so a leftover open overlay can't get
-    // "stuck" the way it could on an in-page tab switch. But if the
-    // notification panel or profile menu was open at the moment of the
-    // tap, its full-screen dimmed backdrop would still flash on screen for
-    // the brief moment before the browser actually unloads the page.
-    // Closing overlays first avoids that visible flash.
     document.querySelectorAll(".bottom-nav").forEach(nav => {
       nav.addEventListener("click", () => closeAllOverlays(), true);
     });

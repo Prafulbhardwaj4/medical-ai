@@ -115,12 +115,12 @@ def _room_charge_breakdown(db: Session, admission: Admission):
             days += 1  # the current/last segment's start day counts as a full day, same convention as before
         days = max(days, 0)
         is_emergency_segment = s.ward_type_id in emergency_ward_type_ids
-        amount = 0.0 if is_emergency_segment else days * s.daily_charge
+        amount = s.daily_charge if is_emergency_segment else days * s.daily_charge
         breakdown.append({
             "ward": s.ward_name, "bed_number": s.bed_number, "days": days,
-            "daily_charge": 0.0 if is_emergency_segment else s.daily_charge,
+            "daily_charge": s.daily_charge,
             "amount": amount, "start_date": s.start_date.isoformat(), "end_date": s.end_date.isoformat() if s.end_date else None,
-            "ward_type_id": s.ward_type_id,
+            "ward_type_id": s.ward_type_id, "is_emergency": is_emergency_segment,
         })
         total += amount
     return breakdown, total
@@ -171,6 +171,7 @@ def _room_out(db: Session, room: AdmissionRoom) -> RoomOut:
     ).count()
     return RoomOut(
         id=room.id, ward_type_id=room.ward_type_id, room_number=room.room_number,
+        room_name=room.room_name, room_type=room.room_type, daily_charge=room.daily_charge,
         beds_count=room.beds_count, occupied=occupied, vacant=max(room.beds_count - occupied, 0),
     )
 
@@ -784,6 +785,11 @@ def delete_ward_type(ward_type_id: int, current_doctor: Doctor = Depends(get_cur
     in_use = db.query(Admission).filter(Admission.ward_type_id == wt.id, Admission.status == "admitted").count()
     if in_use > 0:
         raise HTTPException(status_code=400, detail=f"Cannot delete — {in_use} patient(s) currently admitted under this ward type")
+    from app.models.attendance_coverage import AttendanceCoverage
+    db.query(AdmissionWardStay).filter(AdmissionWardStay.ward_type_id == wt.id).update({"ward_type_id": None}, synchronize_session=False)
+    db.query(Admission).filter(Admission.ward_type_id == wt.id).update({"ward_type_id": None}, synchronize_session=False)
+    db.query(AttendanceCoverage).filter(AttendanceCoverage.ward_type_id == wt.id).update({"ward_type_id": None}, synchronize_session=False)
+    db.flush()
     db.query(AdmissionRoom).filter(AdmissionRoom.ward_type_id == wt.id).delete()
     db.delete(wt)
     db.commit()
@@ -1480,11 +1486,13 @@ def raise_emergency_alert(admission_id: str, body: EmergencyAlertIn, current_doc
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="This patient is not currently admitted")
     patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+    raised_by_role = current_doctor.role.value.replace("_", " ").title()
     notify_emergency_alert(
         db, hospital_id=a.hospital_id, admission_id=a.id,
         patient_name=patient.name if patient else "patient",
         doctor_id=a.admitting_doctor_id,
         raised_by_name=f"{current_doctor.title} {current_doctor.name}",
+        raised_by_role=raised_by_role,
         ward=a.ward, bed_number=a.bed_number,
         message=body.message,
     )
@@ -1492,11 +1500,41 @@ def raise_emergency_alert(admission_id: str, body: EmergencyAlertIn, current_doc
     # If the paged doctor is mid-OPD-consultation right now, pull them out of
     # rotation and hold the queue — the exact draft they left is already
     # pinned via active_consultation_id, so nothing to guess on return.
+    target_doctor = None
     if a.admitting_doctor_id:
         from app.routers.attendance import set_away_for_emergency
         target_doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
         if target_doctor and target_doctor.active_consultation_id:
             set_away_for_emergency(db, target_doctor.id, target_doctor.hospital_id)
+
+    # Covering assistants get their own copy of the alert, labeled with the
+    # admitting doctor's name — same lookup pattern as the Emergency Ward
+    # intake flow's notify_emergency_assistant_hold.
+    if target_doctor:
+        from app.utils.notify import notify_emergency_alert_for_assistant
+        from app.models.attendance_coverage import AttendanceCoverage
+        from app.models.attendance import AttendanceRecord
+        covering_assistant_ids = [
+            r[0] for r in db.query(AttendanceRecord.doctor_id).join(
+                AttendanceCoverage, AttendanceCoverage.attendance_record_id == AttendanceRecord.id
+            ).filter(
+                AttendanceRecord.hospital_id == current_doctor.hospital_id,
+                AttendanceRecord.date == ist_today(),
+                AttendanceRecord.status.in_(["present", "on_break"]),
+                AttendanceCoverage.doctor_id == target_doctor.id
+            ).distinct().all()
+        ]
+        for assistant_id in covering_assistant_ids:
+            notify_emergency_alert_for_assistant(
+                db, hospital_id=a.hospital_id, admission_id=a.id,
+                patient_name=patient.name if patient else "patient",
+                assistant_id=assistant_id,
+                admitting_doctor_name=f"{target_doctor.title} {target_doctor.name}",
+                raised_by_name=f"{current_doctor.title} {current_doctor.name}",
+                raised_by_role=raised_by_role,
+                ward=a.ward, bed_number=a.bed_number,
+                message=body.message,
+            )
 
     db.commit()
     return {"message": "Emergency alert sent"}
@@ -1566,23 +1604,16 @@ def _build_discharge_bill(db: Session, a: Admission):
             start_str = datetime.fromisoformat(seg["start_date"]).strftime("%d %b, %I:%M %p")
             end_str = datetime.fromisoformat(seg["end_date"]).strftime("%d %b, %I:%M %p") if seg["end_date"] else "discharge"
             seg_ward_type = ward_type_cache.get(seg.get("ward_type_id"))
+            is_emergency_seg = seg.get("is_emergency", False)
             items.append({
-                "type": "room", "name": f"Room Charges — {seg['ward']} ({start_str} to {end_str})",
-                "qty": seg["days"], "unit_price": seg["daily_charge"], "line_total": seg["amount"], "payable_here": True,
+                "type": "room",
+                "name": f"Emergency Ward Charge — {seg['ward']}" if is_emergency_seg else f"Room Charges — {seg['ward']} ({start_str} to {end_str})",
+                "qty": 1 if is_emergency_seg else seg["days"], "unit_price": seg["daily_charge"], "line_total": seg["amount"], "payable_here": True,
                 "_is_icu": bool(seg_ward_type and seg_ward_type.is_icu),
             })
 
     for c in charges:
-        # Pharmacy (medicine) charges are settled only at the pharmacy counter, never at
-        # reception — still listed here as a reference so the total bill picture is visible.
-        # Description is just the medicine/charge name — no boilerplate text appended;
-        # the "settled at pharmacy" fact is carried as its own flag (_dispensed_at_pharmacy)
-        # so the PDF can render it as a small separate note instead of jamming it into
-        # every medicine line's description.
         payable_here = c.charge_type != "medicine"
-        # OT charges were stored with "— {ward name}" baked into the description at
-        # creation time (see change_ward) — strip that suffix here so the invoice shows
-        # a plain "OT Charge" label, consistent with Room Charges.
         name = c.description
         if c.charge_type == "other" and name and name.startswith("OT Charge —"):
             name = "OT Charge"
