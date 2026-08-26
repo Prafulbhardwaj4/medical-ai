@@ -38,10 +38,8 @@ html {
   font-size: 15px;
 }
 
-html,
 body {
   overflow-x: hidden;
-  overscroll-behavior-y: none;
 }
 
 body {

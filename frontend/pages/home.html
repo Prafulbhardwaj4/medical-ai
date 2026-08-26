@@ -1082,10 +1082,6 @@
   </footer>
 
   <script>
-    // Smooth-scroll only for in-page anchor clicks (nav links, footer
-    // links) — kept off html's scroll-behavior globally, since that was
-    // intercepting/mangling plain mouse-wheel scrolling on some
-    // Windows mouse/trackpad driver + Chrome combinations.
     document.querySelectorAll('a[href^="#"]').forEach(link => {
       link.addEventListener('click', (e) => {
         const id = link.getAttribute('href').slice(1);
