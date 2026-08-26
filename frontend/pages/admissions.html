@@ -27,6 +27,11 @@
       transform: translateY(-1px);
     }
 
+    .ward-card-emergency {
+      border-left-color: #dc2626;
+      background: #fef2f2;
+    }
+
     .ward-avatar {
       width: 46px;
       height: 46px;
@@ -591,18 +596,6 @@
           <div class="form-group"><label class="form-label">Default Deposit (₹)</label><input class="form-control"
               type="number" min="0" id="wt-deposit" placeholder="Pre-filled at admission, reception can override" />
           </div>
-          <div class="form-group">
-            <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
-              <input type="checkbox" id="wt-is-ot"
-                onchange="document.getElementById('wt-ot-charge-group').style.display=this.checked?'':'none'"> Operation
-              Theatre (auto-bills an OT charge when a patient is moved into this ward)
-            </label>
-          </div>
-          <div class="form-group" id="wt-ot-charge-group" style="display:none">
-            <label class="form-label">OT Charge (₹, per use)</label>
-            <input class="form-control" type="number" min="0" id="wt-ot-charge"
-              placeholder="Billed once when a patient moves into this ward" />
-          </div>
           <div class="err-msg" id="wt-err"></div>
           <div style="display:flex;gap:10px">
             <button class="btn btn-outline" style="flex:1" onclick="backToManageWardsList()">Back</button>
@@ -1156,7 +1149,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
           <div>
             <div style="font-weight:600">${sanitize(w.name)}</div>
-            <div style="font-size:12px;color:var(--slate-light)"><span class="badge badge-grey" style="text-transform:capitalize">${sanitize((w.category || 'general').replace('_', ' '))}</span> · ${(w.rooms || []).length} room${(w.rooms || []).length === 1 ? '' : 's'}, ${w.total_beds} beds · ₹${w.daily_charge}/day · ₹${w.default_deposit || 0} default deposit${w.is_icu ? ' · <strong>ICU (GST-exempt)</strong>' : ''}${w.is_ot ? ` · <strong>OT (₹${w.ot_charge || 0}/use)</strong>` : ''}${w.is_emergency_ward ? ' · <strong>🚨 Emergency Ward</strong>' : ''}</div>
+            <div style="font-size:12px;color:var(--slate-light)"><span class="badge badge-grey" style="text-transform:capitalize">${sanitize((w.category || 'general').replace('_', ' '))}</span> · ${(w.rooms || []).length} room${(w.rooms || []).length === 1 ? '' : 's'}, ${w.total_beds} beds · ₹${w.daily_charge}/day · ₹${w.default_deposit || 0} default deposit${w.is_icu ? ' · <strong>ICU (GST-exempt)</strong>' : ''}${w.is_emergency_ward ? ' · <strong>🚨 Emergency Ward</strong>' : ''}</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick='editWardType(${JSON.stringify(w)})'>Edit</button>
@@ -1228,9 +1221,6 @@
       document.getElementById("wt-charge").value = w.daily_charge;
       document.getElementById("wt-charge-label").textContent = w.is_emergency_ward ? "One-Time Charge (₹)" : "Daily Charge (₹)";
       document.getElementById("wt-deposit").value = w.default_deposit || 0;
-      document.getElementById("wt-is-ot").checked = !!w.is_ot;
-      document.getElementById("wt-ot-charge").value = w.ot_charge != null ? w.ot_charge : '';
-      document.getElementById("wt-ot-charge-group").style.display = w.is_ot ? '' : 'none';
       document.getElementById("wt-err").textContent = "";
       document.getElementById("mw-list-view").style.display = "none";
       document.getElementById("mw-edit-view").style.display = "";
@@ -1249,14 +1239,10 @@
       const isIcu = !!(editingWardTypeSnapshot && editingWardTypeSnapshot.is_icu);
       const isEmergency = !!(editingWardTypeSnapshot && editingWardTypeSnapshot.is_emergency_ward);
       const category = (editingWardTypeSnapshot && editingWardTypeSnapshot.category) || 'general';
-      const isOt = document.getElementById("wt-is-ot").checked;
-      const otCharge = document.getElementById("wt-ot-charge").value ? parseFloat(document.getElementById("wt-ot-charge").value) : null;
+      const isOt = !!(editingWardTypeSnapshot && editingWardTypeSnapshot.is_ot);
+      const otCharge = editingWardTypeSnapshot ? editingWardTypeSnapshot.ot_charge : null;
       if (!name || isNaN(charge) || charge < 0 || isNaN(deposit) || deposit < 0) {
         err.textContent = "Please fill in all fields with valid values";
-        return;
-      }
-      if (isOt && (otCharge == null || otCharge < 0)) {
-        err.textContent = "Enter a valid OT charge amount";
         return;
       }
       try {

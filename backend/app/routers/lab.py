@@ -992,8 +992,13 @@ def get_order_current_result(
         result_data = json.loads(order.result_data or "{}")
     except Exception:
         result_data = {}
+    patient = db.query(Patient).filter(Patient.id == order.patient_id).first()
 
-    return {"id": order.id, "test_id": order.test_id, "test_name": order.test_name, "status": order.status, "results": result_data}
+    return {
+        "id": order.id, "test_id": order.test_id, "test_name": order.test_name,
+        "status": order.status, "results": result_data,
+        "patient_gender": patient.gender if patient else None,
+    }
 
 
 @router.post("/orders/{order_id}/result")
@@ -1190,8 +1195,15 @@ def get_test_report(
     # off `order` by generate_test_report_pdf below — no extra lookup needed.
 
     patient = db.query(Patient).filter(Patient.id == order.patient_id).first()
-    consultation = db.query(Consultation).filter(Consultation.id == order.consultation_id).first()
-    ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first() if consultation else None
+    ordering_doctor = None
+    if order.admission_id:
+        from app.models.admission import Admission
+        admission = db.query(Admission).filter(Admission.id == order.admission_id).first()
+        if admission and admission.admitting_doctor_id:
+            ordering_doctor = db.query(Doctor).filter(Doctor.id == admission.admitting_doctor_id).first()
+    elif order.consultation_id:
+        consultation = db.query(Consultation).filter(Consultation.id == order.consultation_id).first()
+        ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first() if consultation else None
 
     if _is_hiv_order(db, order):
         is_ordering_doctor = ordering_doctor and current_doctor.id == ordering_doctor.id

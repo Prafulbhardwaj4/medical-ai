@@ -135,11 +135,12 @@ def sync_admission_action_notifications(db: Session, hospital_id: int):
     from app.models.admission_referral import AdmissionReferral
     from app.models.admission import Admission, AdmissionMedicationOrder
     from app.models.admission_ward_stay import AdmissionWardStay
+    from app.models.admission_ward_type import AdmissionWardType
 
     unread = db.query(Notification).filter(
         Notification.hospital_id == hospital_id,
         Notification.is_read == False,  # noqa: E712
-        Notification.type.in_(["admission_referral", "ward_change_request", "admission_medicine_order"]),
+        Notification.type.in_(["admission_referral", "ward_change_request", "admission_medicine_order", "emergency_admission"]),
     ).all()
     if not unread:
         return
@@ -177,6 +178,16 @@ def sync_admission_action_notifications(db: Session, hospital_id: int):
             ).first()
             if not still_pending:
                 n.is_read = True
+        elif n.type == "emergency_admission":
+            admission = db.query(Admission).filter(Admission.id == n.link_id).first()
+            if not admission or admission.status != "admitted":
+                n.is_read = True
+            else:
+                ward_type = db.query(AdmissionWardType).filter(
+                    AdmissionWardType.id == admission.ward_type_id
+                ).first() if admission.ward_type_id else None
+                if not ward_type or not ward_type.is_emergency_ward:
+                    n.is_read = True
 
     db.commit()
 

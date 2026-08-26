@@ -1626,7 +1626,7 @@
               ${!isAdminViewer ? `<button class="btn btn-outline btn-sm" onclick="openModal('modal-other-charges')">Other Charges</button>` : ''}
               ${canSeeBilling ? `<button class="btn btn-outline btn-sm" onclick="openDischargeModal()">Discharge</button>` : ''}
             ` : ''}
-            ${a.status === 'admitted' && !isAdminViewer ? `<button class="btn btn-sm ph-emergency-btn" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}
+            ${a.status === 'admitted' && isNurseViewer() ? `<button class="btn btn-sm ph-emergency-btn" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}
           </div>
         </div>
 
@@ -1923,8 +1923,13 @@
       const paidSoFar = -sum(payments);
 
       const roomRows = (b.room_breakdown && b.room_breakdown.length > 1)
-        ? b.room_breakdown.map(r => `<div class="bill-row"><span>Room — ${sanitize(r.ward)} (${r.days} day${r.days === 1 ? '' : 's'} × ₹${r.daily_charge})</span><span>₹${r.amount.toFixed(2)}</span></div>`).join('')
-        : `<div class="bill-row"><span>Room (${admissionData.days_admitted} day${admissionData.days_admitted === 1 ? '' : 's'} × ₹${admissionData.daily_room_charge})</span><span>₹${b.room_total.toFixed(2)}</span></div>`;
+        ? b.room_breakdown.map(r => r.is_emergency
+            ? `<div class="bill-row"><span>Emergency</span><span>₹${r.amount.toFixed(2)}</span></div>`
+            : `<div class="bill-row"><span>Room — ${sanitize(r.ward)} (${r.days} day${r.days === 1 ? '' : 's'} × ₹${r.daily_charge})</span><span>₹${r.amount.toFixed(2)}</span></div>`
+          ).join('')
+        : (b.room_breakdown && b.room_breakdown.length === 1 && b.room_breakdown[0].is_emergency)
+          ? `<div class="bill-row"><span>Emergency</span><span>₹${b.room_total.toFixed(2)}</span></div>`
+          : `<div class="bill-row"><span>Room (${admissionData.days_admitted} day${admissionData.days_admitted === 1 ? '' : 's'} × ₹${admissionData.daily_room_charge})</span><span>₹${b.room_total.toFixed(2)}</span></div>`;
 
       const medRows = meds.length
         ? meds.map(c => `
@@ -2490,8 +2495,8 @@
       if (!testCatalogLoaded) {
         try {
           testCatalogCache = await api("GET", "/admissions/test-catalog");
-          testCatalogLoaded = true;
         } catch (e) { testCatalogCache = []; }
+        testCatalogLoaded = true;
       }
     }
 

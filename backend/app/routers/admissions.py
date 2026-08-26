@@ -633,7 +633,7 @@ def cancel_referral(referral_id: int, current_doctor: Doctor = Depends(get_curre
 
 @router.get("/test-catalog")
 def test_catalog_for_ward(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "admin", "sub_admin"]:
+    if current_doctor.role.value not in ["doctor", "nurse", "assistant", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     from app.models.test_catalog import TestCatalogItem
     items = db.query(TestCatalogItem).filter(
@@ -973,11 +973,13 @@ def list_active_admissions(search: str = "", ward_type_id: int = None, current_d
             haystack = " ".join(filter(None, [p.name if p else "", p.phone if p else "", p.patient_uid if p else "", a.diagnosis or ""])).lower()
             if q not in haystack:
                 continue
+        ward_type = db.query(AdmissionWardType).filter(AdmissionWardType.id == a.ward_type_id).first() if a.ward_type_id else None
         out.append({
             "id": a.public_token, "patient_id": a.patient_id, "patient_name": p.name if p else "Unknown",
             "patient_uid": p.patient_uid if p else None, "phone": p.phone if p else None,
             "ward": a.ward, "bed_number": a.bed_number, "diagnosis": a.diagnosis,
             "status": a.status, "admission_date": a.admission_date.isoformat(), "days_admitted": _days_admitted(a),
+            "is_emergency_ward": bool(ward_type and ward_type.is_emergency_ward),
         })
     return out
 

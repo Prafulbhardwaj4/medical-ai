@@ -1917,11 +1917,10 @@ tbody tr:hover {
   .att-card .staff-att-actions {
     flex: 1 1 100%;
     margin-top: 12px;
+    align-items: flex-end;
   }
 }
 
-/* Compact, single-row desktop layout: title+badge on the left, the
-   off-duty time in its own bordered chip, action buttons pinned right. */
 @media (min-width: 901px) {
   #att-card-header { display: flex; align-items: center; justify-content: space-between; }
   #att-card-header #btn-mark-present { flex-shrink: 0; }

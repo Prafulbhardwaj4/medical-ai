@@ -28,8 +28,12 @@
         display: block !important;
       }
 
-      #section-attendance.mobile-section,
-      #section-admitted.mobile-section {
+      #section-attendance.mobile-section {
+        display: block !important;
+        margin-bottom: 20px;
+      }
+
+      #section-queue.active + #section-admitted.mobile-section {
         display: block !important;
         margin-bottom: 20px;
       }
@@ -1928,21 +1932,33 @@
           try { detail = await api("GET", `/lab/tests/${current.test_id}`); } catch (e) { }
         }
 
+        const isMale = (current.patient_gender || '').toLowerCase() === 'male';
+
         if (detail && detail.is_panel && detail.parameters.length) {
           editReportMode = 'panel';
           editReportParams = detail.parameters;
-          bodyEl.innerHTML = detail.parameters.map(p => `
+          bodyEl.innerHTML = detail.parameters.map(p => {
+            const range = isMale ? p.reference_range_male : p.reference_range_female;
+            return `
             <div class="bulk-param-row">
-              <div class="bulk-param-meta"><strong>${sanitize(p.name)}</strong>${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}</div>
+              <div class="bulk-param-meta">
+                <strong>${sanitize(p.name)}</strong>${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}
+                <span class="range-text">${range ? 'Reference: ' + sanitize(range) : 'No reference range set'}</span>
+              </div>
               <input class="form-control" id="edit-val-${p.id}" value="${sanitize(current.results[p.name] ?? '')}" placeholder="Value" />
             </div>
-          `).join('');
+          `;
+          }).join('');
         } else {
           editReportMode = 'single';
           editReportParams = [];
+          const range = detail ? (isMale ? detail.reference_range_male : detail.reference_range_female) : '';
           bodyEl.innerHTML = `
             <div class="bulk-param-row">
-              <div class="bulk-param-meta"><strong>Result</strong>${detail?.unit ? ' (' + sanitize(detail.unit) + ')' : ''}</div>
+              <div class="bulk-param-meta">
+                <strong>Result</strong>${detail?.unit ? ' (' + sanitize(detail.unit) + ')' : ''}
+                <span class="range-text">${range ? 'Reference: ' + sanitize(range) : 'No reference range set'}</span>
+              </div>
               <input class="form-control" id="edit-val-single" value="${sanitize(current.results.value ?? '')}" placeholder="Value" />
             </div>
           `;

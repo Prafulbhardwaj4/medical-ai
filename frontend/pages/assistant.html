@@ -165,8 +165,6 @@
     </nav>
 
     <main class="main-content">
-      <div id="emergency-hold-banner" style="display:none;background:#dc2626;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
-
       <div class="mobile-section d-active" id="section-attendance">
         <div class="card att-card" style="margin-bottom:20px">
           <div class="card-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
@@ -682,8 +680,8 @@
       overlay.id = "modal-assistant-emergency-alert";
       overlay.innerHTML = `
         <div class="modal" style="max-width:400px;text-align:center">
-          <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:center">
-            <h2 style="margin:0;font-size:18px;color:#dc2626">${n.title.replace('🚨 ', '🚨 ')}</h2>
+          <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:space-between;align-items:center">
+            <h2 style="margin:0;font-size:18px;color:#dc2626;flex:1;text-align:center">${n.title.replace('🚨 ', '🚨 ')}</h2>
             <button class="modal-close" id="aea-close-btn">&times;</button>
           </div>
           <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${n.message}</p>
@@ -704,19 +702,33 @@
         const data = await api("GET", "/notifications");
         const notifs = data.notifications || [];
         const holds = notifs.filter(n => n.type === 'emergency_assistant_hold' && !n.is_read);
-        const banner = document.getElementById('emergency-hold-banner');
-        if (!holds.length) { banner.style.display = 'none'; return; }
-        const n = holds[0];
-        banner.style.display = 'flex';
-        banner.innerHTML = `<span>🚨 ${n.message}</span><button class="btn btn-sm" style="background:#fff;color:#dc2626" onclick="dismissEmergencyHold(${n.id})">Got it</button>`;
+        if (holds.length && !document.getElementById('modal-emergency-hold')) {
+          openEmergencyHoldModal(holds[0]);
+        }
       } catch (e) { }
     }
 
-    async function dismissEmergencyHold(id) {
-      try {
-        await api("PATCH", `/notifications/${id}/read`);
-        loadEmergencyHoldAlerts();
-      } catch (e) { }
+    function openEmergencyHoldModal(n) {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay open";
+      overlay.id = "modal-emergency-hold";
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:400px;text-align:center">
+          <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:space-between;align-items:center">
+            <h2 style="margin:0;font-size:18px;color:#dc2626;flex:1;text-align:center">${n.title}</h2>
+            <button class="modal-close" id="eh-close-btn">&times;</button>
+          </div>
+          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${n.message}</p>
+          <button type="button" class="btn btn-primary" id="eh-ack-btn" style="background:#dc2626;border-color:#dc2626;width:100%">Acknowledge</button>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      const dismiss = async () => {
+        try { await api("PATCH", `/notifications/${n.id}/read`); } catch (e) { }
+        overlay.remove();
+      };
+      overlay.querySelector("#eh-close-btn").addEventListener("click", dismiss);
+      overlay.querySelector("#eh-ack-btn").addEventListener("click", dismiss);
     }
 
     loadNurseAttendance().then(refreshAll);
