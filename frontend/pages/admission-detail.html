@@ -1626,7 +1626,7 @@
               ${!isAdminViewer ? `<button class="btn btn-outline btn-sm" onclick="openModal('modal-other-charges')">Other Charges</button>` : ''}
               ${canSeeBilling ? `<button class="btn btn-outline btn-sm" onclick="openDischargeModal()">Discharge</button>` : ''}
             ` : ''}
-            ${a.status === 'admitted' && isNurseViewer() ? `<button class="btn btn-sm ph-emergency-btn" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}
+            ${a.status === 'admitted' && isNurseViewer() && !a.ward_is_emergency ? `<button class="btn btn-sm ph-emergency-btn" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}
           </div>
         </div>
 
@@ -1870,7 +1870,7 @@
         <div class="med-card ${m.is_active ? '' : 'stopped'}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
             <div>
-              <div style="font-weight:600">${sanitize(m.medicine_name)} — ${m.quantity} unit${m.quantity === 1 ? '' : 's'} ${m.sourced_outside ? '<span class="badge badge-slate" style="font-weight:400">Family-sourced</span>' : ''}</div>
+              <div style="font-weight:600">${sanitize(m.medicine_name)} ${m.sourced_outside ? '<span class="badge badge-slate" style="font-weight:400">Family-sourced</span>' : ''}</div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               ${canManageMedOrders() && admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-outline btn-sm" onclick="stopMed(${m.id})">Stop</button>` : ''}
@@ -2349,20 +2349,40 @@
       box.style.display = 'block';
     }
 
+    // Blocks adding a medicine that's either already an active order on this
+    // admission, or already sitting in the current Add Medication(s) rows —
+    // checked by medicine_id when catalog-linked, otherwise by name
+    // (case-insensitive). Silently skips the add; rest of the flow (search
+    // box clears, suggestions close) stays the same either way.
+    function isAdmMedAlreadyListed(medicineId, name) {
+      const norm = (s) => (s || '').trim().toLowerCase();
+      const alreadyActive = admissionData.medications.some(m => m.is_active &&
+        (medicineId != null ? m.medicine_id === medicineId : norm(m.medicine_name) === norm(name)));
+      if (alreadyActive) return true;
+      const rows = [...document.querySelectorAll('#med-rows .med-row')];
+      return rows.some(row => {
+        const rowMedId = row.dataset.medicineId ? parseInt(row.dataset.medicineId) : null;
+        const rowName = row.querySelector('.am-med-name input').value;
+        return medicineId != null ? rowMedId === medicineId : norm(rowName) === norm(name);
+      });
+    }
+
     function selectAdmMed(id) {
       const m = medCatalogCache.find(x => x.id === id);
       if (!m) return;
-      addAdmMedRow({ medicine_id: m.id, medicine_name: m.display_name, dosage_forms: m.dosage_forms, pack_size: m.pack_size });
       document.getElementById('med-catalog-search').value = '';
       document.getElementById('med-suggestions').style.display = 'none';
+      if (isAdmMedAlreadyListed(m.id, m.display_name)) { toast(`${m.display_name} is already ordered`, "error"); return; }
+      addAdmMedRow({ medicine_id: m.id, medicine_name: m.display_name, dosage_forms: m.dosage_forms, pack_size: m.pack_size });
     }
 
     function selectAdmMedManual() {
       const name = document.getElementById('med-catalog-search').value.trim();
       if (!name) return;
-      addAdmMedRow({ medicine_id: null, medicine_name: name, manual: true });
       document.getElementById('med-catalog-search').value = '';
       document.getElementById('med-suggestions').style.display = 'none';
+      if (isAdmMedAlreadyListed(null, name)) { toast(`${name} is already ordered`, "error"); return; }
+      addAdmMedRow({ medicine_id: null, medicine_name: name, manual: true });
     }
 
     const ADM_MED_DIVISIBLE_FORMS = ['Tablet', 'Capsule', 'Sachet', 'Suppository', 'Patch'];

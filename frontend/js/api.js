@@ -650,7 +650,7 @@ async function openReportsModal(patientId) {
         <button type="button" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'"
           style="width:100%;text-align:left;background:none;border:none;padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
           <span><strong>${v.date ? new Date(v.date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) : 'Date not recorded'}</strong>
-            <span style="color:var(--slate);font-size:13px"> · Token ${v.token_number || '—'}</span></span>
+            ${v.token_number ? `<span style="color:var(--slate);font-size:13px"> · Token ${v.token_number}</span>` : ''}</span>
           <span style="color:var(--slate)">${v.tests.length} test${v.tests.length > 1 ? 's' : ''} ▾</span>
         </button>
         <div style="display:${i === 0 ? '' : 'none'};padding:0 14px 14px">

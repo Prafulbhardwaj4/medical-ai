@@ -331,6 +331,43 @@ def _expire_stale_pending_reviews(db: Session, hospital_id: int) -> None:
     db.commit()
 
 
+def _expire_stale_awaiting_payment(db: Session, hospital_id: int) -> None:
+    """Phone bookings reception took (status=booked, payment_status=unpaid)
+    stay in Pending Appointment Reviews under reason='awaiting_payment'
+    until someone collects payment. If the caller never shows up/pays that
+    same day, the booking is a no-show — cancel it (no refund owed, nothing
+    was ever paid) and release its slot so it stops sitting in the list as
+    a backdated entry. Same-day bookings are left alone even if their exact
+    slot time has passed — collect_payment_at_reception already bumps a
+    late arrival to the next free slot for today, so only once the day
+    itself is over do we give up and clear it out."""
+    today_start = datetime.combine(now_ist_naive().date(), datetime.min.time())
+
+    stale = db.query(Appointment).filter(
+        Appointment.hospital_id == hospital_id,
+        Appointment.status == AppointmentStatus.booked,
+        Appointment.payment_status == "unpaid",
+        Appointment.requested_time < today_start,
+    ).all()
+
+    for appt in stale:
+        if appt.slot_id:
+            slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.slot_id).with_for_update().first()
+            if slot and slot.booked_count > 0:
+                slot.booked_count -= 1
+        appt.status = AppointmentStatus.cancelled
+        db.add(Notification(
+            hospital_id=hospital_id,
+            source_key=f"appointment_awaiting_payment_expired:{appt.id}",
+            type="appointment_awaiting_payment_expired",
+            severity="warning",
+            title="Phone booking cancelled — no-show",
+            message=f"Appointment #{appt.id} was never paid/collected on its booked day and has been cancelled.",
+            link_type="portal_appointment", link_id=appt.id,
+        ))
+    db.commit()
+
+
 @router.get("/{appointment_id}/new-patient-prefill")
 def new_patient_prefill(
     appointment_id: int,
@@ -519,6 +556,7 @@ def list_pending_review(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     _expire_stale_pending_reviews(db, current_doctor.hospital_id)
+    _expire_stale_awaiting_payment(db, current_doctor.hospital_id)
 
     needs_review = db.query(Appointment).filter(
         Appointment.hospital_id == current_doctor.hospital_id,

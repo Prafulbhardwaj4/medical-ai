@@ -1478,7 +1478,7 @@
               <div class="ward-avatar">${a.patient_name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('')}</div>
               <div>
                 <div style="font-weight:700;color:var(--navy)">${sanitize(a.patient_name)}</div>
-                <div style="font-size:13px;color:var(--slate)">${sanitize(a.ward)} · Bed ${sanitize(a.bed_number)}${a.patient_uid ? ' · ' + sanitize(a.patient_uid) : ''}</div>
+                <div style="font-size:13px;color:var(--slate)">${a.is_emergency_ward ? `<span style="color:#dc2626;font-weight:700">${sanitize(a.ward)}</span>` : sanitize(a.ward)} · Bed ${sanitize(a.bed_number)}${a.patient_uid ? ' · ' + sanitize(a.patient_uid) : ''}</div>
                 ${(admissionsView === 'history' ? a.discharge_diagnosis : a.diagnosis) ? `<div style="font-size:12.5px;color:var(--slate-light);margin-top:2px">${sanitize(admissionsView === 'history' ? a.discharge_diagnosis : a.diagnosis)}</div>` : ''}
               </div>
             </div>
