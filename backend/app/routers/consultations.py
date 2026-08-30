@@ -205,6 +205,44 @@ def get_analytics(
         "top_tests": [{"name": k, "count": v} for k, v in top_tests]
     }
 
+@router.post("/draft/{patient_id}")
+def create_draft_consultation(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Creates (or reuses) a blank consultation row with no transcript —
+    needed for the Foundation-tier / AI-Scribe-unavailable manual-entry
+    path, which otherwise has no way to ever get a consultation_id at all
+    (every other path that sets consultationId goes through actual voice
+    transcription). Same "reuse existing unconfirmed draft" pattern as the
+    /transcribe endpoint, so switching between manual entry and a later
+    recording attempt on the same visit doesn't create duplicate drafts."""
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    consultation = db.query(Consultation).filter(
+        Consultation.patient_id == patient_id,
+        Consultation.doctor_id == current_doctor.id,
+        Consultation.token_number == None
+    ).first()
+
+    if not consultation:
+        consultation = Consultation(patient_id=patient_id, doctor_id=current_doctor.id)
+        db.add(consultation)
+        db.commit()
+        db.refresh(consultation)
+
+    current_doctor.active_consultation_id = consultation.id
+    db.commit()
+
+    return {"consultation_id": consultation.id}
+
+
 @router.post("/transcribe/{patient_id}")
 @limiter.limit("10/minute")
 async def transcribe(

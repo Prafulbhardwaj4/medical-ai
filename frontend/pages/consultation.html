@@ -1243,13 +1243,25 @@
     // used for review/edit — diagnosis, medicines, tests, follow-up.
     // Reopen mode (#reopen) already does its own panel-2 jump, so this
     // steps aside for it rather than doing the work twice.
-    function switchToManualEntryMode(reasonMessage) {
+    async function switchToManualEntryMode(reasonMessage) {
       isFoundationManualMode = true;
       document.getElementById('steps').style.display = 'none';
       document.getElementById('panel-2-title').textContent = 'Consultation Details';
       document.getElementById('panel-2-ai-badge').style.display = 'none';
       goStep(2);
       if (reasonMessage) toast(reasonMessage, 'info');
+
+      // Manual entry never goes through the voice/transcription flow, which
+      // is the only place consultationId normally gets set — without this,
+      // doConfirm() ends up calling the API with a literal "null" id.
+      if (!consultationId && patientId) {
+        try {
+          const draft = await api("POST", `/consultations/draft/${patientId}`);
+          consultationId = draft.consultation_id;
+        } catch (e) {
+          toast("Could not start this consultation — please refresh and try again.", "error");
+        }
+      }
     }
 
     function applyFoundationTierGating() {
