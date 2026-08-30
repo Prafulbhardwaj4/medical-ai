@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List, Literal, Dict
+from app.schemas.admission import RadiologyFormFIn
 
 class MedicineItem(BaseModel):
     name: str
@@ -25,6 +26,7 @@ class ConsultationStructured(BaseModel):
     test_priorities: Optional[Dict[int, str]] = {}
     recommended_radiology_template_ids: Optional[List[int]] = []  # real, orderable imaging studies — mirrors recommended_test_ids
     radiology_priorities: Optional[Dict[int, str]] = {}
+    radiology_form_f: Optional[Dict[int, RadiologyFormFIn]] = {}  # keyed by radiology_template_id — PCPNDT Form F (item 7)
     clinical_indication: Optional[str] = None
     advice: Optional[str] = ""
     followup: Optional[str] = ""
@@ -55,6 +57,7 @@ class ConfirmPrescriptionPayload(BaseModel):
     test_priorities: Optional[Dict[int, str]] = {}
     recommended_radiology_template_ids: Optional[List[int]] = []
     radiology_priorities: Optional[Dict[int, str]] = {}
+    radiology_form_f: Optional[Dict[int, RadiologyFormFIn]] = {}  # keyed by radiology_template_id — PCPNDT Form F (item 7)
     clinical_indication: Optional[str] = None
 
 class ConsultationHistoryItem(BaseModel):

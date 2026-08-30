@@ -22,6 +22,7 @@ from app.models.refund import Refund
 from app.models.test_catalog import TestCatalogItem
 from app.models.radiology_template import RadiologyTemplate
 from app.models.radiology_order import RadiologyOrder
+from app.models.radiology_form_f import RadiologyFormF
 from app.models.test_order import TestOrder
 from app.models.medicine_order import MedicineOrder
 from app.models.hospital_medicine import HospitalMedicine
@@ -940,9 +941,16 @@ def confirm_prescription(
 
         valid_priorities_rad = {"routine", "urgent", "stat"}
         indication_rad = (payload.clinical_indication or "").strip() or None
+        # PCPNDT Form F (item 7) — keyed by template_id in the payload since
+        # that's the id the frontend chip/checkbox flow tracks against.
+        form_f_map = payload.radiology_form_f or {}
         for t in radiology_templates:
             requested_priority = (payload.radiology_priorities or {}).get(t.id, "routine")
-            db.add(RadiologyOrder(
+            ff = form_f_map.get(t.id)
+            is_repro = bool(ff) and t.study_type == "ultrasound"
+            if is_repro and not ff.non_sex_determination_declared:
+                raise HTTPException(status_code=400, detail=f"The non-sex-determination declaration must be confirmed for {t.name}")
+            order = RadiologyOrder(
                 consultation_id=consultation.id,
                 patient_id=consultation.patient_id,
                 hospital_id=current_doctor.hospital_id,
@@ -953,7 +961,29 @@ def confirm_prescription(
                 status="payment_pending",
                 priority=requested_priority if requested_priority in valid_priorities_rad else "routine",
                 clinical_indication=indication_rad,
-            ))
+                is_reproductive_age_woman=is_repro,
+            )
+            db.add(order)
+            if is_repro:
+                db.flush()  # assign order.id before the Form F row references it
+                declared_date = None
+                if ff.declaration_obtained_date:
+                    try:
+                        declared_date = date.fromisoformat(ff.declaration_obtained_date)
+                    except ValueError:
+                        declared_date = None
+                db.add(RadiologyFormF(
+                    radiology_order_id=order.id, hospital_id=current_doctor.hospital_id,
+                    patient_age=ff.patient_age, total_living_children=ff.total_living_children,
+                    living_sons_ages=ff.living_sons_ages, living_daughters_ages=ff.living_daughters_ages,
+                    guardian_name=ff.guardian_name, patient_address_contact=ff.patient_address_contact,
+                    referral_type=ff.referral_type, referring_doctor_details=ff.referring_doctor_details,
+                    lmp_or_gestational_weeks=ff.lmp_or_gestational_weeks, performing_doctor_name=ff.performing_doctor_name,
+                    indication_checklist=json.dumps(ff.indication_checklist) if ff.indication_checklist else None,
+                    declaration_obtained_date=declared_date,
+                    non_sex_determination_declared=ff.non_sex_determination_declared,
+                    created_by=current_doctor.id,
+                ))
 
     try:
         prescribed_medicines = json.loads(consultation.medicines or "[]")
@@ -1299,8 +1329,13 @@ def update_consultation(
             valid_priorities_rad = {"routine", "urgent", "stat"}
             indication_rad = (payload.clinical_indication or "").strip() or None
             added_radiology_fee = 0
+            form_f_map = payload.radiology_form_f or {}
             for t in radiology_items:
                 requested_priority = (payload.radiology_priorities or {}).get(t.id, "routine")
+                ff = form_f_map.get(t.id)
+                is_repro = bool(ff) and t.study_type == "ultrasound"
+                if is_repro and not ff.non_sex_determination_declared:
+                    raise HTTPException(status_code=400, detail=f"The non-sex-determination declaration must be confirmed for {t.name}")
                 order = RadiologyOrder(
                     consultation_id=consultation.id,
                     patient_id=consultation.patient_id,
@@ -1312,10 +1347,31 @@ def update_consultation(
                     status="payment_pending",
                     priority=requested_priority if requested_priority in valid_priorities_rad else "routine",
                     clinical_indication=indication_rad,
+                    is_reproductive_age_woman=is_repro,
                 )
                 db.add(order)
                 new_radiology_orders.append(order)
                 added_radiology_fee += t.fee
+                if is_repro:
+                    db.flush()  # assign order.id before the Form F row references it
+                    declared_date = None
+                    if ff.declaration_obtained_date:
+                        try:
+                            declared_date = date.fromisoformat(ff.declaration_obtained_date)
+                        except ValueError:
+                            declared_date = None
+                    db.add(RadiologyFormF(
+                        radiology_order_id=order.id, hospital_id=current_doctor.hospital_id,
+                        patient_age=ff.patient_age, total_living_children=ff.total_living_children,
+                        living_sons_ages=ff.living_sons_ages, living_daughters_ages=ff.living_daughters_ages,
+                        guardian_name=ff.guardian_name, patient_address_contact=ff.patient_address_contact,
+                        referral_type=ff.referral_type, referring_doctor_details=ff.referring_doctor_details,
+                        lmp_or_gestational_weeks=ff.lmp_or_gestational_weeks, performing_doctor_name=ff.performing_doctor_name,
+                        indication_checklist=json.dumps(ff.indication_checklist) if ff.indication_checklist else None,
+                        declaration_obtained_date=declared_date,
+                        non_sex_determination_declared=ff.non_sex_determination_declared,
+                        created_by=current_doctor.id,
+                    ))
 
             if added_radiology_fee > 0 and todays_checkin_for_radiology:
                 todays_checkin_for_radiology.test_fee = (todays_checkin_for_radiology.test_fee or 0) + added_radiology_fee

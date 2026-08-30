@@ -504,6 +504,42 @@
     </main>
   </div>
 
+  <!-- PCPNDT Form F modal — opened per radiology chip when that item is
+       Ultrasound and the reproductive-age checkbox on the chip is ticked. -->
+  <div class="modal-overlay" id="modal-form-f">
+    <div class="modal" style="max-width:520px;max-height:85vh;overflow-y:auto">
+      <div class="modal-header">
+        <h2>PCPNDT Form F</h2>
+        <button class="modal-close" onclick="closeFormFModal()">&times;</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--danger);font-weight:600;margin:0 0 14px">Required by law before this ultrasound order can be placed</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="form-group" style="margin:0"><label class="form-label">Patient Age</label><input class="form-control" id="ff-patient-age" type="number" min="0" /></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Total Living Children</label><input class="form-control" id="ff-living-children" type="number" min="0" value="0" /></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Living Sons (ages)</label><input class="form-control" id="ff-sons-ages" placeholder="e.g. 6 years, 3 months" /></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Living Daughters (ages)</label><input class="form-control" id="ff-daughters-ages" placeholder="e.g. 4 years" /></div>
+        <div class="form-group" style="margin:0;grid-column:1/-1"><label class="form-label">Husband's/Wife's/Father's/Mother's Name *</label><input class="form-control" id="ff-guardian-name" /></div>
+        <div class="form-group" style="margin:0;grid-column:1/-1"><label class="form-label">Patient's Full Address & Contact *</label><textarea class="form-control" id="ff-address" rows="2"></textarea></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Referral *</label>
+          <select class="form-control" id="ff-referral-type">
+            <option value="referred">Referred by a doctor</option>
+            <option value="self_referral">Self-referral</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0"><label class="form-label">LMP / Gestational Weeks *</label><input class="form-control" id="ff-lmp" placeholder="e.g. 24 weeks" /></div>
+        <div class="form-group" style="margin:0;grid-column:1/-1"><label class="form-label">Referring Doctor's Name & Address (or self-referral note) *</label><textarea class="form-control" id="ff-referring-doctor" rows="2"></textarea></div>
+        <div class="form-group" style="margin:0;grid-column:1/-1"><label class="form-label">Doctor Performing the Scan *</label><input class="form-control" id="ff-performing-doctor" /></div>
+        <div class="form-group" style="margin:0;grid-column:1/-1"><label class="form-label">Date Declaration Was Obtained</label><input class="form-control" id="ff-declared-date" type="date" /></div>
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;margin:10px 0 4px;cursor:pointer">
+        <input type="checkbox" id="ff-non-sex-declared" style="margin-top:2px" />
+        I declare that I have neither detected nor disclosed the sex of the foetus to the pregnant woman, her relatives, or any other person during this procedure.
+      </label>
+      <div class="err-msg" id="ff-err"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="submitFormFModal()">Save Form F Details</button>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="modal-send-to-admit">
     <div class="modal" style="max-width:440px">
       <div class="modal-header">
@@ -1243,9 +1279,21 @@
     }
 
     async function doConfirm() {
+      // Block the whole confirm if any ultrasound chip has the
+      // reproductive-age box ticked but no completed Form F behind it —
+      // this is a legal requirement, not a soft validation.
+      const incompleteFormF = selectedRadiology.find(t => t.is_reproductive_age_woman && !t.form_f);
+      if (incompleteFormF) {
+        toast(`Complete Form F for ${incompleteFormF.study_name} before confirming`, "error");
+        return;
+      }
+
       const btn = document.getElementById("confirm-btn");
       btn.disabled = true;
       btn.textContent = isReopenMode ? "Saving…" : "Generating…";
+
+      const radiologyFormF = {};
+      selectedRadiology.forEach(t => { if (t.form_f) radiologyFormF[t.id] = t.form_f; });
 
       const editedData = {
         chief_complaint: document.getElementById("f-complaint").value.trim(),
@@ -1257,6 +1305,7 @@
         test_priorities: Object.fromEntries(selectedTests.map(t => [t.id, t.priority || 'routine'])),
         recommended_radiology_template_ids: selectedRadiology.map(t => t.id),
         radiology_priorities: Object.fromEntries(selectedRadiology.map(t => [t.id, t.priority || 'routine'])),
+        radiology_form_f: radiologyFormF,
         clinical_indication: document.getElementById('test-clinical-indication')?.value.trim() || null,
         advice: document.getElementById("f-advice").value.trim(),
         followup: document.getElementById("f-followup").value.trim(),
@@ -1282,10 +1331,13 @@
         const checkedRadiologyIds = selectedRadiology.map(t => t.id);
         const radiologyPriorities = {};
         selectedRadiology.forEach(t => { radiologyPriorities[t.id] = t.priority || 'routine'; });
+        const radiologyFormFPayload = {};
+        selectedRadiology.forEach(t => { if (t.form_f) radiologyFormFPayload[t.id] = t.form_f; });
         const clinicalIndication = document.getElementById('test-clinical-indication').value.trim();
         const data = await api("POST", `/consultations/confirm/${consultationId}`, {
           recommended_test_ids: checkedTestIds, test_priorities: testPriorities,
           recommended_radiology_template_ids: checkedRadiologyIds, radiology_priorities: radiologyPriorities,
+          radiology_form_f: radiologyFormFPayload,
           clinical_indication: clinicalIndication || null
         });
         window._tokenNumber = data.token_number;
