@@ -37,6 +37,7 @@ from app.models.patient_merge_request import PatientMergeRequest
 from app.models.portal import PatientProfileLink, InviteStatus
 from app.schemas.patient import MergeRequestIn, MergeConfirmIn, PatientAllergyIn
 from app.models.patient_allergy import PatientAllergy
+from app.models.radiology_order import RadiologyOrder
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -1750,6 +1751,18 @@ def reception_pending_payments(
                     pharm_status = "dispensed"
                 buckets["pharmacy"] = {"status": pharm_status}
 
+            radiology_orders = db.query(RadiologyOrder).filter(
+                RadiologyOrder.consultation_id.in_(consultation_ids),
+                RadiologyOrder.included == True
+            ).all()
+            if radiology_orders:
+                pending_rad = [r for r in radiology_orders if r.status == "payment_pending"]
+                buckets["radiology"] = {
+                    "status": "unpaid" if pending_rad else "paid",
+                    "pending_count": len(pending_rad),
+                    "pending_total": sum(r.price for r in pending_rad)
+                }
+
         opd_charges = db.query(OpdCharge).filter(OpdCharge.checkin_id == c.id).all()
         if opd_charges:
             pending_charges = [ch for ch in opd_charges if ch.status == "payment_pending"]
@@ -1864,6 +1877,17 @@ def get_patient_pending_tasks(
         if not is_order_expired(db, patient_id, t.consultation_id, t.created_at)
     ]
 
+    radiology_orders = db.query(RadiologyOrder).filter(
+        RadiologyOrder.patient_id == patient_id,
+        RadiologyOrder.hospital_id == current_doctor.hospital_id,
+        RadiologyOrder.status == "payment_pending",
+        RadiologyOrder.included == True
+    ).all()
+    radiology_pending = [
+        r for r in radiology_orders
+        if not is_order_expired(db, patient_id, r.consultation_id, r.created_at)
+    ]
+
     medicine_orders = db.query(MedicineOrder).filter(
         MedicineOrder.patient_id == patient_id,
         MedicineOrder.hospital_id == current_doctor.hospital_id
@@ -1880,6 +1904,10 @@ def get_patient_pending_tasks(
             {"id": t.id, "test_name": t.test_name, "price": t.price, "created_at": t.created_at.isoformat()}
             for t in lab_pending
         ],
+        "radiology": [
+            {"id": r.id, "study_name": r.study_name, "price": r.price, "created_at": r.created_at.isoformat()}
+            for r in radiology_pending
+        ],
         "charges": [
             {"id": c.id, "description": c.description, "amount": c.amount, "quantity": c.quantity, "created_at": c.charged_at.isoformat()}
             for c in opd_charges
@@ -1889,6 +1917,48 @@ def get_patient_pending_tasks(
             for m in medicine_orders
         ]
     }
+
+
+@router.post("/{patient_id}/collect-radiology-payment-anyday")
+def collect_radiology_payment_anyday(
+    patient_id: int,
+    body: PaymentMethodIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Used from the search-based pending-tasks modal — collects payment for
+    included, non-expired payment_pending radiology orders regardless of
+    what day they were ordered on. Mirrors collect_test_payment_anyday."""
+    orders = db.query(RadiologyOrder).filter(
+        RadiologyOrder.patient_id == patient_id,
+        RadiologyOrder.hospital_id == current_doctor.hospital_id,
+        RadiologyOrder.status == "payment_pending",
+        RadiologyOrder.included == True
+    ).all()
+
+    payable = [o for o in orders if not is_order_expired(db, patient_id, o.consultation_id, o.created_at)]
+    if not payable:
+        raise HTTPException(status_code=400, detail="No payable radiology orders pending — window may have closed")
+
+    total = 0
+    now = now_ist_naive()
+    for o in payable:
+        o.status = "paid"
+        o.paid_at = now
+        o.payment_method = body.payment_method
+        o.queued_at = now
+        total += o.price
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="radiology_fees_collected_anyday",
+        target_type="patient",
+        target_id=patient_id,
+        target_label=f"Rs.{total:.2f} for {len(payable)} radiology order(s) (late collection)",
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"charged": total, "count": len(payable)}
 
 
 @router.post("/{patient_id}/collect-test-payment-anyday")
@@ -2062,6 +2132,106 @@ def get_pending_test_fees(
         {"id": o.id, "test_name": o.test_name, "price": o.price, "status": o.status, "included": o.included}
         for o in orders
     ]
+
+
+@router.get("/{patient_id}/pending-radiology-fees")
+def get_pending_radiology_fees(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    today_start, today_end = ist_day_bounds()
+
+    orders = db.query(RadiologyOrder).filter(
+        RadiologyOrder.patient_id == patient_id,
+        RadiologyOrder.hospital_id == current_doctor.hospital_id,
+        RadiologyOrder.status == "payment_pending",
+        RadiologyOrder.created_at >= today_start,
+        RadiologyOrder.created_at <= today_end
+    ).order_by(RadiologyOrder.created_at).all()
+
+    return [
+        {"id": o.id, "study_name": o.study_name, "price": o.price, "status": o.status, "included": o.included}
+        for o in orders
+    ]
+
+
+@router.patch("/radiology-orders/{order_id}/toggle-include")
+def toggle_radiology_order_include(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    order = db.query(RadiologyOrder).filter(
+        RadiologyOrder.id == order_id,
+        RadiologyOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Radiology order not found")
+    if order.status != "payment_pending":
+        raise HTTPException(status_code=400, detail="Cannot change inclusion after payment")
+
+    order.included = not order.included
+    db.commit()
+    return {"id": order.id, "included": order.included}
+
+
+@router.post("/{patient_id}/collect-radiology-payment")
+def collect_radiology_payment(
+    patient_id: int,
+    body: PaymentMethodIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    today_start, today_end = ist_day_bounds()
+
+    voided_consultation_ids = [
+        c.id for c in db.query(Consultation).filter(
+            Consultation.patient_id == patient_id,
+            Consultation.is_voided == True
+        ).all()
+    ]
+
+    orders = db.query(RadiologyOrder).filter(
+        RadiologyOrder.patient_id == patient_id,
+        RadiologyOrder.hospital_id == current_doctor.hospital_id,
+        RadiologyOrder.status == "payment_pending",
+        RadiologyOrder.included == True,
+        RadiologyOrder.created_at >= today_start,
+        RadiologyOrder.created_at <= today_end,
+        ~RadiologyOrder.consultation_id.in_(voided_consultation_ids) if voided_consultation_ids else True
+    ).all()
+
+    if not orders:
+        raise HTTPException(status_code=400, detail="No included radiology orders pending payment")
+
+    total = 0
+    now = now_ist_naive()
+    for o in orders:
+        o.status = "paid"
+        o.paid_at = now
+        o.payment_method = body.payment_method
+        o.queued_at = now
+        total += o.price
+
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="radiology_fees_collected",
+        target_type="patient",
+        target_id=patient_id,
+        target_label=f"Rs.{total:.2f} for {len(orders)} radiology order(s)",
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"charged": total, "count": len(orders)}
 
 
 @router.patch("/test-orders/{order_id}/toggle-include")

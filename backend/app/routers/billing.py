@@ -12,6 +12,7 @@ from app.models.hospital import Hospital
 from app.models.checkin import Checkin
 from app.models.consultation import Consultation
 from app.models.test_order import TestOrder
+from app.models.radiology_order import RadiologyOrder
 from app.models.medicine_order import MedicineOrder
 from app.models.invoice import Invoice
 from app.models.opd_charge import OpdCharge
@@ -100,6 +101,21 @@ def gather_invoice_items(db: Session, checkin: Checkin):
             "_medicine_hsn_code": medicine_hsn_code
         })
 
+    radiology_orders = db.query(RadiologyOrder).filter(
+        RadiologyOrder.patient_id == checkin.patient_id,
+        RadiologyOrder.hospital_id == checkin.hospital_id,
+        RadiologyOrder.status.in_(["paid", "reported", "verified_released"]),
+        RadiologyOrder.consultation_id.in_(consultation_ids) if consultation_ids else False
+    ).all()
+    for r in radiology_orders:
+        items.append({
+            "type": "radiology",
+            "name": r.study_name,
+            "qty": 1,
+            "unit_price": r.price,
+            "line_total": r.price
+        })
+
     opd_charges = db.query(OpdCharge).filter(
         OpdCharge.checkin_id == checkin.id,
         OpdCharge.status == "paid"
@@ -114,7 +130,6 @@ def gather_invoice_items(db: Session, checkin: Checkin):
         })
 
     return items
-
 
 @router.post("/checkins/{checkin_id}/finalize-invoice")
 def finalize_invoice(

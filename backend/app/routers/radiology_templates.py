@@ -20,6 +20,16 @@ def require_admin(current_doctor: Doctor):
         raise HTTPException(status_code=403, detail="Not authorized")
 
 
+def require_admin_or_radiology_read(current_doctor: Doctor):
+    """Radiology staff can view templates (item: radiology.html Templates
+    tab) but not create/edit/delete — that stays admin-only, since a
+    template edit changes what every future report in the hospital looks
+    like. If you want radiology to fully manage their own templates instead,
+    say so and this becomes require_admin everywhere in this file."""
+    if current_doctor.role.value not in ["admin", "sub_admin", "radiology"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
 class SectionIn(BaseModel):
     name: str
     default_finding_text: Optional[str] = ""
@@ -64,7 +74,7 @@ def list_templates(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    require_admin(current_doctor)
+    require_admin_or_radiology_read(current_doctor)
 
     query = db.query(RadiologyTemplate).filter(
         RadiologyTemplate.hospital_id == current_doctor.hospital_id,

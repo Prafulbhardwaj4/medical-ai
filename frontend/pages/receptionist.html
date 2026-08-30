@@ -822,6 +822,16 @@
               <button class="btn btn-primary btn-sm" id="pending-tests-collect-wrap"
                 style="width:100%;margin-top:8px">Collect Payment</button>
             </div>
+            <div id="pending-radiology-row" class="no-print"
+              style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
+              <p style="font-weight:600;margin-bottom:8px">Pending Radiology Fees <span
+                  style="font-weight:400;font-size:12px;color:var(--slate)">(uncheck what the patient won't be getting
+                  here)</span></p>
+              <div id="pending-radiology-list"></div>
+              <p style="margin-top:8px"><strong>Total:</strong> Rs.<span id="pending-radiology-total">0</span></p>
+              <button class="btn btn-primary btn-sm" id="pending-radiology-collect-wrap"
+                style="width:100%;margin-top:8px">Collect Payment</button>
+            </div>
             <div class="no-print"
               style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:10px">
               <button class="btn btn-primary btn-sm" style="width:100%" onclick="generateBill()">🧾 Generate
@@ -1688,6 +1698,7 @@
         if (today.exists) {
           showExistingToken(today);
           loadPendingTestFees(p.id);
+          loadPendingRadiologyFees(p.id);
           return;
         }
       } catch (e) { }
@@ -1878,6 +1889,7 @@
           const parts = [];
           if (b.consultation) parts.push(b.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
           if (b.tests) parts.push(b.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${b.tests.pending_total} pending`);
+          if (b.radiology) parts.push(b.radiology.status === 'paid' ? 'Radiology: Paid' : `Radiology: Rs.${b.radiology.pending_total} pending`);
           if (b.charges) parts.push(b.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${b.charges.pending_total} pending`);
           if (b.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[b.pharmacy.status] || b.pharmacy.status}`);
           return `
@@ -2098,6 +2110,7 @@
         setText('slip-checkin-time', formatCheckinTime(result.checked_in_at));
         renderBillingRow(billingOn, result.total_fee, result.is_paid);
         loadPendingTestFees(selectedPatient.id);
+        loadPendingRadiologyFees(selectedPatient.id);
 
         const extraWrap = document.getElementById('slip-additional-doctors');
         if (result.additional_tokens && result.additional_tokens.length) {
@@ -2161,6 +2174,54 @@
         const orders = await api("GET", `/patients/${patientId}/pending-test-fees`);
         renderPendingTestFees(orders, patientId);
       } catch (e) { }
+    }
+
+    async function loadPendingRadiologyFees(patientId) {
+      try {
+        const orders = await api("GET", `/patients/${patientId}/pending-radiology-fees`);
+        renderPendingRadiologyFees(orders, patientId);
+      } catch (e) { }
+    }
+
+    function renderPendingRadiologyFees(orders, patientId) {
+      const row = document.getElementById('pending-radiology-row');
+      const list = document.getElementById('pending-radiology-list');
+      if (!orders.length) { row.style.display = 'none'; return; }
+      row.style.display = '';
+      list.innerHTML = orders.map(o => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;gap:10px;${o.included ? '' : 'opacity:0.45'}">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" ${o.included ? 'checked' : ''} onchange="toggleRadiologyInclude(${o.id}, ${patientId})" style="width:16px;height:16px" />
+            <span>${o.study_name} — Rs.${o.price}</span>
+          </label>
+        </div>
+      `).join('');
+      const total = orders.filter(o => o.included).reduce((s, o) => s + (o.price || 0), 0);
+      document.getElementById('pending-radiology-total').textContent = total.toFixed(2);
+
+      const btnWrap = document.getElementById('pending-radiology-collect-wrap');
+      const includedCount = orders.filter(o => o.included).length;
+      if (btnWrap) {
+        btnWrap.style.display = includedCount ? '' : 'none';
+        btnWrap.onclick = () => collectRadiologyPayment(patientId);
+      }
+    }
+
+    async function toggleRadiologyInclude(orderId, patientId) {
+      try {
+        await api("PATCH", `/patients/radiology-orders/${orderId}/toggle-include`, {});
+        loadPendingRadiologyFees(patientId);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function collectRadiologyPayment(patientId) {
+      const method = await askPaymentMethod();
+      if (!method) return;
+      try {
+        const result = await api("POST", `/patients/${patientId}/collect-radiology-payment`, { payment_method: method });
+        toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} radiology order(s).`, 'success');
+        loadPendingRadiologyFees(patientId);
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     function renderPendingTestFees(orders, patientId) {
@@ -2656,6 +2717,19 @@
         html += `<button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px" onclick="collectAnydayTestPayment(${patientId})">Collect Rs.${total}</button>`;
       }
 
+      html += '<h3 style="margin:16px 0 8px">Radiology (payment collection — any day within window)</h3>';
+      if (!data.radiology.length) {
+        html += '<p style="color:var(--slate-light);margin-bottom:16px">No unpaid radiology orders pending.</p>';
+      } else {
+        const radTotal = data.radiology.reduce((s, r) => s + (r.price || 0), 0);
+        html += data.radiology.map(r => `
+          <div style="display:flex;justify-content:space-between;padding:6px 0">
+            <span>${r.study_name}</span><span>Rs.${r.price}</span>
+          </div>
+        `).join('');
+        html += `<button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px" onclick="collectAnydayRadiologyPayment(${patientId})">Collect Rs.${radTotal}</button>`;
+      }
+
       html += '<h3 style="margin:16px 0 8px">Ad-hoc Charges (payment collection — any day)</h3>';
       if (!data.charges.length) {
         html += '<p style="color:var(--slate-light);margin-bottom:16px">No unpaid charges pending.</p>';
@@ -2689,6 +2763,17 @@
       try {
         const result = await api("POST", `/patients/${patientId}/collect-test-payment-anyday`, { payment_method: method });
         toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} test(s).`, 'success');
+        openPendingTasksModal(patientId, document.getElementById('pt-patient-name').textContent);
+        loadPendingPayments();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function collectAnydayRadiologyPayment(patientId) {
+      const method = await askPaymentMethod();
+      if (!method) return;
+      try {
+        const result = await api("POST", `/patients/${patientId}/collect-radiology-payment-anyday`, { payment_method: method });
+        toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} radiology order(s).`, 'success');
         openPendingTasksModal(patientId, document.getElementById('pt-patient-name').textContent);
         loadPendingPayments();
       } catch (e) { toast(e.message, 'error'); }

@@ -257,6 +257,164 @@ def verify_and_release_radiology_report(
     return {"id": order.id, "status": order.status, "verified_at": order.verified_at.isoformat()}
 
 
+@router.get("/pending-tasks")
+def search_pending_radiology_tasks(
+    q: str = "",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Mirrors lab's /pending-tasks — paid-but-not-imaged OPD studies that
+    fell out of today's active queue. IPD studies never fall out (the queue
+    stays open for them regardless of day), so this only ever surfaces OPD."""
+    require_radiology(current_doctor)
+    from app.models.patient import Patient as PatientModel
+    from app.utils.order_lifecycle import is_order_expired
+
+    query = db.query(PatientModel).filter(PatientModel.hospital_id == current_doctor.hospital_id)
+    if q and len(q.strip()) >= 2:
+        like = f"%{q.strip()}%"
+        query = query.filter((PatientModel.name.ilike(like)) | (PatientModel.patient_uid.ilike(like)))
+        patients = query.limit(15).all()
+    else:
+        patients = query.join(RadiologyOrder, RadiologyOrder.patient_id == PatientModel.id).filter(
+            RadiologyOrder.hospital_id == current_doctor.hospital_id,
+            RadiologyOrder.status == "paid",
+            RadiologyOrder.admission_id.is_(None),
+        ).distinct().order_by(PatientModel.id.desc()).limit(30).all()
+
+    today = ist_day_bounds()[0].date()
+    result = []
+    for p in patients:
+        orders = db.query(RadiologyOrder).filter(
+            RadiologyOrder.patient_id == p.id,
+            RadiologyOrder.hospital_id == current_doctor.hospital_id,
+            RadiologyOrder.status == "paid",
+            RadiologyOrder.admission_id.is_(None),
+        ).all()
+
+        pending = []
+        for o in orders:
+            if o.queued_at and o.queued_at.date() == today:
+                continue
+            if is_order_expired(db, p.id, o.consultation_id, o.created_at):
+                continue
+            consultation = db.query(Consultation).filter(Consultation.id == o.consultation_id).first()
+            ordering_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first() if consultation else None
+            pending.append({
+                "order_id": o.id,
+                "study_name": o.study_name,
+                "price": o.price,
+                "doctor_name": f"{ordering_doctor.title} {ordering_doctor.name}" if ordering_doctor else "—",
+                "paid_at": o.paid_at.isoformat() if o.paid_at else None
+            })
+
+        if pending:
+            result.append({
+                "patient_id": p.id,
+                "patient_name": p.name,
+                "patient_uid": p.patient_uid,
+                "pending": pending
+            })
+    return result
+
+
+@router.post("/orders/{order_id}/requeue")
+def requeue_radiology_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_radiology(current_doctor)
+    from app.utils.order_lifecycle import is_order_expired
+
+    order = db.query(RadiologyOrder).filter(
+        RadiologyOrder.id == order_id,
+        RadiologyOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Radiology order not found")
+    if order.status != "paid":
+        raise HTTPException(status_code=400, detail="Only paid, unimaged studies can be requeued")
+    if is_order_expired(db, order.patient_id, order.consultation_id, order.created_at):
+        raise HTTPException(status_code=400, detail="This order's window has closed — a fresh order is needed")
+
+    order.queued_at = now_ist_naive()
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="radiology_order_requeued",
+        target_type="radiology_order",
+        target_id=order.id,
+        target_label=order.study_name,
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"id": order.id, "queued_at": order.queued_at.isoformat()}
+
+
+@router.get("/reports/history")
+def get_radiology_reports_history(
+    q: str = "",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Mirrors lab's /reports/history — completed studies grouped by patient
+    then by visit, for the Patients tab search + edit-after-completion."""
+    require_radiology(current_doctor)
+
+    orders = db.query(RadiologyOrder).filter(
+        RadiologyOrder.hospital_id == current_doctor.hospital_id,
+        RadiologyOrder.status == "verified_released"
+    ).order_by(RadiologyOrder.verified_at.desc()).limit(500).all()
+
+    visit_groups = {}
+    for o in orders:
+        key = (o.patient_id, o.consultation_id)
+        if key not in visit_groups:
+            visit_groups[key] = {
+                "order_ids": [], "study_names": [], "completed_at": None,
+                "patient_id": o.patient_id, "consultation_id": o.consultation_id
+            }
+        v = visit_groups[key]
+        v["order_ids"].append(o.id)
+        v["study_names"].append(o.study_name)
+        completed_iso = o.verified_at.isoformat() if o.verified_at else None
+        if completed_iso and (v["completed_at"] is None or completed_iso > v["completed_at"]):
+            v["completed_at"] = completed_iso
+
+    patients_map = {}
+    for v in visit_groups.values():
+        consultation = db.query(Consultation).filter(Consultation.id == v["consultation_id"]).first()
+        entry = patients_map.setdefault(v["patient_id"], {"patient_id": v["patient_id"], "visits": []})
+        entry["visits"].append({
+            "consultation_id": v["consultation_id"],
+            "token_number": consultation.token_number if consultation else "",
+            "study_names": v["study_names"],
+            "order_ids": v["order_ids"],
+            "completed_at": v["completed_at"]
+        })
+
+    q_lower = q.strip().lower()
+    result = []
+    for entry in patients_map.values():
+        patient = db.query(Patient).filter(Patient.id == entry["patient_id"]).first()
+        patient_name = patient.name if patient else "Unknown"
+        patient_uid = patient.patient_uid if patient else ""
+        if q_lower and q_lower not in patient_name.lower() and q_lower not in patient_uid.lower():
+            continue
+        entry["visits"].sort(key=lambda v: v["completed_at"] or "", reverse=True)
+        result.append({
+            "patient_id": entry["patient_id"],
+            "patient_name": patient_name,
+            "patient_uid": patient_uid,
+            "visits": entry["visits"],
+            "latest_completed_at": entry["visits"][0]["completed_at"] if entry["visits"] else None
+        })
+
+    result.sort(key=lambda r: r["latest_completed_at"] or "", reverse=True)
+    return result
+
+
 @router.get("/orders/{order_id}/pdf")
 def get_radiology_report_pdf(
     order_id: int,
