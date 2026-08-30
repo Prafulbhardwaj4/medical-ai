@@ -2480,6 +2480,7 @@
           parts.push(first.consultation.status === 'paid' ? 'Consultation: Paid' : 'Consultation: Unpaid');
         }
         if (first.tests) parts.push(first.tests.status === 'paid' ? 'Tests: Paid' : `Tests: Rs.${first.tests.pending_total} pending`);
+        if (first.radiology) parts.push(first.radiology.status === 'paid' ? 'Radiology: Paid' : `Radiology: Rs.${first.radiology.pending_total} pending`);
         if (first.charges) parts.push(first.charges.status === 'paid' ? 'Charges: Paid' : `Charges: Rs.${first.charges.pending_total} pending`);
         if (first.pharmacy) parts.push(`Pharmacy: ${PHARM_STATUS_LABEL[first.pharmacy.status] || first.pharmacy.status}`);
         return `
@@ -2512,9 +2513,8 @@
       let html = '';
       const first = row.doctors[0].buckets;
       const needsTestLines = first.tests && first.tests.status !== 'paid';
+      const needsRadiologyLines = first.radiology && first.radiology.status !== 'paid';
 
-      // One consultation-fee line per doctor on this visit, each with its
-      // own checkbox — reception pays for whichever doctor(s) they want.
       row.doctors.forEach(d => {
         if (!d.buckets.consultation) return;
         const paid = d.buckets.consultation.status === 'paid';
@@ -2562,6 +2562,35 @@
             </div>`;
         }
       }
+      if (first.radiology) {
+        const radPaid = first.radiology.status === 'paid';
+        if (radPaid) {
+          html += `
+            <div class="pay-toggle-row">
+              <div class="pay-toggle-info">
+                <span class="pay-toggle-icon">🩻</span>
+                <div>
+                  <div class="pay-toggle-label">Radiology</div>
+                  <div class="pay-toggle-sub is-paid">Paid</div>
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="togglePaymentSwitch('radiology', false)">Revert</button>
+            </div>`;
+        } else {
+          html += `
+            <div class="pay-toggle-row" style="flex-direction:column;align-items:stretch">
+              <div class="pay-toggle-info" style="margin-bottom:8px">
+                <span class="pay-toggle-icon">🩻</span>
+                <div class="pay-toggle-label">Radiology</div>
+              </div>
+              <div id="pt-radiology-list">Loading…</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+                <strong>Total: Rs.<span id="pt-radiology-total">0</span></strong>
+                <button class="btn btn-primary btn-sm" onclick="collectRadiologyFromToggleModal()">Collect Payment</button>
+              </div>
+            </div>`;
+        }
+      }
       if (first.charges) {
         const chargesPaid = first.charges.status === 'paid';
         if (chargesPaid) {
@@ -2603,6 +2632,43 @@
       }
       body.innerHTML = html || '<p style="color:var(--slate-light)">Nothing to show.</p>';
       if (needsTestLines) loadPaymentToggleTestLines(row.patient_id);
+      if (needsRadiologyLines) loadPaymentToggleRadiologyLines(row.patient_id);
+    }
+
+    async function loadPaymentToggleRadiologyLines(patientId) {
+      try {
+        const orders = await api("GET", `/patients/${patientId}/pending-radiology-fees`);
+        const list = document.getElementById('pt-radiology-list');
+        if (!list) return;
+        list.innerHTML = orders.map(o => `
+          <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;${o.included ? '' : 'opacity:0.45'}">
+            <input type="checkbox" ${o.included ? 'checked' : ''} onchange="toggleRadiologyIncludeInModal(${o.id}, ${patientId})" style="width:16px;height:16px" />
+            <span>${o.study_name} — Rs.${o.price}</span>
+          </label>
+        `).join('') || '<p style="color:var(--slate-light)">Nothing pending.</p>';
+        const total = orders.filter(o => o.included).reduce((s, o) => s + (o.price || 0), 0);
+        document.getElementById('pt-radiology-total').textContent = total.toFixed(2);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function toggleRadiologyIncludeInModal(orderId, patientId) {
+      try {
+        await api("PATCH", `/patients/radiology-orders/${orderId}/toggle-include`, {});
+        loadPaymentToggleRadiologyLines(patientId);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function collectRadiologyFromToggleModal() {
+      const row = paymentToggleRow;
+      const method = await askPaymentMethod();
+      if (!method) return;
+      try {
+        const result = await api("POST", `/patients/${row.patient_id}/collect-radiology-payment`, { payment_method: method });
+        toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
+        row.doctors[0].buckets.radiology.status = 'paid';
+        renderPaymentToggleBody();
+        loadPendingPayments();
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     async function loadPaymentToggleTestLines(patientId) {
@@ -2679,6 +2745,17 @@
             await api("POST", `/patients/${row.patient_id}/revert-test-payment`, {});
           }
           row.doctors[0].buckets.tests.status = turningOn ? 'paid' : 'unpaid';
+        } else if (kind === 'radiology') {
+          if (turningOn) {
+            const method = await askPaymentMethod();
+            if (!method) { renderPaymentToggleBody(); return; }
+            const result = await api("POST", `/patients/${row.patient_id}/collect-radiology-payment`, { payment_method: method });
+            toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
+          } else {
+            if (!confirm('Mark radiology as unpaid? Only studies not yet imaged can be reverted.')) { renderPaymentToggleBody(); return; }
+            await api("POST", `/patients/${row.patient_id}/revert-radiology-payment`, {});
+          }
+          row.doctors[0].buckets.radiology.status = turningOn ? 'paid' : 'unpaid';
         }
         renderPaymentToggleBody();
         loadPendingPayments();

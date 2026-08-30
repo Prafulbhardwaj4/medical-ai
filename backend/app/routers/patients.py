@@ -1459,6 +1459,64 @@ def revert_test_payment(
     )
     return {"reverted": len(orders)}
 
+
+@router.post("/{patient_id}/revert-radiology-payment")
+def revert_radiology_payment(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Mirrors revert_test_payment — only paid, not-yet-imaged radiology
+    orders for today's visit can be reverted."""
+    todays_checkin = db.query(Checkin).filter(
+        Checkin.patient_id == patient_id,
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == ist_today()
+    ).order_by(desc(Checkin.created_at)).first()
+    if not todays_checkin:
+        raise HTTPException(status_code=404, detail="No visit found for today")
+
+    consultation_ids = [
+        c.id for c in db.query(Consultation).filter(
+            Consultation.patient_id == patient_id,
+            or_(
+                Consultation.token_number == todays_checkin.token_number,
+                Consultation.token_number.like(f"{todays_checkin.token_number}-%")
+            )
+        ).all()
+    ]
+
+    orders = db.query(RadiologyOrder).filter(
+        RadiologyOrder.patient_id == patient_id,
+        RadiologyOrder.hospital_id == current_doctor.hospital_id,
+        RadiologyOrder.consultation_id.in_(consultation_ids),
+        RadiologyOrder.status == "paid"
+    ).all()
+
+    if not orders:
+        raise HTTPException(status_code=400, detail="No paid radiology orders to revert for today's visit — they may already be imaged")
+
+    for o in orders:
+        o.status = "payment_pending"
+        o.paid_at = None
+        o.queued_at = None
+
+    if todays_checkin.is_finalized:
+        todays_checkin.is_finalized = False
+        todays_checkin.invoice_id = None
+
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="radiology_payment_reverted",
+        target_type="patient",
+        target_id=patient_id,
+        target_label=f"{len(orders)} radiology order(s) reverted to unpaid"
+    )
+    return {"reverted": len(orders)}
+
+
 @router.get("/queue/today")
 def todays_queue(
     db: Session = Depends(get_db),
