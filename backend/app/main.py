@@ -21,6 +21,8 @@ from app.routers import nurses as nurses_router
 from app.routers import attendance as attendance_router
 from app.routers import medicines as medicines_router
 from app.routers import tests as tests_router
+from app.routers import radiology_templates as radiology_templates_router
+from app.routers import radiology as radiology_router
 from app.routers import lab as lab_router
 from app.routers import mlc_custody as mlc_custody_router
 from app.routers import pharmacy as pharmacy_router
@@ -43,6 +45,10 @@ from app.models.audit_log import AuditLog
 from app.models.checkin import Checkin
 from app.models.attendance import AttendanceRecord
 from app.models.test_catalog import TestCatalogItem
+from app.models.radiology_template import RadiologyTemplate
+from app.models.radiology_template_section import RadiologyTemplateSection
+from app.models.radiology_order import RadiologyOrder
+from app.models.ai_scribe_topup import AiScribeTopup
 from app.models.room import Room
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.test_order import TestOrder
@@ -253,6 +259,8 @@ app.include_router(nurses_router.router)
 app.include_router(attendance_router.router)
 app.include_router(medicines_router.router)
 app.include_router(tests_router.router)
+app.include_router(radiology_templates_router.router)
+app.include_router(radiology_router.router)
 app.include_router(lab_router.router)
 app.include_router(mlc_custody_router.router)
 app.include_router(pharmacy_router.router)

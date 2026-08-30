@@ -13,8 +13,43 @@ import re
 from app.models.consultation import Consultation
 from sqlalchemy import func
 from datetime import datetime, timedelta
+from app.utils.ai_scribe_gate import get_ai_scribe_status, has_ai_scribe_at_all
+from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING
+from app.models.ai_scribe_topup import AiScribeTopup
+from dateutil.relativedelta import relativedelta
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def serialize_billing_block(db: Session, hospital: Hospital) -> dict:
+    """Shared by the hospital list and hospital detail endpoints so the two
+    views can never disagree on used/total or renew-button state. Returns
+    has_ai_scribe=False for Foundation with everything else null — per
+    Praful, Foundation shows no topup/usage UI at all, not a 0/0 counter."""
+    if not has_ai_scribe_at_all(hospital.tier):
+        return {
+            "has_ai_scribe": False,
+            "ai_scribe_used": None, "ai_scribe_cap": None, "ai_scribe_topup_remaining": None, "ai_scribe_total_remaining": None,
+            "billing_cycle_start": None, "billing_cycle_end": None, "grace_end": None, "deactivation_at": None,
+            "renew_window_open": False,
+        }
+
+    status = get_ai_scribe_status(db, hospital)
+    cycle = get_billing_cycle_info(hospital)
+    now = now_ist_naive()
+
+    return {
+        "has_ai_scribe": True,
+        "ai_scribe_used": status["used"],
+        "ai_scribe_cap": status["cap"],  # None = unlimited (Enterprise) — frontend must show "Unlimited", not a fraction
+        "ai_scribe_topup_remaining": status["topup_remaining"],
+        "ai_scribe_total_remaining": status["total_remaining"],
+        "billing_cycle_start": hospital.billing_cycle_start.isoformat() if hospital.billing_cycle_start else None,
+        "billing_cycle_end": cycle["cycle_end"].isoformat() if cycle else None,
+        "grace_end": cycle["grace_end"].isoformat() if cycle else None,
+        "deactivation_at": cycle["deactivation_at"].isoformat() if cycle else None,
+        "renew_window_open": is_renew_window_open(hospital, now),
+    }
 
 def verify_super_admin_key(x_super_admin_key: str = Header(...)):
     if x_super_admin_key != settings.SUPER_ADMIN_KEY:
@@ -35,6 +70,7 @@ def validate_fields(name, email, phone, password):
         raise HTTPException(status_code=400, detail="Name too short")
 
 VALID_HOSPITAL_TYPES = {"government", "private"}
+VALID_TIERS = {"foundation", "growth", "scale", "enterprise"}
 
 @router.post("/hospitals", status_code=201)
 def create_hospital(
@@ -161,7 +197,7 @@ def create_doctor(
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "receptionist"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy"]:
+    if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy", "radiology"]:
         raise HTTPException(status_code=400, detail="Invalid role")
 
     if current_doctor.role.value == "sub_admin" and role != "doctor":
@@ -561,7 +597,7 @@ def list_doctors(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     doctors_query = db.query(Doctor).filter(
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.receptionist, UserRole.nurse, UserRole.assistant, UserRole.lab, UserRole.pharmacy])
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.receptionist, UserRole.nurse, UserRole.assistant, UserRole.lab, UserRole.pharmacy, UserRole.radiology])
     )
     if current_doctor.role.value != "super_admin":
         doctors_query = doctors_query.filter(Doctor.hospital_id == current_doctor.hospital_id)
@@ -875,11 +911,191 @@ def list_hospitals_jwt(
             "hospital_code": h.hospital_code,
             "hospital_type": h.hospital_type,
             "billing_enabled": h.billing_enabled,
+            "tier": h.tier,
             "city": h.city,
-            "is_active": h.is_active
+            "is_active": h.is_active,
+            **serialize_billing_block(db, h),
         }
         for h in hospitals
     ]
+
+@router.patch("/hospitals/{hospital_id}/billing-cycle-start")
+def set_hospital_billing_cycle_start(
+    hospital_id: int,
+    cycle_start_date: str,  # "YYYY-MM-DD" — super admin enters this manually (item 4/6), not derived from any login event
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    try:
+        parsed = datetime.strptime(cycle_start_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="cycle_start_date must be YYYY-MM-DD")
+
+    hospital.billing_cycle_start = parsed
+    hospital.ai_scribe_consultations_used = 0  # setting/resetting the anchor starts a fresh cycle
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="hospital_billing_cycle_start_set",
+        target_type="hospital",
+        target_id=hospital.id,
+        target_label=hospital.name,
+        details=f"Billing cycle start set to {cycle_start_date}",
+        hospital_id=hospital.id
+    )
+
+    return {"id": hospital.id, "billing_cycle_start": hospital.billing_cycle_start.isoformat()}
+
+
+@router.post("/hospitals/{hospital_id}/ai-scribe-topup", status_code=201)
+def buy_ai_scribe_topup(
+    hospital_id: int,
+    block_size: int,
+    payment_collected: bool,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Item 3. The confirmation popup asking whether payment was collected
+    lives in the frontend, before this call ever fires — payment_collected
+    is sent as part of that confirmation, and this endpoint refuses to
+    create anything unless it's explicitly True, so a topup can never be
+    granted without that confirmation having happened."""
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if block_size not in AI_SCRIBE_TOPUP_PRICING:
+        raise HTTPException(status_code=400, detail=f"block_size must be one of {sorted(AI_SCRIBE_TOPUP_PRICING.keys())}")
+    if not payment_collected:
+        raise HTTPException(status_code=400, detail="Payment must be confirmed as collected before a topup can be applied")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    if not hospital.is_active:
+        raise HTTPException(status_code=400, detail="This hospital is deactivated — a topup would sit unused. Reactivate first.")
+    if not has_ai_scribe_at_all(hospital.tier):
+        raise HTTPException(status_code=400, detail="This hospital's tier doesn't include AI Scribe — a topup wouldn't be usable")
+
+    now = now_ist_naive()
+    topup = AiScribeTopup(
+        hospital_id=hospital.id,
+        block_size=block_size,
+        consultations_granted=block_size,
+        price_paid=AI_SCRIBE_TOPUP_PRICING[block_size],
+        payment_collected=True,
+        purchased_at=now,
+        expires_at=now + timedelta(days=30),
+        purchased_by=current_doctor.id,
+    )
+    db.add(topup)
+    db.commit()
+    db.refresh(topup)
+
+    log_action(
+        db, current_doctor,
+        action="ai_scribe_topup_purchased",
+        target_type="hospital",
+        target_id=hospital.id,
+        target_label=hospital.name,
+        details=f"{block_size} consultations for Rs.{topup.price_paid}, expires {topup.expires_at.date().isoformat()}",
+        hospital_id=hospital.id
+    )
+
+    return {"id": topup.id, "hospital_id": hospital.id, "block_size": block_size, "price_paid": topup.price_paid, "expires_at": topup.expires_at.isoformat()}
+
+
+@router.post("/hospitals/{hospital_id}/renew")
+def renew_hospital_billing_cycle(
+    hospital_id: int,
+    confirm: bool,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Item 6. Same pattern as the topup endpoint — the payment-collected
+    confirmation popup lives in the frontend, confirm=True is what it sends
+    after that popup, and this refuses to do anything without it. The
+    button being enabled client-side (2-day-before through grace-end) is
+    mirrored here server-side so a stale/forced request can't renew outside
+    that window either."""
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Payment must be confirmed before renewing")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    if not hospital.is_active:
+        raise HTTPException(status_code=400, detail="This hospital is deactivated — use Activate, not Renew, to bring it back")
+    if not hospital.billing_cycle_start:
+        raise HTTPException(status_code=400, detail="No billing cycle has been set for this hospital yet")
+
+    now = now_ist_naive()
+    if not is_renew_window_open(hospital, now):
+        raise HTTPException(status_code=400, detail="It's not yet time to renew this hospital — the Renew window opens 2 days before cycle-end")
+
+    # Stays anchored to the ORIGINAL cycle_start's day-of-month — advances
+    # by exactly one month from the current anchor, not from "now" (item 6:
+    # "cycle stays anchored to the original signup date, not the date the
+    # button was pressed").
+    hospital.billing_cycle_start = hospital.billing_cycle_start + relativedelta(months=1)
+    hospital.ai_scribe_consultations_used = 0
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="hospital_billing_cycle_renewed",
+        target_type="hospital",
+        target_id=hospital.id,
+        target_label=hospital.name,
+        details=f"New cycle: {hospital.billing_cycle_start.date().isoformat()}",
+        hospital_id=hospital.id
+    )
+
+    return {"id": hospital.id, "billing_cycle_start": hospital.billing_cycle_start.isoformat()}
+
+
+@router.patch("/hospitals/{hospital_id}/tier")
+def set_hospital_tier(
+    hospital_id: int,
+    tier: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    tier = tier.strip().lower()
+    if tier not in VALID_TIERS:
+        raise HTTPException(status_code=400, detail=f"tier must be one of {sorted(VALID_TIERS)}")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    previous_tier = hospital.tier
+    hospital.tier = tier
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="hospital_tier_changed",
+        target_type="hospital",
+        target_id=hospital.id,
+        target_label=hospital.name,
+        details=f"Tier changed from {previous_tier} to {tier}",
+        hospital_id=hospital.id
+    )
+
+    return {"id": hospital.id, "tier": hospital.tier}
 
 @router.patch("/hospitals/{hospital_id}/toggle-billing")
 def toggle_hospital_billing(
@@ -922,7 +1138,19 @@ def toggle_hospital_active(
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
 
+    was_active = hospital.is_active
     hospital.is_active = not hospital.is_active
+
+    reanchored = False
+    if not was_active and hospital.is_active and hospital.billing_cycle_start:
+        # Item 7: reactivating after a deactivation re-anchors the billing
+        # cycle to today, not the original signup date — only when a cycle
+        # was already running; a hospital that never had one set stays None
+        # until the super admin sets it manually.
+        hospital.billing_cycle_start = now_ist_naive()
+        hospital.ai_scribe_consultations_used = 0
+        reanchored = True
+
     db.commit()
 
     log_action(
@@ -931,11 +1159,11 @@ def toggle_hospital_active(
         target_type="hospital",
         target_id=hospital.id,
         target_label=hospital.name,
+        details="Billing cycle re-anchored to reactivation date" if reanchored else None,
         hospital_id=hospital.id
     )
 
-    return {"id": hospital.id, "is_active": hospital.is_active}
-
+    return {"id": hospital.id, "is_active": hospital.is_active, "billing_cycle_start": hospital.billing_cycle_start.isoformat() if hospital.billing_cycle_start else None}
 
 @router.post("/hospitals-jwt", status_code=201)
 def create_hospital_jwt(
@@ -1121,7 +1349,7 @@ def update_account(
     if role is not None:
         if account.role.value in ["admin", "super_admin"]:
             raise HTTPException(status_code=403, detail="Cannot change role of an admin account")
-        if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy"]:
+        if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy", "radiology"]:
             raise HTTPException(status_code=400, detail="Invalid role")
         account.role = UserRole(role)
         if role not in ["doctor", "sub_admin"]:
@@ -1301,8 +1529,10 @@ def hospital_detail(
         "hospital_code": hospital.hospital_code,
         "hospital_type": hospital.hospital_type,
         "billing_enabled": hospital.billing_enabled,
+        "tier": hospital.tier,
         "is_active": hospital.is_active,
         "created_at": hospital.created_at.isoformat(),
+        **serialize_billing_block(db, hospital),
         "admins": [
             {
                 "id": a.id,

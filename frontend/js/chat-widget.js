@@ -29,6 +29,9 @@
       </svg>
       <span class="chat-header-badge" id="chat-header-badge">0</span>
     `;
+    if (typeof isFoundationTier === "function" && isFoundationTier()) {
+      trigger.classList.add("nav-locked");
+    }
 
     if (profileBtn && profileBtn.parentNode) {
       const rightGroup = document.createElement("div");
@@ -68,7 +71,13 @@
       document.getElementById("chat-broadcast-btn").addEventListener("click", renderBroadcastCompose);
     }
 
-    trigger.addEventListener("click", open);
+    trigger.addEventListener("click", () => {
+      if (typeof isFoundationTier === "function" && isFoundationTier()) {
+        if (typeof openUpgradeModal === "function") openUpgradeModal();
+        return;
+      }
+      open();
+    });
     backdrop.addEventListener("click", close);
     document.getElementById("chat-back-btn").addEventListener("click", () => {
       if (ADMIN_ROLES.includes(doctor.role) && (currentThreadStaffId !== null || inBroadcastMode)) {

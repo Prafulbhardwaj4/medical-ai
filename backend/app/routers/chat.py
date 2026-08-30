@@ -14,7 +14,7 @@ from app.utils.timezone import now_ist_naive
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 ADMIN_ROLES = ["admin", "sub_admin"]
-STAFF_ROLES = ["doctor", "receptionist", "nurse", "assistant", "lab", "pharmacy"]
+STAFF_ROLES = ["doctor", "receptionist", "nurse", "assistant", "lab", "pharmacy", "radiology"]
 
 CHAT_UPLOAD_DIR = "chat_uploads"
 os.makedirs(CHAT_UPLOAD_DIR, exist_ok=True)
@@ -98,7 +98,7 @@ def list_threads(
 
     staff = db.query(Doctor).filter(
         Doctor.hospital_id == scoped_hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.receptionist, UserRole.nurse, UserRole.assistant, UserRole.lab, UserRole.pharmacy])
+        Doctor.role.in_([UserRole.doctor, UserRole.receptionist, UserRole.nurse, UserRole.assistant, UserRole.lab, UserRole.pharmacy, UserRole.radiology])
     ).all()
 
     result = []
@@ -211,7 +211,7 @@ def broadcast_to_all_staff(
     scoped_hospital_id = _hospital_scope(current_doctor, hospital_id)
     staff = db.query(Doctor).filter(
         Doctor.hospital_id == scoped_hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.receptionist, UserRole.nurse, UserRole.assistant, UserRole.lab, UserRole.pharmacy])
+        Doctor.role.in_([UserRole.doctor, UserRole.receptionist, UserRole.nurse, UserRole.assistant, UserRole.lab, UserRole.pharmacy, UserRole.radiology])
     ).all()
 
     now = now_ist_naive()

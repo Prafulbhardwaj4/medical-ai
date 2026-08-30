@@ -18,7 +18,10 @@ from app.services.sarvam_stream import stream_transcribe
 from app.models.doctor import Doctor as DoctorModel
 from app.models.checkin import Checkin
 from app.models.hospital import Hospital
+from app.models.refund import Refund
 from app.models.test_catalog import TestCatalogItem
+from app.models.radiology_template import RadiologyTemplate
+from app.models.radiology_order import RadiologyOrder
 from app.models.test_order import TestOrder
 from app.models.medicine_order import MedicineOrder
 from app.models.hospital_medicine import HospitalMedicine
@@ -543,6 +546,11 @@ def get_history(
             if t.test_id is not None:
                 test_statuses[str(t.test_id)] = t.status
 
+        radiology_statuses = {}
+        for r in db.query(RadiologyOrder).filter(RadiologyOrder.consultation_id == c.id).all():
+            if r.template_id is not None:
+                radiology_statuses[str(r.template_id)] = r.status
+
         item = ConsultationHistoryItem(
             id=c.id,
             token_number=c.token_number,
@@ -558,6 +566,8 @@ def get_history(
             ordered_tests=c.ordered_tests,
             medicine_statuses=medicine_statuses,
             test_statuses=test_statuses,
+            ordered_radiology=c.ordered_radiology,
+            radiology_statuses=radiology_statuses,
             doctor_name=f"{doctor.title} {doctor.name}" if doctor else "—",
             doctor_specialization=doctor.specialization if doctor else None
         )
@@ -678,6 +688,20 @@ def mark_dispensed(
     return {"message": "Marked as dispensed", "dispensed_at": consultation.dispensed_at.isoformat()}
 
 
+@router.get("/ai-scribe-status")
+def get_my_ai_scribe_status(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Lets the frontend check before showing the recording UI at all,
+    rather than only finding out via a failed /structure call. The
+    /structure endpoint's 402 stays in place too, as a safety net for
+    cap/cycle state changing mid-session (e.g. another doctor's consultation
+    used the last shared credit)."""
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    return get_ai_scribe_status(db, hospital)
+
+
 @router.post("/structure/{consultation_id}")
 @limiter.limit("10/minute")
 async def structure(
@@ -705,6 +729,14 @@ async def structure(
     if not consultation.raw_transcript:
         raise HTTPException(status_code=400, detail="No transcript found for this consultation")
 
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    ai_scribe_status = get_ai_scribe_status(db, hospital)
+    if not ai_scribe_status["allowed"]:
+        # 402, not 400/403 — a distinct status the frontend checks for
+        # specifically, to fall back to manual entry instead of showing a
+        # generic error (item 2: "same as Foundation", not a broken screen).
+        raise HTTPException(status_code=402, detail={"ai_scribe_blocked": True, "reason": ai_scribe_status["reason"]})
+
     previous = (
         db.query(Consultation)
         .filter(
@@ -728,6 +760,8 @@ async def structure(
         structured = await structure_transcript(consultation.raw_transcript, history_text)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI structuring failed: {str(e)}")
+
+    consume_ai_scribe_credit(db, hospital)  # only counts against the cap once structuring actually succeeds
 
     consultation.chief_complaint = structured.get("chief_complaint", "")
     consultation.diagnosis = structured.get("diagnosis", "")
@@ -888,6 +922,37 @@ def confirm_prescription(
                 status="payment_pending",
                 priority=requested_priority if requested_priority in valid_priorities else "routine",
                 clinical_indication=indication,
+            ))
+
+    if payload.recommended_radiology_template_ids:
+        radiology_templates = db.query(RadiologyTemplate).filter(
+            RadiologyTemplate.id.in_(payload.recommended_radiology_template_ids),
+            RadiologyTemplate.hospital_id == current_doctor.hospital_id
+        ).all()
+        consultation.recommended_radiology_template_ids = json.dumps([t.id for t in radiology_templates])
+        consultation.ordered_radiology = json.dumps([
+            {"template_id": t.id, "study_name": t.name, "price": t.fee, "status": "payment_pending"}
+            for t in radiology_templates
+        ])
+        total_radiology_fee = sum(t.fee for t in radiology_templates)
+        if total_radiology_fee > 0:
+            todays_checkin.test_fee = (todays_checkin.test_fee or 0) + total_radiology_fee
+
+        valid_priorities_rad = {"routine", "urgent", "stat"}
+        indication_rad = (payload.clinical_indication or "").strip() or None
+        for t in radiology_templates:
+            requested_priority = (payload.radiology_priorities or {}).get(t.id, "routine")
+            db.add(RadiologyOrder(
+                consultation_id=consultation.id,
+                patient_id=consultation.patient_id,
+                hospital_id=current_doctor.hospital_id,
+                template_id=t.id,
+                study_name=t.name,
+                study_type=t.study_type,
+                price=t.fee,
+                status="payment_pending",
+                priority=requested_priority if requested_priority in valid_priorities_rad else "routine",
+                clinical_indication=indication_rad,
             ))
 
     try:
@@ -1216,6 +1281,48 @@ def update_consultation(
             all_ids = list(old_test_ids) + [t.id for t in test_items]
             consultation.recommended_test_ids = json.dumps(all_ids)
 
+    new_radiology_orders = []
+    if was_confirmed and payload.recommended_radiology_template_ids:
+        old_radiology_ids = set(json.loads(consultation.recommended_radiology_template_ids or "[]"))
+        new_radiology_ids = [tid for tid in payload.recommended_radiology_template_ids if tid not in old_radiology_ids]
+        if new_radiology_ids:
+            radiology_items = db.query(RadiologyTemplate).filter(
+                RadiologyTemplate.id.in_(new_radiology_ids),
+                RadiologyTemplate.hospital_id == current_doctor.hospital_id
+            ).all()
+            todays_checkin_for_radiology = db.query(Checkin).filter(
+                Checkin.patient_id == consultation.patient_id,
+                Checkin.doctor_id == consultation.doctor_id,
+                Checkin.visit_date == ist_today()
+            ).order_by(desc(Checkin.created_at)).first()
+
+            valid_priorities_rad = {"routine", "urgent", "stat"}
+            indication_rad = (payload.clinical_indication or "").strip() or None
+            added_radiology_fee = 0
+            for t in radiology_items:
+                requested_priority = (payload.radiology_priorities or {}).get(t.id, "routine")
+                order = RadiologyOrder(
+                    consultation_id=consultation.id,
+                    patient_id=consultation.patient_id,
+                    hospital_id=current_doctor.hospital_id,
+                    template_id=t.id,
+                    study_name=t.name,
+                    study_type=t.study_type,
+                    price=t.fee,
+                    status="payment_pending",
+                    priority=requested_priority if requested_priority in valid_priorities_rad else "routine",
+                    clinical_indication=indication_rad,
+                )
+                db.add(order)
+                new_radiology_orders.append(order)
+                added_radiology_fee += t.fee
+
+            if added_radiology_fee > 0 and todays_checkin_for_radiology:
+                todays_checkin_for_radiology.test_fee = (todays_checkin_for_radiology.test_fee or 0) + added_radiology_fee
+
+            all_radiology_ids = list(old_radiology_ids) + [t.id for t in radiology_items]
+            consultation.recommended_radiology_template_ids = json.dumps(all_radiology_ids)
+
     # A same-day return can happen any number of times before the day ends,
     # and everything (medicines, tests) accumulates correctly in the DB by
     # this point — but the actual prescription PDF was never regenerated on
@@ -1252,6 +1359,7 @@ def update_consultation(
                 "medicine_orders_cancelled": cancelled_order_ids,
                 "refunds_created": [r.id for r in refunds_created],
                 "new_test_orders": [t.id for t in new_test_orders],
+                "new_radiology_orders": [r.id for r in new_radiology_orders],
             })
         )
 
@@ -1260,6 +1368,7 @@ def update_consultation(
         "new_medicine_orders_added": len(new_medicine_orders),
         "medicine_orders_cancelled": len(cancelled_order_ids),
         "new_test_orders_added": len(new_test_orders),
+        "new_radiology_orders_added": len(new_radiology_orders),
         "pending_refunds_created": len(refunds_created),
     }
 
@@ -1272,7 +1381,6 @@ def void_consultation(
 ):
     from app.models.test_order import TestOrder
     from app.models.medicine_order import MedicineOrder
-    from app.models.refund import Refund
     consultation = db.query(Consultation).filter(
         Consultation.id == consultation_id,
         Consultation.doctor_id == current_doctor.id
@@ -1369,6 +1477,8 @@ def admin_dashboard(
     from datetime import datetime, timedelta
     from sqlalchemy import func, case
     from app.models.hospital import Hospital
+    from app.utils.ai_scribe_gate import get_ai_scribe_status, consume_ai_scribe_credit
+
 
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")

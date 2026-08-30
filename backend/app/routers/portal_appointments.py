@@ -56,18 +56,22 @@ def _to_out(a: Appointment, db: Session) -> AppointmentOut:
 
 
 def _release_abandoned_holds(db: Session, slot: DoctorSlot) -> None:
-    """Abandoned (never-paid) holds don't get to sit on a slot forever. There's
-    no background scheduler in this codebase yet, so this is a lazy expiry
-    sweep: anyone touching this slot (booking, checking capacity, paying)
-    triggers it, and any unpaid hold past the grace window gets released and
-    the slot count freed up for someone else. Caller must already hold the
-    row lock on `slot` before calling this."""
-    cutoff = now_ist_naive() - timedelta(minutes=settings.PORTAL_BOOKING_HOLD_MINUTES)
+    """Genuinely abandoned bookings free their slot back up for others.
+    "Unpaid" is now the expected resting state for any booking — online
+    self-booked or phone-booked — all the way up to the patient paying at
+    the hospital (see collect_payment_at_reception), not a short online-
+    checkout window anymore, so this no longer expires on a short timer.
+    Same cutoff as reception's own awaiting-payment cleanup
+    (_expire_stale_awaiting_payment in portal_appointments_staff.py): a
+    booking is only abandoned once its own booked day has fully passed
+    with no payment ever collected. Caller must already hold the row lock
+    on `slot` before calling this."""
+    today_start = datetime.combine(now_ist_naive().date(), datetime.min.time())
     stale = db.query(Appointment).filter(
         Appointment.slot_id == slot.id,
         Appointment.status == AppointmentStatus.booked,
         Appointment.payment_status == "unpaid",
-        Appointment.created_at < cutoff,
+        Appointment.requested_time < today_start,
     ).all()
     for a in stale:
         a.status = AppointmentStatus.cancelled

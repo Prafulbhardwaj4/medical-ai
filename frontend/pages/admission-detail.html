@@ -549,6 +549,17 @@
 
           <div class="card" style="margin-bottom:20px">
             <div class="card-header">
+              <h2>Radiology</h2>
+              <button class="btn btn-outline btn-sm" id="btn-add-radiology" onclick="openAddRadiologyModal()">+ Order
+                Imaging</button>
+            </div>
+            <div id="radiology-list">
+              <p>Loading...</p>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-header">
               <h2>Progress Notes</h2>
               <button class="btn btn-primary btn-sm" id="btn-add-progress-note" style="display:none" onclick="submitProgressNote()">Add Note</button>
             </div>
@@ -720,6 +731,33 @@
       <div id="test-rows" style="margin-top:8px"></div>
       <div class="err-msg" id="test-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitAddTest()">Order All</button>
+    </div>
+  </div>
+
+  <!-- Add Radiology modal -->
+  <div class="modal-overlay" id="modal-add-radiology">
+    <div class="modal" style="max-width:600px">
+      <div class="modal-header">
+        <h2>Order Imaging</h2><button class="modal-close" onclick="closeModal('modal-add-radiology')">&times;</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--slate-light);margin:-4px 0 12px">
+        Everything added below and submitted together will show as one report as results come in — order
+        separately (or on a different day) if these should be separate reports.
+      </p>
+      <div style="position:relative">
+        <input class="form-control" id="radiology-catalog-search" placeholder="Search imaging studies to order…" autocomplete="off"
+          oninput="renderAdmRadiologySuggestions()" onfocus="renderAdmRadiologySuggestions()" />
+        <div id="radiology-suggestions"
+          style="display:none;position:absolute;z-index:20;background:#fff;border:1px solid var(--border);
+          border-radius:8px;max-height:220px;overflow-y:auto;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.08);margin-top:4px"></div>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label class="form-label">Clinical Indication (optional)</label>
+        <input class="form-control" id="radiology-clinical-indication" placeholder="e.g. suspected appendicitis" />
+      </div>
+      <div id="radiology-rows" style="margin-top:8px"></div>
+      <div class="err-msg" id="radiology-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="submitAddRadiology()">Order All</button>
     </div>
   </div>
 
@@ -1144,6 +1182,8 @@
 
   <script src="../js/api.js"></script>
   <script src="../js/nav-admin.js"></script>
+  <script src="../js/tier-catalog.js"></script>
+  <script src="../js/upgrade-gate.js"></script>
   <script src="../js/chat-widget.js?v=1"></script>
   <script src="../js/suggestion-widget.js?v=1"></script>
   <script>
@@ -1325,6 +1365,7 @@
         renderHeader();
         renderMeds();
         renderTests();
+        renderRadiology();
         renderCharges();
         renderBill();
         applyDischargedReadOnly();
@@ -1902,6 +1943,24 @@
           </span>
         </div>`;
       }).join('');
+    }
+
+    function renderRadiology() {
+      const list = document.getElementById("radiology-list");
+      if (!admissionData.radiology_orders.length) { list.innerHTML = `<p style="color:var(--slate-light)">No imaging ordered yet.</p>`; return; }
+      const fmt = (iso) => iso ? new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+      list.innerHTML = admissionData.radiology_orders.map(r => `
+        <div class="bill-row">
+          <span>${sanitize(r.study_name)}</span>
+          <span style="text-align:right;display:flex;align-items:center;gap:10px">
+            <div style="font-size:11px;color:var(--slate-light)">
+              ${r.queued_at ? 'Ordered ' + fmt(r.queued_at) : ''}
+            </div>
+            ${r.status === 'verified_released'
+              ? `<button class="btn btn-sm" onclick="downloadFile('/radiology/orders/${r.id}/pdf', 'radiology_report_${r.id}.pdf')">Report</button>`
+              : `<button class="btn btn-sm" style="background:var(--smoke-mid);color:var(--slate-light);border-color:var(--border);cursor:not-allowed" disabled title="Not reported yet">Report</button>`}
+          </span>
+        </div>`).join('');
     }
 
     function renderCharges() {
@@ -2621,6 +2680,198 @@
         }
         closeModal("modal-add-test");
         toast(`${rows.length} test(s) ordered`, "success");
+        loadAdmission();
+      } catch (e) { err.textContent = e.message; }
+    }
+
+    // ---------- Radiology ----------
+    let radiologyCatalogCache = [];
+    let radiologyCatalogLoaded = false;
+
+    async function openAddRadiologyModal() {
+      document.getElementById("radiology-err").textContent = "";
+      document.getElementById("radiology-rows").innerHTML = "";
+      document.getElementById("radiology-catalog-search").value = "";
+      document.getElementById("radiology-suggestions").style.display = "none";
+      document.getElementById("radiology-clinical-indication").value = "";
+      openModal("modal-add-radiology");
+      if (!radiologyCatalogLoaded) {
+        try {
+          radiologyCatalogCache = await api("GET", "/admissions/radiology-catalog");
+        } catch (e) { radiologyCatalogCache = []; }
+        radiologyCatalogLoaded = true;
+      }
+    }
+
+    function renderAdmRadiologySuggestions() {
+      const box = document.getElementById('radiology-suggestions');
+      const query = document.getElementById('radiology-catalog-search').value.trim().toLowerCase();
+      const matches = radiologyCatalogCache.filter(t => !query || t.name.toLowerCase().includes(query)).slice(0, 20);
+
+      const html = matches.map(t => `
+        <div onclick="selectAdmRadiology(${t.id})" style="padding:8px 12px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between"
+          onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">
+          <span>${sanitize(t.name)}</span>
+          <span style="color:var(--slate)">₹${t.fee.toFixed(2)}</span>
+        </div>
+      `).join('');
+
+      if (!html) { box.style.display = 'none'; box.innerHTML = ''; return; }
+      box.innerHTML = html;
+      box.style.display = 'block';
+    }
+
+    function selectAdmRadiology(id) {
+      const t = radiologyCatalogCache.find(x => x.id === id);
+      if (!t) return;
+      addAdmRadiologyRow({ template_id: t.id, study_name: t.name, study_type: t.study_type, price: t.fee });
+      document.getElementById('radiology-catalog-search').value = '';
+      document.getElementById('radiology-suggestions').style.display = 'none';
+    }
+
+    function addAdmRadiologyRow(t) {
+      const wrap = document.getElementById("radiology-rows");
+      const div = document.createElement("div");
+      div.className = "radiology-row";
+      div.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:10px;padding:12px;background:var(--smoke);border-radius:var(--radius);border:1px solid var(--border)";
+      div.dataset.templateId = t.template_id || '';
+      div.dataset.studyType = t.study_type || '';
+      const isUltrasound = t.study_type === 'ultrasound';
+      div.innerHTML = `
+        <div class="form-group am-radiology-name" style="margin:0;flex:2;min-width:160px">
+          <label class="form-label">Study</label>
+          <input class="form-control" value="${sanitize(t.study_name)}" readonly />
+        </div>
+        <div class="form-group am-radiology-price" style="margin:0;flex:1;min-width:100px">
+          <label class="form-label">Price (₹)</label>
+          <input class="form-control" type="number" min="0" step="0.01" value="${t.price || 0}" readonly />
+        </div>
+        <button type="button" class="btn-remove-med" onclick="this.closest('.radiology-row').remove()" title="Remove">✕</button>
+        ${isUltrasound ? `
+        <label style="width:100%;display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0 0;cursor:pointer">
+          <input type="checkbox" class="am-radiology-repro-age" onchange="toggleFormFBlock(this)" />
+          Patient is a woman of reproductive age
+        </label>
+        <div class="am-radiology-formf" style="display:none;width:100%;margin-top:8px;padding-top:10px;border-top:1px solid var(--border)"></div>
+        ` : ''}
+      `;
+      wrap.appendChild(div);
+    }
+
+    // PCPNDT Form F sub-form — only ever shown for an ultrasound row where
+    // the reproductive-age checkbox is ticked. Kept per-row (not a shared
+    // block) so ordering more than one ultrasound in the same batch doesn't
+    // conflate two patients' declarations into one form.
+    function toggleFormFBlock(checkbox) {
+      const row = checkbox.closest('.radiology-row');
+      const block = row.querySelector('.am-radiology-formf');
+      if (!checkbox.checked) { block.style.display = 'none'; block.innerHTML = ''; return; }
+      block.style.display = 'block';
+      block.innerHTML = `
+        <p style="font-size:12.5px;color:var(--danger);font-weight:600;margin:0 0 10px">PCPNDT Form F — required by law before this order can be placed</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="form-group" style="margin:0"><label class="form-label">Patient Age</label><input class="form-control ff-patient-age" type="number" min="0" /></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Total Living Children</label><input class="form-control ff-living-children" type="number" min="0" value="0" /></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Living Sons (ages)</label><input class="form-control ff-sons-ages" placeholder="e.g. 6 years, 3 months" /></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Living Daughters (ages)</label><input class="form-control ff-daughters-ages" placeholder="e.g. 4 years" /></div>
+          <div class="form-group" style="margin:0;grid-column:1/-1"><label class="form-label">Husband's/Wife's/Father's/Mother's Name *</label><input class="form-control ff-guardian-name" /></div>
+          <div class="form-group" style="margin:0;grid-column:1/-1"><label class="form-label">Patient's Full Address & Contact *</label><textarea class="form-control ff-address" rows="2"></textarea></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Referral *</label>
+            <select class="form-control ff-referral-type">
+              <option value="referred">Referred by a doctor</option>
+              <option value="self_referral">Self-referral</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0"><label class="form-label">LMP / Gestational Weeks *</label><input class="form-control ff-lmp" placeholder="e.g. 24 weeks" /></div>
+          <div class="form-group" style="margin:0;grid-column:1/-1"><label class="form-label">Referring Doctor's Name & Address (or self-referral note) *</label><textarea class="form-control ff-referring-doctor" rows="2"></textarea></div>
+          <div class="form-group" style="margin:0;grid-column:1/-1"><label class="form-label">Doctor Performing the Scan *</label><input class="form-control ff-performing-doctor" /></div>
+          <div class="form-group" style="margin:0;grid-column:1/-1"><label class="form-label">Date Declaration Was Obtained</label><input class="form-control ff-declared-date" type="date" /></div>
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;margin-top:10px;cursor:pointer">
+          <input type="checkbox" class="ff-non-sex-declared" style="margin-top:2px" />
+          I declare that I have neither detected nor disclosed the sex of the foetus to the pregnant woman, her relatives, or any other person during this procedure.
+        </label>
+      `;
+    }
+
+    async function submitAddRadiology() {
+      const err = document.getElementById("radiology-err");
+      err.textContent = "";
+      const rows = [...document.querySelectorAll("#radiology-rows .radiology-row")];
+      if (!rows.length) { err.textContent = "Add at least one imaging study"; return; }
+
+      const pendingStudyNames = new Set(
+        (admissionData.radiology_orders || [])
+          .filter(r => !["verified_released", "rejected"].includes(r.status))
+          .map(r => r.study_name.trim().toLowerCase())
+      );
+      for (const row of rows) {
+        const name = row.querySelector(".am-radiology-name input").value.trim();
+        if (pendingStudyNames.has(name.toLowerCase())) {
+          closeModal("modal-add-radiology");
+          toast("this study's report is pending.", "info");
+          return;
+        }
+      }
+
+      // Block submission if any ultrasound row has the reproductive-age box
+      // ticked but the Form F fields/declaration aren't complete — this is
+      // a legal requirement, not a soft validation.
+      for (const row of rows) {
+        const reproCheckbox = row.querySelector(".am-radiology-repro-age");
+        if (!reproCheckbox || !reproCheckbox.checked) continue;
+        const required = ['.ff-guardian-name', '.ff-address', '.ff-lmp', '.ff-referring-doctor', '.ff-performing-doctor'];
+        for (const sel of required) {
+          if (!row.querySelector(sel).value.trim()) {
+            err.textContent = "Complete all required Form F fields before ordering this ultrasound";
+            return;
+          }
+        }
+        if (!row.querySelector(".ff-non-sex-declared").checked) {
+          err.textContent = "The non-sex-determination declaration must be confirmed for every ultrasound on a woman of reproductive age";
+          return;
+        }
+      }
+
+      const clinicalIndication = document.getElementById("radiology-clinical-indication").value.trim() || null;
+      // One batch id shared by every row in this submission — same convention as submitAddTest's batchId.
+      const batchId = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+      try {
+        for (const row of rows) {
+          const templateId = row.dataset.templateId ? parseInt(row.dataset.templateId) : null;
+          const studyType = row.dataset.studyType;
+          const name = row.querySelector(".am-radiology-name input").value.trim();
+          const price = parseFloat(row.querySelector(".am-radiology-price input").value) || 0;
+          const payload = {
+            template_id: templateId, study_name: name, study_type: studyType, price,
+            clinical_indication: clinicalIndication, order_batch_id: batchId,
+          };
+
+          const reproCheckbox = row.querySelector(".am-radiology-repro-age");
+          if (reproCheckbox && reproCheckbox.checked) {
+            payload.is_reproductive_age_woman = true;
+            const ageVal = row.querySelector(".ff-patient-age").value;
+            payload.form_f = {
+              patient_age: ageVal ? parseInt(ageVal) : null,
+              total_living_children: parseInt(row.querySelector(".ff-living-children").value) || 0,
+              living_sons_ages: row.querySelector(".ff-sons-ages").value.trim() || null,
+              living_daughters_ages: row.querySelector(".ff-daughters-ages").value.trim() || null,
+              guardian_name: row.querySelector(".ff-guardian-name").value.trim(),
+              patient_address_contact: row.querySelector(".ff-address").value.trim(),
+              referral_type: row.querySelector(".ff-referral-type").value,
+              referring_doctor_details: row.querySelector(".ff-referring-doctor").value.trim(),
+              lmp_or_gestational_weeks: row.querySelector(".ff-lmp").value.trim(),
+              performing_doctor_name: row.querySelector(".ff-performing-doctor").value.trim(),
+              declaration_obtained_date: row.querySelector(".ff-declared-date").value || null,
+              non_sex_determination_declared: row.querySelector(".ff-non-sex-declared").checked,
+            };
+          }
+
+          await api("POST", `/admissions/${admissionId}/radiology-orders`, payload);
+        }
+        closeModal("modal-add-radiology");
+        toast(`${rows.length} imaging study(ies) ordered`, "success");
         loadAdmission();
       } catch (e) { err.textContent = e.message; }
     }

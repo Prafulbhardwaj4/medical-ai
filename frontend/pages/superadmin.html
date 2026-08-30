@@ -233,6 +233,13 @@
             </div>
           </div>
 
+          <div class="card" id="detail-ai-scribe-card" style="display:none">
+            <div class="card-header">
+              <h2>AI Scribe &amp; Billing Cycle</h2>
+            </div>
+            <div id="detail-ai-scribe"></div>
+          </div>
+
           <div class="card">
             <div class="card-header">
               <h2>Doctors</h2>
@@ -419,8 +426,35 @@
     </div>
   </div>
 
+  <!-- AI Scribe Topup modal -->
+  <div class="modal-overlay" id="modal-topup">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h2>Add AI Scribe Topup</h2>
+        <button class="modal-close" onclick="closeTopupModal()">&times;</button>
+      </div>
+      <input type="hidden" id="topup-hospital-id" />
+      <p style="font-size:12.5px;color:var(--slate-light);margin:-4px 0 14px">
+        Usable for 30 days from purchase. Pick a block — the next screen confirms payment before it's applied.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-outline" style="justify-content:space-between;display:flex" onclick="confirmTopupPurchase(250)">
+          <span>250 consultations</span><strong>Rs.2,999</strong>
+        </button>
+        <button class="btn btn-outline" style="justify-content:space-between;display:flex" onclick="confirmTopupPurchase(350)">
+          <span>350 consultations</span><strong>Rs.3,999</strong>
+        </button>
+        <button class="btn btn-outline" style="justify-content:space-between;display:flex" onclick="confirmTopupPurchase(500)">
+          <span>500 consultations</span><strong>Rs.4,999</strong>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <script src="../js/api.js?v=4"></script>
+  <script src="../js/tier-catalog.js"></script>
+  <script src="../js/upgrade-gate.js"></script>
   <script src="../js/chat-widget.js?v=1"></script>
   <script>
     requireAuth();
@@ -571,7 +605,9 @@
               <div style="font-weight:600;font-size:1rem">${sanitize(h.name)}</div>
               <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(h.city)} · Code: ${sanitize(h.hospital_code)} · ${h.hospital_type === 'government' ? 'Government' : 'Private'}</div>
             </div>
-            <div style="display:flex;align-items:center;gap:12px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <span class="badge badge-grey">${typeof tierLabel === 'function' ? tierLabel(h.tier) : h.tier}</span>
+              ${aiScribeUsageBadgeHtml(h)}
               <span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span>
               <button class="btn ${h.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="event.stopPropagation(); toggleHospitalActive(${h.id}, this)">
                 ${h.is_active ? 'Deactivate' : 'Activate'}
@@ -583,6 +619,15 @@
           </div>
         </div>
       `).join('');
+    }
+
+    // Shared by the hospital cards and the detail page (item 5/6). Foundation
+    // shows nothing at all — no 0/0 counter — per Praful's instruction.
+    function aiScribeUsageBadgeHtml(h) {
+      if (!h.has_ai_scribe) return '';
+      if (h.ai_scribe_cap === null) return '<span class="badge badge-grey">Unlimited</span>';
+      const isExhausted = h.ai_scribe_total_remaining <= 0;
+      return `<span class="badge ${isExhausted ? 'badge-red' : 'badge-grey'}">${h.ai_scribe_used}/${h.ai_scribe_cap}${h.ai_scribe_topup_remaining ? ` (+${h.ai_scribe_topup_remaining} topup)` : ''}</span>`;
     }
 
     async function toggleHospitalActive(hospitalId, btn) {
@@ -602,6 +647,17 @@
         openDetail(hospitalId);
       } catch (e) {
         toast(e.message, 'error');
+      }
+    }
+
+    async function updateHospitalTier(hospitalId, tier) {
+      try {
+        const data = await api('PATCH', `/admin/hospitals/${hospitalId}/tier?tier=${encodeURIComponent(tier)}`);
+        toast(`Plan changed to ${typeof tierLabel === 'function' ? tierLabel(data.tier) : data.tier}.`, 'success');
+        openDetail(hospitalId);
+      } catch (e) {
+        toast(e.message, 'error');
+        openDetail(hospitalId); // reset the <select> back to the actual saved tier
       }
     }
 
@@ -722,6 +778,11 @@
             <div><span style="color:var(--slate);font-size:13px">Address</span><div style="font-weight:500">${sanitize(h.address || '—')}</div></div>
             <div><span style="color:var(--slate);font-size:13px">Hospital Code</span><div style="font-weight:500;font-family:monospace">${sanitize(h.hospital_code)}</div></div>
             <div><span style="color:var(--slate);font-size:13px">Type</span><div style="font-weight:500">${h.hospital_type === 'government' ? 'Government' : 'Private'}</div></div>
+            <div><span style="color:var(--slate);font-size:13px">Plan</span><div style="display:flex;align-items:center;gap:8px">
+              <select class="form-control" style="width:auto;padding:6px 10px" onchange="updateHospitalTier(${h.id}, this.value)">
+                ${(typeof TIER_CATALOG !== 'undefined' ? TIER_CATALOG : []).map(t => `<option value="${t.key}" ${h.tier === t.key ? 'selected' : ''}>${t.label}</option>`).join('')}
+              </select>
+            </div></div>
             <div><span style="color:var(--slate);font-size:13px">Billing</span><div style="display:flex;align-items:center;gap:8px">
               <span class="badge ${h.billing_enabled ? 'badge-teal' : 'badge-grey'}">${h.billing_enabled ? 'Enabled' : 'Disabled'}</span>
               <button class="btn btn-outline btn-sm" onclick="toggleHospitalBilling(${h.id})">${h.billing_enabled ? 'Disable' : 'Enable'}</button>
@@ -760,9 +821,93 @@
           `).join('');
 
         document.getElementById('admin-modal-sub').textContent = `For: ${h.name}`;
+        renderAiScribeDetailCard(h);
       } catch (e) {
         toast('Failed to load hospital details', 'error');
       }
+    }
+
+    function fmtCycleDate(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function renderAiScribeDetailCard(h) {
+      const card = document.getElementById('detail-ai-scribe-card');
+      const body = document.getElementById('detail-ai-scribe');
+      if (!h.has_ai_scribe) { card.style.display = 'none'; return; }
+      card.style.display = '';
+
+      const capLine = h.ai_scribe_cap === null
+        ? '<span class="badge badge-grey">Unlimited</span>'
+        : `<strong>${h.ai_scribe_used} / ${h.ai_scribe_cap}</strong>${h.ai_scribe_topup_remaining ? ` <span class="badge badge-grey">+${h.ai_scribe_topup_remaining} topup</span>` : ''}`;
+
+      const renewDisabled = !h.renew_window_open;
+      const cycleSetControl = !h.billing_cycle_start
+        ? `<div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+             <input type="date" class="form-control" id="cycle-start-input" style="width:auto" />
+             <button class="btn btn-outline btn-sm" onclick="setBillingCycleStart(${h.id})">Set Cycle Start</button>
+           </div>`
+        : '';
+
+      body.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div><span style="color:var(--slate);font-size:13px">Consultations Used This Cycle</span><div>${capLine}</div></div>
+          <div><span style="color:var(--slate);font-size:13px">Billing Cycle</span><div style="font-weight:500">${fmtCycleDate(h.billing_cycle_start)} → ${fmtCycleDate(h.billing_cycle_end)}</div>${cycleSetControl}</div>
+          <div><span style="color:var(--slate);font-size:13px">Grace Period Ends</span><div style="font-weight:500">${fmtCycleDate(h.grace_end)}</div></div>
+          <div><span style="color:var(--slate);font-size:13px">Full Deactivation From</span><div style="font-weight:500;color:var(--danger)">${fmtCycleDate(h.deactivation_at)}</div></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+            <button class="btn btn-outline btn-sm" onclick="openTopupModal(${h.id})">Topup</button>
+            <button class="btn btn-primary btn-sm" ${renewDisabled ? 'disabled title="Opens 2 days before cycle-end, through the end of the grace period"' : ''} onclick="renewHospital(${h.id})">Renew</button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function setBillingCycleStart(hospitalId) {
+      const val = document.getElementById('cycle-start-input').value;
+      if (!val) { toast('Pick a date first.', 'error'); return; }
+      try {
+        await api('PATCH', `/admin/hospitals/${hospitalId}/billing-cycle-start?cycle_start_date=${val}`);
+        toast('Billing cycle start set.', 'success');
+        openDetail(hospitalId);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // Mirrors backend AI_SCRIBE_TOPUP_PRICING for display only — the
+    // backend is the source of truth and validates independently.
+    const TOPUP_PRICING = { 250: 2999, 350: 3999, 500: 4999 };
+
+    function openTopupModal(hospitalId) {
+      document.getElementById('topup-hospital-id').value = hospitalId;
+      document.getElementById('modal-topup').classList.add('open');
+    }
+
+    function closeTopupModal() {
+      document.getElementById('modal-topup').classList.remove('open');
+    }
+
+    async function confirmTopupPurchase(blockSize) {
+      const hospitalId = document.getElementById('topup-hospital-id').value;
+      const price = TOPUP_PRICING[blockSize];
+      closeTopupModal();
+      const ok = await confirmDialog(`Confirm ${blockSize} consultations for Rs.${price.toLocaleString('en-IN')} — has payment been collected from the hospital?`, 'Yes, Payment Collected');
+      if (!ok) return;
+      try {
+        await api('POST', `/admin/hospitals/${hospitalId}/ai-scribe-topup?block_size=${blockSize}&payment_collected=true`);
+        toast(`${blockSize} consultations added.`, 'success');
+        openDetail(hospitalId);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function renewHospital(hospitalId) {
+      const ok = await confirmDialog('Has payment been collected for this hospital\'s renewal?', 'Yes, Payment Collected — Renew');
+      if (!ok) return;
+      try {
+        await api('POST', `/admin/hospitals/${hospitalId}/renew?confirm=true`);
+        toast('Hospital renewed.', 'success');
+        openDetail(hospitalId);
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     function closeDetail() {

@@ -13,6 +13,7 @@ httpx
 pydantic-settings
 email-validator
 pytz
+python-dateutil
 slowapi
 alembic
 qrcode[pil]

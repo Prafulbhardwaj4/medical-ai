@@ -16,9 +16,34 @@ from datetime import timedelta
 from app.database import SessionLocal
 from app.models.hospital import Hospital
 from app.models.day_end_close import DayEndClose
-from app.utils.timezone import ist_today, now_ist
+from app.utils.timezone import ist_today, now_ist, now_ist_naive
+from app.utils.billing_cycle import is_past_grace
 
 logger = logging.getLogger("scheduler")
+
+
+def run_billing_deactivation_sweep_for_all_hospitals():
+    """Item 4/7: once a hospital's grace window has fully passed with no
+    renewal, the whole account is deactivated. Runs once daily alongside
+    the midnight day-end close — day-level granularity is fine here since
+    every date in the spec (cycle-end, grace-end, deactivation date) is
+    itself a whole day, not a specific time. The AI-Scribe-stops-at-
+    cycle-end part is enforced live on every /structure call via
+    is_ai_scribe_period_active, independent of this sweep."""
+    db = SessionLocal()
+    try:
+        now = now_ist_naive()
+        hospitals = db.query(Hospital).filter(
+            Hospital.is_active == True,  # noqa: E712
+            Hospital.billing_cycle_start.isnot(None),
+        ).all()
+        for hospital in hospitals:
+            if is_past_grace(hospital, now):
+                hospital.is_active = False
+                logger.info(f"Auto-deactivated hospital {hospital.id} ({hospital.name}) — grace window passed with no renewal.")
+        db.commit()
+    finally:
+        db.close()
 
 
 def _seconds_until_next_midnight_ist():
@@ -57,6 +82,7 @@ async def midnight_close_loop():
             wait_seconds = _seconds_until_next_midnight_ist()
             await asyncio.sleep(wait_seconds)
             run_midnight_close_for_all_hospitals()
+            run_billing_deactivation_sweep_for_all_hospitals()
         except Exception as e:
             logger.warning(f"Midnight scheduler loop error: {e}")
             await asyncio.sleep(60)  # avoid a tight crash loop if something above is broken

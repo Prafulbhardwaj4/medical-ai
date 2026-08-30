@@ -199,14 +199,14 @@ def attendance_today(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "doctor", "nurse", "assistant", "receptionist", "lab", "pharmacy"]:
+    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "doctor", "nurse", "assistant", "receptionist", "lab", "pharmacy", "radiology"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     auto_close_stale_shifts(db, current_doctor.hospital_id)
 
     staff = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.nurse, UserRole.assistant, UserRole.receptionist, UserRole.lab, UserRole.pharmacy]),
+        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.nurse, UserRole.assistant, UserRole.receptionist, UserRole.lab, UserRole.pharmacy, UserRole.radiology]),
         Doctor.is_active == True
     ).all()
 

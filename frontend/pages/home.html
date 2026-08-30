@@ -60,7 +60,97 @@
 
     @media (max-width: 860px) {
       .lp-nav-links a:not(.lp-nav-cta) { display: none; }
-      .lp-header { padding: 16px 20px; }
+      .lp-header { padding: 14px 20px; }
+    }
+
+    /* ── Mobile menu ── */
+    .lp-menu-btn {
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 5px;
+      width: 44px;
+      height: 44px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      border-radius: var(--radius);
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+
+    .lp-menu-btn span {
+      display: block;
+      width: 22px;
+      height: 2px;
+      background: var(--navy);
+      border-radius: 2px;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    .lp-menu-btn[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .lp-menu-btn[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+    .lp-menu-btn[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+    @media (max-width: 860px) {
+      .lp-menu-btn { display: flex; }
+    }
+
+    .lp-mobile-nav {
+      position: fixed;
+      top: 0;
+      right: 0;
+      height: 100vh;
+      width: min(78vw, 320px);
+      background: var(--white);
+      z-index: 260;
+      box-shadow: -8px 0 32px rgba(15, 31, 61, 0.18);
+      padding: 88px 28px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+      overflow-y: auto;
+    }
+
+    .lp-mobile-nav.lp-open { transform: translateX(0); }
+
+    .lp-mobile-nav a {
+      display: flex;
+      align-items: center;
+      min-height: 52px;
+      padding: 0 4px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--navy);
+      text-decoration: none;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .lp-mobile-nav-cta {
+      margin-top: 18px;
+      justify-content: center;
+      background: var(--teal);
+      color: var(--white) !important;
+      border-radius: var(--radius);
+      border-bottom: none !important;
+    }
+
+    .lp-mobile-nav-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 31, 61, 0.4);
+      z-index: 250;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .lp-mobile-nav-backdrop.lp-open {
+      opacity: 1;
+      pointer-events: auto;
     }
 
     /* ── Hero ── */
@@ -846,6 +936,111 @@
     }
 
     .lp-footer-vande span { color: var(--teal-light); }
+
+    /* ══════════════════════════════════════════════════
+       Mobile — real responsive treatment (not a squeezed-
+       down desktop layout): rescaled type, restacked
+       sections, and 44px+ touch targets throughout.
+       ══════════════════════════════════════════════════ */
+
+    @media (max-width: 640px) {
+      /* Uniform tighter side gutters across every section */
+      .lp-section,
+      .lp-hero,
+      .lp-scribe,
+      .lp-final-cta,
+      .lp-footer,
+      .lp-trust-strip {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+
+      /* Header */
+      .lp-logo { font-size: 1.15rem; }
+      .lp-nav-links { gap: 10px; }
+      .lp-nav-links .lp-nav-cta .btn {
+        min-height: 40px;
+        padding: 8px 16px;
+        font-size: 0.85rem;
+      }
+
+      /* Hero */
+      .lp-hero { padding-top: 108px; padding-bottom: 60px; }
+      .lp-hero-inner { max-width: 100%; }
+      .lp-vande-badge { font-size: 0.72rem; padding: 7px 14px; margin-bottom: 22px; }
+      .lp-hero h1 { font-size: 1.9rem; margin-bottom: 16px; }
+      .lp-hero-sub { font-size: 0.92rem; margin-bottom: 30px; }
+      .lp-hero-ctas { flex-direction: column; align-items: stretch; gap: 12px; }
+      .lp-btn-hero-primary,
+      .lp-btn-hero-outline {
+        width: 100%;
+        min-height: 48px;
+        justify-content: center;
+        padding: 14px 24px;
+        font-size: 0.92rem;
+      }
+      .lp-hero-vande-main { margin-top: 40px; font-size: 0.78rem; letter-spacing: 0.1em; }
+
+      /* Trust strip */
+      .lp-trust-strip {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 14px;
+        padding-top: 20px;
+        padding-bottom: 20px;
+      }
+
+      /* Generic section heads */
+      .lp-section { padding-top: 60px; padding-bottom: 60px; }
+      .lp-section-tight { padding-top: 0; }
+      .lp-section-head { margin-bottom: 36px; }
+      .lp-section-head h2 { font-size: 1.5rem; }
+      .lp-section-head p { font-size: 0.9rem; }
+
+      /* Feature cards */
+      .lp-feature-card { padding: 22px 20px; }
+
+      /* Roles */
+      .lp-roles-grid { grid-template-columns: 1fr; gap: 10px; }
+      .lp-role-chip { padding: 16px 18px; font-size: 0.92rem; min-height: 52px; }
+
+      /* AI Scribe */
+      .lp-scribe { padding-top: 56px; padding-bottom: 56px; }
+      .lp-scribe h2 { font-size: 1.5rem; }
+      .lp-scribe-sub { font-size: 0.88rem; }
+      .lp-scribe-mock { padding: 20px; }
+      .lp-scribe-mock-row { flex-wrap: wrap; row-gap: 4px; padding: 10px 0; }
+      .lp-scribe-mock-label { width: auto; }
+
+      /* Pricing */
+      .lp-pricing-grid { max-width: 420px; }
+      .lp-price-card { padding: 26px 22px; }
+      .lp-price-amount { font-size: 1.8rem; }
+      .lp-price-cta { padding: 14px; min-height: 48px; display: flex; align-items: center; justify-content: center; }
+
+      /* Final CTA */
+      .lp-final-cta { padding-top: 52px; padding-bottom: 52px; }
+      .lp-final-cta h2 { font-size: 1.35rem; }
+      .lp-final-cta p { font-size: 0.88rem; }
+      .lp-final-cta .btn-lg {
+        width: 100%;
+        min-height: 50px;
+        padding: 14px 24px;
+        font-size: 0.95rem;
+      }
+
+      /* Footer */
+      .lp-footer { padding-top: 44px; padding-bottom: 24px; }
+      .lp-footer-inner { grid-template-columns: 1fr 1fr; gap: 28px 20px; }
+      .lp-footer-blurb { max-width: 100%; }
+      .lp-footer-col a { min-height: 40px; display: flex; align-items: center; }
+      .lp-footer-bottom { flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 20px; }
+    }
+
+    @media (max-width: 420px) {
+      .lp-hero h1 { font-size: 1.6rem; }
+      .lp-footer-inner { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 
@@ -863,7 +1058,20 @@
         <span class="btn btn-primary btn-sm">Login</span>
       </a>
     </nav>
+    <button class="lp-menu-btn" id="lp-menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="lp-mobile-nav">
+      <span></span><span></span><span></span>
+    </button>
   </header>
+
+  <!-- Mobile nav panel -->
+  <div class="lp-mobile-nav-backdrop" id="lp-mobile-nav-backdrop"></div>
+  <nav class="lp-mobile-nav" id="lp-mobile-nav">
+    <a href="#features">Features</a>
+    <a href="#roles">Who it's for</a>
+    <a href="#ai-scribe">AI Scribe</a>
+    <a href="#pricing">Pricing</a>
+    <a href="login.html" class="lp-mobile-nav-cta">Login →</a>
+  </nav>
 
   <!-- Hero -->
   <section class="lp-hero">
@@ -983,65 +1191,7 @@
       <h2>Priced around how much you actually use it</h2>
       <p>No per-bed licensing, no confusing add-ons. Pick the tier that matches your monthly consultation volume.</p>
     </div>
-    <div class="lp-pricing-grid">
-      <div class="lp-price-card lp-reveal">
-        <div class="lp-price-tier-label">Foundation</div>
-        <div class="lp-price-amount">₹9,999<span>/month</span></div>
-        <div class="lp-price-scope">Unlimited staff logins, every role</div>
-        <div class="lp-price-features">
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> OPD: registration, token queue, consultation, prescriptions</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Lab orders, pharmacy dispense, billing &amp; GST</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Pathology / Lab module</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Pharmacy module</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Online appointment booking</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Patient Portal</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Radiology / Imaging</div>
-        </div>
-        <a href="login.html" class="lp-price-cta">Get Started</a>
-      </div>
-
-      <div class="lp-price-card lp-reveal">
-        <div class="lp-price-tier-label">Growth</div>
-        <div class="lp-price-amount">₹24,999<span>/month</span></div>
-        <div class="lp-price-scope">Up to 4,000 consultations/month</div>
-        <div class="lp-price-features">
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Everything in Foundation</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> IPD / Admissions &amp; ward management unlocked</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> AI Medical Scribe for OPD</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Staff chat (staff ↔ admin)</div>
-        </div>
-        <a href="login.html" class="lp-price-cta">Get Started</a>
-      </div>
-
-      <div class="lp-price-card lp-price-card-dimmed lp-reveal">
-        <div class="lp-price-tier-label">Scale</div>
-        <div class="lp-price-amount">₹44,999<span>/month</span></div>
-        <div class="lp-price-scope">Up to 8,000 consultations/month</div>
-        <div class="lp-price-features">
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Everything in Growth</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Higher AI Scribe consultation volume</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> AI Scribe for admitted / IPD patients</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Pregnancy / Maternity management</div>
-        </div>
-        <span class="lp-price-cta lp-price-cta-disabled">Coming Soon</span>
-      </div>
-
-      <div class="lp-price-card lp-price-card-premium lp-price-card-dimmed lp-reveal">
-        <div class="lp-premium-badge">Most Powerful</div>
-        <div class="lp-price-tier-label">Enterprise</div>
-        <div class="lp-price-amount">₹54,999<span>/month</span></div>
-        <div class="lp-price-scope">Unlimited consultations</div>
-        <div class="lp-price-features">
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Everything in Scale</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Blood Bank / transfusion management</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> OT / Surgery clinical documentation</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Specialty-specific tools (e.g. orthopaedic)</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> Referrals to other onboarded hospitals</div>
-          <div class="lp-price-feature"><span class="lp-price-check">✓</span> White-glove onboarding — we set up every staff account, your full test catalog, and medicine list for you</div>
-        </div>
-        <span class="lp-price-cta lp-price-cta-disabled">Coming Soon</span>
-      </div>
-    </div>
+    <div class="lp-pricing-grid" id="lp-pricing-grid"></div>
   </section>
 
   <!-- Final CTA -->
@@ -1081,7 +1231,58 @@
     </div>
   </footer>
 
+  <script src="../js/tier-catalog.js"></script>
   <script>
+    // Pricing cards — rendered from tier-catalog.js (the same file the
+    // app's Upgrade Modal reads) so this section can never go stale
+    // relative to what's actually gated in the product. To change
+    // pricing/features, edit tier-catalog.js only.
+    (function renderPricingSection() {
+      const grid = document.getElementById('lp-pricing-grid');
+      if (!grid || typeof TIER_CATALOG === 'undefined') return;
+      grid.innerHTML = TIER_CATALOG.map(t => `
+        <div class="lp-price-card${t.comingSoon ? ' lp-price-card-dimmed' : ''}${t.premium ? ' lp-price-card-premium' : ''} lp-reveal">
+          ${t.premium ? '<div class="lp-premium-badge">Most Powerful</div>' : ''}
+          <div class="lp-price-tier-label">${t.label}</div>
+          <div class="lp-price-amount">${t.price}<span>${t.period}</span></div>
+          <div class="lp-price-scope">${t.scope}</div>
+          <div class="lp-price-features">
+            ${t.features.map(f => `<div class="lp-price-feature"><span class="lp-price-check">✓</span> ${f}</div>`).join('')}
+          </div>
+          ${t.comingSoon
+            ? '<span class="lp-price-cta lp-price-cta-disabled">Coming Soon</span>'
+            : '<a href="login.html" class="lp-price-cta">Get Started</a>'}
+        </div>
+      `).join('');
+    })();
+    
+    (function () {
+      const btn = document.getElementById('lp-menu-btn');
+      const panel = document.getElementById('lp-mobile-nav');
+      const backdrop = document.getElementById('lp-mobile-nav-backdrop');
+      if (!btn || !panel || !backdrop) return;
+
+      function closeMenu() {
+        panel.classList.remove('lp-open');
+        backdrop.classList.remove('lp-open');
+        btn.setAttribute('aria-expanded', 'false');
+        document.body.style.overflow = '';
+      }
+      function openMenu() {
+        panel.classList.add('lp-open');
+        backdrop.classList.add('lp-open');
+        btn.setAttribute('aria-expanded', 'true');
+        document.body.style.overflow = 'hidden';
+      }
+      btn.addEventListener('click', () => {
+        btn.getAttribute('aria-expanded') === 'true' ? closeMenu() : openMenu();
+      });
+      backdrop.addEventListener('click', closeMenu);
+      panel.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+      window.addEventListener('resize', () => { if (window.innerWidth > 860) closeMenu(); });
+    })();
+
     document.querySelectorAll('a[href^="#"]').forEach(link => {
       link.addEventListener('click', (e) => {
         const id = link.getAttribute('href').slice(1);

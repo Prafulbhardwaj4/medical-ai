@@ -26,6 +26,7 @@ class DoctorOut(BaseModel):
     hospital_id: Optional[int] = None
     hospital_type: Optional[str] = None
     billing_enabled: bool = False
+    hospital_tier: str = "growth"
     default_consultation_fee: Optional[float] = None
     consultation_fee: Optional[float] = None
     id: int

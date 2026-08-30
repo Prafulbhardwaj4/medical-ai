@@ -14,6 +14,7 @@ class UserRole(enum.Enum):
     assistant = "assistant"
     lab = "lab"
     pharmacy = "pharmacy"
+    radiology = "radiology"
 
 class Doctor(Base):
     __tablename__ = "doctors"
@@ -53,6 +54,10 @@ class Doctor(Base):
     @property
     def billing_enabled(self):
         return self.hospital.billing_enabled if self.hospital else False
+
+    @property
+    def hospital_tier(self):
+        return self.hospital.tier if self.hospital else "growth"
 
     @property
     def default_consultation_fee(self):

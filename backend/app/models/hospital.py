@@ -29,5 +29,11 @@ class Hospital(Base):
     default_service_hsn_sac = Column(String, nullable=True, default="999311")  # SAC code applied to service-type invoice lines (consultation, room, professional fee, tests, procedures) — medicines use their own catalog hsn_code instead
     phone = Column(String, nullable=True)  # optional — shown on PDF letterheads if set
     logo_base64 = Column(Text, nullable=True)  # optional — full data URI; stored in-DB since Render's disk is ephemeral
+    tier = Column(String, nullable=False, default="growth")  # "foundation" | "growth" | "scale" | "enterprise" — manually set by super admin, gates feature access
+    pcpndt_registration_number = Column(String, nullable=True)  # Registration No. under PC&PNDT Act, 1994 — required on every Form F (item 2 of the statutory form); only relevant to hospitals doing ultrasound
+
+    # --- Billing cycle / AI Scribe usage ---
+    billing_cycle_start = Column(DateTime, nullable=True)  # anchor date for the current cycle — set on the hospital's first login, then re-anchored on renewal (rolls +1mo) or reactivation (resets to reactivation date)
+    ai_scribe_consultations_used = Column(Integer, default=0, nullable=False)  # resets to 0 every cycle roll (renewal or reactivation)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=now_ist_naive)

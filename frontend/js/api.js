@@ -346,6 +346,8 @@ function redirectByRole(role) {
     window.location.href = '/pages/lab.html';
   } else if (role === 'pharmacy') {
     window.location.href = '/pages/pharmacy.html';
+  } else if (role === 'radiology') {
+    window.location.href = '/pages/radiology.html';
   } else if (role === 'patient') {
     window.location.href = '/pages/my-health.html';
   } else {
@@ -387,7 +389,10 @@ function ensureEditDetailsModal() {
           <h2>Settings</h2>
           <button class="modal-close" onclick="closeEditDetailsModal()">&times;</button>
         </div>
-        <div style="font-size:13px;font-weight:600;color:var(--slate);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.3px">Edit My Details</div>
+        <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border)">
+          <button type="button" style="flex:1;padding:8px 4px;background:none;border:none;border-bottom:2px solid var(--teal);font-size:13px;font-weight:600;color:var(--navy);cursor:default;text-transform:uppercase;letter-spacing:0.3px">Edit My Details</button>
+          <button type="button" onclick="closeEditDetailsModal();if(typeof openUpgradeModal==='function')openUpgradeModal();" style="flex:1;padding:8px 4px;background:none;border:none;border-bottom:2px solid transparent;font-size:13px;font-weight:600;color:var(--slate);cursor:pointer;text-transform:uppercase;letter-spacing:0.3px">Upgrade</button>
+        </div>
         <div style="margin-bottom:12px">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Name</label>
           <div style="display:flex;gap:10px">

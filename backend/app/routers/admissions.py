@@ -17,6 +17,8 @@ from app.models.doctor import Doctor
 from app.models.hospital import Hospital
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.test_order import TestOrder
+from app.models.radiology_order import RadiologyOrder
+from app.models.radiology_form_f import RadiologyFormF
 from app.models.invoice import Invoice
 from app.models.notification import Notification
 from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
@@ -33,7 +35,7 @@ from app.schemas.admission import (
     TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, EmergencyAlertIn,
     ProfessionalFeeIn, VALID_ADMISSION_TYPES, AdmissionConsentIn, VALID_CONSENT_TYPES, VALID_DISCHARGE_TYPES,
     VALID_WARD_CATEGORIES, TpaSettleIn, ProgressNoteIn, EmergencyAdmitIn, RoomCreateIn, RoomOut,
-    AdmissionVitalsIn,
+    AdmissionVitalsIn, AddAdmissionRadiologyOrderIn,
 )
 from app.models.consultation import Consultation
 from app.models.doctor import UserRole
@@ -642,6 +644,17 @@ def test_catalog_for_ward(current_doctor: Doctor = Depends(get_current_doctor), 
     return [{"id": t.id, "name": t.name, "fee": t.fee, "category": t.category} for t in items]
 
 
+@router.get("/radiology-catalog")
+def radiology_catalog_for_ward(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "nurse", "assistant", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    from app.models.radiology_template import RadiologyTemplate
+    items = db.query(RadiologyTemplate).filter(
+        RadiologyTemplate.hospital_id == current_doctor.hospital_id, RadiologyTemplate.is_active == True
+    ).order_by(RadiologyTemplate.name).all()
+    return [{"id": t.id, "name": t.name, "study_type": t.study_type, "fee": t.fee} for t in items]
+
+
 @router.get("/medicine-forms")
 def list_medicine_forms(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     if current_doctor.role.value not in ["doctor", "nurse", "assistant", "admin", "sub_admin"]:
@@ -1046,6 +1059,14 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         "verified_at": t.verified_at.isoformat() if t.verified_at else None,
     } for t in tests]
 
+    radiology_orders = db.query(RadiologyOrder).filter(RadiologyOrder.admission_id == a.id).order_by(RadiologyOrder.created_at.desc()).all()
+    radiology_orders_out = [{
+        "id": r.id, "study_name": r.study_name, "study_type": r.study_type, "status": r.status, "price": r.price,
+        "queued_at": r.queued_at.isoformat() if r.queued_at else None,
+        "reported_at": r.reported_at.isoformat() if r.reported_at else None,
+        "verified_at": r.verified_at.isoformat() if r.verified_at else None,
+    } for r in radiology_orders]
+
     charge_total = sum(c.amount * c.quantity for c in charges)
     room_breakdown, room_total = _room_charge_breakdown(db, a)
     # grand_total below is computed off the actual billable (payable_here) items via the
@@ -1080,6 +1101,7 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         "medications": med_out,
         "charges": charges_out,
         "tests": tests_out,
+        "radiology_orders": radiology_orders_out,
         "bill": {
             "room_total": room_total, "room_breakdown": room_breakdown, "charges_total": charge_total,
             "subtotal": gst_subtotal, "gst_total": gst_amount, "grand_total": gst_grand_total,
@@ -1581,6 +1603,70 @@ def order_admission_test(admission_id: str, body: AddAdmissionTestIn, current_do
     )
     db.commit()
     return {"message": "Test ordered"}
+
+
+@router.post("/{admission_id}/radiology-orders")
+def order_admission_radiology(admission_id: str, body: AddAdmissionRadiologyOrderIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor or nurse can order imaging")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="Cannot order imaging for a discharged admission")
+
+    # PCPNDT Form F is a hard legal requirement, not optional, the moment
+    # an ultrasound is ordered on a woman of reproductive age (item 7) —
+    # reject the order outright rather than silently skipping the record.
+    if body.study_type == "ultrasound" and body.is_reproductive_age_woman:
+        if not body.form_f:
+            raise HTTPException(status_code=400, detail="Form F details are required for an ultrasound on a woman of reproductive age")
+        if not body.form_f.non_sex_determination_declared:
+            raise HTTPException(status_code=400, detail="The non-sex-determination declaration must be confirmed before this order can be placed")
+
+    valid_priorities = {"routine", "urgent", "stat"}
+    priority = body.priority if body.priority in valid_priorities else "routine"
+    order = RadiologyOrder(
+        admission_id=a.id, patient_id=a.patient_id, hospital_id=a.hospital_id,
+        template_id=body.template_id, study_name=body.study_name, study_type=body.study_type,
+        price=body.price,
+        included=False, status="paid",  # billed at discharge, so it can go straight to the radiology queue — same convention as order_admission_test
+        paid_at=now_ist_naive(), queued_at=now_ist_naive(),
+        priority=priority,
+        clinical_indication=(body.clinical_indication or "").strip() or None,
+        order_batch_id=body.order_batch_id,
+        is_reproductive_age_woman=body.is_reproductive_age_woman,
+    )
+    db.add(order)
+    db.add(AdmissionCharge(
+        admission_id=a.id, charge_type="test", description=body.study_name,
+        amount=body.price, quantity=1, added_by=current_doctor.id, charged_at=now_ist_naive(),
+    ))
+    db.flush()  # assign order.id before it's referenced by the Form F row below
+
+    if body.study_type == "ultrasound" and body.is_reproductive_age_woman and body.form_f:
+        ff = body.form_f
+        declared_date = None
+        if ff.declaration_obtained_date:
+            try:
+                declared_date = date_cls.fromisoformat(ff.declaration_obtained_date)
+            except ValueError:
+                declared_date = None
+        db.add(RadiologyFormF(
+            radiology_order_id=order.id, hospital_id=a.hospital_id,
+            patient_age=ff.patient_age, total_living_children=ff.total_living_children,
+            living_sons_ages=ff.living_sons_ages, living_daughters_ages=ff.living_daughters_ages,
+            guardian_name=ff.guardian_name, patient_address_contact=ff.patient_address_contact,
+            referral_type=ff.referral_type, referring_doctor_details=ff.referring_doctor_details,
+            lmp_or_gestational_weeks=ff.lmp_or_gestational_weeks, performing_doctor_name=ff.performing_doctor_name,
+            indication_checklist=json.dumps(ff.indication_checklist) if ff.indication_checklist else None,
+            declaration_obtained_date=declared_date,
+            non_sex_determination_declared=ff.non_sex_determination_declared,
+            created_by=current_doctor.id,
+        ))
+
+    db.commit()
+    # No dedicated radiology notification yet — held back deliberately (see item 4 discussion) until
+    # the queue/reporting flow defines what's actually worth alerting radiology staff about.
+    return {"message": "Imaging ordered"}
 
 
 # ---------- Discharge ----------

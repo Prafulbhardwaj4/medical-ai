@@ -24,6 +24,8 @@ class Consultation(Base):
     vitals = Column(Text, nullable=True)  # JSON: {bp, temperature, pulse, weight, spo2}
     recommended_test_ids = Column(Text, nullable=True)  # JSON list of TestCatalogItem ids
     ordered_tests = Column(Text, nullable=True)  # JSON list of {test_id, test_name, price, status}
+    recommended_radiology_template_ids = Column(Text, nullable=True)  # JSON list of RadiologyTemplate ids — mirrors recommended_test_ids
+    ordered_radiology = Column(Text, nullable=True)  # JSON list of {template_id, study_name, price, status} — mirrors ordered_tests
     is_voided = Column(Boolean, default=False)
 
     has_pending_tests = Column(Boolean, default=False)

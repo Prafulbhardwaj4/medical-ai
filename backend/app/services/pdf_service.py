@@ -674,6 +674,91 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     doc.build(elements)
     return filepath
 
+def generate_radiology_report_pdf(order: object, patient: object, ordering_doctor: object, radiology_staff: object, hospital: object) -> str:
+    ensure_reports_dir()
+
+    filename = f"radiology_report_{order.id}.pdf"
+    filepath = os.path.join(REPORTS_DIR, filename)
+
+    doc = SimpleDocTemplate(
+        filepath, pagesize=A4,
+        rightMargin=20*mm, leftMargin=20*mm, topMargin=15*mm, bottomMargin=15*mm
+    )
+
+    styles = getSampleStyleSheet()
+    elements = []
+
+    section_style = ParagraphStyle("section", fontSize=11, fontName="Helvetica-Bold", textColor=colors.HexColor("#1a237e"), spaceAfter=2*mm, spaceBefore=3*mm)
+    label_style = ParagraphStyle("label", fontSize=10, fontName="Helvetica-Bold", textColor=colors.HexColor("#1a237e"))
+    body_style = ParagraphStyle("body", fontSize=10, fontName="Helvetica", leading=14)
+    STUDY_TYPE_LABEL = {"xray": "X-Ray", "ct": "CT", "mri": "MRI", "ultrasound": "Ultrasound"}
+
+    elements.extend(build_letterhead(hospital, subtitle="Radiology Report"))
+    elements.append(Spacer(1, 3*mm))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a237e")))
+    elements.append(Spacer(1, 4*mm))
+
+    bg = f" | Blood Group: {patient.blood_group}" if patient.blood_group else ""
+    elements.append(Paragraph(
+        f"<b>Patient:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}{bg}",
+        styles["Normal"]
+    ))
+    elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", styles["Normal"]))
+    report_dt = order.verified_at if order.verified_at else now_ist()
+    elements.append(Paragraph(f"<b>Report Date:</b> {report_dt.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
+    elements.append(Spacer(1, 4*mm))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
+    elements.append(Spacer(1, 4*mm))
+
+    study_label = f"{STUDY_TYPE_LABEL.get(order.study_type, order.study_type)} — {order.study_name}"
+    elements.append(Paragraph(study_label.upper(), section_style))
+    if order.clinical_indication:
+        elements.append(Paragraph(f"<b>Clinical Indication:</b> {order.clinical_indication}", body_style))
+    elements.append(Spacer(1, 3*mm))
+
+    try:
+        sections = json.loads(order.sections_data or "{}")
+    except Exception:
+        sections = {}
+
+    # Narrative sections (Liver, Kidneys, etc.), not a value/range table —
+    # imaging findings are prose per section, not numeric values (Part 1 item 1).
+    for name, text in sections.items():
+        elements.append(Paragraph(
+            f'<font name="Helvetica-Bold" color="#1a237e">{name.upper()}:</font> {text or "—"}',
+            body_style
+        ))
+        elements.append(Spacer(1, 1.5*mm))
+
+    elements.append(Spacer(1, 2*mm))
+    elements.append(Paragraph("IMPRESSION", label_style))
+    elements.append(Paragraph(order.impression or "—", body_style))
+    elements.append(Spacer(1, 3*mm))
+
+    elements.append(Paragraph("ADVISED", label_style))
+    elements.append(Paragraph(order.advised or "—", body_style))
+    elements.append(Spacer(1, 4*mm))
+
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
+    elements.append(Spacer(1, 4*mm))
+
+    footer_style = ParagraphStyle("footer", fontSize=9, fontName="Helvetica", textColor=colors.HexColor("#334155"))
+    doctor_line = f"<b>Referring Doctor:</b> {ordering_doctor.title} {ordering_doctor.name}" if ordering_doctor else "<b>Referring Doctor:</b> —"
+    if ordering_doctor and getattr(ordering_doctor, "registration_number", None):
+        doctor_line += f" (Reg. No: {ordering_doctor.registration_number})"
+    elements.append(Paragraph(doctor_line, footer_style))
+    if radiology_staff:
+        verified_line = f"<b>Verified By:</b> {radiology_staff.title} {radiology_staff.name}" if getattr(radiology_staff, "title", None) else f"<b>Verified By:</b> {radiology_staff.name}"
+        if order.verified_at:
+            verified_line += f" on {order.verified_at.strftime('%d %b %Y, %I:%M %p')}"
+        elements.append(Paragraph(verified_line, footer_style))
+    else:
+        elements.append(Paragraph("<b>Verified By:</b> —", footer_style))
+
+    doc.build(elements)
+    return filepath
+
+
 def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None, receipt_number=None, place_of_supply=None, admission_date=None, discharge_date=None) -> str:
     ensure_reports_dir()
     invoices_dir = os.path.join(os.path.dirname(__file__), "..", "..", "invoices")

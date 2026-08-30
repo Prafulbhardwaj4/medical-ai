@@ -422,6 +422,19 @@
             style="margin-top:12px" />
         </div>
 
+        <div class="section-block" id="radiology-catalog-block">
+          <div class="section-title">Radiology / Imaging</div>
+          <div style="position:relative;max-width:400px">
+            <input class="form-control" id="radiology-catalog-search" placeholder="Search imaging studies to order…" autocomplete="off"
+              oninput="renderRadiologySuggestions()" onfocus="renderRadiologySuggestions()" />
+            <div id="radiology-suggestions"
+              style="display:none;position:absolute;z-index:20;background:#fff;border:1px solid var(--border);
+              border-radius:8px;max-height:220px;overflow-y:auto;width:100%;box-shadow:0 4px 12px rgba(0,0,0,0.08);margin-top:4px"></div>
+          </div>
+          <div id="radiology-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
+          <div id="radiology-total-fee" style="margin-top:10px;font-size:14px;font-weight:600;display:none"></div>
+        </div>
+
         <div class="section-block">
           <div class="section-title">Doctor's Advice</div>
           <textarea class="form-control" id="f-advice" rows="2" placeholder="General advice to patient"></textarea>
@@ -441,7 +454,7 @@
         </div>
 
         <div style="display:flex;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:10px">
-          <button class="btn btn-outline" id="panel-2-back-btn" onclick="isReopenMode ? goBack() : goStep(1)">← Back</button>
+          <button class="btn btn-outline" id="panel-2-back-btn" onclick="(isReopenMode || isFoundationManualMode) ? goBack() : goStep(1)">← Back</button>
           <button class="btn btn-navy btn-lg" id="confirm-btn" onclick="doConfirm()">Confirm & Generate PDF →</button>
         </div>
       </div>
@@ -510,6 +523,8 @@
   <div id="toast"></div>
 
   <script src="../js/api.js?v=4"></script>
+  <script src="../js/tier-catalog.js"></script>
+  <script src="../js/upgrade-gate.js"></script>
   <script>
     if (!requireAuth()) throw new Error();
     fillTopbar();
@@ -1029,7 +1044,16 @@
         goStep(2);
         toast("AI structuring complete — review and edit before confirming.", "success");
       } catch (e) {
-        toast(e.message, "error");
+        if (e.status === 402 && e.data?.ai_scribe_blocked) {
+          const reasonMessages = {
+            cap_reached: "This month's AI Scribe usage is used up — continuing with manual entry.",
+            cycle_ended: "This hospital's billing cycle has ended — AI Scribe is paused until renewal. Continuing with manual entry.",
+            cycle_not_started: "AI Scribe hasn't been activated for this hospital yet — continuing with manual entry.",
+          };
+          switchToManualEntryMode(reasonMessages[e.data.reason] || "AI Scribe isn't available right now — continuing with manual entry.");
+        } else {
+          toast(e.message, "error");
+        }
       } finally {
         btn.disabled = false;
         btn.textContent = "Analyse with AI →";
@@ -1176,6 +1200,47 @@
 
     // ── Confirm ─────────────────────────────────────────
     let isReopenMode = false;
+    let isFoundationManualMode = false;
+
+    // Foundation tier has no AI Scribe: skip the recording panel entirely
+    // and land the doctor straight on the manual entry fields already
+    // used for review/edit — diagnosis, medicines, tests, follow-up.
+    // Reopen mode (#reopen) already does its own panel-2 jump, so this
+    // steps aside for it rather than doing the work twice.
+    function switchToManualEntryMode(reasonMessage) {
+      isFoundationManualMode = true;
+      document.getElementById('steps').style.display = 'none';
+      document.getElementById('panel-2-title').textContent = 'Consultation Details';
+      document.getElementById('panel-2-ai-badge').style.display = 'none';
+      goStep(2);
+      if (reasonMessage) toast(reasonMessage, 'info');
+    }
+
+    function applyFoundationTierGating() {
+      if (window.location.hash === '#reopen') return;
+      if (typeof isFoundationTier !== 'function' || !isFoundationTier()) return;
+      switchToManualEntryMode();
+    }
+
+    // Growth/Scale hospitals aren't Foundation, but can still lose AI Scribe
+    // mid-cycle (cap reached, or the billing cycle rolled past cycle-end
+    // per item 4) — checked proactively here so the doctor lands straight
+    // on manual entry instead of hitting a dead "Analyse with AI" button.
+    async function checkAiScribeAvailability() {
+      if (window.location.hash === '#reopen') return;
+      if (typeof isFoundationTier === 'function' && isFoundationTier()) return; // already handled by applyFoundationTierGating
+      try {
+        const status = await api("GET", "/consultations/ai-scribe-status", null, false, true);
+        if (!status.allowed) {
+          const reasonMessages = {
+            cap_reached: "This month's AI Scribe usage is used up — continuing with manual entry.",
+            cycle_ended: "This hospital's billing cycle has ended — AI Scribe is paused until renewal. Continuing with manual entry.",
+            cycle_not_started: "AI Scribe hasn't been activated for this hospital yet — continuing with manual entry.",
+          };
+          switchToManualEntryMode(reasonMessages[status.reason] || "AI Scribe isn't available right now — continuing with manual entry.");
+        }
+      } catch (e) { /* if the check itself fails, fall through to the normal flow — /structure's own 402 is the safety net */ }
+    }
 
     async function doConfirm() {
       const btn = document.getElementById("confirm-btn");
@@ -1190,6 +1255,8 @@
         tests: selectedTests.map(t => t.test_name),
         recommended_test_ids: selectedTests.map(t => t.id),
         test_priorities: Object.fromEntries(selectedTests.map(t => [t.id, t.priority || 'routine'])),
+        recommended_radiology_template_ids: selectedRadiology.map(t => t.id),
+        radiology_priorities: Object.fromEntries(selectedRadiology.map(t => [t.id, t.priority || 'routine'])),
         clinical_indication: document.getElementById('test-clinical-indication')?.value.trim() || null,
         advice: document.getElementById("f-advice").value.trim(),
         followup: document.getElementById("f-followup").value.trim(),
@@ -1212,8 +1279,15 @@
         const checkedTestIds = selectedTests.map(t => t.id);
         const testPriorities = {};
         selectedTests.forEach(t => { testPriorities[t.id] = t.priority || 'routine'; });
+        const checkedRadiologyIds = selectedRadiology.map(t => t.id);
+        const radiologyPriorities = {};
+        selectedRadiology.forEach(t => { radiologyPriorities[t.id] = t.priority || 'routine'; });
         const clinicalIndication = document.getElementById('test-clinical-indication').value.trim();
-        const data = await api("POST", `/consultations/confirm/${consultationId}`, { recommended_test_ids: checkedTestIds, test_priorities: testPriorities, clinical_indication: clinicalIndication || null });
+        const data = await api("POST", `/consultations/confirm/${consultationId}`, {
+          recommended_test_ids: checkedTestIds, test_priorities: testPriorities,
+          recommended_radiology_template_ids: checkedRadiologyIds, radiology_priorities: radiologyPriorities,
+          clinical_indication: clinicalIndication || null
+        });
         window._tokenNumber = data.token_number;
         window._verifyHash = data.verify_hash;
         document.getElementById("token-display").textContent = window._tokenNumber;
@@ -1327,6 +1401,8 @@
 
     let hospitalTests = [];
     let selectedTests = [];
+    let hospitalRadiologyTemplates = [];
+    let selectedRadiology = [];
 
     async function loadTestCatalog() {
       try {
@@ -1335,6 +1411,83 @@
         autoMatchTests();
       } catch (e) { }
     }
+
+    async function loadRadiologyCatalog() {
+      try {
+        const items = await api("GET", "/patients/hospital-radiology-templates");
+        hospitalRadiologyTemplates = items;
+      } catch (e) { }
+    }
+
+    function renderRadiologySuggestions() {
+      const box = document.getElementById('radiology-suggestions');
+      const query = document.getElementById('radiology-catalog-search').value.trim().toLowerCase();
+      const selectedIds = new Set(selectedRadiology.map(t => t.id));
+      const matches = hospitalRadiologyTemplates
+        .filter(t => !selectedIds.has(t.id))
+        .filter(t => !query || t.study_name.toLowerCase().includes(query))
+        .slice(0, 20);
+
+      if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+
+      box.innerHTML = matches.map(t => `
+        <div onclick="selectRadiology(${t.id})" style="padding:8px 12px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between"
+          onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">
+          <span>${t.study_name}</span><span style="color:var(--slate)">Rs.${t.price}</span>
+        </div>
+      `).join('');
+      box.style.display = 'block';
+    }
+
+    function selectRadiology(id) {
+      const t = hospitalRadiologyTemplates.find(t => t.id === id);
+      if (!t || selectedRadiology.some(t2 => t2.id === id)) return;
+      selectedRadiology.push({ ...t, priority: 'routine' });
+      document.getElementById('radiology-catalog-search').value = '';
+      document.getElementById('radiology-suggestions').style.display = 'none';
+      renderRadiologyChips();
+    }
+
+    function removeRadiology(id) {
+      selectedRadiology = selectedRadiology.filter(t => t.id !== id);
+      renderRadiologyChips();
+    }
+
+    const COMPLETED_RADIOLOGY_STATUSES = new Set(["reported", "verified_released"]);
+
+    function renderRadiologyChips() {
+      const chipsEl = document.getElementById('radiology-chips');
+      chipsEl.innerHTML = selectedRadiology.map(t => {
+        const isDone = COMPLETED_RADIOLOGY_STATUSES.has(t.status);
+        if (isDone) {
+          return `
+            <span class="badge badge-grey" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
+              ✓ ${t.study_name} — Already Ordered
+            </span>`;
+        }
+        return `
+          <span class="badge badge-teal" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
+            ${t.study_name} — Rs.${t.price}
+            <span onclick="removeRadiology(${t.id})" style="cursor:pointer;font-weight:700">×</span>
+          </span>`;
+      }).join('');
+
+      const totalEl = document.getElementById('radiology-total-fee');
+      const total = selectedRadiology.reduce((sum, t) => sum + (t.price || 0), 0);
+      if (selectedRadiology.length) {
+        totalEl.style.display = 'block';
+        totalEl.textContent = `Total Imaging Fee: Rs.${total}`;
+      } else {
+        totalEl.style.display = 'none';
+      }
+    }
+
+    document.addEventListener('click', (e) => {
+      const wrap = document.getElementById('radiology-catalog-block');
+      if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('radiology-suggestions').style.display = 'none';
+      }
+    });
 
     function renderTestSuggestions() {
       const box = document.getElementById('test-suggestions');
@@ -1445,6 +1598,11 @@
         selectedTests = orderedTests.map(t => ({ id: t.test_id, test_name: t.test_name, price: t.price, priority: 'routine', status: liveTestStatuses[String(t.test_id)] }));
         renderTestChips();
 
+        const orderedRadiology = safeJSON(match.ordered_radiology, []) || [];
+        const liveRadiologyStatuses = match.radiology_statuses || {};
+        selectedRadiology = orderedRadiology.map(t => ({ id: t.template_id, study_name: t.study_name, price: t.price, priority: 'routine', status: liveRadiologyStatuses[String(t.template_id)] }));
+        renderRadiologyChips();
+
         isReopenMode = true;
         document.getElementById('reopen-banner').style.display = 'block';
         document.getElementById('steps').style.display = 'none';  // this is its own section, not a step in the stepper
@@ -1466,9 +1624,12 @@
         loadPatient();
         loadLastVisit();
         loadTestCatalog();
+        loadRadiologyCatalog();
         loadMedicineCatalog();
         loadNurseVitals();
         checkExistingAdmitReferral();
+        applyFoundationTierGating();
+        await checkAiScribeAvailability();
         await checkReopenMode();
       } catch (e) {
         window.location.href = "/pages/dashboard.html";

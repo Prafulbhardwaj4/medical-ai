@@ -109,6 +109,13 @@ const ADMIN_NAV_ITEMS = [
     inMobileMenu: true,
   },
   {
+    key: "radiology-templates",
+    href: "radiology-templates.html",
+    label: "Radiology Templates",
+    icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M9 22V12h6v10',
+    inMobileMenu: true,
+  },
+  {
     key: "hiv-results",
     href: "#",
     label: "HIV Results",

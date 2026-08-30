@@ -23,6 +23,8 @@ class ConsultationStructured(BaseModel):
     tests: Optional[List[str]] = []
     recommended_test_ids: Optional[List[int]] = []  # real, orderable tests — same-day-return reopen flow adds NEW ones here; `tests` above stays just the display list
     test_priorities: Optional[Dict[int, str]] = {}
+    recommended_radiology_template_ids: Optional[List[int]] = []  # real, orderable imaging studies — mirrors recommended_test_ids
+    radiology_priorities: Optional[Dict[int, str]] = {}
     clinical_indication: Optional[str] = None
     advice: Optional[str] = ""
     followup: Optional[str] = ""
@@ -50,8 +52,10 @@ class ConsultationOut(BaseModel):
 
 class ConfirmPrescriptionPayload(BaseModel):
     recommended_test_ids: Optional[List[int]] = []
-    test_priorities: Optional[Dict[int, str]] = {}  # {test_id: "routine" | "urgent" | "stat"} — Phase 3 item 5
-    clinical_indication: Optional[str] = None  # e.g. "suspected DKA" — applies to this whole test order batch — Phase 3 item 7
+    test_priorities: Optional[Dict[int, str]] = {}
+    recommended_radiology_template_ids: Optional[List[int]] = []
+    radiology_priorities: Optional[Dict[int, str]] = {}
+    clinical_indication: Optional[str] = None
 
 class ConsultationHistoryItem(BaseModel):
     id: int
@@ -70,6 +74,8 @@ class ConsultationHistoryItem(BaseModel):
     ordered_tests: Optional[str] = None
     medicine_statuses: Optional[Dict[str, str]] = {}
     test_statuses: Optional[Dict[str, str]] = {}
+    ordered_radiology: Optional[str] = None
+    radiology_statuses: Optional[Dict[str, str]] = {}
 
     class Config:
         from_attributes = True

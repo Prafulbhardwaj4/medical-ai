@@ -195,7 +195,7 @@
       <div id="confirm-body"></div>
       <div style="display:flex;gap:10px;margin-top:20px">
         <button class="btn btn-outline" style="flex:1" onclick="closeConfirmModal()">Back</button>
-        <button class="btn btn-primary" style="flex:1" id="btn-pay-book" onclick="proceedToPayment()">Pay and Book</button>
+        <button class="btn btn-primary" style="flex:1" id="btn-pay-book" onclick="confirmBooking()">Confirm Booking</button>
       </div>
     </div>
   </div>
@@ -246,7 +246,7 @@
       profileLinkId: null, profileName: null,
       date: null, dateLabel: null,
       slotId: null, slotTime: null,
-      pendingAppointmentId: null
+      confirmedAppointmentId: null
     };
 
     const STEP_META = {
@@ -255,7 +255,7 @@
       doctor: { title: "Select Doctor", sub: () => state.hospitalName },
       profile: { title: "Who is this for?", sub: () => state.doctorName },
       datetime: { title: "Select Date and Time", sub: () => state.doctorName },
-      payment: { title: "Payment", sub: () => "Complete payment to confirm your booking" },
+      confirmed: { title: "Booking Confirmed", sub: () => "Pay at the hospital when you arrive" },
     };
 
     function attachAddressToggle() {
@@ -564,34 +564,24 @@
         return;
       }
 
-      if (state.step === "payment") {
+      if (state.step === "confirmed") {
         area.innerHTML = `
+          <div style="text-align:center;padding:8px 0 4px">
+            <div style="width:52px;height:52px;border-radius:50%;background:var(--teal-subtle);color:var(--teal);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:26px">✓</div>
+            <div style="font-weight:700;font-size:1.05rem;color:var(--navy)">Confirmed — Pay at Hospital</div>
+            <div style="font-size:13px;color:var(--slate);margin-top:4px">Bring payment with you and pay at reception when you arrive.</div>
+          </div>
+
           <div class="pay-summary-row"><span>Doctor</span><strong>${sanitize(state.doctorName)}</strong></div>
           <div class="pay-summary-row"><span>Hospital</span><strong>${sanitize(state.hospitalName)}</strong></div>
-          <div class="pay-summary-row"><span>Date &amp; Time</span><strong>${sanitize(state.dateLabel)}, ${sanitize(state.slotTime)}</strong></div>
-          <div class="pay-summary-row" style="font-size:16px"><span>Amount</span><strong style="color:var(--teal)">₹${state.doctorFee || 0}</strong></div>
+          <div class="pay-summary-row"><span>Your Slot</span><strong>${sanitize(state.dateLabel)}, ${sanitize(state.slotTime)}</strong></div>
+          <div class="pay-summary-row" style="font-size:16px"><span>Amount Due at Hospital</span><strong style="color:var(--teal)">₹${state.doctorFee || 0}</strong></div>
 
-          <div class="pay-method-tabs">
-            <div class="pay-method-tab active" id="pm-card" onclick="setPayMethod('card')">Card</div>
-            <div class="pay-method-tab" id="pm-upi" onclick="setPayMethod('upi')">UPI</div>
-          </div>
-
-          <div id="pay-fields-card">
-            <div class="form-group"><label class="form-label">Card Number</label><input class="form-control" placeholder="4242 4242 4242 4242" maxlength="19" /></div>
-            <div style="display:flex;gap:12px">
-              <div class="form-group" style="flex:1"><label class="form-label">Expiry</label><input class="form-control" placeholder="MM/YY" /></div>
-              <div class="form-group" style="flex:1"><label class="form-label">CVV</label><input class="form-control" placeholder="123" maxlength="3" /></div>
-            </div>
-          </div>
-          <div id="pay-fields-upi" style="display:none">
-            <div class="form-group"><label class="form-label">UPI ID</label><input class="form-control" placeholder="yourname@upi" /></div>
-          </div>
-
-          <p style="font-size:12px;color:var(--slate-light);margin:10px 0 16px">This is a placeholder payment screen — no real transaction is processed.</p>
+          <p style="font-size:12px;color:var(--slate-light);margin:14px 0 16px">Please reach the hospital by your slot time. If you arrive later than your slot, you'll be moved to the next available slot for the same doctor that day instead of losing your booking.</p>
 
           <div style="display:flex;gap:10px">
-            <button class="btn btn-outline" style="flex:1" onclick="cancelPaymentAndGoBack()">Cancel and Go Back</button>
-            <button class="btn btn-teal" style="flex:1" onclick="markPaidAndFinish()">Mark Paid</button>
+            <button class="btn btn-outline" style="flex:1" onclick="cancelConfirmedBooking()">Cancel Booking</button>
+            <button class="btn btn-teal" style="flex:1" onclick="finishBooking()">Done</button>
           </div>`;
         return;
       }
@@ -670,13 +660,6 @@
       }
     }
 
-    function setPayMethod(m) {
-      document.getElementById("pm-card").classList.toggle("active", m === "card");
-      document.getElementById("pm-upi").classList.toggle("active", m === "upi");
-      document.getElementById("pay-fields-card").style.display = m === "card" ? "block" : "none";
-      document.getElementById("pay-fields-upi").style.display = m === "upi" ? "block" : "none";
-    }
-
     function pickHospital(id, name) { state.hospitalId = id; state.hospitalName = name; setStep("doctor"); }
 
     async function checkBedAvailability() {
@@ -708,7 +691,7 @@
     }
     function closeConfirmModal() { document.getElementById("modal-confirm").classList.remove("open"); }
 
-    async function proceedToPayment() {
+    async function confirmBooking() {
       const btn = document.getElementById("btn-pay-book");
       btn.disabled = true;
       try {
@@ -727,6 +710,12 @@
           return;
         }
 
+        // Booking lands as status=booked / payment_status=unpaid — the same
+        // state reception's own phone-booking flow produces (see
+        // book_appointment_for_caller). Reception collects payment in
+        // person and, if the patient arrives after this slot time,
+        // reassigns them to the next available slot automatically
+        // (collect_payment_at_reception) — no separate payment step here.
         const appt = await api("POST", "/portal/appointments", {
           hospital_id: state.hospitalId, doctor_id: state.doctorId,
           profile_link_id: state.profileLinkId, slot_id: state.slotId, type: "scheduled",
@@ -738,29 +727,28 @@
           new_patient_age: state.profileLinkId ? null : state.newPatientAge,
           new_patient_blood_group: state.profileLinkId ? null : state.newPatientBloodGroup,
         });
-        state.pendingAppointmentId = appt.id;
+        state.confirmedAppointmentId = appt.id;
         closeConfirmModal();
-        setStep("payment");
+        setStep("confirmed");
       } catch (e) { toast(e.message, "error"); }
       finally { btn.disabled = false; }
     }
 
-    async function cancelPaymentAndGoBack() {
-      if (state.pendingAppointmentId) {
-        try { await api("POST", `/portal/appointments/${state.pendingAppointmentId}/cancel`); } catch (e) { }
-        state.pendingAppointmentId = null;
-      }
-      goBack();
-    }
-
-    async function markPaidAndFinish() {
-      try {
-        await api("POST", `/portal/appointments/${state.pendingAppointmentId}/mark-paid`);
-        toast("Payment successful — you're on the hospital's queue", "success");
-        state.pendingAppointmentId = null;
+    async function cancelConfirmedBooking() {
+      if (!state.confirmedAppointmentId) { finishBooking(); return; }
+      try { await api("POST", `/portal/appointments/${state.confirmedAppointmentId}/cancel`); toast("Booking cancelled", "success"); }
+      catch (e) { toast(e.message, "error"); }
+      finally {
+        state.confirmedAppointmentId = null;
         state.history = [];
         setStep("location", false);
-      } catch (e) { toast(e.message, "error"); }
+      }
+    }
+
+    function finishBooking() {
+      state.confirmedAppointmentId = null;
+      state.history = [];
+      setStep("location", false);
     }
 
     function openMyAppointmentsModal() { document.getElementById("modal-my-appointments").classList.add("open"); loadAppointments(); loadFamilyRequests(); }

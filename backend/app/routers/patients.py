@@ -976,10 +976,6 @@ def send_back_for_vitals(
 
     return {"status": "sent_back"}
 
-# Must stay registered before /{patient_id} below — that route is a 1-segment int path param
-# and, being registered first, was silently swallowing every request to this literal path
-# ("hospital-tests" failing int conversion, hence the 422s). Any other new literal 1-segment
-# GET route added to this router needs to go above /{patient_id} too, for the same reason.
 @router.get("/hospital-tests")
 def get_hospital_tests(
     db: Session = Depends(get_db),
@@ -991,6 +987,22 @@ def get_hospital_tests(
     ).order_by(TestCatalogItem.name).all()
     return [
         {"id": t.id, "test_name": t.name, "price": t.fee, "aliases": t.aliases or ""}
+        for t in items
+    ]
+
+# Must stay registered before /{patient_id} too — same literal-path-vs-int-param gotcha noted above.
+@router.get("/hospital-radiology-templates")
+def get_hospital_radiology_templates(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    from app.models.radiology_template import RadiologyTemplate
+    items = db.query(RadiologyTemplate).filter(
+        RadiologyTemplate.hospital_id == current_doctor.hospital_id,
+        RadiologyTemplate.is_active == True
+    ).order_by(RadiologyTemplate.name).all()
+    return [
+        {"id": t.id, "study_name": t.name, "study_type": t.study_type, "price": t.fee}
         for t in items
     ]
 

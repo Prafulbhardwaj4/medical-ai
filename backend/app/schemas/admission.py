@@ -162,6 +162,38 @@ class AddAdmissionTestIn(BaseModel):
     order_batch_id: Optional[str] = None  # shared across every test submitted in the same "Order Test(s)" action
 
 
+class RadiologyFormFIn(BaseModel):
+    """Only required when is_reproductive_age_woman is ticked on an
+    ultrasound order — Section A/B/D of the real PCPNDT Form F, matching
+    RadiologyFormF's field split (order-time fields only; result-in-brief
+    etc. get filled in later, at reporting time)."""
+    patient_age: Optional[int] = None
+    total_living_children: int = 0
+    living_sons_ages: Optional[str] = None
+    living_daughters_ages: Optional[str] = None
+    guardian_name: str
+    patient_address_contact: str
+    referral_type: str  # "referred" | "self_referral"
+    referring_doctor_details: str
+    lmp_or_gestational_weeks: str
+    performing_doctor_name: str
+    indication_checklist: Optional[List[str]] = None
+    declaration_obtained_date: Optional[str] = None  # ISO date string, e.g. "2026-08-23"
+    non_sex_determination_declared: bool = False
+
+
+class AddAdmissionRadiologyOrderIn(BaseModel):
+    template_id: Optional[int] = None
+    study_name: str
+    study_type: str  # "xray" | "ct" | "mri" | "ultrasound"
+    price: float = 0
+    priority: Optional[str] = "routine"
+    clinical_indication: Optional[str] = None  # also the field PCPNDT Form F reuses for indication (Part 1 item 7)
+    order_batch_id: Optional[str] = None
+    is_reproductive_age_woman: bool = False  # the Form F trigger checkbox (item 7)
+    form_f: Optional[RadiologyFormFIn] = None
+
+
 class RequestWardChangeIn(BaseModel):
     requested_ward_type_id: int
     note: Optional[str] = None
