@@ -179,6 +179,8 @@
         <button class="btn btn-outline btn-sm" id="df-lab" onclick="setDoctorFilter('lab')">Lab Staff</button>
         <button class="btn btn-outline btn-sm" id="df-pharmacy"
           onclick="setDoctorFilter('pharmacy')">Pharmacists</button>
+        <button class="btn btn-outline btn-sm" id="df-radiology"
+          onclick="setDoctorFilter('radiology')">Radiology</button>
       </div>
       <select class="form-control staff-filter-select" id="df-mobile-select" onchange="setDoctorFilter(this.value)"
         style="display:none;margin-bottom:20px">
@@ -190,6 +192,7 @@
         <option value="assistant">Assistants</option>
         <option value="lab">Lab Staff</option>
         <option value="pharmacy">Pharmacists</option>
+        <option value="radiology">Radiology</option>
       </select>
       <div class="card" id="doctors-list">
         <p>Loading...</p>
@@ -216,6 +219,7 @@
         <option value="assistant">Assistant</option>
         <option value="lab">Lab</option>
         <option value="pharmacy">Pharmacy</option>
+        <option value="radiology">Radiology</option>
       </select>
 
       <div style="display:flex;gap:12px;margin-bottom:14px">
@@ -293,6 +297,7 @@
           <option value="assistant">Assistant</option>
           <option value="lab">Lab</option>
           <option value="pharmacy">Pharmacy</option>
+          <option value="radiology">Radiology</option>
         </select>
       </div>
       <div class="form-group">
