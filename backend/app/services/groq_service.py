@@ -222,6 +222,77 @@ Do not include any explanation or markdown — only the raw JSON array.
 """
 
 
+RADIOLOGY_MATCH_PROMPT_TEMPLATE = """You are matching imaging studies (X-ray/CT/MRI/USG etc.) a doctor said out loud to a specific hospital's own radiology catalog.
+
+This hospital's radiology catalog (the ONLY valid options to match against — every hospital's catalog is different, do not use outside knowledge of study names not listed here):
+{catalog_list}
+
+Doctor said these imaging study names/abbreviations during a consultation:
+{raw_terms}
+
+For each term, return the single best-matching entry from the catalog list above, using your medical knowledge of imaging study names, abbreviations, and synonyms (e.g. "CXR" usually means "Chest X-ray", "USG abdomen" means "Ultrasound Abdomen"). Only match if genuinely confident it's the same study as something in the list — if nothing in the catalog is a good match, return null for that term rather than guessing, since a wrong match here silently affects patient billing.
+
+Return ONLY a valid JSON array, one object per term said, in this exact shape:
+[{{"raw_term": "the term exactly as the doctor said it", "matched_study_name": "the exact catalog name copied from the list above, or null if no confident match"}}]
+
+Do not include any explanation or markdown — only the raw JSON array.
+"""
+
+
+async def match_radiology_to_catalog(raw_terms: list, catalog_names: list) -> list:
+    """
+    Matches doctor-dictated imaging study terms (e.g. "CXR", "USG abdomen") against one
+    specific hospital's own radiology catalog, fetched fresh per-request — same pattern as
+    match_tests_to_catalog just below, one step behind it in the consultation flow.
+
+    Only called when the main structuring call actually returned imaging studies (see
+    consultations.py) — kept off the hot path for the majority of visits where no imaging
+    is ordered at all.
+
+    Fails open: any error here returns an empty list rather than raising, since matching
+    is a convenience layer and should never block the rest of the consultation flow. An
+    unmatched term just stays as free text with an "unmatched" flag in the UI, not silently
+    dropped, so the doctor still sees it and can add it manually if needed.
+    """
+    if not raw_terms or not catalog_names:
+        return []
+
+    prompt = RADIOLOGY_MATCH_PROMPT_TEMPLATE.format(
+        catalog_list="\n".join(f"- {n}" for n in catalog_names),
+        raw_terms="\n".join(f"- {t}" for t in raw_terms)
+    )
+
+    headers = {
+        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "openai/gpt-oss-120b",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1,
+        "max_tokens": 500
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(GROQ_API_URL, headers=headers, json=payload)
+
+        if response.status_code != 200:
+            return []
+
+        content = response.json()["choices"][0]["message"]["content"].strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+
+        result = json.loads(content)
+        return result if isinstance(result, list) else []
+    except Exception:
+        return []
+
+
 async def match_tests_to_catalog(raw_terms: list, catalog_names: list) -> list:
     """
     Matches doctor-dictated test terms (e.g. "CBC", "KFT") against one specific hospital's
