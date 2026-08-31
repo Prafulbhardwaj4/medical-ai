@@ -68,8 +68,10 @@
       .doc-picker-btn { font-size: 12px; padding: 6px 8px; }
     }
     @media (min-width: 901px) {
-      .att-card .doc-picker { margin-left: auto; flex: 0 0 auto; }
-      .att-card .staff-att-actions { margin-left: 0; }
+      /* Let the shared .staff-att-actions { margin-left: auto } rule in
+         style.css do its job — this used to override it back to 0,
+         which is why the actions block sat left-aligned instead of
+         shifting to the right of the card. */
     }
     @media (max-width: 900px) {
       #up-next-btn { width: 100%; }
@@ -580,7 +582,7 @@
         : `<tr><td colspan="6"><div class="empty-state"><p>${walkinEmptyMsg}</p></div></td></tr>`;
 
       document.getElementById("queue-tbody-online").innerHTML = online.length
-        ? online.map(v => renderQueueRow(v, 'booked_time', true, patientIdCounts[v.patient_id] > 1)).join('')
+        ? online.map(v => renderQueueRow(v, 'booked_time', false, patientIdCounts[v.patient_id] > 1)).join('')
         : `<tr><td colspan="6"><div class="empty-state"><p>${onlineEmptyMsg}</p></div></td></tr>`;
 
       const upNextCard = document.getElementById('up-next-card');
@@ -595,7 +597,7 @@
         document.getElementById('up-next-uid').textContent = nextPatient.patient_uid || '';
         document.getElementById('up-next-phone').textContent = nextPatient.phone || '';
         document.getElementById('up-next-vitals').innerHTML = vitalsCellHtml(nextPatient);
-        document.getElementById('up-next-type').textContent = nextPatient.source === 'online' ? 'Online Appointment' : 'Walk-in';
+        document.getElementById('up-next-type').textContent = nextPatient.source === 'online' ? '' : 'Walk-in';
         document.getElementById('up-next-btn').dataset.checkinId = nextPatient.checkin_id;
         document.getElementById('up-next-btn').style.display = '';
       } else {

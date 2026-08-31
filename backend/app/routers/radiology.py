@@ -186,6 +186,14 @@ def save_radiology_report(
 
     was_already_completed = order.status == "verified_released"
 
+    # Nothing was stopping a report from saving with every section blank and
+    # no Impression — silently producing an empty report/PDF. At minimum,
+    # Impression (or some section text, if the study has sections at all)
+    # has to have real content before this counts as reported.
+    has_section_content = any((v or "").strip() for v in (payload.sections or {}).values())
+    if not (payload.impression or "").strip() and not has_section_content:
+        raise HTTPException(status_code=400, detail="Enter at least an Impression before saving this report")
+
     order.sections_data = json.dumps(payload.sections)
     order.impression = payload.impression
     order.advised = payload.advised

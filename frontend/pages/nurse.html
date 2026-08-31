@@ -411,10 +411,12 @@
             <div>
               <strong>${v.patient_name}</strong>
               <span class="badge badge-navy" style="margin-left:8px">${v.patient_uid}</span>
+              ${v.is_recheck ? '<span class="badge badge-amber" style="margin-left:8px">Recheck</span>' : ''}
               ${v.source === 'online' ? '<span class="badge badge-teal" style="margin-left:8px">Online</span>' : ''}
               <div class="ns-row-sub">Token ${v.token_number} · ${v.issue_category} · For ${v.doctor_name}${v.booked_time ? ' · Booked for ' + new Date(toIST(v.booked_time)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : ''}</div>
+              ${v.is_recheck && v.recheck_request ? `<div class="ns-row-sub" style="color:var(--danger)">Doctor's note: ${v.recheck_request}</div>` : ''}
             </div>
-            <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openVitalsModal(${v.checkin_id}, ${JSON.stringify(v.patient_name)})'>Record Vitals</button>
+            <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openVitalsModal(${v.checkin_id}, ${JSON.stringify(v.patient_name)}, ${JSON.stringify(v.prior_vitals || null)})'>${v.is_recheck ? 'Recheck' : 'Record Vitals'}</button>
           </div>
         `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No patients waiting for vitals.</p>';
       } catch (e) { toast(e.message, "error"); }

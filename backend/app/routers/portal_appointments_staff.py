@@ -619,7 +619,7 @@ def mark_arrived_by_staff(
     ).first()
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
-    if appt.status != AppointmentStatus.confirmed:
+    if appt.status not in (AppointmentStatus.confirmed, AppointmentStatus.completed):
         raise HTTPException(status_code=400, detail="This appointment isn't confirmed and ready for arrival")
 
     if not appt.arrived_at:

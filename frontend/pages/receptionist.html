@@ -522,7 +522,7 @@
             d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
           <circle cx="12" cy="12" r="3" />
         </svg>
-        Settings
+        Edit My Details
       </button>
       <button class="profile-menu-item danger" onclick="logout()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -550,7 +550,7 @@
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-        Online Appointments
+        Appointments
       </div>
       <a class="nav-item" href="admissions.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -603,7 +603,7 @@
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-        Online
+        Appointments
       </button>
       <a class="bottom-nav-item" href="admissions.html">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -922,18 +922,6 @@
           <div id="expected-today-list">
             <p style="color:var(--slate-light);font-size:13px">Loading...</p>
           </div>
-        </div>
-
-        <div class="card" style="margin-top:20px" id="emergency-ward-card">
-          <div class="card-header">
-            <h2>🚨 Emergency Ward <span class="badge badge-red" id="emergency-ward-count"
-                style="margin-left:8px">0</span></h2>
-          </div>
-          <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
-            Currently admitted patients in the Emergency Ward. Full IPD tools — progress notes, orders, transfer,
-            discharge — are on each patient's admission page.
-          </p>
-          <div id="emergency-ward-list"></div>
         </div>
 
         <div class="card" style="margin-top:20px">
@@ -1609,7 +1597,7 @@
         if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
       });
       if (id === 'home') loadPendingPayments();
-      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter(); }
+      if (id === 'portal') { loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter(); }
       if (id === 'availability') loadAvailabilityDoctorList();
     }
 
@@ -1620,7 +1608,7 @@
       ['home', 'patients', 'portal', 'availability'].forEach(t => {
         document.getElementById('sidebar-nav-' + t).classList.toggle('active', t === id);
       });
-      if (id === 'portal') { loadEmergencyWard(); loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter(); }
+      if (id === 'portal') { loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter(); }
       if (id === 'availability') loadAvailabilityDoctorList();
     }
 
@@ -1635,12 +1623,11 @@
     }
     checkEmergencyWardAvailable();
     if (__startTab === 'portal') {
-      loadEmergencyWard(); loadPendingReview();
+      loadPendingReview();
       loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter();
       const slotPreviewDateEl = document.getElementById('slot-preview-date');
       if (slotPreviewDateEl) slotPreviewDateEl.valueAsDate = new Date();
     }
-    setInterval(() => { if (document.getElementById('section-portal')?.classList.contains('active') || document.getElementById('section-portal')?.classList.contains('d-active')) loadEmergencyWard(); }, 15000);
 
     function goToStep(step) {
       ['search', 'room', 'doctor', 'token'].forEach(s => {
@@ -3252,7 +3239,7 @@
       document.getElementById('pb-address').value = p.address || '';
       showPhoneBookingPatientFields(true, true);
       const matchesEl = document.getElementById('pb-patient-matches');
-      matchesEl.innerHTML = `<p style="font-size:12.5px;color:var(--teal);margin:6px 0 12px">Selected: ${sanitize(p.name)} (${sanitize(p.patient_uid)}). <a href="#" onclick="event.preventDefault();renderPhoneBookingMatches()">Not this patient?</a></p>`;
+      matchesEl.innerHTML = `<p style="font-size:12.5px;color:var(--teal);margin:6px 0 12px">Selected: ${sanitize(p.name)} (${sanitize(p.patient_uid)}). <a href="#" onclick="event.preventDefault();renderPhoneBookingMatches()" style="background:var(--teal-subtle);color:var(--teal);padding:2px 8px;border-radius:999px;text-decoration:none;font-weight:600;display:inline-block;margin-left:2px">Not this patient?</a></p>`;
     }
 
     function resetPhoneBookingPatientFields() {
@@ -3406,7 +3393,6 @@
     }
     function closeEmergencyIntakeModal() {
       document.getElementById('modal-emergency-intake').classList.remove('open');
-      loadEmergencyWard();
       loadPendingPayments();
     }
     async function submitEmergencyIntake() {
@@ -3980,28 +3966,6 @@
       catch (e) { toast(e.message, "error"); }
     }
 
-    async function loadEmergencyWard() {
-      const el = document.getElementById('emergency-ward-list');
-      try {
-        const status = await api("GET", "/admissions/emergency-ward-status", null, false, true);
-        if (!status.available) { document.getElementById('emergency-ward-card').style.display = 'none'; return; }
-        const patients = await api("GET", `/admissions/active?ward_type_id=${status.ward_type_id}`, null, false, true);
-        document.getElementById('emergency-ward-count').textContent = patients.length;
-        document.getElementById('emergency-ward-card').style.display = '';
-        el.innerHTML = patients.length
-          ? patients.map(p => `
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-                <div>
-                  <strong>${p.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${p.patient_uid || ''}</span>
-                  <div style="font-size:12px;color:var(--slate)">Bed ${p.bed_number} · ${p.diagnosis || ''} · Day ${p.days_admitted}</div>
-                </div>
-                <button class="btn btn-outline btn-sm" onclick="window.location.href='admission-detail.html?id=${p.id}'">Open</button>
-              </div>
-            `).join('')
-          : '<p style="color:var(--slate-light);padding:8px 0">No one in the Emergency Ward right now.</p>';
-      } catch (e) { el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`; }
-    }
-
     async function loadUpcomingBookings() {
       const el = document.getElementById("upcoming-list");
       const doctorId = document.getElementById("upcoming-doctor-filter").value;
@@ -4198,7 +4162,7 @@
             </div>
             ${a.reason === 'awaiting_payment' ? `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-              <button class="btn btn-primary btn-sm" onclick="collectAppointmentPayment(${a.id})">Collect Payment</button>
+              <button class="btn btn-primary btn-sm" onclick="if(confirm('Mark this appointment\\'s payment as collected?')) collectAppointmentPayment(${a.id})">Collect Payment</button>
             </div>
             ` : `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">

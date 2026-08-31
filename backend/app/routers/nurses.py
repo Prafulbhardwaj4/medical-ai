@@ -103,6 +103,17 @@ def vitals_queue(
         doctor_names = [f"{doctors[x.doctor_id].title} {doctors[x.doctor_id].name}" for x in group_checkins if x.doctor_id in doctors]
         d = doctors.get(c.doctor_id)
 
+        # On a recheck, the nurse needs to see what was already recorded
+        # (usually only one vital needs repeating) rather than starting
+        # from a blank form — vitals_data survives a recheck since
+        # submit_vitals merges rather than clears it.
+        prior_vitals = None
+        if c.vitals_status == "sent_back" and c.vitals_data:
+            try:
+                prior_vitals = json.loads(c.vitals_data)
+            except Exception:
+                prior_vitals = None
+
         result.append({
             "checkin_id": c.id,
             "patient_id": p.id,
@@ -118,6 +129,7 @@ def vitals_queue(
             "created_at": c.created_at.isoformat(),
             "is_recheck": c.vitals_status == "sent_back",
             "recheck_request": c.vitals_recheck_request,
+            "prior_vitals": prior_vitals,
             "source": c.source,
             "booked_time": c.booked_time.isoformat() if c.booked_time else None,
             "vitals_status": c.vitals_status,

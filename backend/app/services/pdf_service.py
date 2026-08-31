@@ -323,6 +323,34 @@ def generate_prescription_pdf(
             elements.append(test_table)
             elements.append(Spacer(1, 4*mm))
 
+    # ── Imaging / Radiology ── (mirrors the Tests block exactly, ordered_radiology
+    # is the confirmed/catalog-matched list, same relationship ordered_tests has to tests)
+    try:
+        ordered_radiology = json.loads(consultation.ordered_radiology or "[]")
+    except Exception:
+        ordered_radiology = []
+
+    if ordered_radiology:
+        elements.append(Paragraph("Imaging / Radiology", section_style))
+        rad_data = [["#", "Study Name"]]
+        for i, r in enumerate(ordered_radiology, 1):
+            rad_data.append([str(i), cap_sentence(r.get("study_name", ""))])
+        rad_table = Table(rad_data, colWidths=[15*mm, 155*mm])
+        rad_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a237e")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f5f5")]),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(rad_table)
+        elements.append(Spacer(1, 4*mm))
+
     # ── Advice ──
     if consultation.advice:
         elements.append(Paragraph("Doctor's Advice", section_style))

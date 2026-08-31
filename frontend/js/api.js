@@ -386,7 +386,7 @@ function ensureEditDetailsModal() {
     <div class="modal-overlay" id="modal-edit-details">
       <div class="modal" style="max-width:420px">
         <div class="modal-header">
-          <h2>Settings</h2>
+          <h2>Edit My Details</h2>
           <button class="modal-close" onclick="closeEditDetailsModal()">&times;</button>
         </div>
         <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border)">

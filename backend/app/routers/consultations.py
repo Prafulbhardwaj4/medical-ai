@@ -7,11 +7,12 @@ from app.database import get_db
 from app.models.consultation import Consultation
 from app.models.patient import Patient
 from app.models.doctor import Doctor, UserRole
+from app.utils.ai_scribe_gate import get_ai_scribe_status, consume_ai_scribe_credit
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem, StructureRequest
 from app.utils.auth import get_current_doctor, now_ist_naive, ist_day_bounds, ist_today, decode_access_token, is_token_blacklisted
 from app.utils.audit import log_action
 # from app.services.whisper import transcribe_audio
-from app.services.groq_service import structure_transcript, match_tests_to_catalog
+from app.services.groq_service import structure_transcript, match_tests_to_catalog, match_radiology_to_catalog
 from app.services.pdf_service import generate_prescription_pdf
 from app.services.sms_service import send_sms
 from app.services.sarvam_stream import stream_transcribe
@@ -834,10 +835,31 @@ async def structure(
                     c = catalog_by_name[matched_name]
                     matched_tests.append({"raw_term": m.get("raw_term", ""), "test_id": c.id, "test_name": c.name})
 
+    # Same pattern as tests, one step behind — matches dictated imaging
+    # studies (X-ray/CT/MRI/USG) against this hospital's own radiology
+    # catalog, so the doctor doesn't have to say a test and then separately
+    # re-search/re-click it as a radiology chip too.
+    matched_radiology = []
+    raw_imaging = structured.get("imaging", [])
+    if raw_imaging:
+        radiology_items = db.query(RadiologyTemplate).filter(
+            RadiologyTemplate.hospital_id == current_doctor.hospital_id,
+            RadiologyTemplate.is_active == True
+        ).all()
+        if radiology_items:
+            radiology_by_name = {r.name: r for r in radiology_items}
+            raw_rad_matches = await match_radiology_to_catalog(raw_imaging, list(radiology_by_name.keys()))
+            for m in raw_rad_matches:
+                matched_name = m.get("matched_study_name")
+                if matched_name and matched_name in radiology_by_name:
+                    r = radiology_by_name[matched_name]
+                    matched_radiology.append({"raw_term": m.get("raw_term", ""), "template_id": r.id, "study_name": r.name})
+
     return {
         "consultation_id": consultation.id,
         "structured": structured,
-        "matched_tests": matched_tests
+        "matched_tests": matched_tests,
+        "matched_radiology": matched_radiology
     }
 
 
@@ -1571,7 +1593,7 @@ def admin_dashboard(
     from datetime import datetime, timedelta
     from sqlalchemy import func, case
     from app.models.hospital import Hospital
-    from app.utils.ai_scribe_gate import get_ai_scribe_status, consume_ai_scribe_credit
+
 
 
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:

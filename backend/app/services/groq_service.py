@@ -62,7 +62,7 @@ Rules for schedule field:
 - If unsure, default to "controlled".
 
 Other rules:
-- medicines and tests must always be arrays (empty array [] if none mentioned)
+- medicines, tests, and imaging must always be arrays (empty array [] if none mentioned)
 - vitals fields must be empty strings if not mentioned — never invent values
 - vitals must be an actual measurement restated with a number in the transcript (e.g. "BP is 145 over 99", "temperature 102"). If the doctor only describes a vital qualitatively without restating the number — "your BP is high", "temperature is very high", "fever hai" — leave that field empty. Never write a qualitative word (high, low, normal, elevated, very high, etc.) as a vitals value.
 - nurse_instructions: capture if doctor mentions nurse tasks — 'dressing karna hai', 'injection dena', 'IV lagana', 'wound dress karo', etc. Translate to English.
