@@ -667,6 +667,8 @@
           location.href = `admissions.html?admit_patient_id=${linkId}`;
         } else if (linkType === 'admission_medicine_order' && linkId) {
           location.href = `pharmacy.html?admission_id=${linkId}`;
+        } else if (linkType === 'upgrade') {
+          if (typeof openUpgradeModal === 'function') openUpgradeModal();
         }
       } catch (e) { toast(e.message, "error"); }
     }

@@ -37,6 +37,13 @@ from app.utils.receipts import next_receipt_number, next_note_number
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
+TIER_CATALOG_PY = [
+    {"key": "foundation", "label": "Foundation"},
+    {"key": "growth", "label": "Growth"},
+    {"key": "scale", "label": "Scale"},
+    {"key": "enterprise", "label": "Enterprise"},
+]
+
 
 class UpgradeNudgeIn(BaseModel):
     tier: str
@@ -68,6 +75,7 @@ def request_upgrade_nudge(
         title="Staff requested a plan upgrade",
         message=f"{current_doctor.title} {current_doctor.name} ({role_label}) wants to upgrade this hospital to the {tier_label} plan.",
         target_doctor_id=None,
+        link_type="upgrade",
     ))
     db.commit()
     return {"message": "Sent to your hospital admin."}

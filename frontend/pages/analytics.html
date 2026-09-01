@@ -746,10 +746,12 @@
                 loadNotifUnreadCount();
                 if (linkType === 'medicine') {
                     window.location.href = 'medicines.html';
+                } else if (linkType === 'upgrade') {
+                    closeNotifPanel();
+                    if (typeof openUpgradeModal === 'function') openUpgradeModal();
                 }
             } catch (e) { }
         }
-
         async function markAllNotifsRead() {
             try {
                 await api("POST", "/notifications/mark-all-read", {});
