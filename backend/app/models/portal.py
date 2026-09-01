@@ -129,6 +129,8 @@ class Appointment(Base):
     requested_time = Column(DateTime, nullable=False)
     status = Column(Enum(AppointmentStatus), default=AppointmentStatus.booked)
     payment_status = Column(String, default="unpaid", nullable=False)  # unpaid | paid
+    payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi" — how reception collected the consultation fee
+    paid_at = Column(DateTime, nullable=True)  # exact collection moment — propagated onto the Checkin so day-end buckets it on the right day
     notes = Column(Text, nullable=True)
     address = Column(String, nullable=True)  # snapshot of the address used for this booking
     new_patient_name = Column(String, nullable=True)    # captured only when booking with no existing hospital record

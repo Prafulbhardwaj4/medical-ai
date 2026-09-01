@@ -19,6 +19,10 @@ from app.models.opd_charge import OpdCharge
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.admission import Admission, AdmissionCharge
 from app.models.admission_deposit import AdmissionDeposit
+from app.models.upgrade_request import UpgradeRequest
+from app.models.notification import Notification
+from pydantic import BaseModel
+from typing import Optional
 from app.models.refund import Refund
 from app.models.day_end_close import DayEndClose
 from app.models.credit_debit_note import CreditDebitNote
@@ -32,6 +36,65 @@ from app.utils.timezone import ist_today, ist_day_bounds, ist_date, now_ist_naiv
 from app.utils.receipts import next_receipt_number, next_note_number
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+
+
+class UpgradeNudgeIn(BaseModel):
+    tier: str
+
+
+class UpgradeRequestIn(BaseModel):
+    tier: str
+    message: Optional[str] = None
+
+
+@router.post("/request-upgrade-nudge")
+def request_upgrade_nudge(
+    body: UpgradeNudgeIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """A non-admin staff member taps 'Ask Admin to Upgrade' in the tier
+    gate modal — this is just an internal nudge, no real request is filed
+    with super admin yet. target_doctor_id is left None so every admin/
+    sub_admin at the hospital sees it (see notifications.py's admin
+    visibility rule)."""
+    tier_label = next((t["label"] for t in TIER_CATALOG_PY if t["key"] == body.tier), body.tier)
+    role_label = current_doctor.role.value.replace("_", " ").title()
+    db.add(Notification(
+        hospital_id=current_doctor.hospital_id,
+        source_key=f"upgrade_nudge:{current_doctor.id}:{now_ist_naive().isoformat()}",
+        type="upgrade_request_internal",
+        severity="info",
+        title="Staff requested a plan upgrade",
+        message=f"{current_doctor.title} {current_doctor.name} ({role_label}) wants to upgrade this hospital to the {tier_label} plan.",
+        target_doctor_id=None,
+    ))
+    db.commit()
+    return {"message": "Sent to your hospital admin."}
+
+
+@router.post("/request-upgrade")
+def request_upgrade(
+    body: UpgradeRequestIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """The hospital admin actually submits an upgrade request — this is
+    the real lead that reaches super admin's Upgrade Requests tab."""
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    db.add(UpgradeRequest(
+        hospital_id=current_doctor.hospital_id,
+        requested_by_id=current_doctor.id,
+        requested_tier=body.tier,
+        message=(body.message or "").strip() or None,
+        contact_name=f"{current_doctor.title} {current_doctor.name}",
+        contact_phone=current_doctor.phone,
+        contact_email=current_doctor.email,
+    ))
+    db.commit()
+    return {"message": "Request sent — our team will reach out shortly."}
 
 
 def require_billing_staff(current_doctor: Doctor):

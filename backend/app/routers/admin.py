@@ -16,9 +16,55 @@ from datetime import datetime, timedelta
 from app.utils.ai_scribe_gate import get_ai_scribe_status, has_ai_scribe_at_all
 from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING
 from app.models.ai_scribe_topup import AiScribeTopup
+from app.models.upgrade_request import UpgradeRequest
 from dateutil.relativedelta import relativedelta
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def require_super_admin(current_doctor: Doctor):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
+@router.get("/upgrade-requests")
+def list_upgrade_requests(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    requests = db.query(UpgradeRequest).order_by(UpgradeRequest.created_at.desc()).all()
+    result = []
+    for r in requests:
+        hospital = db.query(Hospital).filter(Hospital.id == r.hospital_id).first()
+        result.append({
+            "id": r.id,
+            "hospital_id": r.hospital_id,
+            "hospital_name": hospital.name if hospital else "Unknown",
+            "requested_tier": r.requested_tier,
+            "message": r.message,
+            "contact_name": r.contact_name,
+            "contact_phone": r.contact_phone,
+            "contact_email": r.contact_email,
+            "status": r.status,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+    return result
+
+
+@router.patch("/upgrade-requests/{request_id}/mark-contacted")
+def mark_upgrade_request_contacted(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    req = db.query(UpgradeRequest).filter(UpgradeRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    req.status = "contacted" if req.status == "new" else "new"
+    db.commit()
+    return {"id": req.id, "status": req.status}
 
 
 def serialize_billing_block(db: Session, hospital: Hospital) -> dict:

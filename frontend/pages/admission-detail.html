@@ -1114,7 +1114,14 @@
       <div id="cw-identity-fields" style="display:none">
         <p style="color:var(--danger);font-size:13px;margin-bottom:12px;font-weight:600">This patient was admitted via Emergency Intake with placeholder details — enter their actual details now. Room billing for this new ward starts from this moment.</p>
         <div class="form-group"><label class="form-label">Patient's Actual Name</label><input class="form-control" id="cw-patient-name" placeholder="Full name" /></div>
-        <div class="form-group"><label class="form-label">Patient's Actual Phone</label><input class="form-control" id="cw-patient-phone" placeholder="10-digit phone number" /></div>
+        <div class="form-group">
+          <label class="form-label">Patient's Actual Phone</label>
+          <div style="display:flex;gap:0;align-items:stretch">
+            <span style="padding:9px 12px;background:var(--smoke-mid);border:1.5px solid var(--border);border-right:none;border-radius:var(--radius) 0 0 var(--radius);font-size:0.9rem;color:var(--slate);white-space:nowrap;font-weight:500;display:flex;align-items:center">+91</span>
+            <input class="form-control" id="cw-patient-phone" type="tel" placeholder="9876543210" maxlength="10"
+              oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)" style="border-radius:0 var(--radius) var(--radius) 0" />
+          </div>
+        </div>
         <div style="display:flex;gap:10px">
           <div class="form-group" style="flex:1"><label class="form-label">Age</label><input class="form-control" type="number" min="0" id="cw-patient-age" /></div>
           <div class="form-group" style="flex:1"><label class="form-label">Gender</label>
@@ -1229,6 +1236,7 @@
     }
     if (!canManageClinicalOrders()) {
       document.getElementById("btn-add-test").style.display = "none";
+      document.getElementById("btn-add-radiology").style.display = "none";
     }
     const canRequestWardChange = ["doctor", "nurse", "assistant"].includes(getDoctor()?.role);
     const canChangeWard = ["receptionist"].includes(getDoctor()?.role);
@@ -1742,7 +1750,9 @@
     async function openRequestWardChangeModal() {
       await loadWardTypesForMove();
       const sel = document.getElementById("rwc-ward-type");
-      const others = wardTypesForMove.filter(w => w.name !== admissionData.ward);
+      const others = wardTypesForMove.filter(w =>
+        w.name !== admissionData.ward && (w.rooms || []).some(r => r.beds_count > 0)
+      );
       sel.innerHTML = others.length
         ? others.map(w => `<option value="${w.id}">${sanitize(w.name)} (${w.vacant} free)</option>`).join('')
         : `<option value="">No other wards configured</option>`;
@@ -1786,7 +1796,9 @@
     async function openChangeWardModal() {
       await loadWardTypesForMove();
       const sel = document.getElementById("cw-ward-type");
-      const others = wardTypesForMove.filter(w => w.name !== admissionData.ward);
+      const others = wardTypesForMove.filter(w =>
+        w.name !== admissionData.ward && (w.rooms || []).some(r => r.beds_count > 0)
+      );
       sel.innerHTML = others.length
         ? others.map(w => `<option value="${w.id}">${sanitize(w.name)} (${w.vacant} free)</option>`).join('')
         : `<option value="">No other wards configured</option>`;
@@ -2689,6 +2701,9 @@
     let radiologyCatalogLoaded = false;
 
     async function openAddRadiologyModal() {
+      toast("Ordering imaging for admitted patients is coming soon.", "info");
+      return;
+      // eslint-disable-next-line no-unreachable
       document.getElementById("radiology-err").textContent = "";
       document.getElementById("radiology-rows").innerHTML = "";
       document.getElementById("radiology-catalog-search").value = "";

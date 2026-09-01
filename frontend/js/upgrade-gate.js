@@ -67,19 +67,63 @@ function _ensureUpgradeModalStyles() {
       content: "\\1F512";
       position: absolute; top: 0; right: 2px; font-size: 10px; line-height: 1;
     }
+
+    .upgrade-request-modal { max-width: 480px; }
+    .upgrade-request-preview {
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 18px 16px;
+      background: linear-gradient(180deg, var(--teal-subtle) 0%, var(--white) 70%);
+      margin-top: 4px;
+    }
+    .upgrade-request-preview-head {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+      margin-bottom: 4px;
+    }
+    .upgrade-request-preview-label { font-size: 17px; font-weight: 800; color: var(--navy); }
+    .upgrade-request-preview-price { font-size: 20px; font-weight: 800; color: var(--teal); white-space: nowrap; }
+    .upgrade-request-preview-price span { font-size: 12px; font-weight: 500; color: var(--slate); }
+    .upgrade-request-preview-scope { font-size: 12.5px; color: var(--slate); margin-bottom: 12px; }
+    .upgrade-request-preview-features { display: flex; flex-direction: column; gap: 7px; }
+    .upgrade-request-preview-feature {
+      display: flex; align-items: flex-start; gap: 7px;
+      font-size: 12.5px; color: var(--navy); line-height: 1.4;
+    }
+    .upgrade-request-preview-check { color: var(--teal); font-weight: 700; flex-shrink: 0; }
+    .upgrade-request-actions {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      margin-top: 20px;
+    }
+    .upgrade-request-confirm-btn {
+      flex: 1;
+      padding: 13px 18px !important;
+      font-size: 15px !important;
+      font-weight: 700 !important;
+      box-shadow: 0 4px 14px rgba(15, 118, 110, 0.28);
+    }
+    .btn-text-back {
+      background: none; border: none; color: var(--slate); font-size: 13px;
+      font-weight: 600; cursor: pointer; padding: 8px 2px; flex-shrink: 0;
+      text-decoration: underline; text-underline-offset: 2px; white-space: nowrap;
+    }
+    .btn-text-back:hover { color: var(--navy); }
   `;
   document.head.appendChild(style);
 }
 
 function _tierCardHtml(tier, currentTierKey) {
   const isCurrent = tier.key === currentTierKey;
+  const doc = (typeof getDoctor === "function") ? getDoctor() : null;
+  const isAdmin = !!doc && ["admin", "sub_admin"].includes(doc.role);
   let cta;
   if (isCurrent) {
     cta = `<span class="btn btn-outline btn-sm upgrade-tier-cta" style="pointer-events:none">Current Plan</span>`;
   } else if (tier.comingSoon) {
     cta = `<span class="btn btn-outline btn-sm upgrade-tier-cta" style="pointer-events:none">Coming Soon</span>`;
+  } else if (isAdmin) {
+    cta = `<button class="btn btn-primary btn-sm upgrade-tier-cta" onclick="openUpgradeRequestModal('${tier.key}')">Contact Us to Upgrade</button>`;
   } else {
-    cta = `<button class="btn btn-primary btn-sm upgrade-tier-cta" onclick="toast('Reach out to your MedScribe representative to upgrade this hospital.','info')">Contact Us to Upgrade</button>`;
+    cta = `<button class="btn btn-primary btn-sm upgrade-tier-cta" onclick="sendUpgradeNudge('${tier.key}','${tier.label}', this)">Ask Admin to Upgrade</button>`;
   }
   return `
     <div class="upgrade-tier-card${isCurrent ? " current" : ""}${tier.premium ? " premium" : ""}">
@@ -126,11 +170,111 @@ function closeUpgradeModal() {
   document.getElementById("modal-upgrade")?.classList.remove("open");
 }
 
-// Locks any Admissions nav link/button on the current page for
-// Foundation-tier hospitals — matches by href or onclick target rather
-// than a specific element id, so it covers dashboard.html, nurse.html,
-// receptionist.html, and doctor-slots.html's differing markup without
-// per-page changes.
+async function sendUpgradeNudge(tierKey, tierLabel, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+  try {
+    await api("POST", "/billing/request-upgrade-nudge", { tier: tierKey });
+    toast(`Sent — your admin has been notified you'd like the ${tierLabel} plan.`, "success");
+    if (btn) { btn.textContent = "Sent ✓"; }
+  } catch (e) {
+    toast(e.message, "error");
+    if (btn) { btn.disabled = false; btn.textContent = "Ask Admin to Upgrade"; }
+  }
+}
+
+function _ensureUpgradeRequestModal() {
+  _ensureUpgradeModalStyles();
+  if (document.getElementById("modal-upgrade-request")) return;
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `
+    <div class="modal-overlay" id="modal-upgrade-request">
+      <div class="modal upgrade-request-modal">
+        <div class="modal-header">
+          <h2>Request an Upgrade</h2>
+          <button class="modal-close" onclick="closeUpgradeRequestModal()">&times;</button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Which plan would you like?</label>
+          <select class="form-control" id="upgrade-request-tier-select" onchange="renderUpgradeRequestTierPreview()"></select>
+        </div>
+
+        <div id="upgrade-request-tier-preview" class="upgrade-request-preview"></div>
+
+        <div class="form-group" style="margin-top:16px">
+          <label class="form-label">Anything you'd like us to know? <span style="font-weight:400;color:var(--slate)">(optional)</span></label>
+          <textarea class="form-control" id="upgrade-request-message" rows="3" placeholder="e.g. best time to call, specific features you need"></textarea>
+        </div>
+
+        <div class="err-msg" id="upgrade-request-err"></div>
+
+        <div class="upgrade-request-actions">
+          <button type="button" class="btn-text-back" onclick="closeUpgradeRequestModal(); openUpgradeModal();">&larr; Back to plans</button>
+          <button type="button" class="btn btn-primary upgrade-request-confirm-btn" id="upgrade-request-submit-btn" onclick="submitUpgradeRequest()">Confirm &amp; Send Request</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap.firstElementChild);
+}
+
+function openUpgradeRequestModal(tierKey) {
+  _ensureUpgradeRequestModal();
+  const doc = (typeof getDoctor === "function") ? getDoctor() : null;
+  const currentTierKey = (doc && doc.hospital_tier) || "growth";
+  const currentIdx = tierIndex(currentTierKey);
+  const higherTiers = TIER_CATALOG.filter((t, i) => i > currentIdx);
+  const sel = document.getElementById("upgrade-request-tier-select");
+  sel.innerHTML = higherTiers.map((t) =>
+    `<option value="${t.key}"${t.key === tierKey ? " selected" : ""}>${t.label}</option>`
+  ).join("");
+  document.getElementById("upgrade-request-message").value = "";
+  document.getElementById("upgrade-request-err").textContent = "";
+  renderUpgradeRequestTierPreview();
+  document.getElementById("modal-upgrade-request").classList.add("open");
+}
+
+function renderUpgradeRequestTierPreview() {
+  const key = document.getElementById("upgrade-request-tier-select").value;
+  const tier = TIER_CATALOG.find((t) => t.key === key);
+  if (!tier) return;
+  document.getElementById("upgrade-request-tier-preview").innerHTML = `
+    <div class="upgrade-request-preview-head">
+      <span class="upgrade-request-preview-label">${tier.label}</span>
+      <span class="upgrade-request-preview-price">${tier.price}<span>${tier.period}</span></span>
+    </div>
+    <div class="upgrade-request-preview-scope">${tier.scope}</div>
+    <div class="upgrade-request-preview-features">
+      ${tier.features.map((f) =>
+        `<div class="upgrade-request-preview-feature"><span class="upgrade-request-preview-check">\u2713</span><span>${f}</span></div>`
+      ).join("")}
+    </div>
+  `;
+}
+
+function closeUpgradeRequestModal() {
+  document.getElementById("modal-upgrade-request")?.classList.remove("open");
+}
+
+async function submitUpgradeRequest() {
+  const btn = document.getElementById("upgrade-request-submit-btn");
+  const err = document.getElementById("upgrade-request-err");
+  const tierKey = document.getElementById("upgrade-request-tier-select").value;
+  const message = document.getElementById("upgrade-request-message").value.trim();
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  try {
+    await api("POST", "/billing/request-upgrade", { tier: tierKey, message });
+    closeUpgradeRequestModal();
+    closeUpgradeModal();
+    toast("Request sent — our team will reach out shortly.", "success");
+  } catch (e) {
+    err.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Confirm & Send Request";
+  }
+}
+
 function gateAdmissionsNav() {
   if (!isFoundationTier()) return;
   document.querySelectorAll('a[href="admissions.html"], [onclick*="admissions.html"]').forEach((el) => {

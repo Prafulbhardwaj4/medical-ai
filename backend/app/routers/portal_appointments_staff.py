@@ -9,6 +9,7 @@ from app.models.portal import Appointment, AppointmentStatus
 from app.models.doctor import Doctor
 from app.models.doctor_slot import DoctorSlot
 from app.models.notification import Notification
+from app.schemas.patient import PaymentMethodIn
 from app.models.patient import Patient
 from app.schemas.portal import DeclineAppointmentIn, SuggestAppointmentIn
 from app.utils.auth import get_current_doctor
@@ -119,6 +120,7 @@ def book_appointment_for_caller(
 @router.post("/{appointment_id}/collect-payment")
 def collect_payment_at_reception(
     appointment_id: int,
+    body: PaymentMethodIn,
     current_doctor=Depends(get_current_doctor),
     db: Session = Depends(get_db),
 ):
@@ -180,6 +182,8 @@ def collect_payment_at_reception(
         appt.fee_amount = current_doctor_fee(db, appt.doctor_id)
 
     appt.payment_status = "paid"
+    appt.payment_method = body.payment_method
+    appt.paid_at = now
 
     needs_review = False
     if appt.doctor_id:

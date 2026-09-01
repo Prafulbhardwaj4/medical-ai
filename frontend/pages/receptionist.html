@@ -1463,11 +1463,18 @@
   <div class="modal-overlay" id="modal-confirm-payment">
     <div class="modal" style="max-width:380px">
       <div class="modal-header">
-        <h2>Confirm Payment</h2>
+        <h2>Consultation Fee</h2>
         <button class="modal-close" onclick="closeModal('modal-confirm-payment')">×</button>
       </div>
-      <p style="font-size:14px;color:var(--slate);margin-bottom:18px">Mark this appointment's payment as collected?</p>
-      <div style="display:flex;gap:10px">
+      <p style="font-size:14px;color:var(--slate);margin-bottom:14px">This patient's consultation fee for the booked appointment needs to be collected in person. How is the patient paying?</p>
+      <div class="form-group">
+        <select class="form-control" id="confirm-payment-method">
+          <option value="cash">Cash</option>
+          <option value="card">Card</option>
+          <option value="upi">UPI</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px">
         <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-confirm-payment')">Cancel</button>
         <button class="btn btn-primary" style="flex:1" id="btn-confirm-payment-yes">Yes, Collected</button>
       </div>
@@ -1594,7 +1601,7 @@
       } catch (e) { }
     }
     loadNotifUnreadCount();
-    setInterval(loadNotifUnreadCount, 30000);
+    setInterval(loadNotifUnreadCount, 15000);
     if (getDoctor()?.role !== 'receptionist') window.location.href = 'login.html';
     if (getDoctor()?.hospital_type === 'government') {
       document.getElementById('govt-fields').style.display = 'block';
@@ -3060,8 +3067,13 @@
       if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       editingPatientId = null;
       document.getElementById('modal-add-title').textContent = 'Add New Patient';
-      document.getElementById('p-name').value = document.getElementById('s-name').value.trim();
-      document.getElementById('p-phone').value = '';
+      // The search box takes either a name or a phone number — whatever
+      // reception typed to search now has to land in the matching field,
+      // not always into Name.
+      const searched = document.getElementById('s-name').value.trim();
+      const isPhoneLike = /^\d+$/.test(searched);
+      document.getElementById('p-name').value = isPhoneLike ? '' : searched;
+      document.getElementById('p-phone').value = isPhoneLike ? searched.slice(0, 10) : '';
       document.getElementById('p-age').value = '';
       document.getElementById('p-blood-group').value = '';
       document.getElementById('p-gender').value = 'male';
@@ -4104,10 +4116,9 @@
                    internal "booking's job is done" state, not the patient's visit
                    being done, so it's never shown verbatim here. -->
               ${a.status !== 'completed' ? `<span class="badge badge-teal">${a.status}</span>` : ''}
-              ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick="collectAppointmentPayment(${a.id})">Collect Payment</button>` : ''}
+              ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick="openCollectPaymentConfirm(${a.id})">Collect Payment</button>` : ''}
               ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
               ${(a.arrived_at && a.doctor_id && coverageByDoctor[a.doctor_id] === false) ? `<button class="btn btn-outline btn-sm" onclick="notifyDoctorNoAssistant(${a.doctor_id}, this)">Notify Doctor</button>` : ''}
-              ${a.patient_id ? `<button class="btn btn-outline btn-sm" onclick="addAnotherDoctorForOnlinePatient(${a.patient_id}, ${JSON.stringify(a.patient_name || '')}, ${JSON.stringify(a.patient_uid || '')})">Add Another Doctor</button>` : ''}
             </div>
           </div>`).join('');
       } catch (e) {
@@ -4136,15 +4147,16 @@
     }
 
     document.getElementById('btn-confirm-payment-yes').addEventListener('click', () => {
+      const method = document.getElementById('confirm-payment-method').value;
       closeModal('modal-confirm-payment');
       const id = pendingCollectPaymentId;
       pendingCollectPaymentId = null;
-      if (id != null) collectAppointmentPayment(id);
+      if (id != null) collectAppointmentPayment(id, method);
     });
 
-    async function collectAppointmentPayment(id) {
+    async function collectAppointmentPayment(id, method) {
       try {
-        const result = await api("POST", `/portal-appointments-staff/${id}/collect-payment`);
+        const result = await api("POST", `/portal-appointments-staff/${id}/collect-payment`, { payment_method: method });
         if (result.reassigned) {
           toast(`Payment collected — original slot had passed, moved to ${new Date(result.estimated_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}`, "success");
         } else {

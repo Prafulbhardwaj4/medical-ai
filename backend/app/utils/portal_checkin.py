@@ -71,6 +71,8 @@ def convert_appointment_to_checkin(db: Session, appt, patient):
             visit_date=now_ist_naive().date(),
             consultation_fee=appt.fee_amount,
             is_paid=True,  # already paid on the portal — this function only ever runs for payment_status == "paid" appointments. Leaving this unset defaulted to False, which silently hid every online patient from the doctor/assistant queue (both filter on is_paid) until reception re-marked them paid a second time.
+            payment_method=appt.payment_method,  # was never propagated — day-end/revenue bucket by this and silently dropped the fee without it
+            paid_at=appt.paid_at,  # the actual moment reception collected it, not whenever this Checkin object happens to get created (could be a different calendar day)
             source="online",
             portal_appointment_id=appt.id,
             booked_time=appt.requested_time,

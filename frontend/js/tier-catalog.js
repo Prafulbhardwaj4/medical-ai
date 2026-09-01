@@ -43,7 +43,7 @@ const TIER_CATALOG = [
   {
     key: "scale",
     label: "Scale",
-    price: "\u20B949,999",
+    price: "\u20B9X",
     period: "/month",
     scope: "Up to 10,000 consultations/month",
     comingSoon: true,
@@ -59,7 +59,7 @@ const TIER_CATALOG = [
   {
     key: "enterprise",
     label: "Enterprise",
-    price: "\u20B966,999",
+    price: "\u20B9X",
     period: "/month",
     scope: "Unlimited consultations",
     comingSoon: true,

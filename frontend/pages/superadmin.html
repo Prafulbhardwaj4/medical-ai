@@ -151,6 +151,13 @@
         Suggestions
         <span class="badge badge-red" id="suggestions-nav-badge" style="display:none;margin-left:auto"></span>
       </a>
+      <a class="nav-item" id="nav-upgrade-requests" href="#" onclick="showSection('upgrade-requests')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+        </svg>
+        Upgrade Requests
+        <span class="badge badge-red" id="upgrade-requests-nav-badge" style="display:none;margin-left:auto"></span>
+      </a>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
@@ -173,6 +180,12 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.5.4.8 1 .8 1.6v.7h6.4v-.7c0-.6.3-1.2.8-1.6A7 7 0 0012 2z" />
         </svg>
         Suggestions
+      </button>
+      <button class="bottom-nav-item" id="tab-btn-upgrade-requests" onclick="showSection('upgrade-requests')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+        </svg>
+        Upgrades
       </button>
     </nav>
 
@@ -320,6 +333,15 @@
         </div>
 
         <div id="suggestions-list"></div>
+      </div>
+
+      <!-- UPGRADE REQUESTS SECTION -->
+      <div id="section-upgrade-requests" style="display:none">
+        <div class="page-header">
+          <h1>Upgrade Requests</h1>
+          <p>Hospital admins asking to move to a higher tier — call, collect payment, then set the tier on their hospital detail page</p>
+        </div>
+        <div id="upgrade-requests-list"></div>
       </div>
 
     </main>
@@ -527,13 +549,57 @@
       document.getElementById('section-overview').style.display = name === 'overview' ? 'block' : 'none';
       document.getElementById('section-hospitals').style.display = name === 'hospitals' ? 'block' : 'none';
       document.getElementById('section-suggestions').style.display = name === 'suggestions' ? 'block' : 'none';
+      document.getElementById('section-upgrade-requests').style.display = name === 'upgrade-requests' ? 'block' : 'none';
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       document.getElementById(`nav-${name}`).classList.add('active');
       document.querySelectorAll('.bottom-nav-item').forEach(el => el.classList.remove('active'));
       document.getElementById(`tab-btn-${name}`)?.classList.add('active');
       if (name === 'overview') loadStats();
       if (name === 'hospitals') loadHospitals();
+      if (name === 'upgrade-requests') loadUpgradeRequests();
       if (name === 'suggestions') loadSuggestions();
+    }
+
+    // ── UPGRADE REQUESTS ──
+    async function loadUpgradeRequests() {
+      const el = document.getElementById('upgrade-requests-list');
+      try {
+        const data = await api('GET', '/admin/upgrade-requests');
+        const newCount = data.filter(r => r.status === 'new').length;
+        const badge = document.getElementById('upgrade-requests-nav-badge');
+        if (newCount) { badge.textContent = newCount; badge.style.display = ''; } else { badge.style.display = 'none'; }
+
+        if (!data.length) {
+          el.innerHTML = '<p style="color:var(--slate)">No upgrade requests yet.</p>';
+          return;
+        }
+        el.innerHTML = data.map(r => `
+          <div class="card" style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+              <div>
+                <div style="font-weight:600">${sanitize(r.hospital_name)} → <span style="color:var(--teal)">${typeof tierLabel === 'function' ? tierLabel(r.requested_tier) : r.requested_tier}</span></div>
+                <div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(r.contact_name)} · ${sanitize(r.contact_phone)} · ${sanitize(r.contact_email)}</div>
+                ${r.message ? `<div style="font-size:13px;color:var(--navy);margin-top:8px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(r.message)}</div>` : ''}
+                <div style="font-size:12px;color:var(--slate-light);margin-top:8px">${new Date(r.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+                <span class="badge ${r.status === 'new' ? 'badge-amber' : 'badge-teal'}">${r.status === 'new' ? 'New' : 'Contacted'}</span>
+                <button class="btn btn-outline btn-sm" onclick="toggleUpgradeRequestStatus(${r.id})">${r.status === 'new' ? 'Mark Contacted' : 'Mark New'}</button>
+                <button class="btn btn-outline btn-sm" onclick="showSection('hospitals');openDetail(${r.hospital_id})">View Hospital</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
+      }
+    }
+
+    async function toggleUpgradeRequestStatus(id) {
+      try {
+        await api('PATCH', `/admin/upgrade-requests/${id}/mark-contacted`, {});
+        loadUpgradeRequests();
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     // ── OVERVIEW ──

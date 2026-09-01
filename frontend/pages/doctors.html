@@ -417,7 +417,7 @@
           return;
         }
         body.innerHTML = data.notifications.map(n => `
-          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'})">
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'}, '${n.type || ''}')">
             <div class="notif-item-title">
               <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
               ${sanitize(n.title)}
@@ -431,11 +431,15 @@
       }
     }
 
-    async function onNotifClick(id, linkType, linkId) {
+    async function onNotifClick(id, linkType, linkId, notifType) {
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
         closeNotifPanel();
+        if (notifType === 'upgrade_request_internal') {
+          openUpgradeModal();
+          return;
+        }
         if (!linkId) return;
         if (linkType === 'admission' || linkType === 'admission_medicine_order') {
           const { token } = await api("GET", `/admissions/token-for/${linkId}`);
