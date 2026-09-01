@@ -277,11 +277,7 @@
         </div>
       </div>
 
-      <!-- Always visible regardless of which panel/step is active (fresh
-           recording OR Continue Consultation reopen mode) — this used to
-           live inside #panel-1, which goStep(2) hides entirely, so Vitals
-           and Reports were unreachable from reopen mode. -->
-      <div class="card" style="margin-bottom:16px">
+      <div class="card" style="margin-bottom:16px" id="patient-context-card">
         <div class="card-header">
           <p id="patient-label" style="margin:0">Loading patient…</p>
           <button class="btn btn-primary" onclick="openReportsModal(patientId)">📋 Reports</button>
@@ -362,8 +358,11 @@
           ↩ Editing today's confirmed consultation for this token — no new recording, no new token. Add/change medicines, order additional tests, or update advice below, then save.
         </div>
         <div class="card-header">
-          <h2 id="panel-2-title">Review & Edit Prescription</h2>
-          <span class="badge badge-teal" id="panel-2-ai-badge">AI Structured</span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <h2 id="panel-2-title">Review & Edit Prescription</h2>
+            <span class="badge badge-teal" id="panel-2-ai-badge">AI Structured</span>
+          </div>
+          <button class="btn btn-primary btn-sm" id="panel-2-reports-btn" style="display:none" onclick="openReportsModal(patientId)">📋 Reports</button>
         </div>
 
         <div class="section-block">
@@ -1177,38 +1176,22 @@
       });
     }
 
-    // // ── Helpers ───────────────────────────────────────────
-    // function setVerifyLink(tokenNumber, verifyHash) {
-    //   const verifyUrl = `https://medical-s-ai.vercel.app/pages/verify.html?token=${tokenNumber}&hash=${verifyHash}`;
-    //   const el = document.getElementById("verify-link-display");
-    //   el.href = verifyUrl;
-    //   el.textContent = verifyUrl;
-    // }
-
     // ── Confirm ─────────────────────────────────────────
     let isReopenMode = false;
     let isFoundationManualMode = false;
 
-    // Foundation tier has no AI Scribe: skip the recording panel entirely
-    // and land the doctor straight on the manual entry fields already
-    // used for review/edit — diagnosis, medicines, tests, follow-up.
-    // Reopen mode (#reopen) already does its own panel-2 jump, so this
-    // steps aside for it rather than doing the work twice.
     async function switchToManualEntryMode(reasonMessage) {
       isFoundationManualMode = true;
       document.getElementById('steps').style.display = 'none';
       document.getElementById('panel-2-title').textContent = 'Consultation Details';
       document.getElementById('panel-2-ai-badge').style.display = 'none';
-      // Redundant with the same data already shown under Consultation
-      // Details → Vitals once manual entry mode is active.
-      const nurseVitalsWrap = document.getElementById('nurse-vitals-wrap');
-      if (nurseVitalsWrap) nurseVitalsWrap.style.display = 'none';
+      const patientContextCard = document.getElementById('patient-context-card');
+      if (patientContextCard) patientContextCard.style.display = 'none';
+      const reportsBtn = document.getElementById('panel-2-reports-btn');
+      if (reportsBtn) reportsBtn.style.display = '';
       goStep(2);
       if (reasonMessage) toast(reasonMessage, 'info');
 
-      // Manual entry never goes through the voice/transcription flow, which
-      // is the only place consultationId normally gets set — without this,
-      // doConfirm() ends up calling the API with a literal "null" id.
       if (!consultationId && patientId) {
         try {
           const draft = await api("POST", `/consultations/draft/${patientId}`);

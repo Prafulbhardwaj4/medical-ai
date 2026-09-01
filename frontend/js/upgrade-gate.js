@@ -148,3 +148,11 @@ function gateAdmissionsNav() {
 }
 
 document.addEventListener("DOMContentLoaded", gateAdmissionsNav);
+
+let _gateAdmissionsNavDebounce = null;
+new MutationObserver(() => {
+  clearTimeout(_gateAdmissionsNavDebounce);
+  _gateAdmissionsNavDebounce = setTimeout(gateAdmissionsNav, 150);
+}).observe(document.documentElement, { childList: true, subtree: true });
+
+setInterval(gateAdmissionsNav, 2000);

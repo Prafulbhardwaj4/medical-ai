@@ -1798,6 +1798,10 @@ tbody tr:hover {
   opacity: 1;
 }
 
+#profile-menu-backdrop {
+  background: transparent;
+}
+
 .mobile-back-link {
   display: none;
   align-items: center;

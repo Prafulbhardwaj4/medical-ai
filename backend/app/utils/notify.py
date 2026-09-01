@@ -417,7 +417,7 @@ def sync_idle_staff_notification(db: Session, doctor):
     ).first()
 
     if is_idle:
-        role_label = "Doctor" if role == "doctor" else "Nurse"
+        role_label = {"doctor": "Doctor", "nurse": "Nurse", "assistant": "Assistant"}.get(role, role.capitalize())
         still_on_shift = attendance.status in ("present", "on_break")
         tail = "and has gone off duty." if not still_on_shift else "and hasn't started yet."
         message = f"{role_label} {doctor.name} was assigned {assigned_count} patient(s) today but completed none, {tail}"

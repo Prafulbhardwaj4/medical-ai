@@ -1114,8 +1114,9 @@
         t.el.innerHTML = groups.map(items => {
           const first = items[0];
           const pendingCount = items.filter(i => !i.dispensed_at && !i.is_out_of_stock).length;
+          const PRESCRIBER_ROLE_LABEL = { nurse: 'Nurse', assistant: 'Assistant' };
           const orderer = first.prescriber_name
-            ? `${first.prescriber_role === 'nurse' ? 'Nurse' : ''} ${first.prescriber_name}`.trim()
+            ? `${PRESCRIBER_ROLE_LABEL[first.prescriber_role] || ''} ${first.prescriber_name}`.trim()
             : null;
           return `
             <div class="item-card" style="cursor:pointer" onclick="openAdmissionMedModal(${first.admission_id})">
@@ -1142,7 +1143,7 @@
       const first = items[0];
       document.getElementById('adm-med-patient').textContent = `${first.patient_name} — ${first.ward}, Bed ${first.bed_number}`;
       document.getElementById('adm-med-list').innerHTML = items.map(i => {
-        const orderer = i.prescriber_name ? `${i.prescriber_role === 'nurse' ? 'Nurse' : ''} ${i.prescriber_name}`.trim() : 'Unrecorded';
+        const orderer = i.prescriber_name ? `${{ nurse: 'Nurse', assistant: 'Assistant' }[i.prescriber_role] || ''} ${i.prescriber_name}`.trim() : 'Unrecorded';
         const actionHtml = i.is_out_of_stock
           ? `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
                <span style="color:var(--danger);font-weight:600;font-size:13px">Out of stock</span>

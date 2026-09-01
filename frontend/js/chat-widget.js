@@ -407,4 +407,11 @@
   } else {
     mount();
   }
+
+  setInterval(() => {
+    const trigger = document.getElementById("chat-header-btn");
+    if (!trigger) return;
+    const shouldBeLocked = typeof isFoundationTier === "function" && isFoundationTier();
+    trigger.classList.toggle("nav-locked", shouldBeLocked);
+  }, 2000);
 })();

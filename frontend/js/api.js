@@ -219,24 +219,24 @@ function forceContentRepaint() {
   el.style.display = prevDisplay;
 }
 
-// Mobile profile dropdown (header)
+// Profile dropdown (header) — no full-screen dimming, just a normal
+// dropdown that closes itself when you click anywhere outside it.
 function toggleProfileMenu() {
   const menu = document.getElementById("profile-menu");
-  const backdrop = document.getElementById("profile-menu-backdrop");
   if (!menu) return;
-  const opening = !menu.classList.contains("open");
-  menu.classList.toggle("open", opening);
-  // This used to set backdrop.style.display directly, but the shared
-  // .sidebar-backdrop CSS only lights up (opacity 1) via the .open class —
-  // display:block alone left an invisible-but-still-click-blocking
-  // full-screen layer sitting over the page with no visible dimming.
-  if (backdrop) backdrop.classList.toggle("open", opening);
+  menu.classList.toggle("open", !menu.classList.contains("open"));
 }
 
 function closeProfileMenu() {
   document.getElementById("profile-menu")?.classList.remove("open");
-  document.getElementById("profile-menu-backdrop")?.classList.remove("open");
 }
+
+document.addEventListener("click", function (e) {
+  const menu = document.getElementById("profile-menu");
+  if (!menu || !menu.classList.contains("open")) return;
+  if (e.target.closest(".topbar-profile-btn") || e.target.closest("#profile-menu")) return;
+  closeProfileMenu();
+});
 
 function closeAllOverlays() {
   closeProfileMenu();
