@@ -1,13 +1,13 @@
 """add hospital_leads table
 
-Revision ID: e5f6a7b8c9d0
+Revision ID: 6efe879ac2a9
 Revises: 57bef11f8ce2
 Create Date: 2026-09-02
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = 'e5f6a7b8c9d0'
+revision = '6efe879ac2a9'
 down_revision = '57bef11f8ce2'
 branch_labels = None
 depends_on = None
