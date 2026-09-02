@@ -7,6 +7,7 @@ from app.database import get_db
 from app.config import settings
 from app.models.portal import Appointment, AppointmentStatus
 from app.models.doctor import Doctor
+from app.models.hospital import Hospital
 from app.models.doctor_slot import DoctorSlot
 from app.models.notification import Notification
 from app.schemas.patient import PaymentMethodIn, CollectAppointmentPaymentIn
@@ -577,6 +578,20 @@ def list_pending_review(
         Appointment.payment_status == "unpaid",
     ).order_by(Appointment.requested_time).all()
 
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+
+    def _resolve_fee(a, doctor):
+        # a.fee_amount is whatever was set/locked at booking time — if it's
+        # blank, fall back to the admin-set default the same way check-in
+        # already does (doctor.consultation_fee, then the hospital-wide
+        # default), so reception always has a sensible starting number
+        # instead of an empty box.
+        if a.fee_amount is not None:
+            return a.fee_amount
+        if doctor and doctor.consultation_fee is not None:
+            return doctor.consultation_fee
+        return hospital.default_consultation_fee if hospital else None
+
     result = []
     for a in needs_review:
         patient_name = a.new_patient_name
@@ -590,7 +605,7 @@ def list_pending_review(
             "doctor_id": a.doctor_id,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
             "requested_time": a.requested_time.isoformat(),
-            "fee_amount": a.fee_amount,
+            "fee_amount": _resolve_fee(a, doctor),
             "review_deadline_at": a.review_deadline_at.isoformat() if a.review_deadline_at else None,
             "followup_sent": a.review_followup_sent_at is not None,
         })
@@ -606,7 +621,7 @@ def list_pending_review(
             "doctor_id": a.doctor_id,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
             "requested_time": a.requested_time.isoformat(),
-            "fee_amount": a.fee_amount,
+            "fee_amount": _resolve_fee(a, doctor),
             "review_deadline_at": None,
             "followup_sent": False,
         })
