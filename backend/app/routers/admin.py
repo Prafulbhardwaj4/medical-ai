@@ -18,6 +18,7 @@ from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open
 from app.models.ai_scribe_topup import AiScribeTopup
 from app.models.upgrade_request import UpgradeRequest
 from app.models.hospital_lead import HospitalLead
+from app.models.portal import PatientProfileLink
 from dateutil.relativedelta import relativedelta
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -75,17 +76,33 @@ def list_hospital_leads(
 ):
     require_super_admin(current_doctor)
     leads = db.query(HospitalLead).order_by(HospitalLead.created_at.desc()).all()
-    return [{
-        "id": l.id,
-        "contact_phone": l.contact_phone,
-        "state": l.state,
-        "city": l.city,
-        "hospital_name": l.hospital_name,
-        "location": l.location,
-        "note": l.note,
-        "status": l.status,
-        "created_at": l.created_at.isoformat() if l.created_at else None,
-    } for l in leads]
+    result = []
+    for l in leads:
+        # "Requested By" needs a name, not just a phone number — resolved via
+        # the account's EARLIEST linked patient profile (the one created at
+        # signup, per PatientProfileLink's own docstring), so a family
+        # account with multiple profiles always shows the main/first person,
+        # not whichever profile happens to be most recent.
+        main_link = (
+            db.query(PatientProfileLink)
+            .filter(PatientProfileLink.account_id == l.patient_account_id)
+            .order_by(PatientProfileLink.id.asc())
+            .first()
+        )
+        contact_name = main_link.patient.name if main_link and main_link.patient else None
+        result.append({
+            "id": l.id,
+            "contact_name": contact_name,
+            "contact_phone": l.contact_phone,
+            "state": l.state,
+            "city": l.city,
+            "hospital_name": l.hospital_name,
+            "location": l.location,
+            "note": l.note,
+            "status": l.status,
+            "created_at": l.created_at.isoformat() if l.created_at else None,
+        })
+    return result
 
 
 @router.patch("/hospital-leads/{lead_id}/mark-contacted")

@@ -421,8 +421,9 @@
         area.innerHTML = `<p>Loading hospitals...</p>`;
         try {
           const hospitals = await api("GET", `/portal/hospitals?city=${encodeURIComponent(state.city)}&state=${encodeURIComponent(state.stateName)}`);
-          const noHospitalLink = `<div style="text-align:center;margin-top:16px"><a href="#" onclick="event.preventDefault();openHospitalLeadModal()" style="font-size:13px;color:var(--teal);font-weight:600">Can't find your hospital?</a></div>`;
-          if (!hospitals.length) { area.innerHTML = `<p style="color:var(--slate-light)">No hospitals found in ${sanitize(state.city)}.</p>` + noHospitalLink; return; }
+          // Top "Can't find your hospital?" button (wizard-hospital-lead-btn) already
+          // covers this step — a second link here was duplicating it.
+          if (!hospitals.length) { area.innerHTML = `<p style="color:var(--slate-light)">No hospitals found in ${sanitize(state.city)}.</p>`; return; }
           searchableFullWidthList(
             area, hospitals,
             (h) => `<div class="select-row-card" onclick='pickHospital(${h.id}, ${JSON.stringify(h.name)})'>
@@ -431,7 +432,6 @@
             (h, q) => h.name.toLowerCase().includes(q),
             "Search hospitals..."
           );
-          area.insertAdjacentHTML('beforeend', noHospitalLink);
         } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
         return;
       }

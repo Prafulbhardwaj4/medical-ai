@@ -647,9 +647,10 @@
           <div class="card" style="margin-bottom:12px">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
               <div>
-                <div style="font-weight:600">${sanitize(l.hospital_name)}</div>
-                <div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(l.city)}, ${sanitize(l.state)}${l.location ? ' · ' + sanitize(l.location) : ''}</div>
-                <div style="font-size:13px;color:var(--slate);margin-top:4px">Requested by ${sanitize(l.contact_phone)}</div>
+                <div style="font-weight:600;font-size:15px">${sanitize(l.hospital_name)}</div>
+                ${l.location ? `<div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(l.location)}</div>` : ''}
+                <div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(l.city)}, ${sanitize(l.state)}</div>
+                <div style="font-size:13px;color:var(--slate);margin-top:8px">Requested By - ${l.contact_name ? sanitize(l.contact_name) + ', ' : ''}${sanitize(l.contact_phone)}</div>
                 ${l.note ? `<div style="font-size:13px;color:var(--navy);margin-top:8px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(l.note)}</div>` : ''}
                 <div style="font-size:12px;color:var(--slate-light);margin-top:8px">${new Date(l.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
               </div>
@@ -1397,10 +1398,49 @@
       } catch (e) { /* silent */ }
     }
 
+    // Same idea as refreshSuggestionsBadge — these two badges were only
+    // ever updated inside loadUpgradeRequests()/loadHospitalLeads(), which
+    // only run when that specific tab is opened, so the count silently
+    // vanished on every reload/tab switch until you happened to click in.
+    // Standalone, independently-polled versions fix that.
+    async function refreshUpgradeRequestsBadge() {
+      try {
+        const rows = await api('GET', '/admin/upgrade-requests');
+        const badge = document.getElementById('upgrade-requests-nav-badge');
+        if (!badge) return;
+        const newCount = rows.filter(r => r.status === 'new').length;
+        if (newCount > 0) {
+          badge.textContent = newCount > 9 ? '9+' : newCount;
+          badge.style.display = 'inline-flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (e) { /* silent */ }
+    }
+
+    async function refreshHospitalLeadsBadge() {
+      try {
+        const rows = await api('GET', '/admin/hospital-leads');
+        const badge = document.getElementById('hospital-leads-nav-badge');
+        if (!badge) return;
+        const newCount = rows.filter(l => l.status === 'new').length;
+        if (newCount > 0) {
+          badge.textContent = newCount > 9 ? '9+' : newCount;
+          badge.style.display = 'inline-flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (e) { /* silent */ }
+    }
+
     // Load overview on start
     loadStats();
     refreshSuggestionsBadge();
+    refreshUpgradeRequestsBadge();
+    refreshHospitalLeadsBadge();
     setInterval(refreshSuggestionsBadge, 30000);
+    setInterval(refreshUpgradeRequestsBadge, 30000);
+    setInterval(refreshHospitalLeadsBadge, 30000);
   </script>
 </body>
 

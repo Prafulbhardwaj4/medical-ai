@@ -173,6 +173,10 @@ class PaymentMethodIn(BaseModel):
         return v
 
 
+class CollectAppointmentPaymentIn(PaymentMethodIn):
+    fee_amount: Optional[float] = None
+
+
 class DoctorLite(BaseModel):
     id: int
     doctor_uid: Optional[str] = None

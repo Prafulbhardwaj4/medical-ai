@@ -4116,7 +4116,7 @@
                    internal "booking's job is done" state, not the patient's visit
                    being done, so it's never shown verbatim here. -->
               ${a.status !== 'completed' ? `<span class="badge badge-teal">${a.status}</span>` : ''}
-              ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick="openCollectPaymentConfirm(${a.id})">Collect Payment</button>` : ''}
+              ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${JSON.stringify(a)})'>Collect Payment</button>` : ''}
               ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
               ${(a.arrived_at && a.doctor_id && coverageByDoctor[a.doctor_id] === false) ? `<button class="btn btn-outline btn-sm" onclick="notifyDoctorNoAssistant(${a.doctor_id}, this)">Notify Doctor</button>` : ''}
             </div>
@@ -4141,22 +4141,37 @@
 
     let pendingCollectPaymentId = null;
 
-    function openCollectPaymentConfirm(id) {
-      pendingCollectPaymentId = id;
+    function openCollectPaymentConfirm(a) {
+      pendingCollectPaymentId = a.id;
+      document.getElementById('confirm-payment-patient').textContent = a.patient_name || 'Name not linked yet';
+      document.getElementById('confirm-payment-doctor').textContent = a.doctor_name || '';
+      document.getElementById('confirm-payment-time').textContent = new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      document.getElementById('confirm-payment-fee').value = a.fee_amount != null ? a.fee_amount : '';
       openModal('modal-confirm-payment');
     }
 
-    document.getElementById('btn-confirm-payment-yes').addEventListener('click', () => {
-      const method = document.getElementById('confirm-payment-method').value;
+    document.getElementById('btn-confirm-payment-yes').addEventListener('click', async () => {
+      const feeInput = document.getElementById('confirm-payment-fee');
+      const fee = feeInput.value !== '' ? parseFloat(feeInput.value) : null;
+      if (fee != null && (isNaN(fee) || fee < 0)) { toast("Enter a valid fee amount", "error"); return; }
       closeModal('modal-confirm-payment');
       const id = pendingCollectPaymentId;
       pendingCollectPaymentId = null;
-      if (id != null) collectAppointmentPayment(id, method);
+      if (id == null) return;
+      // Reuses the same shared payment-mode picker (cash/card/UPI) already
+      // used everywhere else money is collected — "Money Collected" hands
+      // off into it rather than bundling a payment-method dropdown into
+      // this same modal.
+      const method = await askPaymentMethod();
+      if (!method) return;
+      collectAppointmentPayment(id, method, fee);
     });
 
-    async function collectAppointmentPayment(id, method) {
+    async function collectAppointmentPayment(id, method, feeAmount) {
       try {
-        const result = await api("POST", `/portal-appointments-staff/${id}/collect-payment`, { payment_method: method });
+        const payload = { payment_method: method };
+        if (feeAmount != null) payload.fee_amount = feeAmount;
+        const result = await api("POST", `/portal-appointments-staff/${id}/collect-payment`, payload);
         if (result.reassigned) {
           toast(`Payment collected — original slot had passed, moved to ${new Date(result.estimated_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}`, "success");
         } else {
@@ -4193,7 +4208,7 @@
             </div>
             ${a.reason === 'awaiting_payment' ? `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-              <button class="btn btn-primary btn-sm" onclick="openCollectPaymentConfirm(${a.id})">Collect Payment</button>
+              <button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${JSON.stringify(a)})'>Collect Payment</button>
             </div>
             ` : `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
