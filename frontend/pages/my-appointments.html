@@ -179,6 +179,7 @@
             <div class="wizard-step-title" id="wizard-title">Select State &amp; City</div>
             <div class="wizard-step-sub" id="wizard-sub"></div>
           </div>
+          <button class="btn btn-teal" id="wizard-hospital-lead-btn" style="display:none;margin-left:auto;white-space:nowrap" onclick="openHospitalLeadModal()">Can't find your hospital?</button>
         </div>
         <div id="wizard-area"></div>
       </div>
@@ -349,6 +350,7 @@
       document.getElementById("wizard-title").textContent = meta.title;
       document.getElementById("wizard-sub").textContent = typeof meta.sub === 'function' ? meta.sub() : meta.sub;
       document.getElementById("wizard-back").style.display = state.history.length ? "flex" : "none";
+      document.getElementById("wizard-hospital-lead-btn").style.display = state.step === "hospital" ? "inline-flex" : "none";
     }
     function goBack() {
       if (!state.history.length) return;
@@ -433,6 +435,8 @@
         } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
         return;
       }
+
+      document.getElementById("wizard-hospital-lead-btn").style.display = "none";
 
       if (state.step === "doctor") {
         area.innerHTML = `<p>Loading doctors...</p>`;
