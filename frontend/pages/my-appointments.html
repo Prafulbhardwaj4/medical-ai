@@ -230,6 +230,40 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="modal-hospital-lead">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-header">
+        <h2>Hospital Not Listed?</h2>
+        <button class="modal-close" onclick="closeHospitalLeadModal()">&times;</button>
+      </div>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:14px">Tell us which hospital you'd like to see on MedScribe — we'll reach out to them.</p>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">State</label>
+          <select class="form-control" id="hl-state"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">City</label>
+          <select class="form-control" id="hl-city"></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hospital Name</label>
+        <input class="form-control" id="hl-hospital-name" placeholder="e.g. City Care Hospital" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Location / Area</label>
+        <input class="form-control" id="hl-location" placeholder="e.g. near XYZ Road (optional)" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note (optional)</label>
+        <textarea class="form-control" id="hl-note" rows="2" placeholder="Anything else that'd help us find them"></textarea>
+      </div>
+      <div class="err-msg" id="hl-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="submitHospitalLead()">Submit</button>
+    </div>
+  </div>
+
   <script src="../js/api.js"></script>
   <script>
     if (!requireAuth()) { }
@@ -385,7 +419,8 @@
         area.innerHTML = `<p>Loading hospitals...</p>`;
         try {
           const hospitals = await api("GET", `/portal/hospitals?city=${encodeURIComponent(state.city)}&state=${encodeURIComponent(state.stateName)}`);
-          if (!hospitals.length) { area.innerHTML = `<p style="color:var(--slate-light)">No hospitals found in ${sanitize(state.city)}.</p>`; return; }
+          const noHospitalLink = `<div style="text-align:center;margin-top:16px"><a href="#" onclick="event.preventDefault();openHospitalLeadModal()" style="font-size:13px;color:var(--teal);font-weight:600">Can't find your hospital?</a></div>`;
+          if (!hospitals.length) { area.innerHTML = `<p style="color:var(--slate-light)">No hospitals found in ${sanitize(state.city)}.</p>` + noHospitalLink; return; }
           searchableFullWidthList(
             area, hospitals,
             (h) => `<div class="select-row-card" onclick='pickHospital(${h.id}, ${JSON.stringify(h.name)})'>
@@ -394,6 +429,7 @@
             (h, q) => h.name.toLowerCase().includes(q),
             "Search hospitals..."
           );
+          area.insertAdjacentHTML('beforeend', noHospitalLink);
         } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
         return;
       }
@@ -661,6 +697,59 @@
     }
 
     function pickHospital(id, name) { state.hospitalId = id; state.hospitalName = name; setStep("doctor"); }
+
+    async function openHospitalLeadModal() {
+      document.getElementById('hl-hospital-name').value = '';
+      document.getElementById('hl-location').value = '';
+      document.getElementById('hl-note').value = '';
+      document.getElementById('hl-err').textContent = '';
+      const stateSel = document.getElementById('hl-state');
+      const citySel = document.getElementById('hl-city');
+      stateSel.innerHTML = '<option value="">Loading...</option>';
+      citySel.innerHTML = '<option value="">Select state first</option>';
+      document.getElementById('modal-hospital-lead').classList.add('open');
+      try {
+        const states = await api("GET", "/portal/hospitals/states");
+        stateSel.innerHTML = states.map(s => `<option value="${sanitize(s)}" ${s === state.stateName ? 'selected' : ''}>${sanitize(s)}</option>`).join('');
+        if (state.stateName) await loadHlCities(state.stateName, state.city);
+      } catch (e) { document.getElementById('hl-err').textContent = e.message; }
+    }
+
+    async function loadHlCities(stateName, preselectCity) {
+      const citySel = document.getElementById('hl-city');
+      citySel.innerHTML = '<option value="">Loading...</option>';
+      try {
+        const cities = await api("GET", `/portal/hospitals/cities?state=${encodeURIComponent(stateName)}`);
+        citySel.innerHTML = `<option value="">Select city...</option>` + cities.map(c => `<option value="${sanitize(c)}" ${c === preselectCity ? 'selected' : ''}>${sanitize(c)}</option>`).join('');
+      } catch (e) { citySel.innerHTML = '<option value="">Could not load cities</option>'; }
+    }
+
+    document.getElementById('hl-state')?.addEventListener('change', (e) => {
+      if (e.target.value) loadHlCities(e.target.value, null);
+    });
+
+    function closeHospitalLeadModal() {
+      document.getElementById('modal-hospital-lead').classList.remove('open');
+    }
+
+    async function submitHospitalLead() {
+      const err = document.getElementById('hl-err');
+      const stateName = document.getElementById('hl-state').value;
+      const city = document.getElementById('hl-city').value;
+      const hospitalName = document.getElementById('hl-hospital-name').value.trim();
+      const location = document.getElementById('hl-location').value.trim();
+      const note = document.getElementById('hl-note').value.trim();
+      if (!stateName || !city) { err.textContent = "Please select a state and city."; return; }
+      if (!hospitalName) { err.textContent = "Please enter the hospital's name."; return; }
+      try {
+        await api("POST", "/portal/hospitals/lead", {
+          state: stateName, city: city, hospital_name: hospitalName,
+          location: location || null, note: note || null,
+        });
+        closeHospitalLeadModal();
+        toast("Thanks — we'll reach out to them.", "success");
+      } catch (e) { err.textContent = e.message; }
+    }
 
     async function checkBedAvailability() {
       const el = document.getElementById("bed-availability-result");

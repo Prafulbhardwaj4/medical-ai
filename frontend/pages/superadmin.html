@@ -158,6 +158,15 @@
         Upgrade Requests
         <span class="badge badge-red" id="upgrade-requests-nav-badge" style="display:none;margin-left:auto"></span>
       </a>
+      <a class="nav-item" id="nav-hospital-leads" href="#" onclick="showSection('hospital-leads')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Hospital Leads
+        <span class="badge badge-red" id="hospital-leads-nav-badge" style="display:none;margin-left:auto"></span>
+      </a>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
@@ -186,6 +195,14 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
         </svg>
         Upgrades
+      </button>
+      <button class="bottom-nav-item" id="tab-btn-hospital-leads" onclick="showSection('hospital-leads')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Leads
       </button>
     </nav>
 
@@ -342,6 +359,15 @@
           <p>Hospital admins asking to move to a higher tier — call, collect payment, then set the tier on their hospital detail page</p>
         </div>
         <div id="upgrade-requests-list"></div>
+      </div>
+
+      <!-- HOSPITAL LEADS SECTION -->
+      <div id="section-hospital-leads" style="display:none">
+        <div class="page-header">
+          <h1>Hospital Leads</h1>
+          <p>Patients asking for a hospital that isn't on MedScribe yet, from the booking wizard — follow up and onboard them</p>
+        </div>
+        <div id="hospital-leads-list"></div>
       </div>
 
     </main>
@@ -550,6 +576,7 @@
       document.getElementById('section-hospitals').style.display = name === 'hospitals' ? 'block' : 'none';
       document.getElementById('section-suggestions').style.display = name === 'suggestions' ? 'block' : 'none';
       document.getElementById('section-upgrade-requests').style.display = name === 'upgrade-requests' ? 'block' : 'none';
+      document.getElementById('section-hospital-leads').style.display = name === 'hospital-leads' ? 'block' : 'none';
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       document.getElementById(`nav-${name}`).classList.add('active');
       document.querySelectorAll('.bottom-nav-item').forEach(el => el.classList.remove('active'));
@@ -558,6 +585,7 @@
       if (name === 'hospitals') loadHospitals();
       if (name === 'upgrade-requests') loadUpgradeRequests();
       if (name === 'suggestions') loadSuggestions();
+      if (name === 'hospital-leads') loadHospitalLeads();
     }
 
     // ── UPGRADE REQUESTS ──
@@ -599,6 +627,48 @@
       try {
         await api('PATCH', `/admin/upgrade-requests/${id}/mark-contacted`, {});
         loadUpgradeRequests();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ── HOSPITAL LEADS ──
+    async function loadHospitalLeads() {
+      const el = document.getElementById('hospital-leads-list');
+      try {
+        const data = await api('GET', '/admin/hospital-leads');
+        const newCount = data.filter(l => l.status === 'new').length;
+        const badge = document.getElementById('hospital-leads-nav-badge');
+        if (newCount) { badge.textContent = newCount; badge.style.display = ''; } else { badge.style.display = 'none'; }
+
+        if (!data.length) {
+          el.innerHTML = '<p style="color:var(--slate)">No hospital leads yet.</p>';
+          return;
+        }
+        el.innerHTML = data.map(l => `
+          <div class="card" style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+              <div>
+                <div style="font-weight:600">${sanitize(l.hospital_name)}</div>
+                <div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(l.city)}, ${sanitize(l.state)}${l.location ? ' · ' + sanitize(l.location) : ''}</div>
+                <div style="font-size:13px;color:var(--slate);margin-top:4px">Requested by ${sanitize(l.contact_phone)}</div>
+                ${l.note ? `<div style="font-size:13px;color:var(--navy);margin-top:8px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(l.note)}</div>` : ''}
+                <div style="font-size:12px;color:var(--slate-light);margin-top:8px">${new Date(l.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+                <span class="badge ${l.status === 'new' ? 'badge-amber' : 'badge-teal'}">${l.status === 'new' ? 'New' : 'Contacted'}</span>
+                <button class="btn btn-outline btn-sm" onclick="toggleHospitalLeadStatus(${l.id})">${l.status === 'new' ? 'Mark Contacted' : 'Mark New'}</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
+      }
+    }
+
+    async function toggleHospitalLeadStatus(id) {
+      try {
+        await api('PATCH', `/admin/hospital-leads/${id}/mark-contacted`, {});
+        loadHospitalLeads();
       } catch (e) { toast(e.message, 'error'); }
     }
 

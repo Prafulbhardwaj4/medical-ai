@@ -17,6 +17,7 @@ from app.utils.ai_scribe_gate import get_ai_scribe_status, has_ai_scribe_at_all
 from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING
 from app.models.ai_scribe_topup import AiScribeTopup
 from app.models.upgrade_request import UpgradeRequest
+from app.models.hospital_lead import HospitalLead
 from dateutil.relativedelta import relativedelta
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -65,6 +66,41 @@ def mark_upgrade_request_contacted(
     req.status = "contacted" if req.status == "new" else "new"
     db.commit()
     return {"id": req.id, "status": req.status}
+
+
+@router.get("/hospital-leads")
+def list_hospital_leads(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    leads = db.query(HospitalLead).order_by(HospitalLead.created_at.desc()).all()
+    return [{
+        "id": l.id,
+        "contact_phone": l.contact_phone,
+        "state": l.state,
+        "city": l.city,
+        "hospital_name": l.hospital_name,
+        "location": l.location,
+        "note": l.note,
+        "status": l.status,
+        "created_at": l.created_at.isoformat() if l.created_at else None,
+    } for l in leads]
+
+
+@router.patch("/hospital-leads/{lead_id}/mark-contacted")
+def mark_hospital_lead_contacted(
+    lead_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    lead = db.query(HospitalLead).filter(HospitalLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead.status = "contacted" if lead.status == "new" else "new"
+    db.commit()
+    return {"id": lead.id, "status": lead.status}
 
 
 def serialize_billing_block(db: Session, hospital: Hospital) -> dict:

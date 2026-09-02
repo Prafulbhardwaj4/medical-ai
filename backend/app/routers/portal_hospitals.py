@@ -8,9 +8,21 @@ from app.models.hospital import Hospital
 from app.models.doctor import Doctor, UserRole
 from app.models.admission import Admission
 from app.models.admission_ward_type import AdmissionWardType
+from app.models.hospital_lead import HospitalLead
+from app.models.portal import PatientAccount
 from app.schemas.portal import HospitalOut
+from app.utils.portal_auth import get_current_patient_account
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/portal/hospitals", tags=["portal-hospitals"])
+
+
+class HospitalLeadIn(BaseModel):
+    state: str
+    city: str
+    hospital_name: str
+    location: str | None = None
+    note: str | None = None
 
 
 @router.get("/states")
@@ -36,6 +48,31 @@ def list_hospitals(city: Optional[str] = Query(None), state: Optional[str] = Que
     if city:
         q = q.filter(Hospital.city.ilike(f"%{city}%"))
     return q.order_by(Hospital.name).all()
+
+
+@router.post("/lead")
+def submit_hospital_lead(
+    body: HospitalLeadIn,
+    db: Session = Depends(get_db),
+    account: PatientAccount = Depends(get_current_patient_account),
+):
+    if not body.hospital_name.strip():
+        raise HTTPException(status_code=400, detail="Hospital name is required")
+    if not body.state.strip() or not body.city.strip():
+        raise HTTPException(status_code=400, detail="State and city are required")
+
+    lead = HospitalLead(
+        patient_account_id=account.id,
+        contact_phone=account.phone,
+        state=body.state.strip(),
+        city=body.city.strip(),
+        hospital_name=body.hospital_name.strip(),
+        location=(body.location or "").strip() or None,
+        note=(body.note or "").strip() or None,
+    )
+    db.add(lead)
+    db.commit()
+    return {"submitted": True}
 
 
 @router.get("/{hospital_id}/doctors")
