@@ -1466,13 +1466,15 @@
         <h2>Consultation Fee</h2>
         <button class="modal-close" onclick="closeModal('modal-confirm-payment')">×</button>
       </div>
-      <p style="font-size:14px;color:var(--slate);margin-bottom:14px">This patient's consultation fee for the booked appointment needs to be collected in person. How is the patient paying?</p>
+      <p style="font-size:14px;color:var(--slate);margin-bottom:10px">This patient's consultation fee for the booked appointment needs to be collected in person.</p>
+      <div style="background:var(--smoke);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:13.5px">
+        <div><strong id="confirm-payment-patient"></strong></div>
+        <div style="color:var(--slate)" id="confirm-payment-doctor"></div>
+        <div style="color:var(--slate)" id="confirm-payment-time"></div>
+      </div>
       <div class="form-group">
-        <select class="form-control" id="confirm-payment-method">
-          <option value="cash">Cash</option>
-          <option value="card">Card</option>
-          <option value="upi">UPI</option>
-        </select>
+        <label class="form-label">Fee Amount (₹)</label>
+        <input class="form-control" type="number" min="0" step="0.01" id="confirm-payment-fee" />
       </div>
       <div style="display:flex;gap:10px;margin-top:8px">
         <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-confirm-payment')">Cancel</button>
@@ -1761,6 +1763,7 @@
     }
 
     function openSameDayOptionsModal() {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       const btn = document.getElementById('btn-same-day-options');
       document.getElementById('sd-option-return').style.display = btn.dataset.canReturn === '1' ? '' : 'none';
       openModal('modal-same-day-options');
@@ -1785,6 +1788,7 @@
     }
 
     async function requeueCheckinFromModal() {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       const checkinId = document.getElementById('btn-same-day-options').dataset.checkinId;
       try {
         await api('POST', `/patients/requeue/${checkinId}`);
@@ -1939,6 +1943,7 @@
     }
 
     async function doGenerateBill(checkinId, btn) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       btn.disabled = true;
       try {
         const invoice = await api("POST", `/billing/checkins/${checkinId}/finalize-invoice`, {});
@@ -1952,6 +1957,7 @@
     }
 
     async function openAddDoctorModal() {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       const primaryId = parseInt(document.getElementById('doc-select').value);
       const list = document.getElementById('add-doctor-checklist');
       list.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Loading doctors…</p>';
@@ -2933,6 +2939,10 @@
 
     let _paymentMethodResolve = null;
     function askPaymentMethod() {
+      // Central choke-point for every payment-collection path (radiology,
+      // test, anyday variants, mark-paid, appointment collect) — gating
+      // here covers all of them without repeating the check six times.
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return Promise.resolve(null); }
       document.getElementById('modal-payment-method').classList.add('open');
       return new Promise((resolve) => { _paymentMethodResolve = resolve; });
     }
@@ -2945,6 +2955,7 @@
     let refundPatientId = null;
 
     async function openRecordRefundModal(patientId, patientName) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       refundPatientId = patientId;
       document.getElementById('refund-patient-label').textContent = `For: ${patientName}`;
       document.getElementById('refund-source-type').value = 'appointment';
@@ -3112,6 +3123,7 @@
     let pbLastSearchedPhone = null;
 
     async function openPhoneBookingModal() {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       document.getElementById('pb-step-1').style.display = '';
       document.getElementById('pb-step-2').style.display = 'none';
       document.getElementById('pb-step-3').style.display = 'none';
@@ -3456,6 +3468,7 @@
     }
 
     function openEditPatient(p) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       editingPatientId = p.id;
       document.getElementById('modal-add-title').textContent = 'Edit Patient';
       document.getElementById('p-name').value = p.name;
@@ -3638,6 +3651,7 @@
     let mergeDuplicateId = null;
 
     function openMergeModal(duplicateId, duplicateName, duplicateUid) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       mergeDuplicateId = duplicateId;
       document.getElementById('mg-dup-name').textContent = duplicateName;
       document.getElementById('mg-dup-uid').textContent = duplicateUid;
@@ -3873,6 +3887,7 @@
     }
 
     async function openAvailModal(doctorId, doctorName) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       currentAvailDoctorId = doctorId;
       document.getElementById("avail-modal-doctor-name").textContent = doctorName;
       document.getElementById("am-err").textContent = "";
@@ -4127,6 +4142,7 @@
     }
 
     async function notifyDoctorNoAssistant(doctorId, btn) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       btn.disabled = true;
       const original = btn.textContent;
       try {
@@ -4142,6 +4158,7 @@
     let pendingCollectPaymentId = null;
 
     function openCollectPaymentConfirm(a) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       pendingCollectPaymentId = a.id;
       document.getElementById('confirm-payment-patient').textContent = a.patient_name || 'Name not linked yet';
       document.getElementById('confirm-payment-doctor').textContent = a.doctor_name || '';
@@ -4238,6 +4255,7 @@
     }
 
     async function acceptReview(id) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       try {
         await api("POST", `/portal-appointments-staff/${id}/accept`);
         toast("Appointment accepted", "success");
@@ -4246,6 +4264,7 @@
     }
 
     async function submitDecline(id) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       const reason = document.getElementById(`pr-reason-${id}`).value.trim();
       try {
         await api("POST", `/portal-appointments-staff/${id}/decline`, { reason: reason || null });
@@ -4255,6 +4274,7 @@
     }
 
     async function submitSuggest(id) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       const slotVal = document.getElementById(`pr-slot-${id}`).value.trim();
       const doctorVal = document.getElementById(`pr-doctor-${id}`).value.trim();
       if (!slotVal && !doctorVal) { toast("Enter a new slot ID and/or doctor ID", "error"); return; }
