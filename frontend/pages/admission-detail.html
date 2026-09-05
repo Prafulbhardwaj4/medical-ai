@@ -976,13 +976,6 @@
           This marks the patient as departed to the referred hospital and notifies them. The receiving hospital's Emergency Intake will be pre-filled with this patient's referred clinical data.
         </p>
       </div>
-
-      <div id="discharge-referral-fields" style="display:none;margin-bottom:14px">
-        <p style="font-size:12.5px;color:#7c2d12;background:#fff7ed;border-radius:var(--radius);padding:10px">
-          This marks the patient as departed to the referred hospital and notifies them. The receiving hospital's Emergency Intake will be pre-filled with this patient's referred clinical data.
-        </p>
-      </div>
-
       <div id="discharge-death-fields" style="display:none;margin-bottom:14px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
           <div class="form-group" style="margin:0"><label class="form-label">Time of Death</label><input
@@ -1122,35 +1115,6 @@
       <button class="btn btn-primary" style="width:100%" onclick="submitReferral()">Send Referral</button>
     </div>
   </div>
-
-  <div class="modal-overlay" id="modal-refer">
-    <div class="modal" style="max-width:480px">
-      <div class="modal-header">
-        <h2>Refer to Another Hospital</h2>
-        <button class="modal-close" onclick="closeModal('modal-refer')">&times;</button>
-      </div>
-      <div class="form-group">
-        <label class="form-label">State</label>
-        <select class="form-control" id="refer-state" onchange="onReferStateChange()"></select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">City</label>
-        <select class="form-control" id="refer-city" onchange="onReferCityChange()"></select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Hospital</label>
-        <select class="form-control" id="refer-hospital" onchange="onReferHospitalChange()"></select>
-      </div>
-      <div id="refer-bed-summary" style="font-size:12.5px;color:var(--slate);margin-bottom:14px;min-height:16px"></div>
-      <div class="form-group">
-        <label class="form-label">Clinical Note — diagnosis, reason for referral, urgency *</label>
-        <textarea class="form-control" id="refer-clinical-note" rows="3"></textarea>
-      </div>
-      <div class="err-msg" id="refer-err"></div>
-      <button class="btn btn-primary" style="width:100%" onclick="submitReferral()">Send Referral</button>
-    </div>
-  </div>
-
   <div class="modal-overlay" id="modal-request-ward-change">
     <div class="modal" style="max-width:420px">
       <div class="modal-header">
@@ -1298,7 +1262,6 @@
     function isNurseViewer() { return ["nurse", "assistant"].includes(getDoctor()?.role); }
     function canManageAllergies() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
     function canAddProgressNote() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
-    function canReferPatient() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
     function canReferPatient() { return ["doctor", "nurse"].includes(getDoctor()?.role); }
     const isAdminViewer = ["admin", "sub_admin"].includes(getDoctor()?.role);
     const isDoctorViewer = getDoctor()?.role === "doctor";
@@ -1747,7 +1710,6 @@
               ${canSeeBilling ? `<button class="btn btn-outline btn-sm" onclick="openDischargeModal()">Discharge</button>` : ''}
             ` : ''}
             ${a.status === 'admitted' && canReferPatient() && !a.pending_outbound_referral ? `<button class="btn btn-outline btn-sm" onclick="onReferClick()">Refer to Another Hospital</button>` : ''}
-            ${a.status === 'admitted' && canReferPatient() && !a.pending_outbound_referral ? `<button class="btn btn-outline btn-sm" onclick="onReferClick()">Refer to Another Hospital</button>` : ''}
             ${a.status === 'admitted' && isNurseViewer() && !a.ward_is_emergency ? `<button class="btn btn-sm ph-emergency-btn" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}
           </div>
         </div>
@@ -1868,124 +1830,6 @@
         closeModal("modal-request-ward-change");
         toast("Reception has been notified", "success");
       } catch (e) { err.textContent = e.message; }
-    }
-
-    // ---------- Refer to Another Hospital ----------
-
-    function onReferClick() {
-      if (typeof isBelowScaleTier === "function" && isBelowScaleTier()) { openUpgradeModal(); return; }
-      openReferModal();
-    }
-
-    async function openReferModal() {
-      document.getElementById("refer-err").textContent = "";
-      document.getElementById("refer-clinical-note").value = "";
-      document.getElementById("refer-bed-summary").innerHTML = "";
-      document.getElementById("refer-hospital").innerHTML = `<option value="">Select hospital...</option>`;
-      openModal("modal-refer");
-      try {
-        const [loc, states] = await Promise.all([
-          api("GET", "/referrals/my-hospital-location"),
-          api("GET", "/referrals/target-states"),
-        ]);
-        const stateSel = document.getElementById("refer-state");
-        stateSel.innerHTML = states.map(s => `<option value="${sanitize(s)}">${sanitize(s)}</option>`).join('');
-        if (loc.state && states.includes(loc.state)) stateSel.value = loc.state;
-        await onReferStateChange(loc.city);
-      } catch (e) { document.getElementById("refer-err").textContent = e.message; }
-    }
-
-    async function onReferStateChange(preselectCity) {
-      const state = document.getElementById("refer-state").value;
-      const citySel = document.getElementById("refer-city");
-      citySel.innerHTML = `<option value="">Loading...</option>`;
-      try {
-        const cities = await api("GET", `/referrals/target-cities?state=${encodeURIComponent(state)}`);
-        citySel.innerHTML = cities.map(c => `<option value="${sanitize(c)}">${sanitize(c)}</option>`).join('');
-        if (preselectCity && cities.includes(preselectCity)) citySel.value = preselectCity;
-        await onReferCityChange();
-      } catch (e) { document.getElementById("refer-err").textContent = e.message; }
-    }
-
-    async function onReferCityChange() {
-      const state = document.getElementById("refer-state").value;
-      const city = document.getElementById("refer-city").value;
-      const hospitalSel = document.getElementById("refer-hospital");
-      hospitalSel.innerHTML = `<option value="">Loading...</option>`;
-      document.getElementById("refer-bed-summary").innerHTML = "";
-      try {
-        const hospitals = await api("GET", `/referrals/target-hospitals?state=${encodeURIComponent(state)}&city=${encodeURIComponent(city)}`);
-        hospitalSel.innerHTML = `<option value="">Select hospital...</option>` + hospitals.map(h => `<option value="${h.id}">${sanitize(h.name)}</option>`).join('');
-      } catch (e) { document.getElementById("refer-err").textContent = e.message; }
-    }
-
-    async function onReferHospitalChange() {
-      const hospitalId = document.getElementById("refer-hospital").value;
-      const box = document.getElementById("refer-bed-summary");
-      if (!hospitalId) { box.innerHTML = ""; return; }
-      box.innerHTML = "Loading bed availability…";
-      try {
-        const beds = await api("GET", `/referrals/target-hospitals/${hospitalId}/bed-summary`);
-        box.innerHTML = beds.length ? beds.map(b => `${sanitize(b.category)}: ${b.available} available`).join(' · ') : "No ward data available for this hospital";
-      } catch (e) { box.innerHTML = ""; }
-    }
-
-    async function submitReferral() {
-      const hospitalId = document.getElementById("refer-hospital").value;
-      const note = document.getElementById("refer-clinical-note").value.trim();
-      const errEl = document.getElementById("refer-err");
-      errEl.textContent = "";
-      if (!hospitalId) { errEl.textContent = "Select a hospital"; return; }
-      if (!note) { errEl.textContent = "Clinical note is required"; return; }
-      try {
-        await api("POST", `/admissions/${admissionId}/refer`, { to_hospital_id: parseInt(hospitalId, 10), clinical_note: note });
-        closeModal("modal-refer");
-        toast("Referral sent", "success");
-        await loadAdmission();
-      } catch (e) { errEl.textContent = e.message; }
-    }
-
-    // ---------- Records (cross-hospital referral chain history) ----------
-
-    async function openRecordsModal() {
-      const overlay = _createOverlayModal("Referral Records");
-      const body = overlay.querySelector(".generic-modal-body");
-      try {
-        const hops = await api("GET", `/referrals/records/for-admission/${admissionId}`);
-        if (!hops.length) {
-          body.innerHTML = `<p style="color:var(--slate)">No referral history found.</p>`;
-          return;
-        }
-        body.innerHTML = hops.map((hop, i) => `
-          <div style="border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px">
-            <div style="font-weight:600;color:var(--navy);margin-bottom:6px">${sanitize(hop.hospital_name)}</div>
-            ${hop.diagnosis ? `<div style="font-size:13px;color:var(--slate);margin-bottom:4px"><strong>Diagnosis:</strong> ${sanitize(hop.diagnosis)}</div>` : ''}
-            ${hop.clinical_note ? `<div style="font-size:13px;color:var(--slate);margin-bottom:8px"><strong>Note:</strong> ${sanitize(hop.clinical_note)}</div>` : ''}
-            ${hop.progress_notes && hop.progress_notes.length ? `<div style="font-size:12.5px;color:var(--slate-light);margin-bottom:8px">${hop.progress_notes.length} progress note${hop.progress_notes.length > 1 ? 's' : ''} on file</div>` : ''}
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-outline btn-sm" onclick='openReportsModalWithData("Reports — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.visits)})'>Test Reports</button>
-              <button class="btn btn-outline btn-sm" onclick='openMedicinesModalWithData("Medicines — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.medicines)})'>Medicines</button>
-            </div>
-          </div>
-        `).join('');
-      } catch (e) {
-        body.innerHTML = `<p style="color:var(--red)">Couldn't load referral records right now.</p>`;
-      }
-    }
-
-    function openMedicinesModalWithData(title, medicines) {
-      const overlay = _createOverlayModal(title, 560);
-      const body = overlay.querySelector(".generic-modal-body");
-      if (!medicines || !medicines.length) {
-        body.innerHTML = `<p style="color:var(--slate)">No medicines recorded.</p>`;
-        return;
-      }
-      body.innerHTML = medicines.map(m => `
-        <div style="padding:8px 0;border-top:1px solid var(--border)">
-          <strong>${sanitize(m.medicine_name)}</strong> — ${sanitize(m.dosage || '')} ${sanitize(m.route || '')}
-          <div style="font-size:12px;color:var(--slate-light)">Qty ${m.quantity}${m.is_active ? '' : ' · stopped'}</div>
-        </div>
-      `).join('');
     }
 
     // ---------- Refer to Another Hospital ----------

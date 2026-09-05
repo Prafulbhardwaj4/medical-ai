@@ -1779,6 +1779,29 @@
     }
     loadNotifUnreadCount();
     setInterval(loadNotifUnreadCount, 15000);
+
+    // Auto-open the incoming-referral modal without stepping on whatever
+    // reception is already doing — never touches an already-open modal,
+    // and never re-shows a referral it's already auto-opened once.
+    const autoShownReferralIds = new Set();
+    async function checkAutoOpenIncomingReferrals() {
+      if (document.querySelector('.modal-overlay.open')) return;
+      try {
+        const data = await api("GET", "/notifications");
+        const incoming = (data.notifications || []).find(
+          n => n.type === 'referral_incoming' && !n.is_read && !autoShownReferralIds.has(n.link_id)
+        );
+        if (incoming) {
+          autoShownReferralIds.add(incoming.link_id);
+          await api("PATCH", `/notifications/${incoming.id}/read`, {});
+          loadNotifUnreadCount();
+          openReferralIncomingModal(incoming.link_id);
+        }
+      } catch (e) { }
+    }
+    checkAutoOpenIncomingReferrals();
+    setInterval(checkAutoOpenIncomingReferrals, 15000);
+
     if (getDoctor()?.role !== 'receptionist') window.location.href = 'login.html';
     if (getDoctor()?.hospital_type === 'government') {
       document.getElementById('govt-fields').style.display = 'block';
