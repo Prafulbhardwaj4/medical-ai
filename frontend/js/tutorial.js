@@ -111,7 +111,7 @@
       <div id="tutorial-arrow" style="position:absolute;width:14px;height:14px;background:#fff;pointer-events:none"></div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
         <div style="font-size:11px;letter-spacing:.04em;color:var(--slate-light,#94a3b8);font-weight:700;text-transform:uppercase;padding-top:3px">Step ${_stepIndex + 1} of ${_steps.length}</div>
-        <button id="tutorial-close-btn" class="modal-close" style="width:24px;height:24px;font-size:1rem;flex-shrink:0" aria-label="Close tutorial">&times;</button>
+        <button id="tutorial-skip-btn" style="background:none;border:none;color:var(--slate-light,#94a3b8);font-size:12.5px;font-weight:600;cursor:pointer;padding:2px 0 0" aria-label="Skip tutorial">Skip</button>
       </div>
       <div style="font-size:16px;font-weight:700;color:var(--navy,#0f1f3d);margin:4px 0 6px">${_escape(step.title)}</div>
       <div style="font-size:13.5px;color:var(--slate,#475569);line-height:1.55;margin-bottom:16px">${_escape(step.description)}</div>
@@ -124,7 +124,7 @@
       </div>
     `;
     _arrowEl = document.getElementById("tutorial-arrow");
-    document.getElementById("tutorial-close-btn").addEventListener("click", _finish);
+    document.getElementById("tutorial-skip-btn").addEventListener("click", _finish);
     document.getElementById("tutorial-next-btn").addEventListener("click", () => {
       if (isLast) { _finish(); } else { _stepIndex++; _renderStep(); }
     });

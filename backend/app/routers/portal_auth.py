@@ -16,8 +16,8 @@ router = APIRouter(prefix="/portal/auth", tags=["portal-auth"])
 
 
 def _session_payload(account: PatientAccount) -> PatientSessionOut:
-    first_link = account.profiles[0] if account.profiles else None
-    name = first_link.patient.name if first_link and first_link.patient else "Patient"
+    self_link = next((link for link in account.profiles if link.relation == "self"), None)
+    name = self_link.patient.name if self_link and self_link.patient else "Patient"
     return PatientSessionOut(role="patient", name=name, phone=account.phone)
 
 

@@ -92,6 +92,7 @@
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
       <div class="topbar-doctor">
+        <button class="btn btn-teal btn-sm" onclick="openSuggestionModal()" style="margin-right:10px">Suggestions</button>
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <button class="btn-logout" onclick="logout()">Sign out</button>
@@ -266,6 +267,22 @@
       </div>
       <div class="err-msg" id="hl-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitHospitalLead()">Submit</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-suggestion">
+    <div class="modal" style="max-width:420px;background:#f0fdfa">
+      <div class="modal-header">
+        <h3>Suggestions</h3>
+        <button class="modal-close" onclick="closeSuggestionModal()">&times;</button>
+      </div>
+      <div style="padding:16px">
+        <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?" rows="4"></textarea>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-primary btn-sm" onclick="submitSuggestion()">Send</button>
+          <button class="btn btn-outline btn-sm" onclick="closeSuggestionModal()">Cancel</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -742,6 +759,25 @@
       document.getElementById('modal-hospital-lead').classList.remove('open');
     }
 
+    function openSuggestionModal() {
+      document.getElementById("suggestion-text").value = "";
+      document.getElementById("modal-suggestion").classList.add("open");
+    }
+
+    function closeSuggestionModal() {
+      document.getElementById("modal-suggestion").classList.remove("open");
+    }
+
+    async function submitSuggestion() {
+      const message = document.getElementById("suggestion-text").value.trim();
+      if (!message) { toast("Enter a suggestion first", "error"); return; }
+      try {
+        await api("POST", "/portal/dashboard/suggestion", { message });
+        toast("Thanks for the suggestion", "success");
+        closeSuggestionModal();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
     async function submitHospitalLead() {
       const err = document.getElementById('hl-err');
       const stateName = document.getElementById('hl-state').value;
@@ -766,7 +802,9 @@
       if (!el) return;
       try {
         const data = await api("GET", `/portal/hospitals/${state.hospitalId}/bed-availability`);
-        if (data.status === "unknown") {
+        if (data.status === "not_applicable") {
+          el.parentElement.style.display = "none";
+        } else if (data.status === "unknown") {
           el.innerHTML = `<span style="color:var(--slate-light)">Bed availability isn't set up for this hospital yet</span>`;
         } else if (data.status === "full") {
           el.innerHTML = `<span style="color:var(--danger);font-weight:600">🔴 Beds Not Available</span>`;

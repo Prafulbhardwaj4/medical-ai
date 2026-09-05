@@ -155,6 +155,14 @@ def list_doctor_slots(hospital_id: int, doctor_id: int, date: str, db: Session =
 def bed_availability(hospital_id: int, db: Session = Depends(get_db)):
     """Returns the actual vacant bed count, shown by default on the booking flow
     (item 49) — no longer coarsened to available/full/unknown only."""
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if hospital and hospital.tier == "foundation":
+        # Foundation hospitals never have ward/admissions access at all — this
+        # isn't a "not configured yet" gap, the feature just doesn't apply to
+        # this tier, so the frontend hides the row entirely rather than
+        # showing a message that implies something's missing.
+        return {"status": "not_applicable", "vacant_beds": None, "total_beds": 0}
+
     ward_types = db.query(AdmissionWardType).filter(AdmissionWardType.hospital_id == hospital_id).all()
     total_beds = sum(w.total_beds for w in ward_types)
     if total_beds == 0:

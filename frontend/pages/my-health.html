@@ -214,12 +214,12 @@
       </div>
 
       <div class="mobile-section" id="section-records" style="margin-top:24px">
-        <div class="card-header" style="margin-bottom:14px">
-          <h2>Health Records</h2>
-        </div>
+        <div class="card">
+          <div class="card-header" style="margin-bottom:14px">
+            <h2>Health Records</h2>
+          </div>
 
-        <div class="card" style="margin-bottom:16px">
-          <div class="filter-bar">
+          <div class="filter-bar" style="margin-bottom:16px">
             <div class="form-group" style="margin:0">
               <label class="form-label">Search</label>
               <input class="form-control" id="search-input" placeholder="Search by hospital, doctor, token..." oninput="applyFilters()" />
@@ -233,9 +233,9 @@
               <select class="form-control" id="filter-patient" onchange="applyFilters()"><option value="">All profiles</option></select>
             </div>
           </div>
-        </div>
 
-        <div id="records-list"><p>Loading...</p></div>
+          <div id="records-list"><p>Loading...</p></div>
+        </div>
       </div>
 
     </main>
@@ -672,9 +672,12 @@
         dischargedAdmissions = admissions.filter(a => a.status === "discharged");
 
         if (!currentlyAdmitted.length) {
-          list.innerHTML = '';  // nothing currently admitted — say nothing rather than an empty "no admissions" card sitting above Health Records
+          list.innerHTML = `<div class="card-header" style="margin-bottom:14px"><h2>Admission History</h2></div>
+            <div class="card">
+              <p style="color:var(--slate);font-size:13.5px;margin:0">No current hospital admission. Any active stay will show up here.</p>
+            </div>`;
         } else {
-          list.innerHTML = `<div class="card-header" style="margin-bottom:14px"><h2>Currently Admitted</h2></div>` + currentlyAdmitted.map(a => `
+          list.innerHTML = `<div class="card-header" style="margin-bottom:14px"><h2>Admission History</h2></div>` + currentlyAdmitted.map(a => `
             <div class="card" style="margin-bottom:10px">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
                 <div>
