@@ -579,7 +579,7 @@ def notify_referral_incoming(db: Session, to_hospital_id: int, referral_id: int,
         hospital_id=to_hospital_id, source_key=key, type="referral_incoming", severity="warning",
         title=f"Incoming referral — {patient_name}",
         message=f"{from_hospital_name} is referring {patient_name} to you.",
-        link_type="cross_hospital_referral", link_id=referral_id, is_read=False,
+        link_type="referral_incoming", link_id=referral_id, is_read=False,
     ))
 
 
@@ -592,7 +592,7 @@ def notify_referral_departed(db: Session, to_hospital_id: int, referral_id: int,
         hospital_id=to_hospital_id, source_key=key, type="referral_departed", severity="critical",
         title=f"Patient departed — {patient_name}",
         message=f"{patient_name} has left {from_hospital_name} and is on the way to you.",
-        link_type="cross_hospital_referral", link_id=referral_id, is_read=False,
+        link_type="referral_departed", link_id=referral_id, is_read=False,
     ))
 
 
