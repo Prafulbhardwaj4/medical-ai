@@ -108,7 +108,7 @@
         <strong id="profile-menu-name"></strong>
         <span>Patient</span>
       </div>
-      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('patient', 'my-health', true)">
+      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('patient', 'patient', 'my-health', true)">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         Tutorial
       </button>
@@ -775,9 +775,10 @@
     loadAdmissions();
     loadPendingProfiles();
 
-    // Auto-shows only if this account hasn't completed/skipped the patient
-    // tutorial yet (empty TutorialProgress row = first time here, by
-    // construction — no separate "first login" flag needed).
+    // Auto-launches only if this patient account hasn't completed/skipped
+    // the tutorial yet (backend-tracked via TutorialProgress) — shows
+    // through their first real session and never again after that,
+    // regardless of reloads, re-logins, or switching devices/browsers.
     initTutorial('patient', 'patient', 'my-health');
   </script>
 </body>

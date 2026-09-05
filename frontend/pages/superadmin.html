@@ -428,10 +428,18 @@
       <input class="form-control" id="h-city" placeholder="City" style="margin-bottom:14px" />
       <input class="form-control" id="h-state" placeholder="State" style="margin-bottom:14px" />
       <input class="form-control" id="h-address" placeholder="Address (optional)" style="margin-bottom:14px" />
-      <select class="form-control" id="h-type" style="margin-bottom:20px">
+      <select class="form-control" id="h-type" style="margin-bottom:14px">
         <option value="private">Private</option>
         <option value="government">Government</option>
       </select>
+      <select class="form-control" id="h-tier" style="margin-bottom:14px">
+        <option value="foundation">Foundation</option>
+        <option value="growth" selected>Growth</option>
+        <option value="scale">Scale</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+      <label class="form-label" style="font-size:12.5px;color:var(--slate)">Billing Cycle Start Date</label>
+      <input type="date" class="form-control" id="h-billing-cycle-start" style="margin-bottom:20px" />
       <div class="err-msg" id="hospital-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
         <button class="btn btn-primary" style="flex:1" onclick="submitHospital()">Create</button>
@@ -1128,6 +1136,8 @@
       const state = document.getElementById('h-state').value.trim();
       const address = document.getElementById('h-address').value.trim();
       const hospital_type = document.getElementById('h-type').value;
+      const tier = document.getElementById('h-tier').value;
+      const billing_cycle_start = document.getElementById('h-billing-cycle-start').value;
 
       if (!name || !city || !state) {
         err.textContent = 'Name, city and state are required.'; return;
@@ -1135,8 +1145,11 @@
       if (name.length < 3) {
         err.textContent = 'Hospital name must be at least 3 characters.'; return;
       }
+      if (!billing_cycle_start) {
+        err.textContent = 'Billing cycle start date is required.'; return;
+      }
 
-      const params = new URLSearchParams({ name, city, state, address, hospital_type });
+      const params = new URLSearchParams({ name, city, state, address, hospital_type, tier, billing_cycle_start });
       try {
         await api('POST', `/admin/hospitals-jwt?${params.toString()}`);
         toast('Hospital created.', 'success');

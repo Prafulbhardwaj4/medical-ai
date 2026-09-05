@@ -9,6 +9,7 @@ class TutorialStepOut(BaseModel):
     title: str
     description: str
     placement: str
+    device: str
 
     class Config:
         from_attributes = True

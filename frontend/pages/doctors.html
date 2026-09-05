@@ -241,8 +241,6 @@
           style="margin-bottom:14px" />
         <input class="form-control" id="d-reg" placeholder="Registration Number (optional)"
           style="margin-bottom:14px" />
-        <input class="form-control" id="d-room" placeholder="Room Number (optional, e.g. 101)"
-          style="margin-bottom:14px" />
         <input class="form-control" id="d-fee" type="number" min="0" step="1"
           placeholder="Consultation Fee (Rs., optional)" style="margin-bottom:14px;display:none" />
       </div>
@@ -326,10 +324,6 @@
       <div class="form-group">
         <label class="form-label">Specialization</label>
         <input class="form-control" id="edit-specialization" type="text" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">Room Number</label>
-        <input class="form-control" id="edit-room" type="text" placeholder="e.g. 101 (optional)" />
       </div>
       <div class="form-group">
         <label class="form-label">Consultation Fee (Rs.)</label>
@@ -597,7 +591,6 @@
       document.getElementById('d-phone').value = '';
       document.getElementById('d-specialization').value = '';
       document.getElementById('d-reg').value = '';
-      document.getElementById('d-room').value = '';
       document.getElementById('d-fee').value = getDoctor()?.default_consultation_fee ?? '';
       document.getElementById('d-password').value = '';
       document.getElementById('d-confirm-password').value = '';
@@ -764,7 +757,6 @@
       document.getElementById('edit-email').value = d.email;
       document.getElementById('edit-phone').value = (d.phone || '').replace('+91', '');
       document.getElementById('edit-specialization').value = d.specialization;
-      document.getElementById('edit-room').value = d.room_number || '';
       document.getElementById('edit-fee').value = d.consultation_fee || '';
       document.getElementById('edit-professional-fee').value = d.professional_fee_per_admission || '';
       document.getElementById('edit-err').textContent = '';
@@ -784,7 +776,6 @@
       const email = document.getElementById('edit-email').value.trim();
       const phone = document.getElementById('edit-phone').value.trim();
       const specialization = document.getElementById('edit-specialization').value.trim();
-      const room = document.getElementById('edit-room').value.trim();
       const fee = document.getElementById('edit-fee').value;
       const professionalFee = document.getElementById('edit-professional-fee').value;
       const roleGroup = document.getElementById('edit-role-group');
@@ -797,8 +788,7 @@
       btn.innerHTML = '<span class="spinner"></span>';
 
       const params = new URLSearchParams({
-        name, email, phone: '+91' + phone, specialization,
-        room_number: room, title
+        name, email, phone: '+91' + phone, specialization, title
       });
       if (fee) params.append('consultation_fee', fee);
       if (professionalFee) params.append('professional_fee_per_admission', professionalFee);

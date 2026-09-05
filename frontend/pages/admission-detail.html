@@ -1088,6 +1088,22 @@
     </div>
   </div>
 
+  <!-- Payment-collection confirm — same reasoning as above, replaces the
+       native browser confirm() during the discharge flow's payment step. -->
+  <div class="modal-overlay" id="modal-discharge-payment-confirm">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <h2>Confirm Payment Collected</h2>
+        <button class="modal-close" onclick="closeModal('modal-discharge-payment-confirm')">&times;</button>
+      </div>
+      <p style="font-size:13.5px;color:var(--slate);margin-bottom:18px" id="discharge-payment-confirm-text"></p>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-discharge-payment-confirm')">Cancel</button>
+        <button class="btn btn-primary" style="flex:1" onclick="closeModal('modal-discharge-payment-confirm');finalizeCollectDischargeBalance()">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="modal-refer">
     <div class="modal" style="max-width:480px">
       <div class="modal-header">
@@ -1698,7 +1714,7 @@
             <h2 class="ph-name">${sanitize(p.name)}</h2>
             <div class="ph-badges">
               <span class="badge ${a.status === 'admitted' ? 'badge-teal' : 'badge-grey'}">${a.status}</span>
-              ${a.status === 'discharged' && a.discharge_type && a.discharge_type !== 'planned' ? `<span class="badge badge-amber">${a.discharge_type === 'lama_dama' ? 'LAMA/DAMA' : 'Death in Hospital' + (a.is_mlc ? ' · MLC' : '')}</span>` : ''}
+              ${a.status === 'discharged' && a.discharge_type && a.discharge_type !== 'planned' ? `<span class="badge badge-amber">${{lama_dama: 'LAMA/DAMA', death: 'Death in Hospital' + (a.is_mlc ? ' · MLC' : ''), referral_transfer: 'Transferred — Referred Out'}[a.discharge_type] || a.discharge_type}</span>` : ''}
               <span class="badge badge-navy">${ADMISSION_TYPE_LABELS[a.admission_type] || 'Planned / Elective'}</span>
             </div>
           </div>
@@ -3185,13 +3201,19 @@
       }
     }
 
-    async function collectDischargeBalance() {
+    function collectDischargeBalance() {
       const err = document.getElementById("discharge-err");
       err.textContent = "";
       const method = document.getElementById("discharge-payment-method").value;
       if (!method) { err.textContent = "Select how payment was collected."; return; }
-      if (!confirm(`Confirm ₹${dischargeAmountDue.toFixed(2)} collected via ${method.toUpperCase()}?`)) return;
+      document.getElementById("discharge-payment-confirm-text").textContent =
+        `Confirm ₹${dischargeAmountDue.toFixed(2)} collected via ${method.toUpperCase()}?`;
+      openModal("modal-discharge-payment-confirm");
+    }
 
+    async function finalizeCollectDischargeBalance() {
+      const err = document.getElementById("discharge-err");
+      const method = document.getElementById("discharge-payment-method").value;
       const btn = document.getElementById("btn-collect-payment");
       btn.disabled = true;
       try {

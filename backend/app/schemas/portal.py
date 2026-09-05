@@ -346,6 +346,10 @@ class ChangePasswordIn(BaseModel):
     new_password: str
 
 
+class DeactivateAccountIn(BaseModel):
+    password: str  # re-confirmation for a destructive, self-service action
+
+
 class ReportIssueIn(BaseModel):
     context: str  # "booking_payment" | "checkin" | "other"
     hospital_id: int  # a PatientAccount has no single hospital of its own (it can link to Patient rows across many hospitals) — the booking/check-in screen this is reported from always knows which hospital it's on, so that's passed explicitly rather than guessed at

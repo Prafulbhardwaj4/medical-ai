@@ -669,13 +669,13 @@
           <input class="form-control" id="add-room-name" placeholder="Optional" />
         </div>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="add-room-beds-group">
         <label class="form-label">Number of Beds</label>
         <input class="form-control" type="number" min="1" id="add-room-beds" value="1" />
       </div>
       <div class="form-group">
         <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
-          <span>Daily Charge (₹)</span>
+          <span id="add-room-charge-label">Daily Charge (₹)</span>
           <button type="button" class="btn btn-outline btn-sm" id="add-room-charge-edit-btn"
             style="display:none;padding:2px 10px" onclick="unlockAddRoomCharge()">Edit</button>
         </label>
@@ -1276,7 +1276,7 @@
       }
       el.innerHTML = rooms.map(r => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
-          <div><strong>${sanitize(r.room_number)}</strong> — ${r.beds_count} bed${r.beds_count === 1 ? '' : 's'}</div>
+          <div><strong>${sanitize(r.room_number)}</strong>${r.room_type === 'private' ? ' (Private)' : ''} — ${r.beds_count} bed${r.beds_count === 1 ? '' : 's'}</div>
           <div style="display:flex;gap:6px">
             <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick='editRoomFromPanel(${JSON.stringify(r)})'>Edit</button>
             <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick="deleteRoomFromPanel(${r.id})">Delete</button>
@@ -1337,19 +1337,30 @@
       const chargeInput = document.getElementById("add-room-charge");
       const editBtn = document.getElementById("add-room-charge-edit-btn");
       const hint = document.getElementById("add-room-charge-hint");
+      const chargeLabel = document.getElementById("add-room-charge-label");
+      const bedsGroup = document.getElementById("add-room-beds-group");
       const ward = currentAddRoomWard();
+      const isEmergency = !!(ward && ward.is_emergency_ward);
+      const chargeWord = isEmergency ? "One-Time Charge" : "Daily Charge";
+
+      // A private room is always exactly 1 bed — no field, no ambiguity.
+      bedsGroup.style.display = type === "private" ? "none" : "";
+      if (type === "private") document.getElementById("add-room-beds").value = "1";
+
       if (type === "private") {
         chargeInput.readOnly = false;
         chargeInput.value = "";
-        chargeInput.placeholder = "Required for a private room";
+        chargeInput.placeholder = `Required for a private room`;
         editBtn.style.display = "none";
-        hint.textContent = "Private rooms need their own daily charge.";
+        chargeLabel.textContent = `${chargeWord} (₹)`;
+        hint.textContent = `Private rooms need their own ${chargeWord.toLowerCase()}.`;
       } else {
         chargeInput.readOnly = true;
         chargeInput.value = ward ? ward.daily_charge : "";
-        chargeInput.placeholder = "Inherits the ward's daily charge";
+        chargeInput.placeholder = `Inherits the ward's ${chargeWord.toLowerCase()}`;
         editBtn.style.display = ward ? "" : "none";
-        hint.textContent = "Uses the ward's daily charge unless you edit it here.";
+        chargeLabel.textContent = `${chargeWord} (₹)`;
+        hint.textContent = `Uses the ward's ${chargeWord.toLowerCase()} unless you edit it here.`;
       }
     }
 
@@ -1386,7 +1397,7 @@
       const roomType = document.getElementById("add-room-type").value;
       const roomNumber = document.getElementById("add-room-number").value.trim();
       const roomName = document.getElementById("add-room-name").value.trim();
-      const bedsCount = parseInt(document.getElementById("add-room-beds").value, 10);
+      const bedsCount = roomType === "private" ? 1 : parseInt(document.getElementById("add-room-beds").value, 10);
       const chargeRaw = document.getElementById("add-room-charge").value;
       const dailyCharge = chargeRaw !== "" ? parseFloat(chargeRaw) : null;
       if (!wardTypeId) { err.textContent = "Select a ward"; return; }

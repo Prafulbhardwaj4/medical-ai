@@ -510,6 +510,63 @@ async function submitChangePassword() {
   }
 }
 
+function ensureDeactivateAccountModal() {
+  if (document.getElementById('modal-deactivate-account')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <div class="modal-overlay" id="modal-deactivate-account">
+      <div class="modal" style="max-width:400px">
+        <div class="modal-header">
+          <h2>Deactivate Account</h2>
+          <button class="modal-close" onclick="closeDeactivateAccountModal()">&times;</button>
+        </div>
+        <p style="font-size:13.5px;color:var(--slate);margin-bottom:14px">
+          This will deactivate your account and sign you out. Your medical records
+          stay safely on file — nothing is deleted. Enter your password to confirm.
+        </p>
+        <div style="margin-bottom:16px">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Password</label>
+          <input class="form-control" id="da-password" type="password" />
+        </div>
+        <div class="err-msg" id="da-err" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline" style="flex:1" onclick="closeDeactivateAccountModal()">Cancel</button>
+          <button class="btn btn-danger" style="flex:1" id="da-submit-btn" onclick="submitDeactivateAccount()">Deactivate</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap.firstElementChild);
+}
+
+function confirmDeactivateAccount() {
+  closeProfileMenu();
+  ensureDeactivateAccountModal();
+  document.getElementById('da-password').value = '';
+  document.getElementById('da-err').textContent = '';
+  document.getElementById('modal-deactivate-account').classList.add('open');
+}
+
+function closeDeactivateAccountModal() {
+  document.getElementById('modal-deactivate-account')?.classList.remove('open');
+}
+
+async function submitDeactivateAccount() {
+  const errEl = document.getElementById('da-err');
+  const password = document.getElementById('da-password').value;
+  if (!password) { errEl.textContent = 'Enter your password to confirm.'; return; }
+
+  const btn = document.getElementById('da-submit-btn');
+  btn.disabled = true;
+  try {
+    await api("POST", "/portal/auth/deactivate", { password });
+    clearSession();
+    window.location.href = "/pages/login.html";
+  } catch (e) {
+    errEl.textContent = e.message;
+    btn.disabled = false;
+  }
+}
+
 async function submitEditDetails() {
   const errEl = document.getElementById('ed-err');
   const name = document.getElementById('ed-name').value.trim();

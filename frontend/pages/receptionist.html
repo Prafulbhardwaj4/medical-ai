@@ -1605,8 +1605,8 @@
           </div>
           <div class="err-msg" id="ri-err"></div>
           <div style="display:flex;gap:10px">
-            ${isFoundation ? `<button class="btn btn-primary" style="flex:1" onclick="acknowledgeReferral(${r.id}, this)">Acknowledge</button>` : ''}
-            <button class="btn btn-outline" style="flex:1" onclick="onReferralRejectClick(${r.id}, this)">Reject</button>
+            ${isFoundation ? `<button class="btn" style="flex:1;background:#16a34a;color:#fff;border:none" onclick="acknowledgeReferral(${r.id}, this)">Acknowledge</button>` : ''}
+            <button class="btn" style="flex:1;background:#dc2626;color:#fff;border:none" onclick="onReferralRejectClick(${r.id}, this)">Reject</button>
           </div>
         `;
       } catch (e) {

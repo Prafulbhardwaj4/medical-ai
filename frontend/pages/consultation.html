@@ -1180,6 +1180,22 @@
     let isReopenMode = false;
     let isFoundationManualMode = false;
 
+    // Draft creation needs patientId, which isn't resolved yet when
+    // applyFoundationTierGating() fires (it runs synchronously, before the
+    // patient-resolve call, to avoid a UI flash). Pulling this out lets it
+    // be safely retried once patientId actually arrives, instead of
+    // silently leaving consultationId null for the rest of the session.
+    async function ensureManualDraftConsultation() {
+      if (isFoundationManualMode && !consultationId && patientId) {
+        try {
+          const draft = await api("POST", `/consultations/draft/${patientId}`);
+          consultationId = draft.consultation_id;
+        } catch (e) {
+          toast("Could not start this consultation — please refresh and try again.", "error");
+        }
+      }
+    }
+
     async function switchToManualEntryMode(reasonMessage) {
       isFoundationManualMode = true;
       document.getElementById('steps').style.display = 'none';
@@ -1192,14 +1208,7 @@
       goStep(2);
       if (reasonMessage) toast(reasonMessage, 'info');
 
-      if (!consultationId && patientId) {
-        try {
-          const draft = await api("POST", `/consultations/draft/${patientId}`);
-          consultationId = draft.consultation_id;
-        } catch (e) {
-          toast("Could not start this consultation — please refresh and try again.", "error");
-        }
-      }
+      await ensureManualDraftConsultation();
     }
 
     function applyFoundationTierGating() {
@@ -1629,6 +1638,7 @@
       try {
         const r = await api("GET", `/patients/resolve/${patientToken}`);
         patientId = r.id;
+        await ensureManualDraftConsultation();  // catches Foundation-tier gating, which ran before patientId was available
         loadPatient();
         loadLastVisit();
         loadTestCatalog();

@@ -1271,6 +1271,8 @@ def create_hospital_jwt(
     state: str,
     address: str = "",
     hospital_type: str = "private",
+    tier: str = "growth",
+    billing_cycle_start: str = None,  # "YYYY-MM-DD" — required, asked at creation time now instead of set separately after the fact
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1281,6 +1283,17 @@ def create_hospital_jwt(
     if hospital_type not in VALID_HOSPITAL_TYPES:
         raise HTTPException(status_code=400, detail="hospital_type must be 'government' or 'private'")
 
+    tier = tier.strip().lower()
+    if tier not in VALID_TIERS:
+        raise HTTPException(status_code=400, detail=f"tier must be one of {sorted(VALID_TIERS)}")
+
+    if not billing_cycle_start:
+        raise HTTPException(status_code=400, detail="billing_cycle_start is required")
+    try:
+        parsed_cycle_start = datetime.strptime(billing_cycle_start, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="billing_cycle_start must be YYYY-MM-DD")
+
     words = name.strip().upper().split()
     code_base = "".join([w[0] for w in words])[:4]
     hospital_code = f"{code_base}-{secrets.token_hex(3).upper()}"
@@ -1289,7 +1302,8 @@ def create_hospital_jwt(
 
     hospital = Hospital(
         name=name, address=address, city=city, state=state, hospital_code=hospital_code,
-        hospital_type=hospital_type, billing_enabled=(hospital_type == "private")
+        hospital_type=hospital_type, billing_enabled=(hospital_type == "private"),
+        tier=tier, billing_cycle_start=parsed_cycle_start,
     )
     db.add(hospital)
     db.commit()

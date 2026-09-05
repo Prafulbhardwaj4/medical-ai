@@ -6,7 +6,7 @@ from app.database import get_db
 from app.config import settings
 from app.models.patient import Patient
 from app.models.portal import PatientAccount, PatientProfileLink
-from app.schemas.portal import LoginIn, CompleteRegisterIn, TokenOut, PatientSessionOut, LoginResultOut, ChangePasswordIn, AddressUpdateIn, PatientAddressIn, PatientAddressOut, ConfirmProfileIn
+from app.schemas.portal import LoginIn, CompleteRegisterIn, TokenOut, PatientSessionOut, LoginResultOut, ChangePasswordIn, AddressUpdateIn, PatientAddressIn, PatientAddressOut, ConfirmProfileIn, DeactivateAccountIn
 from app.models.portal import PatientAddress
 from app.utils.portal_auth import create_portal_access_token, hash_password, verify_password, get_current_patient_account
 from app.utils.timezone import now_ist_naive
@@ -160,6 +160,19 @@ def change_password(
     account.password_hash = hash_password(body.new_password)
     db.commit()
     return {"message": "Password changed successfully"}
+
+
+@router.post("/deactivate")
+def deactivate_account(
+    body: DeactivateAccountIn,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(body.password, account.password_hash):
+        raise HTTPException(status_code=401, detail="Password is incorrect")
+    account.is_active = False
+    db.commit()
+    return {"message": "Account deactivated"}
 
 
 @router.get("/address")
