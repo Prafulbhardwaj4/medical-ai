@@ -32,6 +32,7 @@ class EmergencyAdmitIn(BaseModel):
     doctor_id: Optional[int] = None  # nullable — reception can submit with no doctor present yet (see admit_emergency)
     deposit_amount: float = 0
     deposit_payment_method: Optional[str] = None
+    referral_id: Optional[int] = None  # set when this Emergency Intake is the handoff side of a cross-hospital referral's departed notification
 
 
 class SendToAdmissionIn(BaseModel):
@@ -208,7 +209,7 @@ class ChangeWardIn(BaseModel):
     patient_gender: Optional[str] = None
 
 
-VALID_DISCHARGE_TYPES = {"planned", "lama_dama", "death"}
+VALID_DISCHARGE_TYPES = {"planned", "lama_dama", "death", "referral_transfer"}
 
 
 class CollectBalanceIn(BaseModel):

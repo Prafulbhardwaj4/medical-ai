@@ -30,3 +30,4 @@ from app.models.suggestion_reply import SuggestionReply
 from app.models.patient_merge_request import PatientMergeRequest
 from app.models.patient_allergy import PatientAllergy
 from app.models.admission_progress_note import AdmissionProgressNote
+from app.models.cross_hospital_referral import CrossHospitalReferral

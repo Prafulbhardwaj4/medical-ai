@@ -14,6 +14,12 @@ function isFoundationTier() {
   return !!doc && (doc.hospital_tier || "growth") === "foundation";
 }
 
+function isBelowScaleTier() {
+  const doc = (typeof getDoctor === "function") ? getDoctor() : null;
+  if (!doc) return true;
+  return tierIndex(doc.hospital_tier || "growth") < tierIndex("scale");
+}
+
 function _ensureUpgradeModalStyles() {
   if (document.getElementById("upgrade-modal-styles")) return;
   const style = document.createElement("style");

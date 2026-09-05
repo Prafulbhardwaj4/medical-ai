@@ -1573,8 +1573,183 @@
           location.href = `admission-detail.html?id=${token}`;
         } else if (linkType === 'admission_referral') {
           location.href = `admissions.html?admit_patient_id=${linkId}`;
+        } else if (linkType === 'referral_incoming') {
+          openReferralIncomingModal(linkId);
+        } else if (linkType === 'referral_departed') {
+          // Foundation tier: read-only/inert from this point on — no click action at all.
+          if (isFoundationTier()) { return; }
+          openReferralDepartedModal(linkId);
         }
       } catch (e) { toast(e.message, "error"); }
+    }
+
+    // ---------- Cross-hospital referral: incoming ----------
+
+    async function openReferralIncomingModal(referralId) {
+      const overlay = _createOverlayModal("Incoming Referral", 480);
+      const body = overlay.querySelector(".generic-modal-body");
+      try {
+        const r = await api("GET", `/referrals/${referralId}`);
+        const isFoundation = isFoundationTier();
+        body.innerHTML = `
+          <div style="margin-bottom:12px">
+            <div style="font-weight:600;font-size:15px">${sanitize(r.patient_name)}</div>
+            <div style="font-size:13px;color:var(--slate)">${r.patient_age || '—'} yrs, ${sanitize(r.patient_gender || '—')}</div>
+          </div>
+          <div style="font-size:13px;margin-bottom:6px"><strong>From:</strong> ${sanitize(r.from_hospital_name)}</div>
+          ${r.diagnosis_snapshot ? `<div style="font-size:13px;margin-bottom:6px"><strong>Diagnosis:</strong> ${sanitize(r.diagnosis_snapshot)}</div>` : ''}
+          <div style="font-size:13px;margin-bottom:14px"><strong>Clinical Note:</strong> ${sanitize(r.clinical_note)}</div>
+          <div id="ri-reject-box" style="display:none;margin-bottom:12px">
+            <label class="form-label">Reason for declining *</label>
+            <textarea class="form-control" id="ri-reject-note" rows="2"></textarea>
+          </div>
+          <div class="err-msg" id="ri-err"></div>
+          <div style="display:flex;gap:10px">
+            ${isFoundation ? `<button class="btn btn-primary" style="flex:1" onclick="acknowledgeReferral(${r.id}, this)">Acknowledge</button>` : ''}
+            <button class="btn btn-outline" style="flex:1" onclick="onReferralRejectClick(${r.id}, this)">Reject</button>
+          </div>
+        `;
+      } catch (e) {
+        body.innerHTML = `<p style="color:var(--red)">${sanitize(e.message)}</p>`;
+      }
+    }
+
+    async function acknowledgeReferral(referralId, btn) {
+      btn.disabled = true;
+      try {
+        await api("POST", `/referrals/${referralId}/acknowledge`, {});
+        btn.closest(".modal-overlay").remove();
+        toast("Acknowledged", "success");
+      } catch (e) {
+        btn.disabled = false;
+        const err = btn.closest(".modal").querySelector("#ri-err");
+        if (err) err.textContent = e.message;
+      }
+    }
+
+    function onReferralRejectClick(referralId, btn) {
+      const modal = btn.closest(".modal");
+      const box = modal.querySelector("#ri-reject-box");
+      if (box.style.display === "none") {
+        box.style.display = "block";
+        btn.textContent = "Confirm Reject";
+        btn.onclick = () => submitReferralReject(referralId, btn);
+      }
+    }
+
+    async function submitReferralReject(referralId, btn) {
+      const modal = btn.closest(".modal");
+      const note = modal.querySelector("#ri-reject-note").value.trim();
+      const err = modal.querySelector("#ri-err");
+      if (!note) { err.textContent = "A reason is required."; return; }
+      btn.disabled = true;
+      try {
+        await api("POST", `/referrals/${referralId}/reject`, { rejection_note: note });
+        modal.closest(".modal-overlay").remove();
+        toast("Referral declined", "success");
+      } catch (e) {
+        btn.disabled = false;
+        err.textContent = e.message;
+      }
+    }
+
+    // ---------- Cross-hospital referral: departed ----------
+
+    async function openReferralDepartedModal(referralId) {
+      const overlay = _createOverlayModal("Patient Departed", 480);
+      const body = overlay.querySelector(".generic-modal-body");
+      try {
+        const r = await api("GET", `/referrals/${referralId}`);
+        const canForward = !isBelowScaleTier();
+        body.innerHTML = `
+          <div style="margin-bottom:12px">
+            <div style="font-weight:600;font-size:15px">${sanitize(r.patient_name)}</div>
+            <div style="font-size:13px;color:var(--slate)">${r.patient_age || '—'} yrs, ${sanitize(r.patient_gender || '—')} · from ${sanitize(r.from_hospital_name)}</div>
+          </div>
+          ${r.diagnosis_snapshot ? `<div style="font-size:13px;margin-bottom:14px"><strong>Diagnosis:</strong> ${sanitize(r.diagnosis_snapshot)}</div>` : ''}
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove();openEmergencyIntakeModal(${r.id})">Admit via Emergency Intake</button>
+            ${canForward ? `<button class="btn btn-outline" onclick="this.closest('.modal-overlay').remove();openReferralForwardModal(${r.id})">Reject &amp; Forward to Another Hospital</button>` : ''}
+          </div>
+        `;
+      } catch (e) {
+        body.innerHTML = `<p style="color:var(--red)">${sanitize(e.message)}</p>`;
+      }
+    }
+
+    // ---------- Cross-hospital referral: reject-and-forward (Scale/Enterprise only) ----------
+
+    async function openReferralForwardModal(referralId) {
+      const overlay = _createOverlayModal("Reject & Forward", 480);
+      const body = overlay.querySelector(".generic-modal-body");
+      body.innerHTML = `
+        <div class="form-group">
+          <label class="form-label">Reason for declining *</label>
+          <textarea class="form-control" id="rf-reject-note" rows="2"></textarea>
+        </div>
+        <div class="form-group"><label class="form-label">State</label><select class="form-control" id="rf-state"></select></div>
+        <div class="form-group"><label class="form-label">City</label><select class="form-control" id="rf-city"></select></div>
+        <div class="form-group"><label class="form-label">Hospital</label><select class="form-control" id="rf-hospital"></select></div>
+        <div class="form-group">
+          <label class="form-label">Clinical Note for the new referral *</label>
+          <textarea class="form-control" id="rf-clinical-note" rows="3"></textarea>
+        </div>
+        <div class="err-msg" id="rf-err"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="submitReferralForward(${referralId}, this)">Confirm &amp; Forward</button>
+      `;
+      try {
+        const [loc, states] = await Promise.all([
+          api("GET", "/referrals/my-hospital-location"),
+          api("GET", "/referrals/target-states"),
+        ]);
+        const stateSel = overlay.querySelector("#rf-state");
+        stateSel.innerHTML = states.map(s => `<option value="${sanitize(s)}">${sanitize(s)}</option>`).join('');
+        if (loc.state && states.includes(loc.state)) stateSel.value = loc.state;
+        stateSel.onchange = () => onReferralForwardStateChange(overlay);
+        await onReferralForwardStateChange(overlay, loc.city);
+      } catch (e) { overlay.querySelector("#rf-err").textContent = e.message; }
+    }
+
+    async function onReferralForwardStateChange(overlay, preselectCity) {
+      const state = overlay.querySelector("#rf-state").value;
+      const citySel = overlay.querySelector("#rf-city");
+      citySel.innerHTML = `<option value="">Loading...</option>`;
+      const cities = await api("GET", `/referrals/target-cities?state=${encodeURIComponent(state)}`);
+      citySel.innerHTML = cities.map(c => `<option value="${sanitize(c)}">${sanitize(c)}</option>`).join('');
+      if (preselectCity && cities.includes(preselectCity)) citySel.value = preselectCity;
+      citySel.onchange = () => onReferralForwardCityChange(overlay);
+      await onReferralForwardCityChange(overlay);
+    }
+
+    async function onReferralForwardCityChange(overlay) {
+      const state = overlay.querySelector("#rf-state").value;
+      const city = overlay.querySelector("#rf-city").value;
+      const hospitalSel = overlay.querySelector("#rf-hospital");
+      hospitalSel.innerHTML = `<option value="">Loading...</option>`;
+      const hospitals = await api("GET", `/referrals/target-hospitals?state=${encodeURIComponent(state)}&city=${encodeURIComponent(city)}`);
+      hospitalSel.innerHTML = `<option value="">Select hospital...</option>` + hospitals.map(h => `<option value="${h.id}">${sanitize(h.name)}</option>`).join('');
+    }
+
+    async function submitReferralForward(referralId, btn) {
+      const overlay = btn.closest(".modal-overlay");
+      const err = overlay.querySelector("#rf-err");
+      const rejectionNote = overlay.querySelector("#rf-reject-note").value.trim();
+      const toHospitalId = overlay.querySelector("#rf-hospital").value;
+      const clinicalNote = overlay.querySelector("#rf-clinical-note").value.trim();
+      if (!rejectionNote) { err.textContent = "A reason for declining is required."; return; }
+      if (!toHospitalId) { err.textContent = "Select a hospital to forward to."; return; }
+      if (!clinicalNote) { err.textContent = "A clinical note is required for the new referral."; return; }
+      btn.disabled = true;
+      try {
+        await api("POST", `/referrals/${referralId}/reject-and-forward`, {
+          rejection_note: rejectionNote, to_hospital_id: parseInt(toHospitalId, 10), clinical_note: clinicalNote,
+        });
+        overlay.remove();
+        toast("Rejected and forwarded", "success");
+      } catch (e) {
+        btn.disabled = false;
+        err.textContent = e.message;
+      }
     }
 
     async function markAllNotifsRead() {
@@ -3400,7 +3575,10 @@
       }
     }
 
-    async function openEmergencyIntakeModal() {
+    let emReferralId = null;
+
+    async function openEmergencyIntakeModal(referralId) {
+      emReferralId = referralId || null;
       document.getElementById('em-modal-form').style.display = '';
       document.getElementById('em-modal-success').style.display = 'none';
       document.getElementById('em-name').value = '';
@@ -3412,6 +3590,9 @@
       document.getElementById('em-deposit-amount').value = '';
       document.getElementById('em-deposit-method').value = '';
       document.getElementById('em-err').textContent = '';
+      document.getElementById('em-name').disabled = false;
+      document.getElementById('em-age').disabled = false;
+      document.getElementById('em-gender').disabled = false;
 
       const doctorSel = document.getElementById('em-doctor');
       const hint = document.getElementById('em-doctor-hint');
@@ -3427,10 +3608,28 @@
         hint.style.display = '';
       }
 
+      if (emReferralId) {
+        // Departed-notification handoff — prefilled from the referral's carried-over
+        // data, receptionist only needs to select the admitting doctor.
+        try {
+          const r = await api("GET", `/referrals/${emReferralId}`);
+          document.getElementById('em-name').value = r.patient_name || '';
+          document.getElementById('em-name').disabled = true;
+          document.getElementById('em-age').value = r.patient_age || '';
+          document.getElementById('em-age').disabled = true;
+          document.getElementById('em-gender').value = r.patient_gender || '';
+          document.getElementById('em-gender').disabled = true;
+          document.getElementById('em-reason-select').value = '__other';
+          document.getElementById('em-reason-other').value = 'Referred from other hospital';
+          document.getElementById('em-reason-other').style.display = 'block';
+        } catch (e) { document.getElementById('em-err').textContent = e.message; }
+      }
+
       document.getElementById('modal-emergency-intake').classList.add('open');
     }
     function closeEmergencyIntakeModal() {
       document.getElementById('modal-emergency-intake').classList.remove('open');
+      emReferralId = null;
       loadPendingPayments();
     }
     async function submitEmergencyIntake() {
@@ -3456,6 +3655,7 @@
           reason: reason,
           deposit_amount: depositAmount ? parseFloat(depositAmount) : 0,
           deposit_payment_method: depositMethod || null,
+          referral_id: emReferralId || null,
         });
 
         document.getElementById('em-modal-form').style.display = 'none';

@@ -6,11 +6,12 @@ from app.models.doctor import Doctor
 from app.models.notification import Notification
 from app.utils.auth import get_current_doctor
 from app.utils.notify import sync_stock_notifications, sync_room_classification_notifications, sync_admission_action_notifications
+from app.routers.referrals import _expire_stale_cross_hospital_referrals
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 PHARMACY_VISIBLE_TYPES = ["low_stock", "expiring_stock", "admission_medicine_order"]
-RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request", "sample_rejected", "admission_referral"]
+RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request", "sample_rejected", "admission_referral", "referral_incoming", "referral_departed", "referral_rejected"]
 LAB_VISIBLE_TYPES = ["admission_test_sample", "admission_sample_overdue"]
 DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "no_assistant_alert", "emergency_ward_intake", "admission_medicine_substitute", "emergency_admission"]
 NURSE_VISIBLE_TYPES = ["critical_result_escalation", "sample_rejected", "emergency_assistant_hold", "emergency_alert_for_assistant"]
@@ -45,6 +46,8 @@ def list_notifications(
     sync_stock_notifications(db, current_doctor.hospital_id)
     sync_room_classification_notifications(db, current_doctor.hospital_id)
     sync_admission_action_notifications(db, current_doctor.hospital_id)
+    _expire_stale_cross_hospital_referrals(db, current_doctor.hospital_id)
+    db.commit()
 
     query = db.query(Notification).filter(Notification.hospital_id == current_doctor.hospital_id)
     if current_doctor.role.value == "pharmacy":

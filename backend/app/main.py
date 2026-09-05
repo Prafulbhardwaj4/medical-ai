@@ -39,6 +39,8 @@ from app.routers import refunds as refunds_router
 from app.routers import doctor_slots as doctor_slots_router
 from app.routers import chat as chat_router
 from app.routers import suggestions as suggestions_router
+from app.routers import referrals as referrals_router
+from app.routers import tutorials
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 from app.models.audit_log import AuditLog
@@ -276,6 +278,8 @@ app.include_router(refunds_router.router)
 app.include_router(doctor_slots_router.router)
 app.include_router(chat_router.router)
 app.include_router(suggestions_router.router)
+app.include_router(referrals_router.router)
+app.include_router(tutorials.router)
 
 os.makedirs("prescriptions", exist_ok=True)
 

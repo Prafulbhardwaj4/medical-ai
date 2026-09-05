@@ -22,8 +22,13 @@ class Admission(Base):
     daily_room_charge = Column(Float, nullable=False, default=0)
     professional_fee_override = Column(Float, nullable=True)  # negotiated per-admission override of the admitting doctor's default professional_fee_per_admission; null = use the doctor's default
     admission_type = Column(String, nullable=False, default="planned")  # "planned" | "emergency" | "maternity" | "transfer_in" | "day_care" — day_care skips overnight bed-night billing entirely (see _room_charge_breakdown / _build_discharge_bill)
-    discharge_type = Column(String, nullable=False, default="planned")  # "planned" | "lama_dama" | "death"
+    discharge_type = Column(String, nullable=False, default="planned")  # "planned" | "lama_dama" | "death" | "referral_transfer"
     capacity_evaluation_note = Column(Text, nullable=True)  # LAMA/DAMA only — used if there's any question of impaired decision-making behind the choice
+
+    # --- Cross-hospital referral linkage ---
+    received_via_referral_id = Column(Integer, ForeignKey("cross_hospital_referrals.id"), nullable=True)  # set when this admission was created via the Emergency Intake handoff of an incoming referral
+    pending_outbound_referral_id = Column(Integer, ForeignKey("cross_hospital_referrals.id"), nullable=True)  # points at whichever outbound referral is currently "live" for this admission (re-refers replace this pointer)
+    referral_discharge_authorized = Column(Boolean, nullable=False, default=False)  # a nurse-initiated referral grants reception discharge authority for this admission going forward, without separate doctor sign-off
     time_of_death = Column(DateTime, nullable=True)  # death discharge only
     certifying_doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # death discharge only
     cause_of_death = Column(Text, nullable=True)  # death discharge only

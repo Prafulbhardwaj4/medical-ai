@@ -185,6 +185,28 @@ def _get_admission_or_404(db: Session, admission_token: str, hospital_id: int) -
     return a
 
 
+def _pending_outbound_referral_summary(db: Session, a: Admission):
+    if not a.pending_outbound_referral_id:
+        return None
+    from app.models.cross_hospital_referral import CrossHospitalReferral
+    r = db.query(CrossHospitalReferral).filter(CrossHospitalReferral.id == a.pending_outbound_referral_id).first()
+    if not r or r.status not in ["pending", "departed"]:
+        return None
+    to_h = db.query(Hospital).filter(Hospital.id == r.to_hospital_id).first()
+    return {"id": r.id, "to_hospital_name": to_h.name if to_h else "Unknown", "status": r.status}
+
+
+def _received_via_referral_summary(db: Session, a: Admission):
+    if not a.received_via_referral_id:
+        return None
+    from app.models.cross_hospital_referral import CrossHospitalReferral
+    r = db.query(CrossHospitalReferral).filter(CrossHospitalReferral.id == a.received_via_referral_id).first()
+    if not r:
+        return None
+    from_h = db.query(Hospital).filter(Hospital.id == r.from_hospital_id).first()
+    return {"id": r.id, "from_hospital_name": from_h.name if from_h else "Unknown", "clinical_note": r.clinical_note, "chain_id": r.chain_id}
+
+
 @router.get("/last-diagnosis/{patient_id}")
 def last_diagnosis(patient_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     """Suggests a starting diagnosis from the patient's most recent consultation.
@@ -417,6 +439,21 @@ def admit_emergency(body: EmergencyAdmitIn, current_doctor: Doctor = Depends(get
     if body.deposit_amount > 0 and not body.deposit_payment_method:
         raise HTTPException(status_code=400, detail="Please select how the deposit was collected")
 
+    inbound_referral = None
+    if body.referral_id:
+        from app.models.cross_hospital_referral import CrossHospitalReferral
+        inbound_referral = db.query(CrossHospitalReferral).filter(
+            CrossHospitalReferral.id == body.referral_id,
+            CrossHospitalReferral.to_hospital_id == current_doctor.hospital_id,
+        ).first()
+        if not inbound_referral:
+            raise HTTPException(status_code=404, detail="Referral not found")
+        if inbound_referral.status != "departed":
+            raise HTTPException(status_code=400, detail="This referral isn't ready for intake yet")
+        this_hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+        if this_hospital and this_hospital.tier == "foundation":
+            raise HTTPException(status_code=403, detail="Foundation tier has no admission capability on this path — coordinate with the referring hospital offline")
+
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     hospital_code = hospital.hospital_code if hospital else "GEN"
 
@@ -473,7 +510,8 @@ def admit_emergency(body: EmergencyAdmitIn, current_doctor: Doctor = Depends(get
             daily_room_charge=ward_type.daily_charge,
             status="admitted", admission_date=now_ist_naive(),
             public_token=secrets.token_urlsafe(16),
-            admission_type="emergency",
+            admission_type="transfer_in" if inbound_referral else "emergency",
+            received_via_referral_id=inbound_referral.id if inbound_referral else None,
         )
         db.add(candidate)
         try:
@@ -529,6 +567,11 @@ def admit_emergency(body: EmergencyAdmitIn, current_doctor: Doctor = Depends(get
     ]
     for assistant_id in covering_assistant_ids:
         notify_emergency_assistant_hold(db, current_doctor.hospital_id, admission.id, patient.name, doctor.id, assistant_id, admission.bed_number)
+
+    if inbound_referral:
+        inbound_referral.status = "admitted"
+        inbound_referral.admitted_at = now_ist_naive()
+        inbound_referral.admitted_admission_id = admission.id
 
     db.commit()
 
@@ -631,6 +674,90 @@ def cancel_referral(referral_id: int, current_doctor: Doctor = Depends(get_curre
     r.status = "cancelled"
     db.commit()
     return {"message": "Referral cancelled"}
+
+
+@router.post("/{admission_id}/refer")
+def refer_to_hospital(admission_id: str, body: dict, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Cross-hospital outbound referral — Scale/Enterprise only, nurse
+    (primary) or doctor (fallback). Unrelated to the AdmissionReferral
+    table above (that's the same-hospital doctor-to-reception referral).
+    Delegates the actual work to referrals.py to avoid duplicating the
+    clinical-snapshot/chain logic in two places. Addressed by public_token,
+    same convention as every other admission-scoped endpoint on this router."""
+    from app.schemas.cross_hospital_referral import InitiateReferralIn
+    from app.routers.referrals import (
+        _require_scale_or_above, _hospital_or_404, _snapshot_admission_clinical_data,
+    )
+    from app.models.cross_hospital_referral import CrossHospitalReferral
+    from app.utils.notify import notify_referral_incoming
+
+    payload = InitiateReferralIn(**body)
+
+    if current_doctor.role.value not in ["nurse", "doctor"]:
+        raise HTTPException(status_code=403, detail="Only a nurse or doctor can initiate a referral")
+
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    _require_scale_or_above(hospital)
+
+    if not (payload.clinical_note or "").strip():
+        raise HTTPException(status_code=400, detail="A clinical note (diagnosis, reason, urgency) is required")
+
+    admission = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission not found")
+    if admission.status != "admitted":
+        raise HTTPException(status_code=400, detail="Patient is not currently admitted")
+    if admission.pending_outbound_referral_id:
+        existing = db.query(CrossHospitalReferral).filter(CrossHospitalReferral.id == admission.pending_outbound_referral_id).first()
+        if existing and existing.status in ["pending", "departed"]:
+            raise HTTPException(status_code=400, detail="This patient already has an active referral in progress")
+
+    _hospital_or_404(db, payload.to_hospital_id)
+    if payload.to_hospital_id == current_doctor.hospital_id:
+        raise HTTPException(status_code=400, detail="Cannot refer a patient to your own hospital")
+
+    patient = db.query(Patient).filter(Patient.id == admission.patient_id).first()
+    snapshot = _snapshot_admission_clinical_data(db, admission)
+
+    chain_id_source = None
+    if admission.received_via_referral_id:
+        prior = db.query(CrossHospitalReferral).filter(CrossHospitalReferral.id == admission.received_via_referral_id).first()
+        if prior:
+            chain_id_source = prior.chain_id
+
+    referral = CrossHospitalReferral(
+        chain_id=0,
+        from_hospital_id=current_doctor.hospital_id, to_hospital_id=payload.to_hospital_id,
+        source_admission_id=admission.id, origin_patient_id=admission.patient_id,
+        initiation_type="referral", initiated_by=current_doctor.id,
+        patient_name=patient.name if patient else "Unknown", patient_age=patient.age if patient else None,
+        patient_gender=patient.gender if patient else None,
+        clinical_note=payload.clinical_note.strip(), diagnosis_snapshot=admission.diagnosis,
+        vitals_snapshot_json=json.dumps(snapshot["vitals"]),
+        medicines_snapshot_json=json.dumps(snapshot["medicines"]),
+        tests_snapshot_json=json.dumps(snapshot["visits"]),
+        progress_notes_snapshot_json=json.dumps(snapshot["progress_notes"]),
+        status="pending", expires_at=now_ist_naive() + timedelta(hours=24),
+    )
+    db.add(referral)
+    db.flush()
+    referral.chain_id = chain_id_source or referral.id
+
+    admission.pending_outbound_referral_id = referral.id
+    if current_doctor.role.value == "nurse":
+        admission.referral_discharge_authorized = True
+
+    to_hospital = db.query(Hospital).filter(Hospital.id == payload.to_hospital_id).first()
+    notify_referral_incoming(db, payload.to_hospital_id, referral.id, referral.patient_name, hospital.name)
+
+    log_action(
+        db, current_doctor, action="referral_initiated", target_type="cross_hospital_referral",
+        target_id=referral.id, target_label=f"{referral.patient_name} -> {to_hospital.name if to_hospital else payload.to_hospital_id}",
+        details=payload.clinical_note.strip(),
+    )
+
+    db.commit()
+    return {"referral_id": referral.id, "message": f"Referred to {to_hospital.name if to_hospital else 'hospital'}"}
 
 
 @router.get("/test-catalog")
@@ -1098,6 +1225,9 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
                                   for al in db.query(PatientAllergy).filter(PatientAllergy.patient_id == patient.id, PatientAllergy.is_active == True).all()]} if patient else None,
         "admitting_doctor_name": f"{doctor.title} {doctor.name}" if doctor else None,
         "admission_type": a.admission_type,
+        "referral_discharge_authorized": a.referral_discharge_authorized,
+        "pending_outbound_referral": _pending_outbound_referral_summary(db, a),
+        "received_via_referral": _received_via_referral_summary(db, a),
         "medications": med_out,
         "charges": charges_out,
         "tests": tests_out,
@@ -2099,12 +2229,27 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Already discharged")
-    if not a.discharge_order_at:
-        raise HTTPException(status_code=400, detail="A doctor must place the discharge order before this patient can be discharged")
 
     discharge_type = (body.discharge_type or "planned").strip().lower()
     if discharge_type not in VALID_DISCHARGE_TYPES:
         raise HTTPException(status_code=400, detail="Invalid discharge type")
+
+    # A nurse-initiated referral grants reception discharge authority for
+    # this admission going forward — skips the usual doctor discharge-order
+    # gate, but only for the referral_transfer path itself.
+    if discharge_type == "referral_transfer" and a.referral_discharge_authorized:
+        pass
+    elif not a.discharge_order_at:
+        raise HTTPException(status_code=400, detail="A doctor must place the discharge order before this patient can be discharged")
+
+    outbound_referral = None
+    if discharge_type == "referral_transfer":
+        from app.models.cross_hospital_referral import CrossHospitalReferral
+        if not a.pending_outbound_referral_id:
+            raise HTTPException(status_code=400, detail="No active outbound referral to transfer this patient against")
+        outbound_referral = db.query(CrossHospitalReferral).filter(CrossHospitalReferral.id == a.pending_outbound_referral_id).first()
+        if not outbound_referral or outbound_referral.status != "pending":
+            raise HTTPException(status_code=400, detail="This referral is no longer awaiting departure — refresh and try again")
 
     if discharge_type == "lama_dama":
         if not (body.discharge_summary or "").strip():
@@ -2156,6 +2301,18 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
         a.certifying_doctor_id = body.certifying_doctor_id
         a.cause_of_death = body.cause_of_death.strip()
         a.is_mlc = body.is_mlc
+
+    if discharge_type == "referral_transfer" and outbound_referral:
+        # This discharge action IS the "mark departed" step — no separate
+        # button/state. Closes the pre-departure reject window at the
+        # receiving hospital (reject only checks status=="pending", so
+        # flipping to "departed" here does that automatically) and fires
+        # the departed notification/Emergency-Intake handoff there.
+        outbound_referral.status = "departed"
+        outbound_referral.departed_at = now_ist_naive()
+        to_hospital = db.query(Hospital).filter(Hospital.id == outbound_referral.to_hospital_id).first()
+        from app.utils.notify import notify_referral_departed
+        notify_referral_departed(db, outbound_referral.to_hospital_id, outbound_referral.id, outbound_referral.patient_name, hospital.name if (hospital := db.query(Hospital).filter(Hospital.id == a.hospital_id).first()) else "the referring hospital")
 
     # A physical discharge can happen well before the TPA actually pays —
     # this just marks the claim as submitted/awaiting settlement; the

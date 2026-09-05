@@ -87,6 +87,9 @@ def list_admissions(account: PatientAccount = Depends(get_current_patient_accoun
         Admission.patient_id.in_(patient_ids)
     ).order_by(Admission.admission_date.desc()).all()
 
+    from app.models.cross_hospital_referral import CrossHospitalReferral
+    from app.schemas.portal import ReferralHistoryEntryOut, ReferredFromOut
+
     out = []
     for a in admissions:
         hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
@@ -96,6 +99,56 @@ def list_admissions(account: PatientAccount = Depends(get_current_patient_accoun
         if a.status == "discharged" and a.discharge_invoice_id:
             invoice = db.query(Invoice).filter(Invoice.id == a.discharge_invoice_id).first()
             invoice_total = invoice.grand_total if invoice else None
+
+        # Outbound referral history for this admission — every attempt
+        # (including any re-refers after a rejection), each with the
+        # receiving hospital's details and, once admitted there, a safe
+        # read-only subset of that live admission (never financial data).
+        outbound = []
+        referral_rows = db.query(CrossHospitalReferral).filter(
+            CrossHospitalReferral.source_admission_id == a.id
+        ).order_by(CrossHospitalReferral.created_at.asc()).all()
+        for r in referral_rows:
+            to_h = db.query(Hospital).filter(Hospital.id == r.to_hospital_id).first()
+            entry = ReferralHistoryEntryOut(
+                referral_id=r.id,
+                to_hospital_name=to_h.name if to_h else "Unknown hospital",
+                to_hospital_city=to_h.city if to_h else None,
+                to_hospital_state=to_h.state if to_h else None,
+                status=r.status,
+                rejection_note=r.rejection_note,
+                departed_at=r.departed_at.isoformat() if r.departed_at else None,
+                admitted_at=r.admitted_at.isoformat() if r.admitted_at else None,
+                admitted_admission_id=r.admitted_admission_id,
+                created_at=r.created_at.isoformat() if r.created_at else None,
+            )
+            if r.status == "admitted" and r.admitted_admission_id:
+                admitted_a = db.query(Admission).filter(Admission.id == r.admitted_admission_id).first()
+                if admitted_a:
+                    admitted_h = db.query(Hospital).filter(Hospital.id == admitted_a.hospital_id).first()
+                    entry.admitted_hospital_name = admitted_h.name if admitted_h else None
+                    entry.admitted_hospital_city = admitted_h.city if admitted_h else None
+                    entry.admitted_hospital_state = admitted_h.state if admitted_h else None
+                    entry.admitted_ward = admitted_a.ward
+                    entry.admitted_bed_number = admitted_a.bed_number
+                    entry.admitted_diagnosis = admitted_a.diagnosis
+                    entry.admitted_status = admitted_a.status
+            outbound.append(entry)
+
+        # If this admission itself arrived via a referral, show where it came from.
+        referred_from = None
+        if a.received_via_referral_id:
+            inbound = db.query(CrossHospitalReferral).filter(CrossHospitalReferral.id == a.received_via_referral_id).first()
+            if inbound:
+                from_h = db.query(Hospital).filter(Hospital.id == inbound.from_hospital_id).first()
+                referred_from = ReferredFromOut(
+                    from_hospital_name=from_h.name if from_h else "Unknown hospital",
+                    from_hospital_city=from_h.city if from_h else None,
+                    from_hospital_state=from_h.state if from_h else None,
+                    clinical_note=inbound.clinical_note,
+                    created_at=inbound.created_at.isoformat() if inbound.created_at else None,
+                )
+
         out.append(AdmissionSummaryOut(
             id=a.id,
             hospital_name=hospital.name if hospital else "Unknown hospital",
@@ -109,6 +162,8 @@ def list_admissions(account: PatientAccount = Depends(get_current_patient_accoun
             discharge_date=a.discharge_date.isoformat() if a.discharge_date else None,
             discharge_invoice_id=a.discharge_invoice_id if a.status == "discharged" else None,
             discharge_invoice_total=invoice_total,
+            outbound_referrals=outbound,
+            referred_from=referred_from,
         ))
     return out
 

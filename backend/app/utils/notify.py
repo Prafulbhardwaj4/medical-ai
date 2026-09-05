@@ -568,3 +568,54 @@ def notify_suggestion_reply(db: Session, hospital_id: int, suggestion_id: int, s
         message="Super Admin asked you something about a suggestion you sent in.",
         link_type="suggestion", link_id=suggestion_id, is_read=False, target_doctor_id=staff_id,
     ))
+
+
+def notify_referral_incoming(db: Session, to_hospital_id: int, referral_id: int, patient_name: str, from_hospital_name: str):
+    """Reception-facing, hospital-wide at the receiving hospital — opens the
+    Referred-in modal on receptionist.html's home tab rather than navigating
+    away, same 'ping, don't force a page change' pattern as admission_referral."""
+    key = f"referral_incoming:{referral_id}"
+    db.add(Notification(
+        hospital_id=to_hospital_id, source_key=key, type="referral_incoming", severity="warning",
+        title=f"Incoming referral — {patient_name}",
+        message=f"{from_hospital_name} is referring {patient_name} to you.",
+        link_type="cross_hospital_referral", link_id=referral_id, is_read=False,
+    ))
+
+
+def notify_referral_departed(db: Session, to_hospital_id: int, referral_id: int, patient_name: str, from_hospital_name: str):
+    """Fires once the referring hospital discharges/marks the patient
+    departed. Foundation tier gets this too but it renders read-only/inert
+    client-side — still fires here so Foundation staff at least see it happened."""
+    key = f"referral_departed:{referral_id}"
+    db.add(Notification(
+        hospital_id=to_hospital_id, source_key=key, type="referral_departed", severity="critical",
+        title=f"Patient departed — {patient_name}",
+        message=f"{patient_name} has left {from_hospital_name} and is on the way to you.",
+        link_type="cross_hospital_referral", link_id=referral_id, is_read=False,
+    ))
+
+
+def notify_referral_rejected(db: Session, from_hospital_id: int, referral_id: int, patient_name: str, to_hospital_name: str):
+    """Tells the referring hospital's nurse/doctor a target rejected the
+    referral pre-departure, so they know to re-refer. Hospital-wide at the
+    referring hospital, same as the other referral pings."""
+    key = f"referral_rejected:{referral_id}"
+    db.add(Notification(
+        hospital_id=from_hospital_id, source_key=key, type="referral_rejected", severity="warning",
+        title=f"Referral declined — {patient_name}",
+        message=f"{to_hospital_name} declined the referral for {patient_name}. Please refer to a different hospital.",
+        link_type="cross_hospital_referral", link_id=referral_id, is_read=False,
+    ))
+
+
+def notify_referral_admin(db: Session, hospital_id: int, referral_id: int, title: str, message: str):
+    """Admin-targeted (hospital-wide, admin/sub_admin visible) notice for the
+    reject-after-departure and reject-and-forward admin-visibility
+    requirements — always scoped to a single hospital_id, never cross-tenant."""
+    key = f"referral_admin_note:{referral_id}:{now_ist_naive().isoformat()}"
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="referral_admin_note", severity="warning",
+        title=title, message=message,
+        link_type="cross_hospital_referral", link_id=referral_id, is_read=False,
+    ))

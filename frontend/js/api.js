@@ -621,87 +621,106 @@ function _isOutOfRange(valueStr, rangeStr) {
   return false;
 }
 
+function _renderReportsVisitsHtml(visits, opts) {
+  opts = opts || {};
+  const allowPdf = opts.allowPdf !== false;  // snapshot data (cross-hospital referral records) has no live order_ids to combine into a PDF
+  if (!visits.length) {
+    return `<p style="color:var(--slate)">No reports available yet.</p>`;
+  }
+  return visits.map((v, i) => {
+    const orderIdsKey = v.tests.map(t => t.order_id).join(',');
+    return `
+    <div style="border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:10px">
+      <button type="button" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'"
+        style="width:100%;text-align:left;background:none;border:none;padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+        <span><strong>${v.date ? new Date(v.date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) : 'Date not recorded'}</strong>
+          ${v.token_number ? `<span style="color:var(--slate);font-size:13px"> · Token ${v.token_number}</span>` : ''}</span>
+        <span style="color:var(--slate)">${v.tests.length} test${v.tests.length > 1 ? 's' : ''} ▾</span>
+      </button>
+      <div style="display:${i === 0 ? '' : 'none'};padding:0 14px 14px">
+        ${allowPdf ? `<button class="btn btn-outline btn-sm" style="margin-bottom:10px" onclick="downloadFile('/lab/reports/combined?order_ids=${orderIdsKey}', 'report_${orderIdsKey}.pdf')">📄 View Full Report (PDF)</button>` : ''}
+        ${v.tests.map(t => `
+          <div style="padding:10px 0;border-top:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <strong>${t.test_name}</strong>
+              ${t.is_critical ? '<span class="badge badge-red">Critical</span>' : ''}
+            </div>
+            ${t.results && t.results.length ? `
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                  <tr style="color:var(--slate);text-align:left">
+                    <th style="padding:4px 8px 4px 0;font-weight:500">Parameter</th>
+                    <th style="padding:4px 8px;font-weight:500">Value</th>
+                    <th style="padding:4px 8px;font-weight:500">Unit</th>
+                    <th style="padding:4px 0 4px 8px;font-weight:500">Range</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${t.results.map(row => {
+                    const out = _isOutOfRange(row.value, row.range);
+                    const valueColor = out ? "#ef4444" : (row.value ? "#065f46" : "inherit");
+                    const valueWeight = out ? "700" : "600";
+                    return `
+                    <tr style="border-top:1px solid var(--border)">
+                      <td style="padding:5px 8px 5px 0">${row.name}</td>
+                      <td style="padding:5px 8px;font-weight:${valueWeight};color:${valueColor}">${row.value}</td>
+                      <td style="padding:5px 8px;color:var(--slate)">${row.unit || '—'}</td>
+                      <td style="padding:5px 0 5px 8px;color:var(--slate)">${row.range || '—'}</td>
+                    </tr>
+                  `;
+                  }).join('')}
+                </tbody>
+              </table>
+            ` : `<p style="font-size:13px;color:var(--slate-light)">No values recorded.</p>`}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  }).join('');
+}
+
+function _createOverlayModal(title, maxWidth) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay open";
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:${maxWidth || 760}px;width:92vw;max-height:88vh;overflow-y:auto">
+      <div class="modal-header">
+        <h2>${title}</h2>
+        <button class="modal-close" id="generic-modal-close-${Date.now()}">&times;</button>
+      </div>
+      <div class="generic-modal-body"><p style="color:var(--slate)">Loading…</p></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector(".modal-close").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  return overlay;
+}
+
 async function openReportsModal(patientId) {
   if (!patientId) {
     toast("Still loading this patient — try again in a moment.", "info");
     return;
   }
-  const overlay = document.createElement("div");
-  overlay.className = "modal-overlay open";
-  overlay.innerHTML = `
-    <div class="modal" style="max-width:760px;width:92vw;max-height:88vh;overflow-y:auto">
-      <div class="modal-header">
-        <h2>Reports</h2>
-        <button class="modal-close" id="reports-modal-close">&times;</button>
-      </div>
-      <div id="reports-modal-body"><p style="color:var(--slate)">Loading…</p></div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  overlay.querySelector("#reports-modal-close").addEventListener("click", () => overlay.remove());
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
-
+  const overlay = _createOverlayModal("Reports");
+  const body = overlay.querySelector(".generic-modal-body");
   try {
     const visits = await api("GET", `/lab/patient-reports/${patientId}`);
-    const body = overlay.querySelector("#reports-modal-body");
-    if (!visits.length) {
-      body.innerHTML = `<p style="color:var(--slate)">No reports available yet for this patient.</p>`;
-      return;
-    }
-    body.innerHTML = visits.map((v, i) => {
-      const orderIdsKey = v.tests.map(t => t.order_id).join(',');
-      return `
-      <div style="border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:10px">
-        <button type="button" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'"
-          style="width:100%;text-align:left;background:none;border:none;padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
-          <span><strong>${v.date ? new Date(v.date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) : 'Date not recorded'}</strong>
-            ${v.token_number ? `<span style="color:var(--slate);font-size:13px"> · Token ${v.token_number}</span>` : ''}</span>
-          <span style="color:var(--slate)">${v.tests.length} test${v.tests.length > 1 ? 's' : ''} ▾</span>
-        </button>
-        <div style="display:${i === 0 ? '' : 'none'};padding:0 14px 14px">
-          <button class="btn btn-outline btn-sm" style="margin-bottom:10px" onclick="downloadFile('/lab/reports/combined?order_ids=${orderIdsKey}', 'report_${orderIdsKey}.pdf')">📄 View Full Report (PDF)</button>
-          ${v.tests.map(t => `
-            <div style="padding:10px 0;border-top:1px solid var(--border)">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <strong>${t.test_name}</strong>
-                ${t.is_critical ? '<span class="badge badge-red">Critical</span>' : ''}
-              </div>
-              ${t.results && t.results.length ? `
-                <table style="width:100%;border-collapse:collapse;font-size:13px">
-                  <thead>
-                    <tr style="color:var(--slate);text-align:left">
-                      <th style="padding:4px 8px 4px 0;font-weight:500">Parameter</th>
-                      <th style="padding:4px 8px;font-weight:500">Value</th>
-                      <th style="padding:4px 8px;font-weight:500">Unit</th>
-                      <th style="padding:4px 0 4px 8px;font-weight:500">Range</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${t.results.map(row => {
-                      const out = _isOutOfRange(row.value, row.range);
-                      const valueColor = out ? "#ef4444" : (row.value ? "#065f46" : "inherit");
-                      const valueWeight = out ? "700" : "600";
-                      return `
-                      <tr style="border-top:1px solid var(--border)">
-                        <td style="padding:5px 8px 5px 0">${row.name}</td>
-                        <td style="padding:5px 8px;font-weight:${valueWeight};color:${valueColor}">${row.value}</td>
-                        <td style="padding:5px 8px;color:var(--slate)">${row.unit || '—'}</td>
-                        <td style="padding:5px 0 5px 8px;color:var(--slate)">${row.range || '—'}</td>
-                      </tr>
-                    `;
-                    }).join('')}
-                  </tbody>
-                </table>
-              ` : `<p style="font-size:13px;color:var(--slate-light)">No values recorded.</p>`}
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
-    }).join('');
+    body.innerHTML = _renderReportsVisitsHtml(visits, { allowPdf: true });
   } catch (e) {
-    overlay.querySelector("#reports-modal-body").innerHTML = `<p style="color:var(--red)">Couldn't load reports right now.</p>`;
+    body.innerHTML = `<p style="color:var(--red)">Couldn't load reports right now.</p>`;
   }
+}
+
+function openReportsModalWithData(title, visits) {
+  // Same visual component as openReportsModal, fed pre-fetched/snapshot data
+  // instead of a live per-hospital API call — used by the cross-hospital
+  // Records modal, where the data already travelled with the referral and
+  // there's no live order_id to build a combined PDF from.
+  const overlay = _createOverlayModal(title || "Reports");
+  const body = overlay.querySelector(".generic-modal-body");
+  body.innerHTML = _renderReportsVisitsHtml(visits || [], { allowPdf: false });
 }
 
 function openOffDutyTimeModal(confirmLabel) {

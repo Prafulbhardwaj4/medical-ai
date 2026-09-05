@@ -255,6 +255,34 @@ class ProfileSummaryOut(BaseModel):
     visit_count: int
 
 
+class ReferralHistoryEntryOut(BaseModel):
+    referral_id: int
+    to_hospital_name: str
+    to_hospital_city: Optional[str] = None
+    to_hospital_state: Optional[str] = None
+    status: str  # pending | rejected | departed | admitted | expired
+    rejection_note: Optional[str] = None  # mandatory on reject — this is what the patient sees for why it was declined
+    departed_at: Optional[str] = None
+    admitted_at: Optional[str] = None
+    admitted_admission_id: Optional[int] = None
+    admitted_hospital_name: Optional[str] = None
+    admitted_hospital_city: Optional[str] = None
+    admitted_hospital_state: Optional[str] = None
+    admitted_ward: Optional[str] = None
+    admitted_bed_number: Optional[str] = None
+    admitted_diagnosis: Optional[str] = None
+    admitted_status: Optional[str] = None  # the live status of the admission at the receiving hospital — never financial data
+    created_at: str
+
+
+class ReferredFromOut(BaseModel):
+    from_hospital_name: str
+    from_hospital_city: Optional[str] = None
+    from_hospital_state: Optional[str] = None
+    clinical_note: str
+    created_at: str
+
+
 class AdmissionSummaryOut(BaseModel):
     id: int
     hospital_name: str
@@ -268,6 +296,8 @@ class AdmissionSummaryOut(BaseModel):
     discharge_date: Optional[str] = None
     discharge_invoice_id: Optional[int] = None
     discharge_invoice_total: Optional[float] = None
+    outbound_referrals: List[ReferralHistoryEntryOut] = []
+    referred_from: Optional[ReferredFromOut] = None
 
 
 class VisitOut(BaseModel):
