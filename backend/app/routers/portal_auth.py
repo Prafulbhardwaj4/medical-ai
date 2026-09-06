@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -17,6 +19,18 @@ router = APIRouter(prefix="/portal/auth", tags=["portal-auth"])
 
 def _session_payload(account: PatientAccount) -> PatientSessionOut:
     self_link = next((link for link in account.profiles if link.relation == "self"), None)
+    if not self_link:
+        # No confirmed "self" profile yet — most likely this phone matched
+        # more than one hospital record at registration, so none were
+        # auto-tagged (see _link_all_hospital_records). Still show a real
+        # name rather than the bare "Patient" fallback: fall back to
+        # whichever linked profile is most recent, until the patient
+        # confirms one via the pending-profiles flow. linked_at is a
+        # nullable column and older rows (linked before some code path
+        # started reliably setting it) can be null, so treat null as the
+        # oldest possible value rather than letting the comparison crash.
+        candidates = [link for link in account.profiles if link.patient]
+        self_link = max(candidates, key=lambda link: link.linked_at or datetime.min, default=None)
     name = self_link.patient.name if self_link and self_link.patient else "Patient"
     return PatientSessionOut(role="patient", name=name, phone=account.phone)
 

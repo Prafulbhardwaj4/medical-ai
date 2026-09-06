@@ -672,12 +672,12 @@
         dischargedAdmissions = admissions.filter(a => a.status === "discharged");
 
         if (!currentlyAdmitted.length) {
-          list.innerHTML = `<div class="card-header" style="margin-bottom:14px"><h2>Admission History</h2></div>
+          list.innerHTML = `<div class="card-header" style="margin-bottom:14px"><h2>Admitted</h2></div>
             <div class="card">
-              <p style="color:var(--slate);font-size:13.5px;margin:0">No current hospital admission. Any active stay will show up here.</p>
+              <p style="color:var(--slate);font-size:13.5px;margin:0">You're not currently admitted at any hospital.</p>
             </div>`;
         } else {
-          list.innerHTML = `<div class="card-header" style="margin-bottom:14px"><h2>Admission History</h2></div>` + currentlyAdmitted.map(a => `
+          list.innerHTML = `<div class="card-header" style="margin-bottom:14px"><h2>Admitted</h2></div>` + currentlyAdmitted.map(a => `
             <div class="card" style="margin-bottom:10px">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
                 <div>
@@ -782,7 +782,10 @@
     // the tutorial yet (backend-tracked via TutorialProgress) — shows
     // through their first real session and never again after that,
     // regardless of reloads, re-logins, or switching devices/browsers.
-    initTutorial('patient', 'patient', 'my-health');
+    if (localStorage.getItem("ms_just_registered")) {
+      localStorage.removeItem("ms_just_registered");
+      startTutorial('patient', 'patient', 'my-health', false);
+    }
   </script>
 </body>
 

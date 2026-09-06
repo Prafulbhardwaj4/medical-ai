@@ -236,6 +236,12 @@
         const json = await res.json();
         if (!res.ok) throw new Error(json.detail || "Registration failed");
         saveSession(json.access_token, json.doctor);
+        // The one moment we can be certain this is a genuine first login —
+        // registration/password-reset only ever runs once per account.
+        // Consumed once on my-health.html's very next load, then removed —
+        // never fires again regardless of whether the tutorial itself was
+        // actually finished or skipped.
+        localStorage.setItem("ms_just_registered", "1");
         redirectByRole(json.doctor.role);
       } catch (e) {
         err.textContent = e.message;

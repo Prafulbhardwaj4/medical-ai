@@ -34,6 +34,7 @@
   let _highlightEl = null;
   let _arrowEl = null;
   let _resizeHandler = null;
+  let _prevBodyOverflow = null;
 
   function _statusEndpoint(subjectType) {
     return subjectType === "patient" ? "/tutorials/status/patient" : "/tutorials/status/staff";
@@ -78,6 +79,8 @@
 
   function _buildOverlay() {
     if (_overlayEl) return;
+    _prevBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     _overlayEl = document.createElement("div");
     _overlayEl.id = "tutorial-overlay";
     _overlayEl.style.cssText = "position:fixed;inset:0;z-index:10500;pointer-events:none";
@@ -100,6 +103,7 @@
   function _teardownOverlay() {
     if (_resizeHandler) window.removeEventListener("resize", _resizeHandler);
     if (_overlayEl) _overlayEl.remove();
+    document.body.style.overflow = _prevBodyOverflow || "";
     _overlayEl = null; _tooltipEl = null; _highlightEl = null; _arrowEl = null; _resizeHandler = null;
   }
 
