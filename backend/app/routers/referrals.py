@@ -11,6 +11,7 @@ from app.models.admission_vitals import AdmissionVitals
 from app.models.admission_progress_note import AdmissionProgressNote
 from app.models.admission_ward_type import AdmissionWardType
 from app.models.cross_hospital_referral import CrossHospitalReferral
+from app.models.notification import Notification
 from app.models.doctor import Doctor
 from app.models.hospital import Hospital
 from app.models.patient import Patient
@@ -195,6 +196,11 @@ def acknowledge_referral(referral_id: int, current_doctor: Doctor = Depends(get_
     if not r:
         raise HTTPException(status_code=404, detail="Referral not found")
     r.acknowledged_at = now_ist_naive()
+    db.query(Notification).filter(
+        Notification.hospital_id == current_doctor.hospital_id,
+        Notification.link_type == "referral_incoming",
+        Notification.link_id == referral_id,
+    ).update({"is_read": True})
     db.commit()
     return {"acknowledged": True}
 
@@ -224,7 +230,12 @@ def reject_referral(referral_id: int, body: RejectReferralIn, current_doctor: Do
 
     from_hospital = db.query(Hospital).filter(Hospital.id == r.from_hospital_id).first()
     to_hospital = db.query(Hospital).filter(Hospital.id == r.to_hospital_id).first()
-    notify_referral_rejected(db, r.from_hospital_id, r.id, r.patient_name, to_hospital.name if to_hospital else "the hospital")
+    initiator = db.query(Doctor).filter(Doctor.id == r.initiated_by).first() if r.initiated_by else None
+    notify_referral_rejected(
+        db, r.from_hospital_id, r.source_admission_id, r.patient_name, to_hospital.name if to_hospital else "the hospital",
+        nurse_id=(initiator.id if initiator and initiator.role.value == "nurse" else None),
+        doctor_id=(initiator.id if initiator and initiator.role.value == "doctor" else None),
+    )
 
     # Symmetric rule: ANY pre-departure reject, regardless of B's tier, notifies
     # Hospital A's admin specifically (not just the hospital-wide nurse/doctor

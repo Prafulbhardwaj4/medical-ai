@@ -1909,8 +1909,8 @@ tbody tr:hover {
   .att-card .staff-att-status {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    text-align: right;
+    align-items: center;
+    text-align: center;
     padding: 0;
     gap: 4px;
     flex: 0 0 auto;
@@ -1919,7 +1919,7 @@ tbody tr:hover {
   .att-card .staff-att-actions {
     flex: 1 1 100%;
     margin-top: 12px;
-    align-items: flex-end;
+    align-items: center;
   }
 }
 

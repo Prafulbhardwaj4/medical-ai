@@ -13,8 +13,8 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 PHARMACY_VISIBLE_TYPES = ["low_stock", "expiring_stock", "admission_medicine_order"]
 RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request", "sample_rejected", "admission_referral", "referral_incoming", "referral_departed", "referral_rejected"]
 LAB_VISIBLE_TYPES = ["admission_test_sample", "admission_sample_overdue"]
-DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "no_assistant_alert", "emergency_ward_intake", "admission_medicine_substitute", "emergency_admission"]
-NURSE_VISIBLE_TYPES = ["critical_result_escalation", "sample_rejected", "emergency_assistant_hold", "emergency_alert_for_assistant"]
+DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "no_assistant_alert", "emergency_ward_intake", "admission_medicine_substitute", "emergency_admission", "referral_rejected", "referral_admitted"]
+NURSE_VISIBLE_TYPES = ["critical_result_escalation", "sample_rejected", "emergency_assistant_hold", "emergency_alert_for_assistant", "referral_rejected", "referral_admitted"]
 
 ADMIN_EXCLUDED_TYPES = list(set(
     RECEPTIONIST_VISIBLE_TYPES + ["admission_medicine_order"] + LAB_VISIBLE_TYPES

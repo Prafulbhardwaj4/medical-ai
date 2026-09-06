@@ -551,7 +551,11 @@ def admit_emergency(body: EmergencyAdmitIn, current_doctor: Doctor = Depends(get
     )
 
     from app.utils.notify import notify_emergency_admission, notify_emergency_assistant_hold
-    notify_emergency_admission(db, current_doctor.hospital_id, admission.id, patient.name, doctor.id, admission.bed_number, is_overflow=is_overflow)
+    notify_emergency_admission(
+        db, current_doctor.hospital_id, admission.id, patient.name, doctor.id, admission.bed_number,
+        is_overflow=is_overflow, reason=body.reason,
+        referral_note=inbound_referral.clinical_note if inbound_referral else None,
+    )
 
     from app.models.attendance_coverage import AttendanceCoverage
     from app.models.attendance import AttendanceRecord
@@ -572,6 +576,19 @@ def admit_emergency(body: EmergencyAdmitIn, current_doctor: Doctor = Depends(get
         inbound_referral.status = "admitted"
         inbound_referral.admitted_at = now_ist_naive()
         inbound_referral.admitted_admission_id = admission.id
+
+        from app.utils.notify import notify_referral_admitted
+        initiator = db.query(Doctor).filter(Doctor.id == inbound_referral.initiated_by).first() if inbound_referral.initiated_by else None
+        referring_nurse_id = initiator.id if initiator and initiator.role.value == "nurse" else None
+        referring_doctor_id = initiator.id if initiator and initiator.role.value == "doctor" else None
+        if not referring_doctor_id and inbound_referral.source_admission_id:
+            original_admission = db.query(Admission).filter(Admission.id == inbound_referral.source_admission_id).first()
+            if original_admission:
+                referring_doctor_id = original_admission.admitting_doctor_id
+        notify_referral_admitted(
+            db, inbound_referral.from_hospital_id, admission.id, patient.name, hospital.name,
+            nurse_id=referring_nurse_id, doctor_id=referring_doctor_id,
+        )
 
     db.commit()
 
@@ -749,6 +766,13 @@ def refer_to_hospital(admission_id: str, body: dict, current_doctor: Doctor = De
 
     to_hospital = db.query(Hospital).filter(Hospital.id == payload.to_hospital_id).first()
     notify_referral_incoming(db, payload.to_hospital_id, referral.id, referral.patient_name, hospital.name)
+
+    from app.utils.notify import notify_referral_sent
+    notify_referral_sent(
+        db, current_doctor.hospital_id, admission.id, referral.patient_name,
+        to_hospital.name if to_hospital else "the receiving hospital",
+        f"{current_doctor.title} {current_doctor.name}",
+    )
 
     log_action(
         db, current_doctor, action="referral_initiated", target_type="cross_hospital_referral",

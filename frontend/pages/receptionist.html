@@ -227,6 +227,10 @@
       background: var(--teal);
     }
 
+    .pay-toggle-switch input:checked+.pay-toggle-slider::before {
+      transform: translateX(18px);
+    }
+
     .row-actions {
       display: flex;
       align-items: center;
@@ -1573,11 +1577,22 @@
           location.href = `admission-detail.html?id=${token}`;
         } else if (linkType === 'admission_referral') {
           location.href = `admissions.html?admit_patient_id=${linkId}`;
+        } else if (linkType === 'referral_sent') {
+          const { token } = await api("GET", `/admissions/token-for/${linkId}`);
+          location.href = `admission-detail.html?id=${token}`;
         } else if (linkType === 'referral_incoming') {
+          try {
+            const r = await api("GET", `/referrals/${linkId}`);
+            if (r.status !== 'pending') { toast("This patient has already departed.", "info"); return; }
+          } catch (e) { }
           openReferralIncomingModal(linkId);
         } else if (linkType === 'referral_departed') {
           // Foundation tier: read-only/inert from this point on — no click action at all.
           if (isFoundationTier()) { return; }
+          try {
+            const r = await api("GET", `/referrals/${linkId}`);
+            if (r.status === 'admitted') { toast("This patient has already been admitted.", "info"); return; }
+          } catch (e) { }
           openReferralDepartedModal(linkId);
         }
       } catch (e) { toast(e.message, "error"); }
@@ -1605,7 +1620,7 @@
           </div>
           <div class="err-msg" id="ri-err"></div>
           <div style="display:flex;gap:10px">
-            ${isFoundation ? `<button class="btn" style="flex:1;background:#16a34a;color:#fff;border:none" onclick="acknowledgeReferral(${r.id}, this)">Acknowledge</button>` : ''}
+            <button class="btn" style="flex:1;background:var(--teal,#0d9488);color:#fff;border:none" onclick="acknowledgeReferral(${r.id}, this)">Acknowledge</button>
             <button class="btn" style="flex:1;background:#dc2626;color:#fff;border:none" onclick="onReferralRejectClick(${r.id}, this)">Reject</button>
           </div>
         `;

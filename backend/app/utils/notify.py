@@ -92,7 +92,8 @@ def notify_emergency_ward_intake(db: Session, hospital_id: int, checkin_id: int,
 
 
 def notify_emergency_admission(db: Session, hospital_id: int, admission_id: int, patient_name: str,
-                                doctor_id: int, bed_number: str, is_overflow: bool = False):
+                                doctor_id: int, bed_number: str, is_overflow: bool = False,
+                                reason: str = None, referral_note: str = None):
     """Emergency Ward admission created — targets only the admitting doctor.
     link_id carries the admission's internal id (Notification.link_id is an
     Integer column); the frontend resolves id→public_token via the existing
@@ -101,10 +102,15 @@ def notify_emergency_admission(db: Session, hospital_id: int, admission_id: int,
     walk-in version this replaces."""
     key = f"emergency_admission:{admission_id}:{now_ist_naive().isoformat()}"
     overflow_part = " (overflow bed — ward is at capacity)" if is_overflow else ""
+    message = f"{patient_name} has been admitted to the Emergency Ward, bed {bed_number}{overflow_part}. See them now."
+    if reason:
+        message += f" Reason: {reason}."
+    if referral_note:
+        message += f" Note: {referral_note}"
     db.add(Notification(
         hospital_id=hospital_id, source_key=key, type="emergency_admission", severity="critical",
         title="🚨 Emergency admission",
-        message=f"{patient_name} has been admitted to the Emergency Ward, bed {bed_number}{overflow_part}. See them now.",
+        message=message,
         link_type="admission", link_id=admission_id, is_read=False, target_doctor_id=doctor_id,
     ))
 
@@ -570,6 +576,22 @@ def notify_suggestion_reply(db: Session, hospital_id: int, suggestion_id: int, s
     ))
 
 
+def notify_referral_sent(db: Session, hospital_id: int, admission_id: int, patient_name: str,
+                          to_hospital_name: str, initiated_by_name: str):
+    """Fires at the REFERRING hospital's own reception the moment a
+    nurse/doctor sends an outbound referral, so reception knows to expect a
+    transfer-out discharge for this patient and can jump straight to the
+    admission. link_id carries the admission's internal id, same
+    resolve-via-token-for pattern as ward_change_request."""
+    key = f"referral_sent:{admission_id}:{now_ist_naive().isoformat()}"
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="referral_sent", severity="info",
+        title=f"Referral sent — {patient_name}",
+        message=f"{initiated_by_name} referred {patient_name} to {to_hospital_name}.",
+        link_type="referral_sent", link_id=admission_id, is_read=False,
+    ))
+
+
 def notify_referral_incoming(db: Session, to_hospital_id: int, referral_id: int, patient_name: str, from_hospital_name: str):
     """Reception-facing, hospital-wide at the receiving hospital — opens the
     Referred-in modal on receptionist.html's home tab rather than navigating
@@ -596,17 +618,50 @@ def notify_referral_departed(db: Session, to_hospital_id: int, referral_id: int,
     ))
 
 
-def notify_referral_rejected(db: Session, from_hospital_id: int, referral_id: int, patient_name: str, to_hospital_name: str):
+def notify_referral_rejected(db: Session, from_hospital_id: int, admission_id: int, patient_name: str, to_hospital_name: str,
+                              nurse_id: int = None, doctor_id: int = None):
     """Tells the referring hospital's nurse/doctor a target rejected the
-    referral pre-departure, so they know to re-refer. Hospital-wide at the
-    referring hospital, same as the other referral pings."""
-    key = f"referral_rejected:{referral_id}"
+    referral pre-departure, so they know to re-refer. Hospital-wide
+    (reception's queue) plus a targeted copy for whoever actually initiated
+    the referral, same pattern as notify_referral_admitted. link_id carries
+    the admission's internal id (not the referral id) so the frontend can
+    jump straight to admission-detail.html via the existing token-for
+    lookup."""
+    key = f"referral_rejected:{admission_id}:{now_ist_naive().isoformat()}"
+    message = f"{to_hospital_name} declined the referral for {patient_name}. Please refer to a different hospital."
     db.add(Notification(
         hospital_id=from_hospital_id, source_key=key, type="referral_rejected", severity="warning",
-        title=f"Referral declined — {patient_name}",
-        message=f"{to_hospital_name} declined the referral for {patient_name}. Please refer to a different hospital.",
-        link_type="cross_hospital_referral", link_id=referral_id, is_read=False,
+        title=f"Referral declined — {patient_name}", message=message,
+        link_type="referral_rejected", link_id=admission_id, is_read=False,
     ))
+    for target_id in {nurse_id, doctor_id} - {None}:
+        db.add(Notification(
+            hospital_id=from_hospital_id, source_key=f"{key}:{target_id}", type="referral_rejected", severity="warning",
+            title=f"Referral declined — {patient_name}", message=message,
+            link_type="referral_rejected", link_id=admission_id, is_read=False, target_doctor_id=target_id,
+        ))
+
+
+def notify_referral_admitted(db: Session, hospital_id: int, admission_id: int, patient_name: str,
+                              to_hospital_name: str, nurse_id: int = None, doctor_id: int = None):
+    """Fires at the REFERRING hospital once the patient is actually admitted
+    at the destination: hospital-wide for admin, plus a targeted ping to
+    whoever referred (nurse and/or doctor), falling back to whoever was the
+    admitting doctor on the original admission when no doctor specifically
+    initiated the referral."""
+    key = f"referral_admitted:{admission_id}:{now_ist_naive().isoformat()}"
+    message = f"{patient_name} has been admitted at {to_hospital_name}."
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="referral_admitted", severity="info",
+        title=f"Patient admitted elsewhere — {patient_name}", message=message,
+        link_type="referral_admitted", link_id=admission_id, is_read=False,
+    ))
+    for target_id in {nurse_id, doctor_id} - {None}:
+        db.add(Notification(
+            hospital_id=hospital_id, source_key=f"{key}:{target_id}", type="referral_admitted", severity="info",
+            title=f"Patient admitted elsewhere — {patient_name}", message=message,
+            link_type="referral_admitted", link_id=admission_id, is_read=False, target_doctor_id=target_id,
+        ))
 
 
 def notify_referral_admin(db: Session, hospital_id: int, referral_id: int, title: str, message: str):

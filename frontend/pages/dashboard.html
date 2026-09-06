@@ -660,7 +660,7 @@
           toast("This has already been taken care of.", "info");
           return;
         }
-        if ((linkType === 'admission' || linkType === 'ward_change_request') && linkId) {
+        if ((linkType === 'admission' || linkType === 'ward_change_request' || linkType === 'referral_rejected') && linkId) {
           const { token } = await api("GET", `/admissions/token-for/${linkId}`);
           location.href = `admission-detail.html?id=${token}`;
         } else if (linkType === 'admission_referral' && linkId) {

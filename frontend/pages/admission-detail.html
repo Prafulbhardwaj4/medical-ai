@@ -972,9 +972,16 @@
       </div>
 
       <div id="discharge-referral-fields" style="display:none;margin-bottom:14px">
-        <p style="font-size:12.5px;color:#7c2d12;background:#fff7ed;border-radius:var(--radius);padding:10px">
+        <p style="font-size:12.5px;color:#7c2d12;background:#fff7ed;border-radius:var(--radius);padding:10px;margin-bottom:10px">
           This marks the patient as departed to the referred hospital and notifies them. The receiving hospital's Emergency Intake will be pre-filled with this patient's referred clinical data.
         </p>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Transfer / Ambulance Charges (₹)</label>
+          <div style="display:flex;gap:8px">
+            <input class="form-control" type="number" min="0" id="discharge-transfer-charge" placeholder="0" />
+            <button type="button" class="btn btn-outline btn-sm" id="btn-add-transfer-charge" onclick="addTransferCharge()">Add</button>
+          </div>
+        </div>
       </div>
       <div id="discharge-death-fields" style="display:none;margin-bottom:14px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -1002,8 +1009,11 @@
             <div id="discharge-amount-due" style="font-size:1.6rem;font-weight:800;color:var(--navy)">Loading…</div>
             <div id="discharge-deposit-context" style="font-size:12px;color:var(--slate-light);margin-top:4px"></div>
           </div>
-          <button class="btn btn-outline btn-sm" id="btn-discharge-waiver" onclick="openWaiverModal()">Waiver /
-            Discount</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" id="btn-discharge-waiver" onclick="openWaiverModal()">Waiver /
+              Discount</button>
+            <button class="btn btn-outline btn-sm" onclick="openAddChargeModal()">+ Other Charges</button>
+          </div>
         </div>
 
         <div id="discharge-payment-row"
@@ -1729,17 +1739,6 @@
             ${a.status === 'admitted' && isNurseViewer() && !a.ward_is_emergency ? `<button class="btn btn-sm ph-emergency-btn" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}
           </div>
         </div>
-        ${a.pending_outbound_referral ? `
-          <div class="ph-referral-banner" style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px;color:#7c2d12">
-            ${a.pending_outbound_referral.status === 'pending' ? `Referral sent to <strong>${sanitize(a.pending_outbound_referral.to_hospital_name)}</strong> — awaiting response.` : `Patient marked departed to <strong>${sanitize(a.pending_outbound_referral.to_hospital_name)}</strong>.`}
-          </div>
-        ` : ''}
-        ${a.received_via_referral ? `
-          <div class="ph-referral-banner" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px;color:#1e3a8a;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-            <div>Referred in from <strong>${sanitize(a.received_via_referral.from_hospital_name)}</strong>${a.received_via_referral.clinical_note ? ' — ' + sanitize(a.received_via_referral.clinical_note) : ''}</div>
-            <button class="btn btn-outline btn-sm" onclick="openRecordsModal()">Records</button>
-          </div>
-        ` : ''}
         ${a.pending_outbound_referral ? `
           <div class="ph-referral-banner" style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px;color:#7c2d12">
             ${a.pending_outbound_referral.status === 'pending' ? `Referral sent to <strong>${sanitize(a.pending_outbound_referral.to_hospital_name)}</strong> — awaiting response.` : `Patient marked departed to <strong>${sanitize(a.pending_outbound_referral.to_hospital_name)}</strong>.`}
@@ -3100,6 +3099,21 @@
       } catch (e) { err.textContent = e.message; }
     }
 
+    async function addTransferCharge() {
+      const amount = parseFloat(document.getElementById("discharge-transfer-charge").value);
+      if (!amount || amount <= 0) { toast("Enter a valid amount", "error"); return; }
+      try {
+        await api("POST", `/admissions/${admissionId}/charges`, { charge_type: "other", description: "Transfer / Ambulance Charges", amount, quantity: 1 });
+        toast("Transfer charge added", "success");
+        document.getElementById("discharge-transfer-charge").value = "";
+        document.getElementById("btn-add-transfer-charge").disabled = true;
+        const preview = await api("GET", `/admissions/${admissionId}/discharge-preview`);
+        dischargeAmountDue = preview.amount_due;
+        document.getElementById("discharge-amount-due").textContent = preview.refund_due > 0 ? `₹${preview.refund_due.toFixed(2)}` : `₹${preview.amount_due.toFixed(2)}`;
+        document.getElementById("discharge-deposit-context").textContent = `Deposit paid: ₹${preview.deposit_total.toFixed(2)} · Charges accrued: ₹${preview.charges_total.toFixed(2)}`;
+      } catch (e) { toast(e.message, "error"); }
+    }
+
     // ---------- Waiver / Discount ----------
     function openWaiverModal() {
       document.getElementById("waiver-amount").value = "";
@@ -3125,11 +3139,31 @@
     let dischargeAmountDue = 0;
     let dischargeRefundDue = 0;
 
+    let hasActiveOutboundReferralFlag = false;
+
     function toggleDischargeTypeFields() {
-      const type = document.getElementById("discharge-type").value;
+      const sel = document.getElementById("discharge-type");
+      const type = sel.value;
+      if (type === "referral_transfer" && !hasActiveOutboundReferralFlag) {
+        toast("No referral order has been generated for this patient.", "error");
+        sel.value = "planned";
+        return toggleDischargeTypeFields();
+      }
       document.getElementById("discharge-lama-fields").style.display = type === "lama_dama" ? "block" : "none";
       document.getElementById("discharge-death-fields").style.display = type === "death" ? "block" : "none";
       document.getElementById("discharge-referral-fields").style.display = type === "referral_transfer" ? "block" : "none";
+
+      const conditionDefaults = {
+        planned: "Improved",
+        lama_dama: "Left against medical advice",
+        death: "Deceased",
+        referral_transfer: "Referred",
+      };
+      document.getElementById("discharge-condition").value = conditionDefaults[type] || "";
+      document.getElementById("discharge-course").value =
+        (type === "referral_transfer" && admissionData?.pending_outbound_referral?.to_hospital_name)
+          ? `Referred to ${admissionData.pending_outbound_referral.to_hospital_name} for further management.`
+          : "";
     }
 
     async function openDischargeModal() {
@@ -3138,20 +3172,21 @@
       document.getElementById("discharge-summary").disabled = false;
       document.getElementById("discharge-amount-due").textContent = "Loading…";
       const hasActiveOutboundReferral = admissionData?.pending_outbound_referral && admissionData.pending_outbound_referral.status === "pending";
-      document.getElementById("discharge-type").value = hasActiveOutboundReferral ? "referral_transfer" : "planned";
-      document.getElementById("discharge-type").disabled = !!hasActiveOutboundReferral;  // one decision per screen — no ambiguity when a referral is already in flight
+      hasActiveOutboundReferralFlag = !!hasActiveOutboundReferral;
       document.getElementById("discharge-capacity-note").value = "";
       document.getElementById("discharge-time-of-death").value = "";
       document.getElementById("discharge-cause-of-death").value = "";
       document.getElementById("discharge-is-mlc").checked = false;
-      toggleDischargeTypeFields();
-      openModal("modal-discharge");
-      document.getElementById("discharge-course").value = "";
       document.getElementById("discharge-procedures").value = "";
       document.getElementById("discharge-diagnosis").value = "";
-      document.getElementById("discharge-condition").value = "";
       document.getElementById("discharge-medications").value = "";
       document.getElementById("discharge-followup").value = "";
+      document.getElementById("discharge-transfer-charge").value = "";
+      document.getElementById("btn-add-transfer-charge").disabled = false;
+      document.getElementById("discharge-type").value = hasActiveOutboundReferral ? "referral_transfer" : "planned";
+      document.getElementById("discharge-type").disabled = !!hasActiveOutboundReferral;  // one decision per screen — no ambiguity when a referral is already in flight
+      toggleDischargeTypeFields();
+      openModal("modal-discharge");
       try {
         const certifyingSel = document.getElementById("discharge-certifying-doctor");
         const dischargingSel = document.getElementById("discharge-doctor");
