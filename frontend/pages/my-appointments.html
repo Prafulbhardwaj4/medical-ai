@@ -9,72 +9,268 @@
   <script src="../js/custom-select.js" defer></script>
   <style>
     .wizard-topbar {
-      display: flex; align-items: center; gap: 12px;
-      margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
     }
+
     .wizard-back-btn {
-      display: flex; align-items: center; gap: 6px;
-      background: var(--teal-subtle); color: var(--teal); border: none;
-      padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--teal-subtle);
+      color: var(--teal);
+      border: none;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
     }
-    .wizard-back-btn:hover { opacity: .85; }
-    .wizard-step-title { font-size: 1.05rem; font-weight: 700; color: var(--navy); }
-    .wizard-step-sub { font-size: 12.5px; color: var(--slate-light); margin-top: 2px; }
+
+    .wizard-back-btn:hover {
+      opacity: .85;
+    }
+
+    .wizard-step-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .wizard-step-sub {
+      font-size: 12.5px;
+      color: var(--slate-light);
+      margin-top: 2px;
+    }
 
     .select-row-card {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius);
-      margin-bottom: 10px; cursor: pointer; background: var(--white);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 10px;
+      cursor: pointer;
+      background: var(--white);
       transition: box-shadow .15s, border-color .15s;
     }
-    .select-row-card:hover { box-shadow: var(--shadow-sm); border-color: var(--teal); }
-    .select-row-card .src-name { font-weight: 700; color: var(--navy); font-size: 15px; }
-    .select-row-card .src-sub { font-size: 12.5px; color: var(--slate); margin-top: 3px; }
 
-    .btn-teal { background: var(--teal); color: #fff; border: none; }
-    .btn-teal:hover { opacity: .9; }
+    .select-row-card:hover {
+      box-shadow: var(--shadow-sm);
+      border-color: var(--teal);
+    }
 
-    .date-scroll-wrap { margin-top: 4px; }
-    .date-month-label { font-size: 13px; font-weight: 700; color: var(--slate); margin-bottom: 8px; }
-    .date-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; }
+    .select-row-card .src-name {
+      font-weight: 700;
+      color: var(--navy);
+      font-size: 15px;
+    }
+
+    .select-row-card .src-sub {
+      font-size: 12.5px;
+      color: var(--slate);
+      margin-top: 3px;
+    }
+
+    .btn-teal {
+      background: var(--teal);
+      color: #fff;
+      border: none;
+    }
+
+    .btn-teal:hover {
+      opacity: .9;
+    }
+
+    .date-scroll-wrap {
+      margin-top: 4px;
+    }
+
+    .date-month-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--slate);
+      margin-bottom: 8px;
+    }
+
+    .date-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      scroll-snap-type: x proximity;
+    }
+
     .date-pill {
-      flex: 0 0 auto; width: 54px; text-align: center; padding: 10px 0;
-      border: 1.5px solid var(--border); border-radius: 11px; cursor: pointer; scroll-snap-align: start;
+      flex: 0 0 auto;
+      width: 54px;
+      text-align: center;
+      padding: 10px 0;
+      border: 1.5px solid var(--border);
+      border-radius: 11px;
+      cursor: pointer;
+      scroll-snap-align: start;
       background: var(--white);
     }
-    .date-pill .dnum { font-size: 1.05rem; font-weight: 700; color: var(--navy); }
-    .date-pill .dabbr { font-size: 10.5px; color: var(--slate-light); margin-top: 2px; text-transform: uppercase; }
-    .date-pill.selected { background: var(--teal); border-color: var(--teal); }
-    .date-pill.selected .dnum, .date-pill.selected .dabbr { color: #fff; }
 
-    .slot-period-title { font-size: 13.5px; font-weight: 700; color: var(--slate); margin: 18px 0 10px; }
-    .slot-grid { display: flex; flex-wrap: wrap; gap: 9px; }
-    .slot-chip {
-      padding: 9px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer;
-      border: 1.5px solid transparent; display: flex; align-items: center; gap: 6px;
+    .date-pill .dnum {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--navy);
     }
-    .slot-chip .dot { width: 8px; height: 8px; border-radius: 50%; }
-    .slot-chip.green { background: #e8f8f0; color: #16794f; }
-    .slot-chip.green .dot { background: #16a34a; }
-    .slot-chip.yellow { background: #fff8e6; color: #92650a; }
-    .slot-chip.yellow .dot { background: #eab308; }
-    .slot-chip.red { background: #fdecec; color: #b91c1c; cursor: not-allowed; opacity: .75; }
-    .slot-chip.red .dot { background: #dc2626; }
-    .slot-chip:not(.red):hover { border-color: currentColor; }
-    .slot-chip.placeholder { background: #f2f4f6; color: var(--slate-light); cursor: pointer; }
-    .slot-chip.placeholder .dot { background: #cbd3da; }
 
-    .pay-summary-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
-    .pay-method-tabs { display: flex; gap: 8px; margin: 16px 0; }
-    .pay-method-tab { flex: 1; text-align: center; padding: 10px; border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--slate); }
-    .pay-method-tab.active { border-color: var(--teal); background: var(--teal-subtle); color: var(--teal); }
+    .date-pill .dabbr {
+      font-size: 10.5px;
+      color: var(--slate-light);
+      margin-top: 2px;
+      text-transform: uppercase;
+    }
+
+    .date-pill.selected {
+      background: var(--teal);
+      border-color: var(--teal);
+    }
+
+    .date-pill.selected .dnum,
+    .date-pill.selected .dabbr {
+      color: #fff;
+    }
+
+    .slot-period-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--slate);
+      margin: 18px 0 10px;
+    }
+
+    .slot-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
+
+    .slot-chip {
+      padding: 9px 14px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid transparent;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .slot-chip .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .slot-chip.green {
+      background: #e8f8f0;
+      color: #16794f;
+    }
+
+    .slot-chip.green .dot {
+      background: #16a34a;
+    }
+
+    .slot-chip.yellow {
+      background: #fff8e6;
+      color: #92650a;
+    }
+
+    .slot-chip.yellow .dot {
+      background: #eab308;
+    }
+
+    .slot-chip.red {
+      background: #fdecec;
+      color: #b91c1c;
+      cursor: not-allowed;
+      opacity: .75;
+    }
+
+    .slot-chip.red .dot {
+      background: #dc2626;
+    }
+
+    .slot-chip:not(.red):hover {
+      border-color: currentColor;
+    }
+
+    .slot-chip.placeholder {
+      background: #f2f4f6;
+      color: var(--slate-light);
+      cursor: pointer;
+    }
+
+    .slot-chip.placeholder .dot {
+      background: #cbd3da;
+    }
+
+    .pay-summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    .pay-method-tabs {
+      display: flex;
+      gap: 8px;
+      margin: 16px 0;
+    }
+
+    .pay-method-tab {
+      flex: 1;
+      text-align: center;
+      padding: 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--slate);
+    }
+
+    .pay-method-tab.active {
+      border-color: var(--teal);
+      background: var(--teal-subtle);
+      color: var(--teal);
+    }
 
     @media (max-width: 900px) {
-      .quick-header-block { margin-bottom: 12px !important; gap: 8px !important; }
-      .quick-header-block h1 { font-size: 1.2rem; margin-bottom: 2px; }
-      .quick-header-block p { font-size: 12px; margin: 0; }
-      .quick-header-block .btn-teal { padding: 7px 14px; font-size: 12.5px; }
-      .state-city-row { grid-template-columns: 1fr !important; }
+      .quick-header-block {
+        margin-bottom: 12px !important;
+        gap: 8px !important;
+      }
+
+      .quick-header-block h1 {
+        font-size: 1.2rem;
+        margin-bottom: 2px;
+      }
+
+      .quick-header-block p {
+        font-size: 12px;
+        margin: 0;
+      }
+
+      .quick-header-block .btn-teal {
+        padding: 7px 14px;
+        font-size: 12.5px;
+      }
+
+      .state-city-row {
+        grid-template-columns: 1fr !important;
+      }
     }
   </style>
 </head>
@@ -91,13 +287,15 @@
         </button>
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
-      <button class="btn btn-teal btn-sm" onclick="openSuggestionModal()" style="margin-right:10px">Suggestions</button>
       <div class="topbar-doctor">
+        <button class="btn btn-sm" onclick="openSuggestionModal()"
+          style="background:var(--teal,#0d9488);color:#fff;border:none;margin-right:10px">Suggestions</button>
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <button class="btn-logout" onclick="logout()">Sign out</button>
       </div>
-      <button class="topbar-profile-btn" onclick="toggleProfileMenu()" aria-label="Profile" data-tutorial-id="my-appointments-profile-btn">
+      <button class="topbar-profile-btn" onclick="toggleProfileMenu()" aria-label="Profile"
+        data-tutorial-id="my-appointments-profile-btn">
         <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="8" r="4" />
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
@@ -111,24 +309,41 @@
         <strong id="profile-menu-name"></strong>
         <span>Patient</span>
       </div>
-      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('patient', 'patient', 'my-appointments', true)">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <button class="profile-menu-item"
+        onclick="closeProfileMenu(); startTutorial('patient', 'patient', 'my-appointments', true)">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
         Tutorial
       </button>
       <button class="profile-menu-item" onclick="openChangePasswordModal()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
         Change Password
       </button>
       <button class="profile-menu-item" onclick="openAddressModal()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
         Saved Address
       </button>
       <button class="profile-menu-item danger" onclick="confirmDeactivateAccount()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+        </svg>
         Deactivate Account
       </button>
       <button class="profile-menu-item danger" onclick="logout()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
         Sign out
       </button>
     </div>
@@ -141,50 +356,71 @@
       </div>
       <div class="sidebar-section-label">Navigation</div>
       <a class="nav-item" href="my-health.html">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
         Home
       </a>
       <a class="nav-item active" href="my-appointments.html">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
         Appointments
       </a>
     </nav>
 
     <nav class="bottom-nav">
       <button class="bottom-nav-item" onclick="location.href='my-health.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3"/></svg>
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3" />
+        </svg>
         Home
       </button>
       <button class="bottom-nav-item" onclick="location.href='my-health.html?tab=records'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
         Records
       </button>
       <button class="bottom-nav-item active" onclick="location.href='my-appointments.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
         Appointments
       </button>
     </nav>
 
     <main class="main-content">
-      <div class="quick-header-block" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+      <div class="quick-header-block"
+        style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px">
         <div>
           <h1>Book an Appointment</h1>
           <p style="color:var(--slate)">Find a hospital, pick a doctor, and choose a time that works for you.</p>
         </div>
-        <button class="btn btn-teal" onclick="openMyAppointmentsModal()" data-tutorial-id="my-appointments-list-btn">My Appointments</button>
+        <button class="btn btn-teal" onclick="openMyAppointmentsModal()" data-tutorial-id="my-appointments-list-btn">My
+          Appointments</button>
       </div>
 
       <div class="card" id="wizard-card" data-tutorial-id="my-appointments-wizard-card">
         <div class="wizard-topbar">
           <button class="wizard-back-btn" id="wizard-back" style="display:none" onclick="goBack()">
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
             Back
           </button>
           <div>
             <div class="wizard-step-title" id="wizard-title">Select State &amp; City</div>
             <div class="wizard-step-sub" id="wizard-sub"></div>
           </div>
-          <button class="btn btn-teal" id="wizard-hospital-lead-btn" style="display:none;margin-left:auto;white-space:nowrap" onclick="openHospitalLeadModal()">Can't find your hospital?</button>
+          <button class="btn btn-teal" id="wizard-hospital-lead-btn"
+            style="display:none;margin-left:auto;white-space:nowrap" onclick="openHospitalLeadModal()">Can't find your
+            hospital?</button>
         </div>
         <div id="wizard-area"></div>
       </div>
@@ -201,7 +437,8 @@
       <div id="confirm-body"></div>
       <div style="display:flex;gap:10px;margin-top:20px">
         <button class="btn btn-outline" style="flex:1" onclick="closeConfirmModal()">Back</button>
-        <button class="btn btn-primary" style="flex:1" id="btn-pay-book" onclick="confirmBooking()">Confirm Booking</button>
+        <button class="btn btn-primary" style="flex:1" id="btn-pay-book" onclick="confirmBooking()">Confirm
+          Booking</button>
       </div>
     </div>
   </div>
@@ -213,7 +450,9 @@
         <button class="modal-close" onclick="closeMyAppointmentsModal()">&times;</button>
       </div>
       <div id="family-request-banner"></div>
-      <div id="appt-list"><p>Loading...</p></div>
+      <div id="appt-list">
+        <p>Loading...</p>
+      </div>
     </div>
   </div>
 
@@ -223,14 +462,19 @@
         <h2>Saved Addresses</h2>
         <button class="modal-close" onclick="closeAddressModal()">&times;</button>
       </div>
-      <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">Pick one at booking time, or enter a one-off address just for that visit.</p>
-      <div id="saved-address-list" style="margin-bottom:14px"><p style="color:var(--slate-light);font-size:13px">Loading…</p></div>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">Pick one at booking time, or enter a one-off
+        address just for that visit.</p>
+      <div id="saved-address-list" style="margin-bottom:14px">
+        <p style="color:var(--slate-light);font-size:13px">Loading…</p>
+      </div>
       <div class="card" style="background:var(--smoke)">
         <p style="font-weight:600;margin-bottom:10px;font-size:13.5px">Add Address</p>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Label</label><input class="form-control" id="new-addr-label" placeholder="Home, Office..." /></div>
+          <div class="form-group"><label class="form-label">Label</label><input class="form-control" id="new-addr-label"
+              placeholder="Home, Office..." /></div>
         </div>
-        <div class="form-group"><label class="form-label">Address</label><textarea class="form-control" id="new-addr-text" rows="2" placeholder="House no., street, city"></textarea></div>
+        <div class="form-group"><label class="form-label">Address</label><textarea class="form-control"
+            id="new-addr-text" rows="2" placeholder="House no., street, city"></textarea></div>
         <button class="btn btn-primary" style="width:100%" onclick="addNewAddress()">Add Address</button>
       </div>
     </div>
@@ -242,7 +486,8 @@
         <h2>Hospital Not Listed?</h2>
         <button class="modal-close" onclick="closeHospitalLeadModal()">&times;</button>
       </div>
-      <p style="color:var(--slate);font-size:13.5px;margin-bottom:14px">Tell us which hospital you'd like to see on MedScribe — we'll reach out to them.</p>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:14px">Tell us which hospital you'd like to see on
+        MedScribe — we'll reach out to them.</p>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">State</label>
@@ -263,7 +508,8 @@
       </div>
       <div class="form-group">
         <label class="form-label">Note (optional)</label>
-        <textarea class="form-control" id="hl-note" rows="2" placeholder="Anything else that'd help us find them"></textarea>
+        <textarea class="form-control" id="hl-note" rows="2"
+          placeholder="Anything else that'd help us find them"></textarea>
       </div>
       <div class="err-msg" id="hl-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitHospitalLead()">Submit</button>
@@ -277,7 +523,8 @@
         <button class="modal-close" onclick="closeSuggestionModal()">&times;</button>
       </div>
       <div style="padding:16px">
-        <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?" rows="4"></textarea>
+        <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?"
+          rows="4"></textarea>
         <div style="display:flex;gap:8px;margin-top:12px">
           <button class="btn btn-primary btn-sm" onclick="submitSuggestion()">Send</button>
           <button class="btn btn-outline btn-sm" onclick="closeSuggestionModal()">Cancel</button>
@@ -669,12 +916,12 @@
           <div class="date-month-label">${monthLabel}</div>
           <div class="date-scroll" id="date-scroll">
             ${days.map(d => {
-              const iso = d.toISOString().split('T')[0];
-              const dayNum = d.getDate();
-              const abbr = d.toLocaleDateString('en-IN', { weekday: 'short' });
-              return `<div class="date-pill" data-date="${iso}" data-label="${abbr}, ${dayNum} ${d.toLocaleDateString('en-IN',{month:'short'})}">
+        const iso = d.toISOString().split('T')[0];
+        const dayNum = d.getDate();
+        const abbr = d.toLocaleDateString('en-IN', { weekday: 'short' });
+        return `<div class="date-pill" data-date="${iso}" data-label="${abbr}, ${dayNum} ${d.toLocaleDateString('en-IN', { month: 'short' })}">
                 <div class="dnum">${dayNum}</div><div class="dabbr">${abbr}</div></div>`;
-            }).join('')}
+      }).join('')}
           </div>
         </div>
         <div id="slot-sections">${placeholderSlotSections()}</div>`;

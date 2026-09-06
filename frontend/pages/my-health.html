@@ -8,53 +8,154 @@
   <link rel="stylesheet" href="../css/style.css" />
   <script src="../js/custom-select.js" defer></script>
   <style>
-    .mobile-section { display: none; }
-    .mobile-section.active { display: block; }
-    @media (min-width: 901px) {
-      .mobile-section { display: block !important; }
+    .mobile-section {
+      display: none;
     }
+
+    .mobile-section.active {
+      display: block;
+    }
+
+    @media (min-width: 901px) {
+      .mobile-section {
+        display: block !important;
+      }
+    }
+
     .avatar-circle {
-      width: 44px; height: 44px; border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
       background: linear-gradient(135deg, var(--teal-subtle), #dff5f0);
       color: var(--teal);
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 16px; flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px;
+      flex-shrink: 0;
     }
+
     .visit-card {
-      display: flex; gap: 14px; align-items: flex-start;
-      padding: 16px 18px; border: 1px solid var(--border); border-left: 4px solid var(--teal);
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--teal);
       border-radius: var(--radius);
-      margin-bottom: 12px; cursor: pointer; transition: box-shadow .15s, transform .1s;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: box-shadow .15s, transform .1s;
       background: var(--white);
     }
-    .visit-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
-    .visit-card .vc-name { font-weight: 700; font-size: 15px; color: var(--navy); }
-    .visit-card .vc-meta { font-size: 13px; color: var(--slate); margin-top: 3px; }
-    .visit-card .vc-date { font-size: 12px; color: var(--slate-light); margin-top: 6px; display:flex; align-items:center; gap:5px; }
+
+    .visit-card:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
+    }
+
+    .visit-card .vc-name {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--navy);
+    }
+
+    .visit-card .vc-meta {
+      font-size: 13px;
+      color: var(--slate);
+      margin-top: 3px;
+    }
+
+    .visit-card .vc-date {
+      font-size: 12px;
+      color: var(--slate-light);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
     .stat-card {
       background: linear-gradient(160deg, var(--white), #fafcfc);
-      border: 1px solid var(--border); border-radius: 14px;
-      padding: 22px 18px; text-align: center; position: relative; overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 18px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
     }
+
     .stat-card::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
     }
-    .stat-card.c-teal::before { background: var(--teal); }
-    .stat-card.c-navy::before { background: var(--navy); }
-    .stat-card .num { font-size: 2.1rem; font-weight: 800; line-height: 1; }
-    .stat-card .label { font-size: 12.5px; color: var(--slate); margin-top: 10px; font-weight: 600; letter-spacing: .2px; }
+
+    .stat-card.c-teal::before {
+      background: var(--teal);
+    }
+
+    .stat-card.c-navy::before {
+      background: var(--navy);
+    }
+
+    .stat-card .num {
+      font-size: 2.1rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .stat-card .label {
+      font-size: 12.5px;
+      color: var(--slate);
+      margin-top: 10px;
+      font-weight: 600;
+      letter-spacing: .2px;
+    }
+
     @media (max-width: 900px) {
-      #portal-stats-grid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
-      #portal-stats-grid .stat-card { padding: 16px 10px; aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-      #portal-stats-grid .stat-card .num { font-size: 1.7rem; }
-      #portal-stats-grid .stat-card .label { font-size: 11px; margin-top: 6px; }
+      #portal-stats-grid {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 10px !important;
+      }
+
+      #portal-stats-grid .stat-card {
+        padding: 16px 10px;
+        aspect-ratio: 1 / 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #portal-stats-grid .stat-card .num {
+        font-size: 1.7rem;
+      }
+
+      #portal-stats-grid .stat-card .label {
+        font-size: 11px;
+        margin-top: 6px;
+      }
     }
+
     .filter-bar {
-      display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 12px;
     }
+
     @media (max-width: 700px) {
-      .filter-bar { grid-template-columns: 1fr; }
-      .filter-bar .form-group { width: 100%; }
+      .filter-bar {
+        grid-template-columns: 1fr;
+      }
+
+      .filter-bar .form-group {
+        width: 100%;
+      }
     }
   </style>
 </head>
@@ -71,18 +172,21 @@
         </button>
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
-      <button class="btn btn-sm" onclick="openSuggestionModal()" style="background:var(--teal,#0d9488);color:#fff;border:none;margin-right:10px">Suggestions</button>
       <div class="topbar-doctor">
+        <button class="btn btn-sm" onclick="openSuggestionModal()"
+          style="background:var(--teal,#0d9488);color:#fff;border:none;margin-right:10px">Suggestions</button>
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <button class="btn-logout" onclick="logout()">Sign out</button>
       </div>
-      <button class="topbar-profile-btn" onclick="toggleProfileMenu()" aria-label="Profile" style="position:relative" data-tutorial-id="my-health-profile-btn">
+      <button class="topbar-profile-btn" onclick="toggleProfileMenu()" aria-label="Profile" style="position:relative"
+        data-tutorial-id="my-health-profile-btn">
         <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="8" r="4" />
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
-        <span id="profile-pending-dot" style="display:none;position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:var(--red,#dc2626);border:1.5px solid var(--white)"></span>
+        <span id="profile-pending-dot"
+          style="display:none;position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:var(--red,#dc2626);border:1.5px solid var(--white)"></span>
       </button>
     </header>
 
@@ -93,7 +197,8 @@
           <button class="modal-close" onclick="closeSuggestionModal()">&times;</button>
         </div>
         <div style="padding:16px">
-          <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?" rows="4"></textarea>
+          <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?"
+            rows="4"></textarea>
           <div style="display:flex;gap:8px;margin-top:12px">
             <button class="btn btn-primary btn-sm" onclick="submitSuggestion()">Send</button>
             <button class="btn btn-outline btn-sm" onclick="closeSuggestionModal()">Cancel</button>
@@ -108,28 +213,48 @@
         <strong id="profile-menu-name"></strong>
         <span>Patient</span>
       </div>
-      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('patient', 'patient', 'my-health', true)">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <button class="profile-menu-item"
+        onclick="closeProfileMenu(); startTutorial('patient', 'patient', 'my-health', true)">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
         Tutorial
       </button>
       <button class="profile-menu-item" onclick="openChangePasswordModal()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
         Change Password
       </button>
       <button class="profile-menu-item" onclick="openAddressModal()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
         Saved Address
       </button>
-      <button class="profile-menu-item" onclick="openConfirmProfilesModal()" id="confirm-profiles-menu-item" style="display:none">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <button class="profile-menu-item" onclick="openConfirmProfilesModal()" id="confirm-profiles-menu-item"
+        style="display:none">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
         Confirm Your Profiles <span id="pending-profile-count" class="badge badge-red" style="margin-left:6px"></span>
       </button>
       <button class="profile-menu-item danger" onclick="confirmDeactivateAccount()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+        </svg>
         Deactivate Account
       </button>
       <button class="profile-menu-item danger" onclick="logout()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
         Sign out
       </button>
     </div>
@@ -140,7 +265,8 @@
           <h2>Saved Address</h2>
           <button class="modal-close" onclick="closeAddressModal()">&times;</button>
         </div>
-        <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">Used by default when booking appointments — you can still enter a different one for any single visit.</p>
+        <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">Used by default when booking appointments —
+          you can still enter a different one for any single visit.</p>
         <div class="form-group">
           <label class="form-label">Address</label>
           <textarea class="form-control" id="acc-address" rows="3" placeholder="House no., street, city"></textarea>
@@ -160,26 +286,42 @@
       </div>
       <div class="sidebar-section-label">Navigation</div>
       <a class="nav-item active" href="my-health.html">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+        </svg>
         Home
       </a>
       <a class="nav-item" href="my-appointments.html" data-tutorial-id="my-health-appointments-nav">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
         Appointments
       </a>
     </nav>
 
     <nav class="bottom-nav">
       <button class="bottom-nav-item active" id="bn-stats" onclick="showMobileSection('stats')">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3"/></svg>
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3" />
+        </svg>
         Home
       </button>
       <button class="bottom-nav-item" id="bn-admissions" onclick="showMobileSection('admissions')">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m8-14v4m-2-2h4m-8 6h.01M17 15h.01"/></svg>
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m8-14v4m-2-2h4m-8 6h.01M17 15h.01" />
+        </svg>
         Admissions
       </button>
-      <button class="bottom-nav-item" id="bn-records" onclick="showMobileSection('records')" data-tutorial-id="my-health-records-nav">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      <button class="bottom-nav-item" id="bn-records" onclick="showMobileSection('records')"
+        data-tutorial-id="my-health-records-nav">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
         Records
       </button>
       <button class="bottom-nav-item" id="bn-appointments" onclick="location.href='my-appointments.html'">
@@ -196,16 +338,30 @@
           <p style="color:var(--slate)">All your prescriptions, reports, and appointments — in one place.</p>
         </div>
 
-        <div id="active-admission-banner" style="display:none;background:#eff6ff;border:1px solid var(--teal);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:16px">
+        <div id="active-admission-banner"
+          style="display:none;background:#eff6ff;border:1px solid var(--teal);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:16px">
           <div style="font-weight:700;color:var(--navy);margin-bottom:4px">🏥 Currently Admitted</div>
           <div id="active-admission-details" style="font-size:13.5px;color:var(--slate)"></div>
         </div>
 
-        <div id="portal-stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
-          <div class="stat-card c-teal"><div class="num" style="color:var(--teal)" id="stat-profiles">—</div><div class="label">Linked Profiles</div></div>
-          <div class="stat-card c-navy"><div class="num" style="color:var(--navy)" id="stat-consultations">—</div><div class="label">Consultations</div></div>
-          <div class="stat-card c-teal"><div class="num" style="color:var(--teal)" id="stat-visits-total">—</div><div class="label">Total Hospital Visits</div></div>
-          <div class="stat-card c-navy"><div class="num" style="color:var(--navy)" id="stat-visits-30d">—</div><div class="label">Visits (Last 30 Days)</div></div>
+        <div id="portal-stats-grid"
+          style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px">
+          <div class="stat-card c-teal">
+            <div class="num" style="color:var(--teal)" id="stat-profiles">—</div>
+            <div class="label">Linked Profiles</div>
+          </div>
+          <div class="stat-card c-navy">
+            <div class="num" style="color:var(--navy)" id="stat-consultations">—</div>
+            <div class="label">Consultations</div>
+          </div>
+          <div class="stat-card c-teal">
+            <div class="num" style="color:var(--teal)" id="stat-visits-total">—</div>
+            <div class="label">Total Hospital Visits</div>
+          </div>
+          <div class="stat-card c-navy">
+            <div class="num" style="color:var(--navy)" id="stat-visits-30d">—</div>
+            <div class="label">Visits (Last 30 Days)</div>
+          </div>
         </div>
       </div>
 
@@ -222,19 +378,26 @@
           <div class="filter-bar" style="margin-bottom:16px">
             <div class="form-group" style="margin:0">
               <label class="form-label">Search</label>
-              <input class="form-control" id="search-input" placeholder="Search by hospital, doctor, token..." oninput="applyFilters()" />
+              <input class="form-control" id="search-input" placeholder="Search by hospital, doctor, token..."
+                oninput="applyFilters()" />
             </div>
             <div class="form-group" style="margin:0">
               <label class="form-label">Hospital</label>
-              <select class="form-control" id="filter-hospital" onchange="applyFilters()"><option value="">All hospitals</option></select>
+              <select class="form-control" id="filter-hospital" onchange="applyFilters()">
+                <option value="">All hospitals</option>
+              </select>
             </div>
             <div class="form-group" style="margin:0">
               <label class="form-label">Patient</label>
-              <select class="form-control" id="filter-patient" onchange="applyFilters()"><option value="">All profiles</option></select>
+              <select class="form-control" id="filter-patient" onchange="applyFilters()">
+                <option value="">All profiles</option>
+              </select>
             </div>
           </div>
 
-          <div id="records-list"><p>Loading...</p></div>
+          <div id="records-list">
+            <p>Loading...</p>
+          </div>
         </div>
       </div>
 
@@ -247,20 +410,25 @@
         <h2>Visit Details</h2>
         <button class="modal-close" onclick="closeVisitModal()">&times;</button>
       </div>
-      <div id="visit-modal-body"><p>Loading...</p></div>
+      <div id="visit-modal-body">
+        <p>Loading...</p>
+      </div>
     </div>
   </div>
 
   <div class="modal-overlay" id="modal-confirm-profiles">
-      <div class="modal" style="max-width:460px">
-        <div class="modal-header"><h2>Confirm Your Profiles</h2><button class="modal-close" onclick="closeConfirmProfilesModal()">&times;</button></div>
-        <p style="font-size:13px;color:var(--slate);margin-bottom:14px">We found these records under your phone number.</p>
-        <div id="pending-profiles-list"></div>
+    <div class="modal" style="max-width:460px">
+      <div class="modal-header">
+        <h2>Confirm Your Profiles</h2><button class="modal-close" onclick="closeConfirmProfilesModal()">&times;</button>
       </div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:14px">We found these records under your phone number.
+      </p>
+      <div id="pending-profiles-list"></div>
     </div>
+  </div>
 
-    <script src="../js/api.js"></script>
-    <script src="../js/tutorial.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/tutorial.js"></script>
   <script>
     if (!requireAuth()) { }
     if (getDoctor()?.role !== 'patient') redirectByRole(getDoctor()?.role);
