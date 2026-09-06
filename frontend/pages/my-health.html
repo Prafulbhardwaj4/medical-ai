@@ -87,16 +87,16 @@
     </header>
 
     <div class="modal-overlay" id="modal-suggestion">
-      <div class="modal" style="max-width:420px;background:#f0fdfa">
-        <div class="modal-header">
-          <h3>Suggestions</h3>
-          <button class="modal-close" onclick="closeSuggestionModal()">&times;</button>
+      <div class="modal" style="max-width:420px;background:var(--teal,#0d9488)">
+        <div class="modal-header" style="border-bottom-color:rgba(255,255,255,0.2)">
+          <h3 style="color:#fff">Suggestions</h3>
+          <button class="modal-close" style="background:rgba(255,255,255,0.15);color:#fff" onclick="closeSuggestionModal()">&times;</button>
         </div>
         <div style="padding:16px">
-          <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?" rows="4"></textarea>
+          <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?" rows="4" style="background:#fff"></textarea>
           <div style="display:flex;gap:8px;margin-top:12px">
             <button class="btn btn-primary btn-sm" onclick="submitSuggestion()">Send</button>
-            <button class="btn btn-outline btn-sm" onclick="closeSuggestionModal()">Cancel</button>
+            <button class="btn btn-outline btn-sm" style="background:#fff" onclick="closeSuggestionModal()">Cancel</button>
           </div>
         </div>
       </div>

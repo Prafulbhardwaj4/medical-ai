@@ -34,7 +34,7 @@
   let _highlightEl = null;
   let _arrowEl = null;
   let _resizeHandler = null;
-  let _prevBodyOverflow = null;
+  let _wheelBlocker = null;
 
   function _statusEndpoint(subjectType) {
     return subjectType === "patient" ? "/tutorials/status/patient" : "/tutorials/status/staff";
