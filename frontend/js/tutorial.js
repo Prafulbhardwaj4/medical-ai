@@ -79,8 +79,7 @@
 
   function _buildOverlay() {
     if (_overlayEl) return;
-    _prevBodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    _lockScroll();
     _overlayEl = document.createElement("div");
     _overlayEl.id = "tutorial-overlay";
     _overlayEl.style.cssText = "position:fixed;inset:0;z-index:10500;pointer-events:none";
@@ -103,8 +102,22 @@
   function _teardownOverlay() {
     if (_resizeHandler) window.removeEventListener("resize", _resizeHandler);
     if (_overlayEl) _overlayEl.remove();
-    document.body.style.overflow = _prevBodyOverflow || "";
+    _unlockScroll();
     _overlayEl = null; _tooltipEl = null; _highlightEl = null; _arrowEl = null; _resizeHandler = null;
+  }
+
+  function _lockScroll() {
+    if (_wheelBlocker) return;
+    _wheelBlocker = (e) => e.preventDefault();
+    window.addEventListener("wheel", _wheelBlocker, { passive: false });
+    window.addEventListener("touchmove", _wheelBlocker, { passive: false });
+  }
+
+  function _unlockScroll() {
+    if (!_wheelBlocker) return;
+    window.removeEventListener("wheel", _wheelBlocker, { passive: false });
+    window.removeEventListener("touchmove", _wheelBlocker, { passive: false });
+    _wheelBlocker = null;
   }
 
   function _renderStep() {
