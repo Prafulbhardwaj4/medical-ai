@@ -71,8 +71,8 @@
         </button>
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
+      <button class="btn btn-sm" onclick="openSuggestionModal()" style="background:var(--teal,#0d9488);color:#fff;border:none;margin-right:10px">Suggestions</button>
       <div class="topbar-doctor">
-        <button class="btn btn-outline btn-sm" onclick="openSuggestionModal()" style="margin-right:10px">Suggestions</button>
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <button class="btn-logout" onclick="logout()">Sign out</button>
@@ -87,16 +87,16 @@
     </header>
 
     <div class="modal-overlay" id="modal-suggestion">
-      <div class="modal" style="max-width:420px;background:var(--teal,#0d9488)">
-        <div class="modal-header" style="border-bottom-color:rgba(255,255,255,0.2)">
-          <h3 style="color:#fff">Suggestions</h3>
-          <button class="modal-close" style="background:rgba(255,255,255,0.15);color:#fff" onclick="closeSuggestionModal()">&times;</button>
+      <div class="modal" style="max-width:420px;background:#f0fdfa">
+        <div class="modal-header">
+          <h3>Suggestions</h3>
+          <button class="modal-close" onclick="closeSuggestionModal()">&times;</button>
         </div>
         <div style="padding:16px">
-          <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?" rows="4" style="background:#fff"></textarea>
+          <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?" rows="4"></textarea>
           <div style="display:flex;gap:8px;margin-top:12px">
             <button class="btn btn-primary btn-sm" onclick="submitSuggestion()">Send</button>
-            <button class="btn btn-outline btn-sm" style="background:#fff" onclick="closeSuggestionModal()">Cancel</button>
+            <button class="btn btn-outline btn-sm" onclick="closeSuggestionModal()">Cancel</button>
           </div>
         </div>
       </div>
@@ -182,7 +182,7 @@
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         Records
       </button>
-      <button class="bottom-nav-item" onclick="location.href='my-appointments.html'">
+      <button class="bottom-nav-item" id="bn-appointments" onclick="location.href='my-appointments.html'">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Appointments
       </button>
