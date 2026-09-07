@@ -652,7 +652,7 @@
     }
 
     async function triggerMassReschedule(unavailabilityId) {
-      if (!confirm("Send a reschedule notice to every affected paid booking on this date? They'll be able to pick a new time with you directly, same fee.")) return;
+      if (!(await confirmModal("Send a reschedule notice to every affected paid booking on this date? They'll be able to pick a new time with you directly, same fee.", { okLabel: "Send Notice" }))) return;
       try {
         const res = await api("POST", `/doctor-slots/unavailable/${unavailabilityId}/trigger-mass-reschedule`);
         toast(res.message, "success");

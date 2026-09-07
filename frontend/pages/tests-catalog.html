@@ -812,7 +812,7 @@
 
     document.getElementById('t-notifiable-disease').addEventListener('change', async function () {
       if (this.value !== '__manage__') return;
-      const action = prompt("Type a disease name to ADD it, or type 'remove:Name' to remove an existing one.\n\nCurrent list: " + notifiableDiseasesCache.map(d => d.name).join(', '));
+      const action = await promptModal("Type a disease name to ADD it, or type 'remove:Name' to remove an existing one.\n\nCurrent list: " + notifiableDiseasesCache.map(d => d.name).join(', '));
       this.value = '';
       if (!action) return;
       try {

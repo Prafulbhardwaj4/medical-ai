@@ -941,7 +941,7 @@
     async function resetAccountPassword(id) {
       try {
         const data = await api('POST', `/admin/accounts/${id}/reset-password`, {});
-        alert(`New password: ${data.new_password}\n\nShare this with the account holder now — it will not be shown again.`);
+        await alertModal(`New password: ${data.new_password}\n\nShare this with the account holder now — it will not be shown again.`, { title: "New Password" });
         toast('Password reset.', 'success');
       } catch (e) {
         toast(e.message, 'error');

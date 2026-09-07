@@ -614,7 +614,7 @@
     }
 
     async function authorizeScheduleXRepeatFromPatientPage(orderId, consultationId) {
-      if (!confirm('Confirm you are explicitly authorizing a repeat dispense of this Schedule X medicine?')) return;
+      if (!(await confirmModal('Confirm you are explicitly authorizing a repeat dispense of this Schedule X medicine?', { okLabel: 'Authorize' }))) return;
       try {
         await api("PATCH", `/pharmacy/medicine-orders/${orderId}/authorize-repeat`, {});
         toast('Repeat dispense authorized.', 'success');

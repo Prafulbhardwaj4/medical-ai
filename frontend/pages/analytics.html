@@ -992,7 +992,7 @@
         }
 
         async function executeMerge(id) {
-            if (!confirm('This permanently merges the duplicate record into the primary. This cannot be undone. Continue?')) return;
+            if (!(await confirmModal('This permanently merges the duplicate record into the primary. This cannot be undone. Continue?', { danger: true, okLabel: 'Merge' }))) return;
             try {
                 const result = await api("POST", `/patients/merge-requests/${id}/execute`, {});
                 toast(result.unmerged_profile_link_note ? 'Merged — ' + result.unmerged_profile_link_note : 'Patients merged.', 'success');

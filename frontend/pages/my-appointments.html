@@ -1167,7 +1167,7 @@
         loadAppointments();
       } catch (e) {
         if ((e.message || "").toLowerCase().includes("enter your name")) {
-          namePrompt = prompt("This hospital hasn't seen your account before — please enter your name:");
+          namePrompt = await promptModal("This hospital hasn't seen your account before — please enter your name:");
           if (!namePrompt) return;
           try {
             await api("POST", `/portal/appointments/family-booking-requests/${id}/confirm`, { new_patient_name: namePrompt });
@@ -1237,7 +1237,7 @@
     }
 
     async function openMassRescheduleModal(id) {
-      const slotIdStr = prompt("Your doctor is unavailable for your booked slot. Enter a new slot ID with the same doctor:");
+      const slotIdStr = await promptModal("Your doctor is unavailable for your booked slot. Enter a new slot ID with the same doctor:");
       if (!slotIdStr) return;
       const newSlotId = parseInt(slotIdStr.trim(), 10);
       if (!newSlotId) { toast("Enter a valid slot ID", "error"); return; }
@@ -1249,7 +1249,7 @@
     }
 
     async function openRescheduleModal(id) {
-      const slotIdStr = prompt("Enter the new slot ID you'd like (check the doctor's available slots page):");
+      const slotIdStr = await promptModal("Enter the new slot ID you'd like (check the doctor's available slots page):");
       if (!slotIdStr) return;
       const newSlotId = parseInt(slotIdStr.trim(), 10);
       if (!newSlotId) { toast("Enter a valid slot ID", "error"); return; }

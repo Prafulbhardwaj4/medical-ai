@@ -755,6 +755,73 @@ function _createOverlayModal(title, maxWidth) {
   return overlay;
 }
 
+// Shared replacements for window.confirm/alert/prompt — every browser-native
+// popup in the app should route through one of these three instead, so it
+// looks and behaves like the rest of the UI. All three are Promise-based;
+// every call site is inside an already-async function, so `await` drops in
+// cleanly wherever `confirm(...)`/`alert(...)`/`prompt(...)` used to sit.
+function confirmModal(message, opts = {}) {
+  return new Promise((resolve) => {
+    const overlay = _createOverlayModal(opts.title || "Confirm", 420);
+    const body = overlay.querySelector(".generic-modal-body");
+    let settled = false;
+    const finish = (val) => { if (settled) return; settled = true; overlay.remove(); resolve(val); };
+    overlay.querySelector(".modal-close").addEventListener("click", () => finish(false));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) finish(false); });
+    body.innerHTML = `
+      <p style="font-size:14px;color:var(--navy);line-height:1.55;margin-bottom:20px;white-space:pre-line">${sanitize(message)}</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-outline btn-sm" id="confirm-modal-cancel">${sanitize(opts.cancelLabel || "Cancel")}</button>
+        <button class="btn btn-sm" id="confirm-modal-ok" style="${opts.danger ? 'background:var(--danger);color:#fff;border:none' : 'background:var(--teal,#0d9488);color:#fff;border:none'}">${sanitize(opts.okLabel || "Confirm")}</button>
+      </div>
+    `;
+    body.querySelector("#confirm-modal-cancel").addEventListener("click", () => finish(false));
+    body.querySelector("#confirm-modal-ok").addEventListener("click", () => finish(true));
+  });
+}
+
+function alertModal(message, opts = {}) {
+  return new Promise((resolve) => {
+    const overlay = _createOverlayModal(opts.title || "Notice", 420);
+    const body = overlay.querySelector(".generic-modal-body");
+    const finish = () => { overlay.remove(); resolve(); };
+    overlay.querySelector(".modal-close").addEventListener("click", finish);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) finish(); });
+    body.innerHTML = `
+      <p style="font-size:14px;color:var(--navy);line-height:1.55;margin-bottom:20px;white-space:pre-line">${sanitize(message)}</p>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn btn-primary btn-sm" id="alert-modal-ok">OK</button>
+      </div>
+    `;
+    body.querySelector("#alert-modal-ok").addEventListener("click", finish);
+  });
+}
+
+function promptModal(message, defaultValue) {
+  return new Promise((resolve) => {
+    const overlay = _createOverlayModal("", 420);
+    const body = overlay.querySelector(".generic-modal-body");
+    let settled = false;
+    const finish = (val) => { if (settled) return; settled = true; overlay.remove(); resolve(val); };
+    overlay.querySelector(".modal-close").addEventListener("click", () => finish(null));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) finish(null); });
+    body.innerHTML = `
+      <p style="font-size:14px;color:var(--navy);line-height:1.55;margin-bottom:12px;white-space:pre-line">${sanitize(message)}</p>
+      <input class="form-control" id="prompt-modal-input" style="margin-bottom:16px" />
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-outline btn-sm" id="prompt-modal-cancel">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="prompt-modal-ok">OK</button>
+      </div>
+    `;
+    const input = body.querySelector("#prompt-modal-input");
+    input.value = defaultValue || "";
+    input.focus();
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") finish(input.value); });
+    body.querySelector("#prompt-modal-cancel").addEventListener("click", () => finish(null));
+    body.querySelector("#prompt-modal-ok").addEventListener("click", () => finish(input.value));
+  });
+}
+
 async function openReportsModal(patientId) {
   if (!patientId) {
     toast("Still loading this patient — try again in a moment.", "info");

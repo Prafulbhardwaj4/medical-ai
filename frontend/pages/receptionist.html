@@ -1620,8 +1620,8 @@
           </div>
           <div class="err-msg" id="ri-err"></div>
           <div style="display:flex;gap:10px">
-            <button class="btn" style="flex:1;background:var(--teal,#0d9488);color:#fff;border:none" onclick="acknowledgeReferral(${r.id}, this)">Acknowledge</button>
             <button class="btn" style="flex:1;background:#dc2626;color:#fff;border:none" onclick="onReferralRejectClick(${r.id}, this)">Reject</button>
+            <button class="btn" style="flex:1;background:var(--teal,#0d9488);color:#fff;border:none" onclick="acknowledgeReferral(${r.id}, this)">Acknowledge</button>
           </div>
         `;
       } catch (e) {
@@ -2361,7 +2361,7 @@
         loadAllPatients();
       } catch (e) {
         if (e.data && e.data.admission) {
-          if (confirm(`${e.data.message}\n\nGenerate a new OPD token anyway?`)) {
+          if (await confirmModal(`${e.data.message}\n\nGenerate a new OPD token anyway?`)) {
             btn.disabled = false;
             btn.innerHTML = 'Generate Token';
             return generateToken(true);
@@ -2957,7 +2957,7 @@
             if (!method) { renderPaymentToggleBody(); return; }
             await api("PATCH", `/patients/checkin/${checkinId}/mark-paid`, { payment_method: method });
           } else {
-            if (!confirm('Mark the consultation fee as unpaid?')) { renderPaymentToggleBody(); return; }
+            if (!(await confirmModal('Mark the consultation fee as unpaid?', { danger: true, okLabel: 'Mark Unpaid' }))) { renderPaymentToggleBody(); return; }
             await api("PATCH", `/patients/checkin/${checkinId}/mark-unpaid`, {});
           }
           if (doctorEntry) doctorEntry.buckets.consultation.status = turningOn ? 'paid' : 'unpaid';
@@ -2968,7 +2968,7 @@
             const result = await api("POST", `/patients/${row.patient_id}/collect-test-payment`, { payment_method: method });
             toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
           } else {
-            if (!confirm('Mark tests as unpaid? Only tests not yet started at the lab can be reverted.')) { renderPaymentToggleBody(); return; }
+            if (!(await confirmModal('Mark tests as unpaid? Only tests not yet started at the lab can be reverted.', { danger: true, okLabel: 'Mark Unpaid' }))) { renderPaymentToggleBody(); return; }
             await api("POST", `/patients/${row.patient_id}/revert-test-payment`, {});
           }
           row.doctors[0].buckets.tests.status = turningOn ? 'paid' : 'unpaid';
@@ -2979,7 +2979,7 @@
             const result = await api("POST", `/patients/${row.patient_id}/collect-radiology-payment`, { payment_method: method });
             toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
           } else {
-            if (!confirm('Mark radiology as unpaid? Only studies not yet imaged can be reverted.')) { renderPaymentToggleBody(); return; }
+            if (!(await confirmModal('Mark radiology as unpaid? Only studies not yet imaged can be reverted.', { danger: true, okLabel: 'Mark Unpaid' }))) { renderPaymentToggleBody(); return; }
             await api("POST", `/patients/${row.patient_id}/revert-radiology-payment`, {});
           }
           row.doctors[0].buckets.radiology.status = turningOn ? 'paid' : 'unpaid';

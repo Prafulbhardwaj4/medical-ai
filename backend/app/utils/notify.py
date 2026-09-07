@@ -650,16 +650,17 @@ def notify_referral_admitted(db: Session, hospital_id: int, admission_id: int, p
     admitting doctor on the original admission when no doctor specifically
     initiated the referral."""
     key = f"referral_admitted:{admission_id}:{now_ist_naive().isoformat()}"
-    message = f"{patient_name} has been admitted at {to_hospital_name}."
+    title = f"Patient Admitted — {patient_name}"
+    message = f"Now admitted at {to_hospital_name}."
     db.add(Notification(
         hospital_id=hospital_id, source_key=key, type="referral_admitted", severity="info",
-        title=f"Patient admitted elsewhere — {patient_name}", message=message,
+        title=title, message=message,
         link_type="referral_admitted", link_id=admission_id, is_read=False,
     ))
     for target_id in {nurse_id, doctor_id} - {None}:
         db.add(Notification(
             hospital_id=hospital_id, source_key=f"{key}:{target_id}", type="referral_admitted", severity="info",
-            title=f"Patient admitted elsewhere — {patient_name}", message=message,
+            title=title, message=message,
             link_type="referral_admitted", link_id=admission_id, is_read=False, target_doctor_id=target_id,
         ))
 

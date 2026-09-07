@@ -11,7 +11,7 @@ from app.routers.referrals import _expire_stale_cross_hospital_referrals
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 PHARMACY_VISIBLE_TYPES = ["low_stock", "expiring_stock", "admission_medicine_order"]
-RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request", "sample_rejected", "admission_referral", "referral_incoming", "referral_departed", "referral_rejected"]
+RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request", "sample_rejected", "admission_referral", "referral_incoming", "referral_departed", "referral_rejected", "referral_sent", "referral_admitted"]
 LAB_VISIBLE_TYPES = ["admission_test_sample", "admission_sample_overdue"]
 DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "no_assistant_alert", "emergency_ward_intake", "admission_medicine_substitute", "emergency_admission", "referral_rejected", "referral_admitted"]
 NURSE_VISIBLE_TYPES = ["critical_result_escalation", "sample_rejected", "emergency_assistant_hold", "emergency_alert_for_assistant", "referral_rejected", "referral_admitted"]
@@ -50,16 +50,20 @@ def list_notifications(
     db.commit()
 
     query = db.query(Notification).filter(Notification.hospital_id == current_doctor.hospital_id)
+    # target_doctor_id set means the row belongs to one specific person —
+    # everyone else (any role) must not see it, or the same event shows up
+    # once as "hospital-wide" and again as "targeted at someone else".
+    not_targeted_at_someone_else = (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)
     if current_doctor.role.value == "pharmacy":
-        query = query.filter(Notification.type.in_(PHARMACY_VISIBLE_TYPES))
+        query = query.filter(Notification.type.in_(PHARMACY_VISIBLE_TYPES), not_targeted_at_someone_else)
     if current_doctor.role.value == "receptionist":
-        query = query.filter(Notification.type.in_(RECEPTIONIST_VISIBLE_TYPES))
+        query = query.filter(Notification.type.in_(RECEPTIONIST_VISIBLE_TYPES), not_targeted_at_someone_else)
     if current_doctor.role.value == "lab":
-        query = query.filter(Notification.type.in_(LAB_VISIBLE_TYPES))
+        query = query.filter(Notification.type.in_(LAB_VISIBLE_TYPES), not_targeted_at_someone_else)
     if current_doctor.role.value == "doctor":
         query = query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
     if current_doctor.role.value in ("nurse", "assistant"):
-        query = query.filter(Notification.type.in_(NURSE_VISIBLE_TYPES))
+        query = query.filter(Notification.type.in_(NURSE_VISIBLE_TYPES), not_targeted_at_someone_else)
     if current_doctor.role.value in ("admin", "sub_admin"):
         # target_doctor_id marks a notification as meant for one specific
         # individual (e.g. a staff member's suggestion reply) — admin/
@@ -76,15 +80,15 @@ def list_notifications(
         Notification.is_read == False
     )
     if current_doctor.role.value == "pharmacy":
-        unread_query = unread_query.filter(Notification.type.in_(PHARMACY_VISIBLE_TYPES))
+        unread_query = unread_query.filter(Notification.type.in_(PHARMACY_VISIBLE_TYPES), not_targeted_at_someone_else)
     if current_doctor.role.value == "receptionist":
-        unread_query = unread_query.filter(Notification.type.in_(RECEPTIONIST_VISIBLE_TYPES))
+        unread_query = unread_query.filter(Notification.type.in_(RECEPTIONIST_VISIBLE_TYPES), not_targeted_at_someone_else)
     if current_doctor.role.value == "lab":
-        unread_query = unread_query.filter(Notification.type.in_(LAB_VISIBLE_TYPES))
+        unread_query = unread_query.filter(Notification.type.in_(LAB_VISIBLE_TYPES), not_targeted_at_someone_else)
     if current_doctor.role.value == "doctor":
         unread_query = unread_query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
     if current_doctor.role.value in ("nurse", "assistant"):
-        unread_query = unread_query.filter(Notification.type.in_(NURSE_VISIBLE_TYPES))
+        unread_query = unread_query.filter(Notification.type.in_(NURSE_VISIBLE_TYPES), not_targeted_at_someone_else)
     if current_doctor.role.value in ("admin", "sub_admin"):
         unread_query = unread_query.filter(
             (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)

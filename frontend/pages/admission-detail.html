@@ -762,7 +762,7 @@
   </div>
 
   <!-- Add Charge modal -->
-  <div class="modal-overlay" id="modal-add-charge">
+  <div class="modal-overlay" id="modal-add-charge" style="z-index:1010">
     <div class="modal" style="max-width:400px">
       <div class="modal-header">
         <h2>Add Charge</h2><button class="modal-close" onclick="closeModal('modal-add-charge')">&times;</button>
@@ -1739,9 +1739,9 @@
             ${a.status === 'admitted' && isNurseViewer() && !a.ward_is_emergency ? `<button class="btn btn-sm ph-emergency-btn" onclick="sendEmergencyAlert()">🚨 Emergency Alert</button>` : ''}
           </div>
         </div>
-        ${a.pending_outbound_referral ? `
+        ${a.pending_outbound_referral && a.pending_outbound_referral.status !== 'pending' ? `
           <div class="ph-referral-banner" style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px;color:#7c2d12">
-            ${a.pending_outbound_referral.status === 'pending' ? `Referral sent to <strong>${sanitize(a.pending_outbound_referral.to_hospital_name)}</strong> — awaiting response.` : `Patient marked departed to <strong>${sanitize(a.pending_outbound_referral.to_hospital_name)}</strong>.`}
+            Patient marked departed to <strong>${sanitize(a.pending_outbound_referral.to_hospital_name)}</strong>.
           </div>
         ` : ''}
         ${a.received_via_referral ? `
@@ -1903,7 +1903,10 @@
       box.innerHTML = "Loading bed availability…";
       try {
         const beds = await api("GET", `/referrals/target-hospitals/${hospitalId}/bed-summary`);
-        box.innerHTML = beds.length ? beds.map(b => `${sanitize(b.category)}: ${b.available} available`).join(' · ') : "No ward data available for this hospital";
+        const anyAvailable = beds.some(b => b.available > 0);
+        box.innerHTML = !beds.length ? "No ward data available for this hospital"
+          : anyAvailable ? `<span style="color:var(--teal);font-weight:600">🟢 Beds Available</span>`
+          : `<span style="color:var(--danger);font-weight:600">🔴 Beds Not Available</span>`;
       } catch (e) { box.innerHTML = ""; }
     }
 
@@ -2309,7 +2312,7 @@
     }
 
     async function cancelTopupRequest(requestId) {
-      if (!confirm("Cancel this top-up request?")) return;
+      if (!(await confirmModal("Cancel this top-up request?", { danger: true, okLabel: "Cancel Request" }))) return;
       try {
         await api("POST", `/admissions/${admissionId}/topup-requests/${requestId}/cancel`, {});
         toast("Top-up request cancelled.", "success");
@@ -2535,7 +2538,7 @@
     }
 
     async function retractAllergy(allergyId) {
-      if (!confirm("Remove this allergy record?")) return;
+      if (!(await confirmModal("Remove this allergy record?", { danger: true, okLabel: "Remove" }))) return;
       try {
         await api("PATCH", `/patients/${admissionData.patient.id}/allergies/${allergyId}/retract`);
         toast("Allergy removed", "success");
@@ -3159,7 +3162,15 @@
         death: "Deceased",
         referral_transfer: "Referred",
       };
+      const followupDefaults = {
+        planned: "Follow up with treating doctor as advised.",
+        lama_dama: "Patient advised to seek medical attention promptly if symptoms worsen.",
+        death: "",
+        referral_transfer: "Continue care at the receiving hospital.",
+      };
       document.getElementById("discharge-condition").value = conditionDefaults[type] || "";
+      document.getElementById("discharge-followup").value = followupDefaults[type] || "";
+      document.getElementById("discharge-diagnosis").value = admissionData?.diagnosis || "";
       document.getElementById("discharge-course").value =
         (type === "referral_transfer" && admissionData?.pending_outbound_referral?.to_hospital_name)
           ? `Referred to ${admissionData.pending_outbound_referral.to_hospital_name} for further management.`
@@ -3178,9 +3189,7 @@
       document.getElementById("discharge-cause-of-death").value = "";
       document.getElementById("discharge-is-mlc").checked = false;
       document.getElementById("discharge-procedures").value = "";
-      document.getElementById("discharge-diagnosis").value = "";
       document.getElementById("discharge-medications").value = "";
-      document.getElementById("discharge-followup").value = "";
       document.getElementById("discharge-transfer-charge").value = "";
       document.getElementById("btn-add-transfer-charge").disabled = false;
       document.getElementById("discharge-type").value = hasActiveOutboundReferral ? "referral_transfer" : "planned";
@@ -3274,9 +3283,9 @@
       if (document.getElementById("btn-discharge-patient").disabled) {
         const referralAuthorized = admissionData?.pending_outbound_referral && admissionData.pending_outbound_referral.status === "pending" && admissionData.referral_discharge_authorized;
         if (!admissionData.discharge_order_at && !referralAuthorized) {
-          alert("A doctor must place the discharge order before this patient can be discharged.");
+          await alertModal("A doctor must place the discharge order before this patient can be discharged.");
         } else {
-          alert(`Payment of ₹${dischargeAmountDue.toFixed(2)} is still pending. Collect payment before discharge can proceed.`);
+          await alertModal(`Payment of ₹${dischargeAmountDue.toFixed(2)} is still pending. Collect payment before discharge can proceed.`);
         }
         return;
       }

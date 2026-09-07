@@ -1316,7 +1316,7 @@
     }
 
     async function deleteRoomFromPanel(roomId) {
-      if (!confirm("Delete this room? This can't be undone.")) return;
+      if (!(await confirmModal("Delete this room? This can't be undone.", { danger: true, okLabel: "Delete" }))) return;
       try {
         await api("DELETE", `/admissions/ward-types/${roomsPanelWardTypeId}/rooms/${roomId}`);
         toast("Room deleted", "success");
