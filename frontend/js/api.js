@@ -41,6 +41,20 @@ function saveSession(token, doctor) {
   }
 }
 
+function renderPasswordStrength(pw, prefix = 'pw') {
+  const checks = [
+    [`${prefix}-check-length`, pw.length >= 8],
+    [`${prefix}-check-number`, /\d/.test(pw)],
+    [`${prefix}-check-upper`, /[A-Z]/.test(pw)],
+  ];
+  checks.forEach(([id, ok]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.color = ok ? 'var(--green, #16a34a)' : 'var(--slate-light)';
+    el.textContent = (ok ? '✓ ' : '○ ') + el.textContent.slice(2);
+  });
+}
+
 function clearSession() {
   try {
     localStorage.removeItem("ms_token");

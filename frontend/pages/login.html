@@ -68,15 +68,52 @@
             </div>
           </div>
 
+          <div class="form-group" id="login-captcha-group" style="display:none">
+            <label class="form-label" id="captcha-question">Loading captcha…</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="form-control" id="login-captcha-answer" type="text" inputmode="numeric" placeholder="Your answer" />
+              <span onclick="loadCaptcha()" style="cursor:pointer;font-size:20px;padding:0 4px" title="Get a new question">🔄</span>
+            </div>
+          </div>
+
           <div class="err-msg" id="login-err"></div>
           <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-login" onclick="doLogin()">
             Sign In
           </button>
 
-          <div style="text-align:center;margin-top:20px;font-size:13px;color:var(--slate-light)">
+          <div style="text-align:center;margin-top:14px">
+            <span onclick="openForgotPasswordModal()" style="font-size:13px;color:var(--teal, #14b8a6);cursor:pointer;font-weight:500">Forgot password?</span>
+          </div>
+
+          <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--slate-light)">
             Staff: contact your hospital admin.<br />
             Patients: your number must already have a hospital visit on record.
           </div>
+        </div>
+
+        <!-- SET PASSWORD FORM (staff, first login only) -->
+        <div id="form-staff-newpw" style="display:none">
+          <div style="text-align:center;margin-bottom:20px">
+            <p style="color:var(--slate);font-size:13px">This is your first time signing in. Choose a new password to finish setting up your account.</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label">New Password</label>
+            <input class="form-control" id="staff-new-password" type="password" placeholder="At least 8 characters"
+              oninput="renderPasswordStrength(this.value, 'staff-pw')" />
+            <ul style="list-style:none;padding:0;margin:8px 0 0;font-size:12.5px">
+              <li id="staff-pw-check-length" style="color:var(--slate-light)">○ At least 8 characters</li>
+              <li id="staff-pw-check-number" style="color:var(--slate-light)">○ At least 1 number</li>
+              <li id="staff-pw-check-upper" style="color:var(--slate-light)">○ At least 1 capital letter</li>
+            </ul>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirm Password</label>
+            <input class="form-control" id="staff-new-password-confirm" type="password" placeholder="Re-enter password" />
+          </div>
+          <div class="err-msg" id="staff-newpw-err"></div>
+          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-staff-newpw" onclick="doStaffSetPassword()">
+            Set Password &amp; Sign In
+          </button>
         </div>
 
         <!-- SET PASSWORD / REGISTER FORM (patients, first login only) -->
@@ -113,24 +150,45 @@
   </div>
 
   <script src="../js/api.js"></script>
+  <script src="../js/forgot-password.js" defer></script>
   <script>
-    function renderPasswordStrength(pw) {
-      const checks = [
-        ['pw-check-length', pw.length >= 8],
-        ['pw-check-number', /\d/.test(pw)],
-        ['pw-check-upper', /[A-Z]/.test(pw)],
-      ];
-      checks.forEach(([id, ok]) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.style.color = ok ? 'var(--green, #16a34a)' : 'var(--slate-light)';
-        el.textContent = (ok ? '✓ ' : '○ ') + el.textContent.slice(2);
-      });
-    }
     // Redirect if already logged in
     if (getToken()) redirectByRole(getDoctor()?.role);
 
     let pendingPatientPhone = null;
+    let currentCaptchaToken = null;
+    let pendingStaffEmail = null;
+    let pendingStaffOldPassword = null;
+    let lastCaptchaAnswer = null;
+
+    async function loadCaptcha() {
+      const q = document.getElementById("captcha-question");
+      const answerInput = document.getElementById("login-captcha-answer");
+      q.textContent = "Loading captcha…";
+      answerInput.value = "";
+      try {
+        const res = await fetch(`${BASE}/auth/captcha`);
+        const json = await res.json();
+        q.textContent = json.question;
+        currentCaptchaToken = json.token;
+      } catch (e) {
+        q.textContent = "Couldn't load captcha — tap 🔄 to retry";
+        currentCaptchaToken = null;
+      }
+    }
+
+    document.getElementById("login-id").addEventListener("input", () => {
+      const val = document.getElementById("login-id").value.trim();
+      const group = document.getElementById("login-captcha-group");
+      if (isEmail(val)) {
+        if (group.style.display === "none") {
+          group.style.display = "block";
+          loadCaptcha();
+        }
+      } else {
+        group.style.display = "none";
+      }
+    });
 
     function toggleLoginPasswordVisibility() {
       const input = document.getElementById("login-password");
@@ -175,13 +233,27 @@
 
       try {
         if (isEmail(identifier)) {
+          if (!currentCaptchaToken) { err.textContent = "Please wait for the captcha to load."; return; }
+          const captchaAnswer = document.getElementById("login-captcha-answer").value.trim();
+          if (!captchaAnswer) { err.textContent = "Please answer the captcha question."; return; }
           const res = await fetch(`${BASE}/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: identifier, password })
+            body: JSON.stringify({ email: identifier, password, captcha_token: currentCaptchaToken, captcha_answer: captchaAnswer })
           });
           const json = await res.json();
-          if (!res.ok) throw new Error(json.detail || "Login failed");
+          if (!res.ok) {
+            if (json.detail && json.detail.toLowerCase().includes("captcha")) loadCaptcha();
+            throw new Error(json.detail || "Login failed");
+          }
+          if (json.status === "needs_password_change") {
+            pendingStaffEmail = identifier;
+            pendingStaffOldPassword = password;
+            lastCaptchaAnswer = captchaAnswer;
+            document.getElementById("form-login").style.display = "none";
+            document.getElementById("form-staff-newpw").style.display = "block";
+            return;
+          }
           saveSession(json.access_token, json.doctor);
           redirectByRole(json.doctor.role);
         } else if (isPhone(identifier)) {
@@ -250,9 +322,50 @@
       }
     }
 
+    async function doStaffSetPassword() {
+      const btn = document.getElementById("btn-staff-newpw");
+      const err = document.getElementById("staff-newpw-err");
+      err.textContent = "";
+
+      const pw = document.getElementById("staff-new-password").value;
+      const cpw = document.getElementById("staff-new-password-confirm").value;
+
+      if (pw.length < 8 || !/\d/.test(pw) || !/[A-Z]/.test(pw)) {
+        err.textContent = "Password must be at least 8 characters, with 1 number and 1 capital letter.";
+        return;
+      }
+      if (pw !== cpw) { err.textContent = "Passwords do not match."; return; }
+      if (pw === pendingStaffOldPassword) { err.textContent = "Please choose a different password than the temporary one."; return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const res = await fetch(`${BASE}/auth/set-new-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: pendingStaffEmail,
+            old_password: pendingStaffOldPassword,
+            new_password: pw,
+            captcha_token: currentCaptchaToken,
+            captcha_answer: lastCaptchaAnswer
+          })
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.detail || "Could not set new password");
+        saveSession(json.access_token, json.doctor);
+        redirectByRole(json.doctor.role);
+      } catch (e) {
+        err.textContent = e.message;
+        btn.disabled = false;
+        btn.textContent = "Set Password & Sign In";
+      }
+    }
+
     document.addEventListener("keydown", e => {
       if (e.key !== "Enter") return;
       if (document.getElementById("form-register").style.display !== "none") doRegister();
+      else if (document.getElementById("form-staff-newpw").style.display !== "none") doStaffSetPassword();
       else doLogin();
     });
   </script>

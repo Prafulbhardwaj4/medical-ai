@@ -245,29 +245,9 @@
           placeholder="Consultation Fee (Rs., optional)" style="margin-bottom:14px;display:none" />
       </div>
 
-      <div style="position:relative;margin-bottom:8px">
-        <input class="form-control" id="d-password" type="password" placeholder="Temporary Password"
-          oninput="checkPasswordStrength(this.value)" style="padding-right:40px" />
-        <span onclick="togglePasswordVisibility('d-password', this)"
-          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px">👁</span>
+      <div style="margin-bottom:14px;font-size:12.5px;color:var(--slate-light);background:var(--smoke-mid);padding:10px 12px;border-radius:var(--radius)">
+        New accounts start with a temporary password. The staff member sets their own password the first time they sign in.
       </div>
-      <div style="margin-bottom:14px;display:flex;flex-direction:column;gap:4px" id="password-strength">
-        <div id="check-length"
-          style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
-          <span id="icon-length">○</span> At least 8 characters
-        </div>
-        <div id="check-number"
-          style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
-          <span id="icon-number">○</span> At least one number
-        </div>
-        <div id="check-upper"
-          style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
-          <span id="icon-upper">○</span> At least one uppercase letter
-        </div>
-      </div>
-
-      <input class="form-control" id="d-confirm-password" type="password" placeholder="Confirm Password"
-        style="margin-bottom:14px" />
 
       <div class="err-msg" id="modal-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
@@ -567,24 +547,6 @@
 
     loadDoctors();
 
-    function checkPasswordStrength(val) {
-      const setCheck = (id, iconId, passed) => {
-        const el = document.getElementById(id);
-        const icon = document.getElementById(iconId);
-        if (passed) { el.style.color = "var(--teal)"; icon.textContent = "✓"; }
-        else { el.style.color = "var(--slate-light)"; icon.textContent = "○"; }
-      };
-      setCheck("check-length", "icon-length", val.length >= 8);
-      setCheck("check-number", "icon-number", /[0-9]/.test(val));
-      setCheck("check-upper", "icon-upper", /[A-Z]/.test(val));
-    }
-
-    function togglePasswordVisibility(inputId, iconEl) {
-      const input = document.getElementById(inputId);
-      if (input.type === "password") { input.type = "text"; iconEl.textContent = "🙈"; }
-      else { input.type = "password"; iconEl.textContent = "👁"; }
-    }
-
     function openAddModal() {
       document.getElementById('d-name').value = '';
       document.getElementById('d-email').value = '';
@@ -592,8 +554,6 @@
       document.getElementById('d-specialization').value = '';
       document.getElementById('d-reg').value = '';
       document.getElementById('d-fee').value = getDoctor()?.default_consultation_fee ?? '';
-      document.getElementById('d-password').value = '';
-      document.getElementById('d-confirm-password').value = '';
       document.getElementById('d-role').value = 'doctor';
       const titleSel = document.getElementById('d-title');
       titleSel.value = 'Dr.';
@@ -639,15 +599,13 @@
       const email = document.getElementById('d-email').value.trim();
       const phone = document.getElementById('d-phone').value.trim();
       const specialization = document.getElementById('d-specialization').value.trim();
-      const password = document.getElementById('d-password').value;
-      const confirmPassword = document.getElementById('d-confirm-password').value;
       const title = document.getElementById('d-title').value;
       const reg = document.getElementById('d-reg').value.trim();
       const role = document.getElementById('d-role').value;
       const needsSpecialization = (role === 'doctor' || role === 'sub_admin');
 
-      if (!name || !email || !phone || !password) {
-        err.textContent = 'Name, email, phone and password are required.'; return;
+      if (!name || !email || !phone) {
+        err.textContent = 'Name, email and phone are required.'; return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         err.textContent = 'Enter a valid email.'; return;
@@ -655,10 +613,6 @@
       if (phone.length !== 10 || !/^\d{10}$/.test(phone)) {
         err.textContent = 'Enter a valid 10-digit phone number.'; return;
       }
-      if (password.length < 8) { err.textContent = 'Password must be at least 8 characters.'; return; }
-      if (!/[0-9]/.test(password)) { err.textContent = 'Password must contain at least one number.'; return; }
-      if (!/[A-Z]/.test(password)) { err.textContent = 'Password must contain at least one uppercase letter.'; return; }
-      if (password !== confirmPassword) { err.textContent = 'Passwords do not match.'; return; }
 
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
@@ -668,7 +622,7 @@
       const room = document.getElementById('d-room')?.value.trim() || '';
       const params = new URLSearchParams({
         hospital_id: doctor.hospital_id,
-        name, email, phone: "+91" + phone, specialization, password, title,
+        name, email, phone: "+91" + phone, specialization, title,
         registration_number: reg, role, room_number: room
       });
       if (fee && needsSpecialization && doctor.billing_enabled) {

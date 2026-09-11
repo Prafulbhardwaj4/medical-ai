@@ -12,9 +12,44 @@ class DoctorCreate(BaseModel):
     clinic_name: str
     password: str
 
+class CaptchaOut(BaseModel):
+    question: str
+    token: str
+
 class DoctorLogin(BaseModel):
     email: EmailStr
     password: str
+    captcha_token: str
+    captcha_answer: str
+
+class StaffLoginResultOut(BaseModel):
+    status: str  # "success" | "needs_password_change"
+    access_token: Optional[str] = None
+    token_type: Optional[str] = "bearer"
+    doctor: Optional["DoctorOut"] = None
+
+class SetNewPasswordIn(BaseModel):
+    email: EmailStr
+    old_password: str
+    new_password: str
+    captcha_token: str
+    captcha_answer: str
+
+class ForgotPasswordRequestIn(BaseModel):
+    email: EmailStr
+    captcha_token: str
+    captcha_answer: str
+
+class ForgotPasswordVerifyIn(BaseModel):
+    email: EmailStr
+    otp: str
+
+class ForgotPasswordVerifyOut(BaseModel):
+    reset_token: str
+
+class ResetPasswordIn(BaseModel):
+    reset_token: str
+    new_password: str
 
 class EditMeIn(BaseModel):
     name: str

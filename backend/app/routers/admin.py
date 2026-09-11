@@ -18,6 +18,7 @@ from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open
 from app.models.ai_scribe_topup import AiScribeTopup
 from app.models.upgrade_request import UpgradeRequest
 from app.models.hospital_lead import HospitalLead
+from app.models.plan_inquiry import PlanInquiry
 from app.models.portal import PatientProfileLink
 from dateutil.relativedelta import relativedelta
 
@@ -120,6 +121,45 @@ def mark_hospital_lead_contacted(
     return {"id": lead.id, "status": lead.status}
 
 
+@router.get("/plan-inquiries")
+def list_plan_inquiries(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    inquiries = db.query(PlanInquiry).order_by(PlanInquiry.created_at.desc()).all()
+    return [
+        {
+            "id": i.id,
+            "requested_tier": i.requested_tier,
+            "billing_period": i.billing_period,
+            "hospital_name": i.hospital_name,
+            "contact_name": i.contact_name,
+            "contact_phone": i.contact_phone,
+            "contact_email": i.contact_email,
+            "message": i.message,
+            "status": i.status,
+            "created_at": i.created_at.isoformat() if i.created_at else None,
+        }
+        for i in inquiries
+    ]
+
+
+@router.patch("/plan-inquiries/{inquiry_id}/mark-contacted")
+def mark_plan_inquiry_contacted(
+    inquiry_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    inquiry = db.query(PlanInquiry).filter(PlanInquiry.id == inquiry_id).first()
+    if not inquiry:
+        raise HTTPException(status_code=404, detail="Inquiry not found")
+    inquiry.status = "contacted" if inquiry.status == "new" else "new"
+    db.commit()
+    return {"id": inquiry.id, "status": inquiry.status}
+
+
 def serialize_billing_block(db: Session, hospital: Hospital) -> dict:
     """Shared by the hospital list and hospital detail endpoints so the two
     views can never disagree on used/total or renew-button state. Returns
@@ -154,17 +194,14 @@ def verify_super_admin_key(x_super_admin_key: str = Header(...)):
     if x_super_admin_key != settings.SUPER_ADMIN_KEY:
         raise HTTPException(status_code=403, detail="Invalid super admin key")
 
-def validate_fields(name, email, phone, password):
+def validate_fields(name, email, phone):
+    # Password is no longer admin-supplied at creation — every new account
+    # starts on settings.STAFF_DEFAULT_TEMP_PASSWORD and must set its own
+    # via /auth/set-new-password on first login. Nothing left to validate here.
     if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
         raise HTTPException(status_code=400, detail="Invalid email format")
     if not re.match(r'^\+?[0-9]{10,13}$', phone):
         raise HTTPException(status_code=400, detail="Invalid phone number")
-    if len(password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    if not re.search(r'[0-9]', password):
-        raise HTTPException(status_code=400, detail="Password must contain at least one number")
-    if not re.search(r'[A-Z]', password):
-        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter")
     if len(name.strip()) < 2:
         raise HTTPException(status_code=400, detail="Name too short")
 
@@ -214,14 +251,13 @@ def create_admin(
     name: str,
     email: str,
     phone: str,
-    password: str,
     title: str = "Dr.",
     specialization: str = "General",
     db: Session = Depends(get_db),
     _: None = Depends(verify_super_admin_key)
 ):
     
-    validate_fields(name, email, phone, password)
+    validate_fields(name, email, phone)
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -239,7 +275,8 @@ def create_admin(
         phone=phone,
         specialization=specialization,
         clinic_name=hospital.name,
-        hashed_password=hash_password(password),
+        hashed_password=hash_password(settings.STAFF_DEFAULT_TEMP_PASSWORD),
+        must_change_password=True,
         role=UserRole.admin,
         hospital_id=hospital_id,
         is_active=True
@@ -281,7 +318,6 @@ def create_doctor(
     name: str,
     email: str,
     phone: str,
-    password: str,
     specialization: str,
     title: str = "Dr.",
     registration_number: str = "",
@@ -306,7 +342,7 @@ def create_doctor(
     if current_doctor.role.value != "super_admin" and current_doctor.hospital_id != hospital_id:
         raise HTTPException(status_code=403, detail="Cannot create doctor for another hospital")
 
-    validate_fields(name, email, phone, password)
+    validate_fields(name, email, phone)
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -326,7 +362,8 @@ def create_doctor(
         registration_number=registration_number,
         room_number=room_number or None,
         clinic_name=hospital.name,
-        hashed_password=hash_password(password),
+        hashed_password=hash_password(settings.STAFF_DEFAULT_TEMP_PASSWORD),
+        must_change_password=True,
         role=UserRole(role),
         hospital_id=hospital_id,
         is_active=True,
@@ -947,7 +984,6 @@ def create_subadmin(
     name: str,
     email: str,
     phone: str,
-    password: str,
     specialization: str = "",
     title: str = "Dr.",
     db: Session = Depends(get_db),
@@ -959,7 +995,7 @@ def create_subadmin(
     if current_doctor.role.value != "super_admin" and current_doctor.hospital_id != hospital_id:
         raise HTTPException(status_code=403, detail="Cannot create sub admin for another hospital")
 
-    validate_fields(name, email, phone, password)
+    validate_fields(name, email, phone)
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -977,7 +1013,8 @@ def create_subadmin(
         phone=phone,
         specialization=specialization,
         clinic_name=hospital.name,
-        hashed_password=hash_password(password),
+        hashed_password=hash_password(settings.STAFF_DEFAULT_TEMP_PASSWORD),
+        must_change_password=True,
         role=UserRole.sub_admin,
         hospital_id=hospital_id,
         is_active=True,
@@ -1326,7 +1363,6 @@ def create_admin_jwt(
     email: str,
     phone: str,
     specialization: str,
-    password: str,
     title: str = "Dr.",
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
@@ -1334,7 +1370,7 @@ def create_admin_jwt(
     if current_doctor.role.value != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    validate_fields(name, email, phone, password)
+    validate_fields(name, email, phone)
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -1348,7 +1384,8 @@ def create_admin_jwt(
     admin = Doctor(
         title=title, name=name, email=email, phone=phone,
         specialization=specialization, clinic_name=hospital.name,
-        hashed_password=hash_password(password),
+        hashed_password=hash_password(settings.STAFF_DEFAULT_TEMP_PASSWORD),
+        must_change_password=True,
         role=UserRole.admin, hospital_id=hospital_id, is_active=True
     )
     db.add(admin)
@@ -1546,6 +1583,9 @@ def reset_account_password(
     new_password = "A1" + "".join(secrets.choice(alphabet) for _ in range(8))
 
     account.hashed_password = hash_password(new_password)
+    account.must_change_password = True
+    account.failed_login_attempts = 0
+    account.locked_until = None
     db.commit()
 
     log_action(

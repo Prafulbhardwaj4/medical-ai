@@ -24,6 +24,55 @@ def create_access_token(data: dict) -> str:
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
+CAPTCHA_EXPIRE_MINUTES = 5
+
+def create_captcha_token(answer: int) -> str:
+    """Signs the expected answer into a short-lived token so the server
+    doesn't need to store the captcha anywhere. type=captcha keeps this
+    from ever being accepted as a real access token."""
+    expire = datetime.utcnow() + timedelta(minutes=CAPTCHA_EXPIRE_MINUTES)
+    return jwt.encode(
+        {"type": "captcha", "answer": answer, "exp": expire},
+        settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
+
+def verify_captcha_token(token: str, submitted_answer: str) -> bool:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        return False
+    if payload.get("type") != "captcha":
+        return False
+    try:
+        return int(payload.get("answer")) == int(str(submitted_answer).strip())
+    except (TypeError, ValueError):
+        return False
+
+PASSWORD_RESET_EXPIRE_MINUTES = 10
+
+def create_password_reset_token(doctor_id: int, otp: str) -> str:
+    """Issued after a correct forgot-password OTP. Lets the frontend set a
+    new password without ever needing the old one. The OTP is embedded too,
+    so reset-password can reject reusing it as the new password."""
+    expire = datetime.utcnow() + timedelta(minutes=PASSWORD_RESET_EXPIRE_MINUTES)
+    return jwt.encode(
+        {"type": "password_reset", "sub": str(doctor_id), "otp": otp, "exp": expire},
+        settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
+
+def verify_password_reset_token(token: str):
+    """Returns (doctor_id, otp) on success, or (None, None) if invalid/expired."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        return None, None
+    if payload.get("type") != "password_reset":
+        return None, None
+    doctor_id = payload.get("sub")
+    if not doctor_id:
+        return None, None
+    return int(doctor_id), payload.get("otp")
+
 def decode_access_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])

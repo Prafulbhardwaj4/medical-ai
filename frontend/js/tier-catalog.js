@@ -12,6 +12,9 @@ const TIER_CATALOG = [
     label: "Foundation",
     price: "\u20B99,999",
     period: "/month",
+    yearlyPrice: "\u20B91,19,988",
+    yearlyPeriod: "/year",
+    yearlyBenefit: "Pay for 12 months, get 13 \u2014 a full month free",
     scope: "Unlimited staff logins, every role",
     comingSoon: false,
     premium: false,
@@ -30,7 +33,10 @@ const TIER_CATALOG = [
     label: "Growth",
     price: "\u20B929,999",
     period: "/month",
-    scope: "Up to 5,000 consultations/month",
+    yearlyPrice: "\u20B93,50,000",
+    yearlyPeriod: "/year",
+    yearlyBenefit: "1,500\u20132,000 bonus AI Scribe consultations across the year, on top of the 60,000 you already get",
+    scope: "5,000 consultations/month",
     comingSoon: false,
     premium: false,
     features: [
@@ -43,9 +49,16 @@ const TIER_CATALOG = [
   {
     key: "scale",
     label: "Scale",
-    price: "\u20B9X",
+    // Real target pricing, decided but not shown until this tier is
+    // actually sellable: \u20B944,999/month, \u20B95,25,000/year (+5,000 bonus
+    // AI Scribe consultations across the year on top of the 120,000
+    // baseline). Flip comingSoon to false and fill these back in when ready.
+    price: "-",
     period: "/month",
-    scope: "Up to 10,000 consultations/month",
+    yearlyPrice: "-",
+    yearlyPeriod: "/year",
+    yearlyBenefit: "5,000 bonus AI Scribe consultations across the year, on top of the 120,000 you already get",
+    scope: "10,000 consultations/month",
     comingSoon: true,
     premium: false,
     features: [
@@ -59,8 +72,11 @@ const TIER_CATALOG = [
   {
     key: "enterprise",
     label: "Enterprise",
-    price: "\u20B9X",
+    price: "-",
     period: "/month",
+    yearlyPrice: "-",
+    yearlyPeriod: "/year",
+    yearlyBenefit: "Custom quotation, priced around your hospital's actual consultation volume",
     scope: "Unlimited consultations",
     comingSoon: true,
     premium: true,

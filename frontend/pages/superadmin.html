@@ -167,6 +167,14 @@
         Hospital Leads
         <span class="badge badge-red" id="hospital-leads-nav-badge" style="display:none;margin-left:auto"></span>
       </a>
+      <a class="nav-item" id="nav-plan-inquiries" href="#" onclick="showSection('plan-inquiries')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+        Plan Inquiries
+        <span class="badge badge-red" id="plan-inquiries-nav-badge" style="display:none;margin-left:auto"></span>
+      </a>
     </nav>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
@@ -203,6 +211,13 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
         Leads
+      </button>
+      <button class="bottom-nav-item" id="tab-btn-plan-inquiries" onclick="showSection('plan-inquiries')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+        Inquiries
       </button>
     </nav>
 
@@ -370,6 +385,15 @@
         <div id="hospital-leads-list"></div>
       </div>
 
+      <!-- PLAN INQUIRIES SECTION -->
+      <div id="section-plan-inquiries" style="display:none">
+        <div class="page-header">
+          <h1>Plan Inquiries</h1>
+          <p>Public "Contact Us" submissions from the pricing page — prospective hospitals, not existing customers</p>
+        </div>
+        <div id="plan-inquiries-list"></div>
+      </div>
+
     </main>
   </div>
 
@@ -485,29 +509,9 @@
       </div>
       <input class="form-control" id="a-specialization" placeholder="Specialization" style="margin-bottom:14px" />
 
-      <div style="position:relative;margin-bottom:8px">
-        <input class="form-control" id="a-password" type="password" placeholder="Temporary Password"
-          oninput="checkAdminPasswordStrength(this.value)" style="padding-right:40px" />
-        <span onclick="togglePasswordVisibility('a-password', this)"
-          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px">👁</span>
+      <div style="margin-bottom:20px;font-size:12.5px;color:var(--slate-light);background:var(--smoke-mid);padding:10px 12px;border-radius:var(--radius)">
+        New accounts start with a temporary password. The admin sets their own password the first time they sign in.
       </div>
-      <div style="margin-bottom:14px;display:flex;flex-direction:column;gap:4px" id="admin-password-strength">
-        <div id="a-check-length"
-          style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
-          <span id="a-icon-length">○</span> At least 8 characters
-        </div>
-        <div id="a-check-number"
-          style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
-          <span id="a-icon-number">○</span> At least one number
-        </div>
-        <div id="a-check-upper"
-          style="font-size:0.78rem;color:var(--slate-light);display:flex;align-items:center;gap:6px">
-          <span id="a-icon-upper">○</span> At least one uppercase letter
-        </div>
-      </div>
-
-      <input class="form-control" id="a-confirm-password" type="password" placeholder="Confirm Password"
-        style="margin-bottom:20px" />
 
       <div class="err-msg" id="admin-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
@@ -585,6 +589,7 @@
       document.getElementById('section-suggestions').style.display = name === 'suggestions' ? 'block' : 'none';
       document.getElementById('section-upgrade-requests').style.display = name === 'upgrade-requests' ? 'block' : 'none';
       document.getElementById('section-hospital-leads').style.display = name === 'hospital-leads' ? 'block' : 'none';
+      document.getElementById('section-plan-inquiries').style.display = name === 'plan-inquiries' ? 'block' : 'none';
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       document.getElementById(`nav-${name}`).classList.add('active');
       document.querySelectorAll('.bottom-nav-item').forEach(el => el.classList.remove('active'));
@@ -594,6 +599,7 @@
       if (name === 'upgrade-requests') loadUpgradeRequests();
       if (name === 'suggestions') loadSuggestions();
       if (name === 'hospital-leads') loadHospitalLeads();
+      if (name === 'plan-inquiries') loadPlanInquiries();
     }
 
     // ── UPGRADE REQUESTS ──
@@ -678,6 +684,47 @@
       try {
         await api('PATCH', `/admin/hospital-leads/${id}/mark-contacted`, {});
         loadHospitalLeads();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // ── PLAN INQUIRIES ──
+    async function loadPlanInquiries() {
+      const el = document.getElementById('plan-inquiries-list');
+      try {
+        const data = await api('GET', '/admin/plan-inquiries');
+        const newCount = data.filter(i => i.status === 'new').length;
+        const badge = document.getElementById('plan-inquiries-nav-badge');
+        if (newCount) { badge.textContent = newCount; badge.style.display = ''; } else { badge.style.display = 'none'; }
+
+        if (!data.length) {
+          el.innerHTML = '<p style="color:var(--slate)">No plan inquiries yet.</p>';
+          return;
+        }
+        el.innerHTML = data.map(i => `
+          <div class="card" style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+              <div>
+                <div style="font-weight:600">${sanitize(i.hospital_name)} → <span style="color:var(--teal)">${typeof tierLabel === 'function' ? tierLabel(i.requested_tier) : i.requested_tier}</span> <span class="badge badge-grey" style="font-weight:500;text-transform:capitalize">${sanitize(i.billing_period)}</span></div>
+                <div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(i.contact_name)} · ${sanitize(i.contact_phone)} · ${sanitize(i.contact_email)}</div>
+                ${i.message ? `<div style="font-size:13px;color:var(--navy);margin-top:8px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(i.message)}</div>` : ''}
+                <div style="font-size:12px;color:var(--slate-light);margin-top:8px">${new Date(i.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+                <span class="badge ${i.status === 'new' ? 'badge-amber' : 'badge-teal'}">${i.status === 'new' ? 'New' : 'Contacted'}</span>
+                <button class="btn btn-outline btn-sm" onclick="togglePlanInquiryStatus(${i.id})">${i.status === 'new' ? 'Mark Contacted' : 'Mark New'}</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
+      }
+    }
+
+    async function togglePlanInquiryStatus(id) {
+      try {
+        await api('PATCH', `/admin/plan-inquiries/${id}/mark-contacted`, {});
+        loadPlanInquiries();
       } catch (e) { toast(e.message, 'error'); }
     }
 
@@ -1166,33 +1213,6 @@
       document.getElementById('admin-modal').classList.remove('open');
       document.getElementById('admin-err').textContent = '';
     }
-    function togglePasswordVisibility(inputId, iconEl) {
-      const input = document.getElementById(inputId);
-      if (input.type === "password") {
-        input.type = "text";
-        iconEl.textContent = "🙈";
-      } else {
-        input.type = "password";
-        iconEl.textContent = "👁";
-      }
-    }
-
-    function checkAdminPasswordStrength(val) {
-      const setCheck = (id, iconId, passed) => {
-        const el = document.getElementById(id);
-        const icon = document.getElementById(iconId);
-        if (passed) {
-          el.style.color = "var(--teal)";
-          icon.textContent = "✓";
-        } else {
-          el.style.color = "var(--slate-light)";
-          icon.textContent = "○";
-        }
-      };
-      setCheck("a-check-length", "a-icon-length", val.length >= 8);
-      setCheck("a-check-number", "a-icon-number", /[0-9]/.test(val));
-      setCheck("a-check-upper", "a-icon-upper", /[A-Z]/.test(val));
-    }
 
     async function submitAdmin() {
       const err = document.getElementById('admin-err');
@@ -1200,10 +1220,8 @@
       const email = document.getElementById('a-email').value.trim();
       const phone = document.getElementById('a-phone').value.trim();
       const specialization = document.getElementById('a-specialization').value.trim();
-      const password = document.getElementById('a-password').value;
-      const confirmPassword = document.getElementById('a-confirm-password').value;
 
-      if (!name || !email || !phone || !password) {
+      if (!name || !email || !phone) {
         err.textContent = 'All required fields must be filled.'; return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -1212,20 +1230,8 @@
       if (phone.length !== 10 || !/^\d{10}$/.test(phone)) {
         err.textContent = 'Enter a valid 10-digit phone number.'; return;
       }
-      if (password.length < 8) {
-        err.textContent = 'Password must be at least 8 characters.'; return;
-      }
-      if (!/[0-9]/.test(password)) {
-        err.textContent = 'Password must contain at least one number.'; return;
-      }
-      if (!/[A-Z]/.test(password)) {
-        err.textContent = 'Password must contain at least one uppercase letter.'; return;
-      }
-      if (password !== confirmPassword) {
-        err.textContent = 'Passwords do not match.'; return;
-      }
 
-      const params = new URLSearchParams({ hospital_id: currentHospitalId, name, email, phone: "+91" + phone, specialization: specialization || "Hospital Admin", password });
+      const params = new URLSearchParams({ hospital_id: currentHospitalId, name, email, phone: "+91" + phone, specialization: specialization || "Hospital Admin" });
       try {
         await api('POST', `/admin/create-admin-jwt?${params.toString()}`);
         toast('Admin created.', 'success');

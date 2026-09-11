@@ -838,6 +838,211 @@
       box-shadow: none;
     }
 
+    /* ── Yearly row, below the monthly card content ── */
+    .lp-yearly-row {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px dashed var(--border);
+      text-align: center;
+    }
+
+    .lp-price-card-premium .lp-yearly-row { border-top-color: rgba(255, 255, 255, 0.15); }
+
+    .lp-yearly-price {
+      font-family: 'DM Mono', monospace;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--navy);
+      margin-bottom: 6px;
+    }
+
+    .lp-yearly-price span {
+      font-size: 0.78rem;
+      font-weight: 400;
+      color: var(--slate-light);
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .lp-price-card-premium .lp-yearly-price { color: var(--white); }
+    .lp-price-card-premium .lp-yearly-price span { color: rgba(255, 255, 255, 0.5); }
+
+    .lp-yearly-benefits-btn {
+      background: none;
+      border: none;
+      color: var(--teal);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      padding: 2px;
+      font-family: inherit;
+    }
+
+    .lp-price-card-premium .lp-yearly-benefits-btn { color: var(--teal-light); }
+
+    /* ── Benefits + Contact modals (public page — no shared app modal CSS
+       here, so these are fully self-contained) ── */
+    .lp-modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 31, 61, 0.55);
+      z-index: 400;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .lp-modal-overlay.open { display: flex; }
+
+    .lp-modal {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      max-width: 480px;
+      width: 100%;
+      max-height: 88vh;
+      overflow-y: auto;
+      padding: 28px 26px;
+      position: relative;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .lp-modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: none;
+      background: var(--smoke);
+      color: var(--slate);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .lp-modal-close:hover { background: var(--smoke-mid); color: var(--navy); }
+
+    .lp-modal-eyebrow {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--teal);
+      margin-bottom: 6px;
+    }
+
+    .lp-modal h3 {
+      font-size: 1.25rem;
+      color: var(--navy);
+      margin-bottom: 16px;
+      padding-right: 24px;
+    }
+
+    .lp-modal-benefit-block {
+      background: var(--teal-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font-size: 0.9rem;
+      color: var(--navy);
+      line-height: 1.55;
+      margin-bottom: 18px;
+    }
+
+    .lp-modal-features {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .lp-modal-feature {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      font-size: 0.87rem;
+      color: var(--slate);
+    }
+
+    .lp-modal-feature-check { color: var(--teal); font-weight: 700; flex-shrink: 0; }
+
+    .lp-modal-price-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      background: var(--smoke);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+
+    .lp-modal-price-line .amount { font-family: 'DM Mono', monospace; font-weight: 600; color: var(--teal); font-size: 1.05rem; }
+
+    .lp-modal-toggle-benefits-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: var(--teal-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 0.87rem;
+      color: var(--navy);
+      cursor: pointer;
+      margin-bottom: 18px;
+      font-family: inherit;
+    }
+
+    .lp-modal-toggle-benefits-btn strong { color: var(--teal); }
+
+    .lp-modal-form-group { margin-bottom: 14px; }
+
+    .lp-modal-form-group label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--navy);
+      margin-bottom: 5px;
+    }
+
+    .lp-modal-form-group input,
+    .lp-modal-form-group textarea,
+    .lp-modal-form-group select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.88rem;
+      font-family: inherit;
+      color: var(--navy);
+      box-sizing: border-box;
+    }
+
+    .lp-modal-err {
+      color: var(--danger);
+      font-size: 0.83rem;
+      margin-bottom: 10px;
+      min-height: 1em;
+    }
+
+    .lp-modal-submit-btn {
+      width: 100%;
+      padding: 13px;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--teal);
+      color: var(--white);
+      font-weight: 700;
+      font-size: 0.92rem;
+      cursor: pointer;
+    }
+
+    .lp-modal-submit-btn:disabled { opacity: 0.6; cursor: default; }
+    .lp-modal-submit-btn:hover:not(:disabled) { background: var(--teal-light); }
+
     /* ── Final CTA ── */
     .lp-final-cta {
       background: var(--teal-subtle);
@@ -1231,6 +1436,65 @@
     </div>
   </footer>
 
+  <!-- Yearly Benefits Modal -->
+  <div class="lp-modal-overlay" id="lp-benefits-modal">
+    <div class="lp-modal">
+      <button class="lp-modal-close" onclick="closeLpModal('lp-benefits-modal')">&times;</button>
+      <div class="lp-modal-eyebrow" id="lp-benefits-tier-label"></div>
+      <h3>Yearly Plan Benefits</h3>
+      <div class="lp-modal-benefit-block" id="lp-benefits-yearly-text"></div>
+      <div class="lp-modal-features" id="lp-benefits-regular-features"></div>
+      <button type="button" class="lp-modal-submit-btn" id="lp-benefits-contact-btn" onclick="openContactModalFromBenefits()">Contact Us</button>
+    </div>
+  </div>
+
+  <!-- Contact Us Modal -->
+  <div class="lp-modal-overlay" id="lp-contact-modal">
+    <div class="lp-modal">
+      <button class="lp-modal-close" onclick="closeLpModal('lp-contact-modal')">&times;</button>
+      <div class="lp-modal-eyebrow" id="lp-contact-tier-label"></div>
+      <h3 id="lp-contact-heading">Contact Us</h3>
+
+      <button type="button" class="lp-modal-toggle-benefits-btn" id="lp-contact-benefits-line" onclick="openBenefitsModalFromContact()"></button>
+
+      <div class="lp-modal-price-line">
+        <span id="lp-contact-price-label"></span>
+        <span class="amount" id="lp-contact-price-amount"></span>
+      </div>
+
+      <div class="lp-modal-form-group">
+        <label>Billing period</label>
+        <select id="lp-contact-period">
+          <option value="yearly">Yearly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+      <div class="lp-modal-form-group">
+        <label>Hospital name</label>
+        <input id="lp-contact-hospital" placeholder="e.g. City Care Hospital" />
+      </div>
+      <div class="lp-modal-form-group">
+        <label>Your name</label>
+        <input id="lp-contact-name" placeholder="Contact person" />
+      </div>
+      <div class="lp-modal-form-group">
+        <label>Phone number</label>
+        <input id="lp-contact-phone" placeholder="10-digit mobile number" />
+      </div>
+      <div class="lp-modal-form-group">
+        <label>Email</label>
+        <input id="lp-contact-email" type="email" placeholder="you@hospital.com" />
+      </div>
+      <div class="lp-modal-form-group">
+        <label>Anything else? <span style="font-weight:400;color:var(--slate-light)">(optional)</span></label>
+        <textarea id="lp-contact-message" rows="3" placeholder="Consultation volume, timeline, questions…"></textarea>
+      </div>
+
+      <div class="lp-modal-err" id="lp-contact-err"></div>
+      <button type="button" class="lp-modal-submit-btn" id="lp-contact-submit-btn" onclick="submitPlanInquiry()">Send — We'll Reach Out</button>
+    </div>
+  </div>
+
   <script src="../js/tier-catalog.js"></script>
   <script>
     // Pricing cards — rendered from tier-catalog.js (the same file the
@@ -1251,10 +1515,126 @@
           </div>
           ${t.comingSoon
             ? '<span class="lp-price-cta lp-price-cta-disabled">Coming Soon</span>'
-            : '<a href="login.html" class="lp-price-cta">Get Started</a>'}
+            : `<button type="button" class="lp-price-cta" style="border:none;cursor:pointer;font:inherit" onclick="openContactModal('${t.key}','yearly')">Contact Us</button>`}
+          <div class="lp-yearly-row">
+            <div class="lp-yearly-price">${t.yearlyPrice}<span>${t.yearlyPeriod}</span></div>
+            <button type="button" class="lp-yearly-benefits-btn" onclick="openBenefitsModal('${t.key}')">+ Additional yearly benefits</button>
+          </div>
         </div>
       `).join('');
     })();
+
+    // ── Benefits + Contact modals — public page, no api.js loaded here,
+    // so this talks to the backend directly at the same base URL api.js
+    // itself uses.
+    const LP_API_BASE = window.MEDSCRIBE_API_BASE || "https://medical-ai-mvv1.onrender.com";
+    let lpActiveTierKey = null;
+
+    function lpTier(key) { return TIER_CATALOG.find(t => t.key === key); }
+
+    function closeLpModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+
+    function openBenefitsModal(tierKey) {
+      lpActiveTierKey = tierKey;
+      const t = lpTier(tierKey);
+      if (!t) return;
+      document.getElementById('lp-benefits-tier-label').textContent = t.label + ' — Yearly Plan';
+      document.getElementById('lp-benefits-yearly-text').textContent = t.yearlyBenefit;
+      document.getElementById('lp-benefits-regular-features').innerHTML =
+        t.features.map(f => `<div class="lp-modal-feature"><span class="lp-modal-feature-check">✓</span><span>${f}</span></div>`).join('');
+      document.getElementById('lp-benefits-contact-btn').style.display = t.comingSoon ? 'none' : 'block';
+      closeLpModal('lp-contact-modal');
+      document.getElementById('lp-benefits-modal').classList.add('open');
+    }
+
+    function openContactModal(tierKey, period) {
+      lpActiveTierKey = tierKey;
+      const t = lpTier(tierKey);
+      if (!t) return;
+      document.getElementById('lp-contact-tier-label').textContent = t.label;
+      document.getElementById('lp-contact-heading').textContent = 'Contact Us';
+      document.getElementById('lp-contact-period').value = period || 'yearly';
+      lpUpdateContactPriceLine();
+      document.getElementById('lp-contact-benefits-line').innerHTML =
+        `<strong>Yearly Plan Benefits</strong> — ${t.yearlyBenefit}`;
+      document.getElementById('lp-contact-err').textContent = '';
+      closeLpModal('lp-benefits-modal');
+      document.getElementById('lp-contact-modal').classList.add('open');
+    }
+
+    function lpUpdateContactPriceLine() {
+      const t = lpTier(lpActiveTierKey);
+      if (!t) return;
+      const period = document.getElementById('lp-contact-period').value;
+      if (period === 'yearly') {
+        document.getElementById('lp-contact-price-label').textContent = t.label + ' (Yearly)';
+        document.getElementById('lp-contact-price-amount').textContent = t.yearlyPrice + t.yearlyPeriod;
+      } else {
+        document.getElementById('lp-contact-price-label').textContent = t.label + ' (Monthly)';
+        document.getElementById('lp-contact-price-amount').textContent = t.price + t.period;
+      }
+    }
+
+    function openBenefitsModalFromContact() {
+      openBenefitsModal(lpActiveTierKey);
+    }
+
+    function openContactModalFromBenefits() {
+      openContactModal(lpActiveTierKey, 'yearly');
+    }
+
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.id === 'lp-contact-period') lpUpdateContactPriceLine();
+    });
+
+    async function submitPlanInquiry() {
+      const err = document.getElementById('lp-contact-err');
+      const btn = document.getElementById('lp-contact-submit-btn');
+      const hospital = document.getElementById('lp-contact-hospital').value.trim();
+      const name = document.getElementById('lp-contact-name').value.trim();
+      const phone = document.getElementById('lp-contact-phone').value.trim();
+      const email = document.getElementById('lp-contact-email').value.trim();
+      const message = document.getElementById('lp-contact-message').value.trim();
+      const period = document.getElementById('lp-contact-period').value;
+
+      if (!hospital || !name || !phone || !email) {
+        err.textContent = 'Please fill in hospital name, your name, phone, and email.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      err.textContent = '';
+
+      try {
+        const res = await fetch(`${LP_API_BASE}/plan-inquiries`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requested_tier: lpActiveTierKey,
+            billing_period: period,
+            hospital_name: hospital,
+            contact_name: name,
+            contact_phone: phone,
+            contact_email: email,
+            message: message || null,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || 'Something went wrong — please try again.');
+        }
+        closeLpModal('lp-contact-modal');
+        alert("Thanks — our team will reach out shortly.");
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Send — We'll Reach Out";
+      }
+    }
     
     (function () {
       const btn = document.getElementById('lp-menu-btn');

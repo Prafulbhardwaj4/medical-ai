@@ -126,6 +126,13 @@
         <strong id="profile-menu-name"></strong>
         <span id="profile-menu-clinic"></span>
       </div>
+      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('staff', 'pharmacy', 'pharmacy', true)">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Tutorial
+      </button>
       <button class="profile-menu-item" onclick="closeProfileMenu(); toggleNotifPanel()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -228,7 +235,7 @@
         </svg>
         Attendance
       </button>
-      <button class="bottom-nav-item" onclick="openMobileMenu()">
+      <button class="bottom-nav-item" onclick="openMobileMenu()" data-tutorial-id="pharm-mobile-menu-btn">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
@@ -791,6 +798,7 @@
   <script src="../js/upgrade-gate.js"></script>
   <script src="../js/chat-widget.js?v=1"></script>
   <script src="../js/suggestion-widget.js?v=1"></script>
+  <script src="../js/tutorial.js"></script>
   <script>
     if (!requireAuth()) throw new Error("Not authenticated");
     if (getDoctor()?.role !== 'pharmacy') window.location.href = 'login.html';
@@ -2535,6 +2543,7 @@
       });
       history.replaceState(null, "", "pharmacy.html");
     }
+    initTutorial('staff', 'pharmacy', 'pharmacy');
   </script>
 </body>
 

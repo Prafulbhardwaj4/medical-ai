@@ -30,6 +30,18 @@ class Settings(BaseSettings):
     # Remove this entirely once real OTP delivery (WhatsApp/SMS) is wired up.
     PORTAL_DEFAULT_TEMP_PASSWORD: str = "Test1234"
 
+    # Temporary, pre-launch only: every newly-created staff account starts
+    # with this password and must change it on first login (must_change_password
+    # flag). Kept as a separate setting from the portal one so staff and patient
+    # temp-password policy can diverge later (e.g. once WhatsApp OTP delivery
+    # replaces this for staff but not patients, or vice versa).
+    STAFF_DEFAULT_TEMP_PASSWORD: str = "Test1234"
+
+    # Temporary, pre-launch only: staff "forgot password" OTP is a fixed
+    # code instead of a real WhatsApp-delivered one-time code. Swap this
+    # for real OTP generation + delivery once WhatsApp is wired up.
+    STAFF_FORGOT_PASSWORD_OTP: str = "1234"
+
     # How long an unpaid scheduled-slot booking holds its place before it's
     # treated as abandoned and the slot is released back for others to book.
     # Placeholder value pending real payment-gateway timing — easy to tune here.
