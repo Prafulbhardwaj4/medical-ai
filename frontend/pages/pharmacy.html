@@ -126,7 +126,7 @@
         <strong id="profile-menu-name"></strong>
         <span id="profile-menu-clinic"></span>
       </div>
-      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('staff', 'pharmacy', 'pharmacy', true)">
+      <button class="profile-menu-item" onclick="replayPharmacyTutorial()">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -290,7 +290,7 @@
       </div>
 
       <div id="pharmacy-home-view" class="mobile-section active">
-        <div class="card">
+        <div class="card" id="pharm-queue-card">
           <div class="card-header"
             style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <h2 style="margin:0">Waiting Queue</h2>
@@ -311,7 +311,7 @@
           </div>
         </div>
 
-        <div class="card desktop-only-block" style="margin-top:16px">
+        <div class="card desktop-only-block" style="margin-top:16px" id="pharm-admission-card-desktop">
           <div class="card-header">
             <h2 style="margin:0">Admitted Patients</h2>
           </div>
@@ -331,7 +331,7 @@
       </div>
 
       <div id="pharmacy-admission-view" class="mobile-section">
-        <div class="card">
+        <div class="card" id="pharm-admission-card-mobile">
           <div class="card-header">
             <h2 style="margin:0">Admitted Patients</h2>
           </div>
@@ -1897,7 +1897,8 @@
         if (mobileBtn) mobileBtn.classList.toggle('active', s === id);
       });
       if (id === 'admission') loadAdmissionPharmQueue();
-      if (id === 'stock') loadStockMedicines();
+      if (id === 'stock') { loadStockMedicines(); maybeRunCatalogTutorial(false); }
+      else if (pharmCatalogTutorialActive) { pharmCatalogTutorialActive = false; }
       if (id === 'pending') loadPendingTasks();
       if (id === 'patients') loadPharmPatients();
     }
@@ -1911,7 +1912,8 @@
       ['home', 'pending', 'patients', 'stock'].forEach(t => {
         document.getElementById('nav-' + t + '-tab').classList.toggle('active', t === id);
       });
-      if (id === 'stock') loadStockMedicines();
+      if (id === 'stock') { loadStockMedicines(); maybeRunCatalogTutorial(false); }
+      else if (pharmCatalogTutorialActive) { pharmCatalogTutorialActive = false; }
       if (id === 'pending') loadPendingTasks();
       if (id === 'patients') loadPharmPatients();
     }
@@ -2044,6 +2046,26 @@
       `).join('');
     }
 
+    let pharmCatalogTutorialActive = false;
+
+    function demoMedicineRowHtml() {
+      if (!pharmCatalogTutorialActive) return '';
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;background:#f0fdfa">
+          <div style="flex:1;min-width:200px" data-tutorial-id="pharm-demo-name-strength-brand">
+            <strong>Paracetamol 500mg</strong>
+            <div style="font-size:12px;color:var(--slate)">Analgesic · Tablet · Brand: Calpol</div>
+            <div style="font-size:11px;color:var(--teal);font-weight:700;margin-top:2px">DEMO — for this tutorial only, not a real medicine</div>
+          </div>
+          <div style="font-size:13px;min-width:80px" data-tutorial-id="pharm-demo-stock">Stock: <strong>240</strong></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" data-tutorial-id="pharm-demo-edit-btn" onclick="toast('Just for the tutorial — nothing to edit here.','info')">Edit</button>
+            <button class="btn btn-outline btn-sm" data-tutorial-id="pharm-demo-addbrand-btn" onclick="toast('Just for the tutorial — nothing to add here.','info')">+ Add Brand</button>
+            <button class="btn btn-primary btn-sm" data-tutorial-id="pharm-demo-addstock-btn" onclick="toast('Just for the tutorial — nothing to add here.','info')">+ Add Stock</button>
+          </div>
+        </div>`;
+    }
+
     function renderStockMedicines() {
       const el = document.getElementById('stock-medicines-list');
       const search = document.getElementById('stock-search').value.trim().toLowerCase();
@@ -2051,11 +2073,12 @@
       if (search) {
         items = items.filter(m => m.generic_name.toLowerCase().includes(search) || (m.brand_names || '').toLowerCase().includes(search));
       }
+      const demoRow = demoMedicineRowHtml();
       if (!items.length) {
-        el.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No medicines found.</p>';
+        el.innerHTML = demoRow || '<p style="color:var(--slate-light);padding:12px 0">No medicines found.</p>';
         return;
       }
-      el.innerHTML = items.map(m => `
+      el.innerHTML = demoRow + items.map(m => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
           <div style="flex:1;min-width:200px">
             <strong>${sanitize(m.generic_name)}${m.strength ? ' ' + sanitize(m.strength) : ''}</strong>
@@ -2063,13 +2086,31 @@
           </div>
           <div style="font-size:13px;min-width:80px">Stock: <strong>${m.stock_quantity != null ? m.stock_quantity : '—'}</strong></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-outline btn-sm" onclick="openEditModal(${JSON.stringify(m).replace(/"/g, '&quot;')})">Edit</button>
+            <button class="btn btn-outline btn-sm" onclick="openEditModal(${JSON.stringify(m).replace(/\"/g, '&quot;')})">Edit</button>
             ${!m.brand_name && !m.parent_medicine_id ? `<button class="btn btn-outline btn-sm" onclick="openAddBrandModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Brand</button>` : ''}
             <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">View Batches</button>
             <button class="btn btn-primary btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">+ Add Stock</button>
           </div>
         </div>
       `).join('');
+    }
+
+    async function maybeRunCatalogTutorial(isReplay) {
+      const onDone = () => { pharmCatalogTutorialActive = false; renderStockMedicines(); };
+      if (isReplay) {
+        pharmCatalogTutorialActive = true;
+        renderStockMedicines();
+        startTutorial('staff', 'pharmacy', 'pharmacy-catalog', true, onDone);
+        return;
+      }
+      try {
+        const status = await api("GET", "/tutorials/status/staff?page=pharmacy-catalog");
+        if (status.completed) return;
+        api("POST", "/tutorials/status/staff/complete?page=pharmacy-catalog").catch(() => {});
+      } catch (e) { return; }
+      pharmCatalogTutorialActive = true;
+      renderStockMedicines();
+      startTutorial('staff', 'pharmacy', 'pharmacy-catalog', false, onDone);
     }
 
     const DIVISIBLE_FORMS = ['Tablet', 'Capsule', 'Sachet', 'Suppository', 'Patch'];
@@ -2543,7 +2584,18 @@
       });
       history.replaceState(null, "", "pharmacy.html");
     }
-    initTutorial('staff', 'pharmacy', 'pharmacy');
+    function currentPharmacyTutorialPage() {
+      const stockActive = document.querySelector('#pharmacy-stock-view.d-active, #pharmacy-stock-view.active');
+      return stockActive ? 'pharmacy-catalog' : 'pharmacy-home';
+    }
+
+    function replayPharmacyTutorial() {
+      closeProfileMenu();
+      if (currentPharmacyTutorialPage() === 'pharmacy-catalog') maybeRunCatalogTutorial(true);
+      else startTutorial('staff', 'pharmacy', 'pharmacy-home', true);
+    }
+
+    initTutorial('staff', 'pharmacy', 'pharmacy-home');
   </script>
 </body>
 

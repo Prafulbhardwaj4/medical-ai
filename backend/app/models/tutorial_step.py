@@ -19,4 +19,5 @@ class TutorialStep(Base):
     description = Column(Text, nullable=False)
     placement = Column(String, nullable=False, default="bottom")  # "top" | "bottom" | "left" | "right" — tooltip position relative to target
     device = Column(String, nullable=False, default="both")  # "mobile" | "desktop" | "both" — mobile/desktop layouts differ enough (sidebar vs bottom-nav, stacked sections) that a step's target often only exists/is visible on one of the two
+    click_before = Column(String, nullable=True)  # optional selector clicked (e.g. a bottom-nav tab) before this step is measured/highlighted — for targets hidden behind a tab that isn't active by default
     is_active = Column(Boolean, default=True, nullable=False)

@@ -37,6 +37,7 @@
   let _wheelBlocker = null;
   let _localOptions = null; // set only by startLocalTour — marks "local" (non-backend) mode
   let _page = null; // which tab's tutorial is currently loaded — passed back on completion
+  let _onDone = null; // optional callback for backend-driven tutorials — fires on Finish OR Skip, after the completion API call
 
   function _statusEndpoint(subjectType, page) {
     const base = subjectType === "patient" ? "/tutorials/status/patient" : "/tutorials/status/staff";
@@ -54,15 +55,20 @@
     return _isMobile() ? step.device === "mobile" : step.device === "desktop";
   }
 
-  async function initTutorial(subjectType, role, page) {
+  async function initTutorial(subjectType, role, page, onDone) {
     try {
       const status = await api("GET", _statusEndpoint(subjectType, page));
       if (status.completed) return; // already seen/skipped this tab — only manual replay from here on
-      startTutorial(subjectType, role, page, false);
+      // Marked seen the moment it auto-shows, not only on Finish/Skip — a
+      // reload or navigating away mid-tour must never bring it back
+      // automatically. Manual replay (startTutorial with isReplay=true)
+      // never goes through here, so it's unaffected.
+      api("POST", _completeEndpoint(subjectType, page)).catch(() => {});
+      startTutorial(subjectType, role, page, false, onDone);
     } catch (e) { /* silent — a broken tutorial fetch should never block the real page */ }
   }
 
-  async function startTutorial(subjectType, role, page, isReplay) {
+  async function startTutorial(subjectType, role, page, isReplay, onDone) {
     try {
       const allSteps = await api("GET", `/tutorials/${role}/${page}`);
       const steps = allSteps.filter(_matchesDevice);
@@ -76,6 +82,7 @@
       _role = role;
       _page = page;
       _localOptions = null;
+      _onDone = onDone || null;
       _buildOverlay();
       _renderStep();
     } catch (e) {
@@ -189,6 +196,14 @@
 
   function _positionForCurrentStep() {
     const step = _steps[_stepIndex];
+    if (step.click_before) {
+      // Switches to the tab/section this step's target lives in before
+      // measuring it — e.g. a mobile bottom-nav tab whose content is
+      // display:none until tapped. Idempotent (re-clicking an already-active
+      // tab is harmless), so it's safe to run again on window resize too.
+      const trigger = document.querySelector(step.click_before);
+      if (trigger) trigger.click();
+    }
     const target = document.querySelector(step.target_selector);
     const preRect = target ? target.getBoundingClientRect() : null;
     if (!target || (preRect.width === 0 && preRect.height === 0)) {
@@ -260,6 +275,7 @@
       return;
     }
     try { await api("POST", _completeEndpoint(_subjectType, _page)); } catch (e) { /* best-effort — don't block the user on this */ }
+    if (_onDone) _onDone();
   }
 
   function _escape(s) {

@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 
 
 class TutorialStepOut(BaseModel):
@@ -10,6 +11,7 @@ class TutorialStepOut(BaseModel):
     description: str
     placement: str
     device: str
+    click_before: Optional[str] = None
 
     class Config:
         from_attributes = True
