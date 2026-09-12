@@ -48,13 +48,22 @@
 
     .hosp-card {
       display: flex; justify-content: space-between; align-items: center; gap: 16px;
-      background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      background: var(--white); border: 1px solid var(--border); border-left: 4px solid var(--border);
+      border-radius: var(--radius-lg);
       padding: 16px 18px; margin-bottom: 12px; cursor: pointer;
-      transition: border-color .15s ease, box-shadow .15s ease;
+      transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
     }
-    .hosp-card:hover { border-color: var(--teal); box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+    .hosp-card:hover { border-color: var(--teal); border-left-color: var(--teal); box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-1px); }
+    .hosp-card.is-active { border-left-color: var(--teal); }
+    .hosp-card-avatar {
+      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 17px; color: #fff;
+      background: linear-gradient(135deg, var(--teal), var(--navy));
+    }
+    .hosp-card-body { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
     .hosp-card-main { flex: 1; min-width: 0; }
-    .hosp-card-name { font-weight: 600; font-size: 1.02rem; color: var(--navy); }
+    .hosp-card-name { font-weight: 700; font-size: 1.05rem; color: var(--navy); }
     .hosp-card-meta { color: var(--slate); font-size: 13px; margin-top: 3px; }
     .hosp-card-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .hosp-card-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
@@ -618,17 +627,31 @@
         }
         el.innerHTML = data.map(r => `
           <div class="card" style="margin-bottom:12px">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
               <div>
-                <div style="font-weight:600">${sanitize(r.hospital_name)} → <span style="color:var(--teal)">${typeof tierLabel === 'function' ? tierLabel(r.requested_tier) : r.requested_tier}</span></div>
-                <div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(r.contact_name)} · ${sanitize(r.contact_phone)} · ${sanitize(r.contact_email)}</div>
-                ${r.message ? `<div style="font-size:13px;color:var(--navy);margin-top:8px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(r.message)}</div>` : ''}
-                <div style="font-size:12px;color:var(--slate-light);margin-top:8px">${new Date(r.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                <div style="font-weight:700;font-size:16px">${sanitize(r.hospital_name)}</div>
+                <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">
+                  <span class="badge badge-teal">${typeof tierLabel === 'function' ? tierLabel(r.requested_tier) : r.requested_tier}</span>
+                </div>
               </div>
-              <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-                <span class="badge ${r.status === 'new' ? 'badge-amber' : 'badge-teal'}">${r.status === 'new' ? 'New' : 'Contacted'}</span>
-                <button class="btn btn-outline btn-sm" onclick="toggleUpgradeRequestStatus(${r.id})">${r.status === 'new' ? 'Mark Contacted' : 'Mark New'}</button>
+              <span class="badge ${r.status === 'new' ? 'badge-amber' : 'badge-teal'}">${r.status === 'new' ? 'New' : 'Contacted'}</span>
+            </div>
+
+            <div style="background:var(--teal-subtle);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px">
+              <div style="font-weight:600;color:var(--navy);margin-bottom:6px">${sanitize(r.contact_name)}</div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:15px;font-weight:600;color:var(--navy)">📞 ${sanitize(r.contact_phone)}</span>
+                <span style="font-size:14px;color:var(--slate)">✉️ ${sanitize(r.contact_email)}</span>
+              </div>
+            </div>
+
+            ${r.message ? `<div style="font-size:13px;color:var(--navy);margin-bottom:10px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(r.message)}</div>` : ''}
+
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <span style="font-size:12px;color:var(--slate-light)">${new Date(r.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              <div style="display:flex;gap:8px">
                 <button class="btn btn-outline btn-sm" onclick="showSection('hospitals');openDetail(${r.hospital_id})">View Hospital</button>
+                <button class="btn btn-outline btn-sm" onclick="toggleUpgradeRequestStatus(${r.id})">${r.status === 'new' ? 'Mark Contacted' : 'Mark New'}</button>
               </div>
             </div>
           </div>
@@ -690,19 +713,27 @@
         }
         el.innerHTML = data.map(l => `
           <div class="card" style="margin-bottom:12px">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
               <div>
-                <div style="font-weight:600;font-size:15px">${sanitize(l.hospital_name)}</div>
-                ${l.location ? `<div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(l.location)}</div>` : ''}
-                <div style="font-size:13px;color:var(--slate);margin-top:4px">${sanitize(l.city)}, ${sanitize(l.state)}</div>
-                <div style="font-size:13px;color:var(--slate);margin-top:8px">Requested By - ${l.contact_name ? sanitize(l.contact_name) + ', ' : ''}${sanitize(l.contact_phone)}</div>
-                ${l.note ? `<div style="font-size:13px;color:var(--navy);margin-top:8px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(l.note)}</div>` : ''}
-                <div style="font-size:12px;color:var(--slate-light);margin-top:8px">${new Date(l.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                <div style="font-weight:700;font-size:16px">${sanitize(l.hospital_name)}</div>
+                <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">
+                  ${l.location ? `<span class="badge badge-grey">${sanitize(l.location)}</span>` : ''}
+                  <span class="badge badge-grey">${sanitize(l.city)}, ${sanitize(l.state)}</span>
+                </div>
               </div>
-              <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-                <span class="badge ${l.status === 'new' ? 'badge-amber' : 'badge-teal'}">${l.status === 'new' ? 'New' : 'Contacted'}</span>
-                <button class="btn btn-outline btn-sm" onclick="toggleHospitalLeadStatus(${l.id})">${l.status === 'new' ? 'Mark Contacted' : 'Mark New'}</button>
-              </div>
+              <span class="badge ${l.status === 'new' ? 'badge-amber' : 'badge-teal'}">${l.status === 'new' ? 'New' : 'Contacted'}</span>
+            </div>
+
+            <div style="background:var(--teal-subtle);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px">
+              ${l.contact_name ? `<div style="font-weight:600;color:var(--navy);margin-bottom:6px">${sanitize(l.contact_name)}</div>` : ''}
+              <span style="font-size:15px;font-weight:600;color:var(--navy)">📞 ${sanitize(l.contact_phone)}</span>
+            </div>
+
+            ${l.note ? `<div style="font-size:13px;color:var(--navy);margin-bottom:10px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(l.note)}</div>` : ''}
+
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:12px;color:var(--slate-light)">${new Date(l.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              <button class="btn btn-outline btn-sm" onclick="toggleHospitalLeadStatus(${l.id})">${l.status === 'new' ? 'Mark Contacted' : 'Mark New'}</button>
             </div>
           </div>
         `).join('');
@@ -748,8 +779,8 @@
             <div style="background:var(--teal-subtle);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px">
               <div style="font-weight:600;color:var(--navy);margin-bottom:6px">${sanitize(i.contact_name)}</div>
               <div style="display:flex;flex-direction:column;gap:4px">
-                <a href="tel:${sanitize(i.contact_phone)}" style="font-size:15px;font-weight:600;color:var(--teal);text-decoration:none">📞 ${sanitize(i.contact_phone)}</a>
-                <a href="mailto:${sanitize(i.contact_email)}" style="font-size:14px;color:var(--teal);text-decoration:none">✉️ ${sanitize(i.contact_email)}</a>
+                <span style="font-size:15px;font-weight:600;color:var(--navy)">📞 ${sanitize(i.contact_phone)}</span>
+                <span style="font-size:14px;color:var(--slate)">✉️ ${sanitize(i.contact_email)}</span>
               </div>
               <div style="font-size:13px;color:var(--slate);margin-top:8px">Preferred language: <strong>${sanitize(i.preferred_language)}</strong></div>
             </div>
@@ -797,14 +828,18 @@
     async function loadNotifList() {
       const body = document.getElementById('notif-panel-body');
       try {
-        const data = await api("GET", "/notifications");
-        loadNotifUnreadCount();
+        const data = await api("GET", "/admin/notifications-feed");
+        const pmBadge = document.getElementById('profile-menu-notif-badge');
+        if (pmBadge) {
+          if (data.unread_count > 0) { pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count; pmBadge.style.display = 'inline-block'; }
+          else pmBadge.style.display = 'none';
+        }
         if (!data.notifications.length) {
           body.innerHTML = '<p style="color:var(--slate-light);padding:20px;text-align:center;font-size:13px">You\'re all caught up.</p>';
           return;
         }
         body.innerHTML = data.notifications.map(n => `
-          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id})">
+          <div class="notif-item ${n.unread ? 'unread' : ''}" onclick="onNotifClick('${n.nav_section}', ${n.hospital_id || 'null'})">
             <div class="notif-item-title">
               <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
               ${sanitize(n.title)}
@@ -818,24 +853,15 @@
       }
     }
 
-    async function onNotifClick(id) {
-      try {
-        await api("PATCH", `/notifications/${id}/read`, {});
-        loadNotifUnreadCount();
-        closeNotifPanel();
-      } catch (e) { toast(e.message, "error"); }
-    }
-
-    async function markAllNotifsRead() {
-      try {
-        await api("POST", "/notifications/mark-all-read", {});
-        loadNotifList();
-      } catch (e) { }
+    function onNotifClick(navSection, hospitalId) {
+      closeNotifPanel();
+      showSection(navSection);
+      if (hospitalId) openDetail(hospitalId);
     }
 
     async function loadNotifUnreadCount() {
       try {
-        const data = await api("GET", "/notifications/unread-count");
+        const data = await api("GET", "/admin/notifications-feed");
         const pmBadge = document.getElementById('profile-menu-notif-badge');
         if (data.unread_count > 0) {
           if (pmBadge) { pmBadge.textContent = data.unread_count > 99 ? '99+' : data.unread_count; pmBadge.style.display = 'inline-block'; }
@@ -965,14 +991,17 @@
         return;
       }
       container.innerHTML = data.map(h => `
-        <div class="hosp-card" onclick="openDetail(${h.id})">
-          <div class="hosp-card-main">
-            <div class="hosp-card-name">${sanitize(h.name)}</div>
-            <div class="hosp-card-meta">${sanitize(h.city)} · Code: ${sanitize(h.hospital_code)} · ${h.hospital_type === 'government' ? 'Government' : 'Private'}</div>
-            <div class="hosp-card-badges">
-              <span class="badge badge-grey">${typeof tierLabel === 'function' ? tierLabel(h.tier) : h.tier}</span>
-              ${aiScribeUsageBadgeHtml(h)}
-              <span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span>
+        <div class="hosp-card ${h.is_active ? 'is-active' : ''}" onclick="openDetail(${h.id})">
+          <div class="hosp-card-body">
+            <div class="hosp-card-avatar">${sanitize((h.name || '?').trim().charAt(0).toUpperCase())}</div>
+            <div class="hosp-card-main">
+              <div class="hosp-card-name">${sanitize(h.name)}</div>
+              <div class="hosp-card-meta">${sanitize(h.city)} · Code: ${sanitize(h.hospital_code)} · ${h.hospital_type === 'government' ? 'Government' : 'Private'}</div>
+              <div class="hosp-card-badges">
+                <span class="badge badge-grey">${typeof tierLabel === 'function' ? tierLabel(h.tier) : h.tier}</span>
+                ${aiScribeUsageBadgeHtml(h)}
+                <span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span>
+              </div>
             </div>
           </div>
           <div class="hosp-card-actions">
@@ -1374,15 +1403,23 @@
         }
         el.innerHTML = rows.map(s => `
           <div class="card" style="margin-bottom:12px;cursor:pointer" onclick="openSuggestionModal(${s.id})">
-            <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
               <div>
-                <div style="font-weight:600">${sanitize(s.hospital_name)}${s.follow_up_requested_at ? ' <span style="color:#dc2626;font-weight:700">· Follow-up requested</span>' : ''}</div>
-                <div style="font-size:12px;color:var(--slate-light)">${sanitize(s.submitted_by_name)} · ${sanitize(s.submitted_by_role)} · ${new Date(s.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                <div style="font-weight:700;font-size:16px">${sanitize(s.hospital_name)}</div>
+                ${s.follow_up_requested_at ? '<div style="margin-top:4px"><span class="badge badge-red">Follow-up requested</span></div>' : ''}
               </div>
               <span class="badge ${SUGG_STATUS_CLASS[s.status] || 'badge-grey'}">${SUGG_STATUS_LABEL[s.status] || s.status}</span>
             </div>
-            <p style="margin:10px 0 0;font-size:14px">${sanitize(s.message)}</p>
-            ${s.status === 'rejected' && s.rejection_reason ? `<p style="margin:6px 0 0;font-size:13px;color:var(--slate-light)"><strong>Reason:</strong> ${sanitize(s.rejection_reason)}</p>` : ''}
+
+            <div style="background:var(--teal-subtle);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px">
+              <div style="font-weight:600;color:var(--navy);margin-bottom:2px">${sanitize(s.submitted_by_name)}</div>
+              <div style="font-size:13px;color:var(--slate);text-transform:capitalize">${sanitize(s.submitted_by_role)}</div>
+            </div>
+
+            <div style="font-size:14px;color:var(--navy);margin-bottom:10px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(s.message)}</div>
+            ${s.status === 'rejected' && s.rejection_reason ? `<div style="font-size:13px;color:var(--slate-light);margin-bottom:8px"><strong>Reason:</strong> ${sanitize(s.rejection_reason)}</div>` : ''}
+
+            <div style="font-size:12px;color:var(--slate-light)">${new Date(s.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
           </div>
         `).join('');
       } catch (e) {
@@ -1554,14 +1591,31 @@
       } catch (e) { /* silent */ }
     }
 
+    async function refreshPlanInquiriesBadge() {
+      try {
+        const rows = await api('GET', '/admin/plan-inquiries');
+        const badge = document.getElementById('plan-inquiries-nav-badge');
+        if (!badge) return;
+        const newCount = rows.filter(i => i.status === 'new').length;
+        if (newCount > 0) {
+          badge.textContent = newCount > 9 ? '9+' : newCount;
+          badge.style.display = 'inline-flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (e) { /* silent */ }
+    }
+
     // Load overview on start
     loadStats();
     refreshSuggestionsBadge();
     refreshUpgradeRequestsBadge();
     refreshHospitalLeadsBadge();
+    refreshPlanInquiriesBadge();
     setInterval(refreshSuggestionsBadge, 30000);
     setInterval(refreshUpgradeRequestsBadge, 30000);
     setInterval(refreshHospitalLeadsBadge, 30000);
+    setInterval(refreshPlanInquiriesBadge, 30000);
   </script>
 </body>
 

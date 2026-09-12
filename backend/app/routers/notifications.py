@@ -40,7 +40,7 @@ def list_notifications(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor", "nurse", "assistant"]:
+    if current_doctor.role.value not in ["super_admin", "admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor", "nurse", "assistant"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     sync_stock_notifications(db, current_doctor.hospital_id)
@@ -64,7 +64,7 @@ def list_notifications(
         query = query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
     if current_doctor.role.value in ("nurse", "assistant"):
         query = query.filter(Notification.type.in_(NURSE_VISIBLE_TYPES), not_targeted_at_someone_else)
-    if current_doctor.role.value in ("admin", "sub_admin"):
+    if current_doctor.role.value in ("super_admin", "admin", "sub_admin"):
         # target_doctor_id marks a notification as meant for one specific
         # individual (e.g. a staff member's suggestion reply) — admin/
         # sub_admin should only see it if they ARE that individual, not
@@ -89,7 +89,7 @@ def list_notifications(
         unread_query = unread_query.filter(Notification.type.in_(DOCTOR_VISIBLE_TYPES), Notification.target_doctor_id == current_doctor.id)
     if current_doctor.role.value in ("nurse", "assistant"):
         unread_query = unread_query.filter(Notification.type.in_(NURSE_VISIBLE_TYPES), not_targeted_at_someone_else)
-    if current_doctor.role.value in ("admin", "sub_admin"):
+    if current_doctor.role.value in ("super_admin", "admin", "sub_admin"):
         unread_query = unread_query.filter(
             (Notification.target_doctor_id.is_(None)) | (Notification.target_doctor_id == current_doctor.id)
         ).filter(~Notification.type.in_(ADMIN_EXCLUDED_TYPES))
@@ -103,7 +103,7 @@ def get_unread_count(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor", "nurse", "assistant"]:
+    if current_doctor.role.value not in ["super_admin", "admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor", "nurse", "assistant"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     sync_stock_notifications(db, current_doctor.hospital_id)
@@ -138,7 +138,7 @@ def mark_read(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor", "nurse", "assistant"]:
+    if current_doctor.role.value not in ["super_admin", "admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor", "nurse", "assistant"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     n = db.query(Notification).filter(
@@ -167,7 +167,7 @@ def mark_all_read(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor", "nurse", "assistant"]:
+    if current_doctor.role.value not in ["super_admin", "admin", "sub_admin", "pharmacy", "receptionist", "lab", "doctor", "nurse", "assistant"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     query = db.query(Notification).filter(

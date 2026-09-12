@@ -14,7 +14,8 @@ from app.models.consultation import Consultation
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from app.utils.ai_scribe_gate import get_ai_scribe_status, has_ai_scribe_at_all
-from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING
+from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING, AI_SCRIBE_TIER_CAPS
+from app.models.suggestion import Suggestion
 from app.models.ai_scribe_topup import AiScribeTopup
 from app.models.upgrade_request import UpgradeRequest
 from app.models.hospital_lead import HospitalLead
@@ -24,11 +25,79 @@ from dateutil.relativedelta import relativedelta
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-
 def require_super_admin(current_doctor: Doctor):
     if current_doctor.role.value != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
+
+@router.get("/notifications-feed")
+def get_notifications_feed(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Super admin's own notification feed — deliberately NOT the generic
+    per-hospital Notification system (super admin has no hospital_id, so
+    that system structurally can't apply). Aggregates exactly the things
+    that are actually his to act on: new plan inquiries, hospital leads,
+    upgrade requests, unseen suggestions, hospitals that have hit their
+    tier's consultation limit, and hospitals whose billing cycle ends
+    within 2 days. Each item's "unread" reflects its own real status field
+    (or, for the two computed ones, is just always true — they're ongoing
+    states with no dismiss action of their own yet)."""
+    require_super_admin(current_doctor)
+    now = now_ist_naive()
+    items = []
+
+    for pi in db.query(PlanInquiry).order_by(PlanInquiry.created_at.desc()).limit(50).all():
+        items.append({
+            "id": f"plan_inquiry-{pi.id}", "notif_type": "plan_inquiry", "severity": "info",
+            "title": "New plan inquiry", "message": f"{pi.hospital_name} enquired about a plan.",
+            "created_at": pi.created_at, "unread": pi.status == "new", "nav_section": "plan-inquiries",
+        })
+
+    for hl in db.query(HospitalLead).order_by(HospitalLead.created_at.desc()).limit(50).all():
+        items.append({
+            "id": f"hospital_lead-{hl.id}", "notif_type": "hospital_lead", "severity": "info",
+            "title": "New hospital lead", "message": f"New lead: {hl.hospital_name}.",
+            "created_at": hl.created_at, "unread": hl.status == "new", "nav_section": "hospital-leads",
+        })
+
+    for ur in db.query(UpgradeRequest).order_by(UpgradeRequest.created_at.desc()).limit(50).all():
+        items.append({
+            "id": f"upgrade_request-{ur.id}", "notif_type": "upgrade_request", "severity": "info",
+            "title": "New upgrade request", "message": f"{ur.hospital_name} requested an upgrade.",
+            "created_at": ur.created_at, "unread": ur.status == "new", "nav_section": "upgrade-requests",
+        })
+
+    for s in db.query(Suggestion).order_by(Suggestion.created_at.desc()).limit(50).all():
+        items.append({
+            "id": f"suggestion-{s.id}", "notif_type": "suggestion", "severity": "info",
+            "title": "New suggestion", "message": f"New suggestion from {s.hospital_name}.",
+            "created_at": s.created_at, "unread": s.status == "sent", "nav_section": "suggestions",
+        })
+
+    for h in db.query(Hospital).filter(Hospital.is_active == True).all():
+        cap = AI_SCRIBE_TIER_CAPS.get(h.tier)
+        if cap and h.ai_scribe_consultations_used >= cap:
+            items.append({
+                "id": f"hospital_limit-{h.id}", "notif_type": "hospital_limit", "severity": "warning",
+                "title": "Hospital hit its consultation limit",
+                "message": f"{h.name} has used {h.ai_scribe_consultations_used}/{cap} consultations on {h.tier.title()}.",
+                "created_at": now, "unread": True, "nav_section": "hospitals", "hospital_id": h.id,
+            })
+        info = get_billing_cycle_info(h)
+        if info and now < info["cycle_end"] and (info["cycle_end"] - now) <= timedelta(days=2):
+            items.append({
+                "id": f"billing_cycle-{h.id}", "notif_type": "billing_cycle", "severity": "warning",
+                "title": "Billing cycle ending soon",
+                "message": f"{h.name}'s billing cycle ends on {info['cycle_end'].strftime('%d %b, %Y')}.",
+                "created_at": now, "unread": True, "nav_section": "hospitals", "hospital_id": h.id,
+            })
+
+    items.sort(key=lambda x: x["created_at"], reverse=True)
+    for it in items:
+        it["created_at"] = it["created_at"].isoformat()
+    return {"notifications": items, "unread_count": sum(1 for it in items if it["unread"])}
 
 @router.get("/upgrade-requests")
 def list_upgrade_requests(
