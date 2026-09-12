@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.database import get_db
 from app.models.doctor import Doctor
 from app.models.tutorial_step import TutorialStep
@@ -31,30 +31,35 @@ def get_tutorial_steps(role: str, page: str, db: Session = Depends(get_db)):
 
 
 @router.get("/status/staff", response_model=TutorialStatusOut)
-def get_staff_tutorial_status(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def get_staff_tutorial_status(page: Optional[str] = None, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     role = current_doctor.role.value
-    done = db.query(TutorialProgress).filter(
+    q = db.query(TutorialProgress).filter(
         TutorialProgress.subject_type == "doctor",
         TutorialProgress.subject_id == current_doctor.id,
         TutorialProgress.role == role,
-    ).first()
+    )
+    q = q.filter(TutorialProgress.page == page) if page else q.filter(TutorialProgress.page.is_(None))
+    done = q.first()
     return {"role": role, "completed": bool(done)}
 
 
 @router.post("/status/staff/complete")
-def complete_staff_tutorial(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def complete_staff_tutorial(page: Optional[str] = None, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     """Skip and finish both call this — there is no distinction between
     them once acted on. Idempotent: calling it again is a no-op, not an
     error, since a user might replay the tutorial from Settings and finish
-    it again."""
+    it again. Scoped by page now, not just role — each tab gets its own
+    completion flag."""
     role = current_doctor.role.value
-    existing = db.query(TutorialProgress).filter(
+    q = db.query(TutorialProgress).filter(
         TutorialProgress.subject_type == "doctor",
         TutorialProgress.subject_id == current_doctor.id,
         TutorialProgress.role == role,
-    ).first()
+    )
+    q = q.filter(TutorialProgress.page == page) if page else q.filter(TutorialProgress.page.is_(None))
+    existing = q.first()
     if not existing:
-        db.add(TutorialProgress(subject_type="doctor", subject_id=current_doctor.id, role=role, completed_at=now_ist_naive()))
+        db.add(TutorialProgress(subject_type="doctor", subject_id=current_doctor.id, role=role, page=page, completed_at=now_ist_naive()))
         db.commit()
     return {"message": "Tutorial marked complete"}
 

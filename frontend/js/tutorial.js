@@ -36,12 +36,15 @@
   let _resizeHandler = null;
   let _wheelBlocker = null;
   let _localOptions = null; // set only by startLocalTour — marks "local" (non-backend) mode
+  let _page = null; // which tab's tutorial is currently loaded — passed back on completion
 
-  function _statusEndpoint(subjectType) {
-    return subjectType === "patient" ? "/tutorials/status/patient" : "/tutorials/status/staff";
+  function _statusEndpoint(subjectType, page) {
+    const base = subjectType === "patient" ? "/tutorials/status/patient" : "/tutorials/status/staff";
+    return page ? `${base}?page=${encodeURIComponent(page)}` : base;
   }
-  function _completeEndpoint(subjectType) {
-    return subjectType === "patient" ? "/tutorials/status/patient/complete" : "/tutorials/status/staff/complete";
+  function _completeEndpoint(subjectType, page) {
+    const base = subjectType === "patient" ? "/tutorials/status/patient/complete" : "/tutorials/status/staff/complete";
+    return page ? `${base}?page=${encodeURIComponent(page)}` : base;
   }
   function _isMobile() {
     return window.innerWidth <= MOBILE_BREAKPOINT;
@@ -53,8 +56,8 @@
 
   async function initTutorial(subjectType, role, page) {
     try {
-      const status = await api("GET", _statusEndpoint(subjectType));
-      if (status.completed) return; // already seen/skipped — only manual replay from here on
+      const status = await api("GET", _statusEndpoint(subjectType, page));
+      if (status.completed) return; // already seen/skipped this tab — only manual replay from here on
       startTutorial(subjectType, role, page, false);
     } catch (e) { /* silent — a broken tutorial fetch should never block the real page */ }
   }
@@ -71,6 +74,7 @@
       _stepIndex = 0;
       _subjectType = subjectType;
       _role = role;
+      _page = page;
       _localOptions = null;
       _buildOverlay();
       _renderStep();
@@ -186,21 +190,28 @@
   function _positionForCurrentStep() {
     const step = _steps[_stepIndex];
     const target = document.querySelector(step.target_selector);
-    if (!target) {
-      // Target isn't on this page right now (shouldn't normally happen now
-      // that steps are device-filtered, but stay defensive) — skip past it
-      // rather than stall the whole tutorial on a missing element.
+    const preRect = target ? target.getBoundingClientRect() : null;
+    if (!target || (preRect.width === 0 && preRect.height === 0)) {
+      // Missing, OR present but currently invisible (e.g. a different
+      // tab's content that isn't the active one right now) — skip past it
+      // rather than draw a box over nothing.
       if (_stepIndex < _steps.length - 1) { _stepIndex++; _renderStep(); }
       else _finish();
       return;
     }
+    // Scroll BEFORE measuring, not after — scrollIntoView's smooth-scroll
+    // animation used to run *after* the highlight/tooltip were already
+    // placed from the pre-scroll position, so the box ended up floating
+    // wherever the target used to be once the animation finished. Instant
+    // scroll removes that race entirely; positioning is always measured
+    // post-scroll now.
+    target.scrollIntoView({ block: "center", behavior: "instant" });
     const rect = target.getBoundingClientRect();
     const pad = 6;
     _highlightEl.style.top = `${rect.top - pad}px`;
     _highlightEl.style.left = `${rect.left - pad}px`;
     _highlightEl.style.width = `${rect.width + pad * 2}px`;
     _highlightEl.style.height = `${rect.height + pad * 2}px`;
-    target.scrollIntoView({ block: "center", behavior: "smooth" });
 
     const placement = step.placement || "bottom";
     const gap = 16;
@@ -248,7 +259,7 @@
       if (_localOptions.onFinish) _localOptions.onFinish();
       return;
     }
-    try { await api("POST", _completeEndpoint(_subjectType)); } catch (e) { /* best-effort — don't block the user on this */ }
+    try { await api("POST", _completeEndpoint(_subjectType, _page)); } catch (e) { /* best-effort — don't block the user on this */ }
   }
 
   function _escape(s) {

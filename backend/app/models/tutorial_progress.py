@@ -17,4 +17,5 @@ class TutorialProgress(Base):
     subject_type = Column(String, nullable=False)  # "doctor" | "patient_account"
     subject_id = Column(Integer, nullable=False)  # Doctor.id or PatientAccount.id, per subject_type
     role = Column(String, nullable=False)  # which tutorial — matches TutorialStep.role
+    page = Column(String, nullable=True)  # which tab within that role's tutorial — matches TutorialStep.page. Nullable for old whole-role rows predating this column.
     completed_at = Column(DateTime, default=now_ist_naive, nullable=False)
