@@ -452,7 +452,7 @@
         <strong id="profile-menu-name"></strong>
         <span id="profile-menu-clinic"></span>
       </div>
-      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('staff', 'lab', 'lab', true)">
+      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('staff', 'lab', 'lab-home', true)">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -587,7 +587,7 @@
 
       <!-- Home tab -->
       <div class="mobile-section active" id="section-queue">
-        <div class="card">
+        <div class="card" id="lab-queue-card">
           <div class="card-header" style="flex-wrap:wrap;gap:10px">
             <h2 style="width:100%;margin-bottom:2px">Waiting Queue</h2>
             <input class="form-control" id="lab-queue-search" placeholder="Search patient or token…" style="flex:1 1 auto;min-width:150px;width:auto" oninput="renderQueue(filterLabQueueData())" />
@@ -607,7 +607,7 @@
            every .mobile-section stacks, so placing this block right after Home
            puts the admitted-patient card directly below the normal queue. -->
       <div class="mobile-section" id="section-admitted">
-        <div class="card">
+        <div class="card" id="lab-admission-card">
           <div class="card-header" style="flex-wrap:wrap;gap:10px">
             <h2 style="width:100%;margin-bottom:2px">Admitted Patients</h2>
             <input class="form-control" id="lab-admission-search" placeholder="Search patient, ward, or bed…" style="flex:1 1 auto;min-width:150px;width:auto" oninput="renderQueue(filterLabAdmissionQueueData())" />
@@ -2052,7 +2052,7 @@
     loadAdmissionQueue();
     setInterval(loadQueue, 15000);
     setInterval(loadAdmissionQueue, 15000);
-    initTutorial('staff', 'lab', 'lab');
+    initTutorial('staff', 'lab', 'lab-home');
   </script>
 </body>
 

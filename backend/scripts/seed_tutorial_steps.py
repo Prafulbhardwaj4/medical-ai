@@ -36,58 +36,48 @@ from app.database import SessionLocal
 from app.models.tutorial_step import TutorialStep
 
 STEPS = [
-    # ═══ lab / lab.html — continuous 1-9 ═══
-    # Queue
-    {"role": "lab", "page": "lab", "device": "desktop", "step_order": 1,
-     "target_selector": "#sidebar-tab-queue", "title": "Waiting Queue",
-     "description": "Patients waiting for lab tests show up here as soon as they're checked in.",
-     "placement": "right"},
-    {"role": "lab", "page": "lab", "device": "mobile", "step_order": 1,
-     "target_selector": "#tab-btn-queue", "title": "Home",
-     "description": "Patients waiting for lab tests show up here as soon as they're checked in.",
+    # ═══ lab / lab.html — "lab-home" page (Home tab only — Pending/Reports
+    # get their own "lab-pending"/"lab-reports" pages later, tab by tab) ═══
+    {"role": "lab", "page": "lab-home", "device": "both", "step_order": 1,
+     "target_selector": "#lab-attendance-card", "title": "Today's Status",
+     "description": "Mark yourself present, on break, or off duty for the day — right from here.",
      "placement": "top"},
-    {"role": "lab", "page": "lab", "device": "both", "step_order": 2,
-     "target_selector": "#lab-queue-search", "title": "Find a Patient",
-     "description": "Search by name or token, or use the filter next to it to narrow by status.",
-     "placement": "bottom"},
-    {"role": "lab", "page": "lab", "device": "both", "step_order": 3,
-     "target_selector": "#lab-queue-list", "title": "Enter Results",
-     "description": "Tap a patient's card to see their ordered tests and enter results.",
+    {"role": "lab", "page": "lab-home", "device": "both", "step_order": 2,
+     "target_selector": "#lab-queue-card", "title": "Waiting Queue",
+     "description": "Patients waiting for lab tests show up here as soon as they're checked in — search, filter, and enter results all from this card.",
      "placement": "top"},
-    # Pending Tasks
-    {"role": "lab", "page": "lab", "device": "desktop", "step_order": 4,
+    {"role": "lab", "page": "lab-home", "device": "both", "step_order": 3,
+     "target_selector": "#lab-admission-card", "title": "Admitted Patients",
+     "description": "Ward-ordered tests for admitted patients live here, separate from the walk-in queue above.",
+     "placement": "top"},
+    {"role": "lab", "page": "lab-home", "device": "desktop", "step_order": 4,
      "target_selector": "#sidebar-tab-pending", "title": "Pending Tasks",
      "description": "Paid tests that need to be requeued — a missed sample, a redo, etc. — land here.",
      "placement": "right"},
-    {"role": "lab", "page": "lab", "device": "mobile", "step_order": 4,
+    {"role": "lab", "page": "lab-home", "device": "mobile", "step_order": 4,
      "target_selector": "#tab-btn-pending", "title": "Pending Tasks",
      "description": "Paid tests that need to be requeued — a missed sample, a redo, etc. — land here.",
      "placement": "top"},
-    {"role": "lab", "page": "lab", "device": "both", "step_order": 5,
-     "target_selector": "#lab-pending-search", "title": "Search or Browse",
-     "description": "Search a patient by name, or leave it blank to see everything pending.",
-     "placement": "bottom"},
-    {"role": "lab", "page": "lab", "device": "both", "step_order": 6,
-     "target_selector": "#lab-pending-results", "title": "Requeue a Test",
-     "description": "Tap Requeue on a patient's card to send their test back to the waiting queue.",
-     "placement": "top"},
-    # Reports
-    {"role": "lab", "page": "lab", "device": "desktop", "step_order": 7,
+    {"role": "lab", "page": "lab-home", "device": "desktop", "step_order": 5,
      "target_selector": "#sidebar-tab-reports", "title": "Reports",
      "description": "Completed lab reports for every patient live here, organized by patient.",
      "placement": "right"},
-    {"role": "lab", "page": "lab", "device": "mobile", "step_order": 7,
+    {"role": "lab", "page": "lab-home", "device": "mobile", "step_order": 5,
      "target_selector": "#tab-btn-reports", "title": "Reports",
      "description": "Completed lab reports for every patient live here, organized by patient.",
      "placement": "top"},
-    {"role": "lab", "page": "lab", "device": "both", "step_order": 8,
-     "target_selector": "#lab-reports-search", "title": "Find a Report",
-     "description": "Search by patient name or UID to jump straight to their reports.",
+    {"role": "lab", "page": "lab-home", "device": "both", "step_order": 6,
+     "target_selector": "#suggestion-header-btn", "title": "Suggest",
+     "description": "Have an idea to improve MedScribe? Send it here.",
      "placement": "bottom"},
-    {"role": "lab", "page": "lab", "device": "both", "step_order": 9,
-     "target_selector": "#lab-reports-list", "title": "View & Share",
-     "description": "Tap Report on a patient's card to download or send their results on WhatsApp.",
-     "placement": "top"},
+    {"role": "lab", "page": "lab-home", "device": "both", "step_order": 7,
+     "target_selector": "#chat-header-btn", "title": "Chat",
+     "description": "Message your hospital admin directly from here.",
+     "placement": "bottom"},
+    {"role": "lab", "page": "lab-home", "device": "both", "step_order": 8,
+     "target_selector": ".topbar-profile-btn", "title": "Profile",
+     "description": "Your account settings — and you can replay any tab's tutorial from here any time.",
+     "placement": "bottom"},
 
     # ═══ receptionist / receptionist.html — "receptionist-attendance" page ═══
     # Mobile-only: this section has no desktop equivalent anywhere on the
@@ -311,6 +301,18 @@ STEPS = [
      "target_selector": "#doctor-roster-list", "title": "Doctor Roster",
      "description": "Each doctor's current status, and a badge marking who you're assisting today.",
      "placement": "top"},
+    {"role": "assistant", "page": "assistant", "device": "both", "step_order": 7,
+     "target_selector": "#suggestion-header-btn", "title": "Suggest",
+     "description": "Have an idea to improve MedScribe? Send it here.",
+     "placement": "bottom"},
+    {"role": "assistant", "page": "assistant", "device": "both", "step_order": 8,
+     "target_selector": "#chat-header-btn", "title": "Chat",
+     "description": "Message your hospital admin directly from here.",
+     "placement": "bottom"},
+    {"role": "assistant", "page": "assistant", "device": "both", "step_order": 9,
+     "target_selector": ".topbar-profile-btn", "title": "Profile",
+     "description": "Your account settings — and you can replay this tutorial from here any time.",
+     "placement": "bottom"},
 
     # ═══ pharmacy / pharmacy.html — continuous 1-12 (desktop), 1-7 (mobile) ═══
     # Home / Waiting Queue
@@ -412,6 +414,14 @@ def run():
             for row in existing:
                 if (row.role, row.page, row.device, row.target_selector) not in seen_keys:
                     row.is_active = False
+
+        # One-time cleanup: "lab"/"lab" was the old monolithic page name,
+        # replaced above by the per-tab "lab-home" page. It no longer
+        # appears anywhere in STEPS, so the generic disable-pass above
+        # (which only inspects role/page pairs still present in STEPS)
+        # would never touch these old rows on its own.
+        db.query(TutorialStep).filter_by(role="lab", page="lab").update({"is_active": False})
+
         db.commit()
         print(f"Seeded/updated {len(STEPS)} tutorial steps across {len(seen_role_pages)} role/page(s).")
     finally:
