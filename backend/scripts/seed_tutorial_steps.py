@@ -23,14 +23,14 @@ Usage:
 """
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Importing app.main (not just the two models this script needs) registers
-# every SQLAlchemy model in the app, including Hospital — without this,
-# Doctor's relationship("Hospital") can't be resolved and configuring the
-# mapper raises InvalidRequestError the moment any query touches Doctor's
-# mapper graph, even though this script never queries Doctor directly.
-import app.main  # noqa: F401
+# Only needed for standalone `python -m scripts.seed_tutorial_steps` use —
+# when this module is instead imported from app.main at startup, app.main
+# has already put the backend dir on sys.path and fully initialized the
+# model registry (Hospital, Doctor, etc.), so this import is a no-op then.
+if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import app.main  # noqa: F401 — registers every model's mapper before we touch the DB
 
 from app.database import SessionLocal
 from app.models.tutorial_step import TutorialStep

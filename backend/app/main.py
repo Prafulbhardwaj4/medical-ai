@@ -170,6 +170,22 @@ except SQLAlchemyError:
     logger.exception("Runtime schema sync failed")
     raise
 
+
+def _seed_tutorial_content():
+    """Runs the same idempotent upsert as `python -m scripts.seed_tutorial_steps`
+    (see that file's own docstring), but automatically on every startup —
+    Render's free tier has no shell, so a manually-run one-off script can
+    never reach production. Non-fatal on failure: missing/stale tutorial
+    content shouldn't take the whole API down."""
+    try:
+        from scripts.seed_tutorial_steps import run as seed_tutorials_run
+        seed_tutorials_run()
+    except Exception:
+        logger.exception("Tutorial content seeding failed at startup")
+
+
+_seed_tutorial_content()
+
 security = HTTPBearer()
 limiter = Limiter(key_func=get_remote_address)
 
