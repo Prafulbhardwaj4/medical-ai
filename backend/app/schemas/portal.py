@@ -346,6 +346,26 @@ class ChangePasswordIn(BaseModel):
     new_password: str
 
 
+class PortalForgotPasswordRequestIn(BaseModel):
+    phone: str
+    captcha_token: str
+    captcha_answer: str
+
+
+class PortalForgotPasswordVerifyIn(BaseModel):
+    phone: str
+    otp: str
+
+
+class PortalForgotPasswordVerifyOut(BaseModel):
+    reset_token: str
+
+
+class PortalResetPasswordIn(BaseModel):
+    reset_token: str
+    new_password: str
+
+
 class DeactivateAccountIn(BaseModel):
     password: str  # re-confirmation for a destructive, self-service action
 

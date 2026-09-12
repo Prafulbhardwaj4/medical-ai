@@ -13,7 +13,7 @@ class DoctorCreate(BaseModel):
     password: str
 
 class CaptchaOut(BaseModel):
-    question: str
+    svg: str
     token: str
 
 class DoctorLogin(BaseModel):

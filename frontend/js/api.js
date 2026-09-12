@@ -55,6 +55,14 @@ function renderPasswordStrength(pw, prefix = 'pw') {
   });
 }
 
+function togglePwVisibility(inputId, iconId) {
+  const input = document.getElementById(inputId);
+  const icon = document.getElementById(iconId);
+  if (!input || !icon) return;
+  if (input.type === "password") { input.type = "text"; icon.textContent = "🙈"; }
+  else { input.type = "password"; icon.textContent = "👁"; }
+}
+
 function clearSession() {
   try {
     localStorage.removeItem("ms_token");
@@ -458,75 +466,6 @@ function openEditDetailsModal() {
 
 function closeEditDetailsModal() {
   document.getElementById('modal-edit-details')?.classList.remove('open');
-}
-
-function ensureChangePasswordModal() {
-  if (document.getElementById('modal-change-password')) return;
-  const wrap = document.createElement('div');
-  wrap.innerHTML = `
-    <div class="modal-overlay" id="modal-change-password">
-      <div class="modal" style="max-width:400px">
-        <div class="modal-header">
-          <h2>Change Password</h2>
-          <button class="modal-close" onclick="closeChangePasswordModal()">&times;</button>
-        </div>
-        <div style="margin-bottom:12px">
-          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Current Password</label>
-          <input class="form-control" id="cp-old" type="password" />
-        </div>
-        <div style="margin-bottom:12px">
-          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">New Password</label>
-          <input class="form-control" id="cp-new" type="password" placeholder="At least 6 characters" />
-        </div>
-        <div style="margin-bottom:16px">
-          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Confirm New Password</label>
-          <input class="form-control" id="cp-confirm" type="password" />
-        </div>
-        <div class="err-msg" id="cp-err" style="margin-bottom:10px"></div>
-        <div style="display:flex;gap:10px">
-          <button class="btn btn-outline" style="flex:1" onclick="closeChangePasswordModal()">Cancel</button>
-          <button class="btn btn-primary" style="flex:1" id="cp-submit-btn" onclick="submitChangePassword()">Save</button>
-        </div>
-      </div>
-    </div>`;
-  document.body.appendChild(wrap.firstElementChild);
-}
-
-function openChangePasswordModal() {
-  closeProfileMenu();
-  ensureChangePasswordModal();
-  document.getElementById('cp-old').value = '';
-  document.getElementById('cp-new').value = '';
-  document.getElementById('cp-confirm').value = '';
-  document.getElementById('cp-err').textContent = '';
-  document.getElementById('modal-change-password').classList.add('open');
-}
-
-function closeChangePasswordModal() {
-  document.getElementById('modal-change-password')?.classList.remove('open');
-}
-
-async function submitChangePassword() {
-  const errEl = document.getElementById('cp-err');
-  const oldPw = document.getElementById('cp-old').value;
-  const newPw = document.getElementById('cp-new').value;
-  const confirmPw = document.getElementById('cp-confirm').value;
-
-  if (!oldPw) { errEl.textContent = 'Enter your current password.'; return; }
-  if (newPw.length < 6) { errEl.textContent = 'New password must be at least 6 characters.'; return; }
-  if (newPw !== confirmPw) { errEl.textContent = 'New passwords do not match.'; return; }
-
-  const btn = document.getElementById('cp-submit-btn');
-  btn.disabled = true;
-  try {
-    await api("POST", "/portal/auth/change-password", { old_password: oldPw, new_password: newPw });
-    toast("Password changed successfully", "success");
-    closeChangePasswordModal();
-  } catch (e) {
-    errEl.textContent = e.message;
-  } finally {
-    btn.disabled = false;
-  }
 }
 
 function ensureDeactivateAccountModal() {

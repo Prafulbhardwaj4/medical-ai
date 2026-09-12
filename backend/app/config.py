@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # for real OTP generation + delivery once WhatsApp is wired up.
     STAFF_FORGOT_PASSWORD_OTP: str = "1234"
 
+    # Same idea, for patients. Kept as its own setting so staff/patient OTP
+    # policy can diverge later once real WhatsApp delivery replaces this.
+    PORTAL_FORGOT_PASSWORD_OTP: str = "1234"
+
     # How long an unpaid scheduled-slot booking holds its place before it's
     # treated as abandoned and the slot is released back for others to book.
     # Placeholder value pending real payment-gateway timing — easy to tune here.

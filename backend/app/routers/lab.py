@@ -15,6 +15,7 @@ from app.models.test_catalog import TestCatalogItem
 from app.models.test_catalog_parameter import TestCatalogParameter
 from app.models.hospital import Hospital
 from app.models.notifiable_disease import NotifiableDisease
+from app.models.admission import AdmissionCharge
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
@@ -566,6 +567,22 @@ def get_admission_lab_queue(
         ),
     ).order_by(TestOrder.queued_at).all()
 
+    # A test that's overdue against its TAT still needs to stay visible for
+    # a while so lab staff can chase it — but if it's been sitting overdue
+    # for more than 24 hours past that TAT deadline, it drops off this live
+    # card. Still fully intact in Reports; just no longer clutters the
+    # active admitted-patients view. Same is_overdue formula as below, plus
+    # a 24h grace window.
+    now = now_ist_naive()
+    orders = [
+        o for o in orders
+        if not (
+            o.accessioned_at
+            and o.status not in ("verified_released", "rejected")
+            and now > o.accessioned_at + timedelta(hours=_expected_tat_hours(o.priority) + 24)
+        )
+    ]
+
     _priority_rank = {"stat": 0, "urgent": 1, "routine": 2}
     orders.sort(key=lambda o: (_priority_rank.get(o.priority, 2), o.queued_at or now_ist_naive()))
 
@@ -892,6 +909,15 @@ def update_order_status(
             order.fasting_confirmed = payload.fasting_confirmed
         if payload.drawn_from_iv_line is not None:
             order.drawn_from_iv_line = payload.drawn_from_iv_line
+        if order.admission_id is not None and order.price:
+            # Running-bill charge happens here, at sample collection —
+            # not at order time (see order_admission_test in admissions.py).
+            # order.price is 0 for a redraw (see reject_sample below), so a
+            # rejected-then-redrawn test is billed once, not twice.
+            db.add(AdmissionCharge(
+                admission_id=order.admission_id, charge_type="test", description=order.test_name,
+                amount=order.price, quantity=1, added_by=current_doctor.id, charged_at=now_ist_naive(),
+            ))
     elif status == "processing" and not order.accession_number:
         if order.is_mlc_sample:
             from app.models.mlc_custody import MlcChainOfCustody

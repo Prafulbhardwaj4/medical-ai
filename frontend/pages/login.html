@@ -69,10 +69,11 @@
           </div>
 
           <div class="form-group" id="login-captcha-group" style="display:none">
-            <label class="form-label" id="captcha-question">Loading captcha…</label>
+            <label class="form-label">Enter the code shown below</label>
+            <div id="captcha-image-box" style="margin-bottom:8px;line-height:0">Loading captcha…</div>
             <div style="display:flex;gap:8px;align-items:center">
-              <input class="form-control" id="login-captcha-answer" type="text" inputmode="numeric" placeholder="Your answer" />
-              <span onclick="loadCaptcha()" style="cursor:pointer;font-size:20px;padding:0 4px" title="Get a new question">🔄</span>
+              <input class="form-control" id="login-captcha-answer" type="text" autocapitalize="characters" placeholder="Type the code" />
+              <span onclick="loadCaptcha()" style="cursor:pointer;font-size:20px;padding:0 4px" title="Get a new code">🔄</span>
             </div>
           </div>
 
@@ -81,7 +82,7 @@
             Sign In
           </button>
 
-          <div style="text-align:center;margin-top:14px">
+          <div style="text-align:right;margin-top:14px">
             <span onclick="openForgotPasswordModal()" style="font-size:13px;color:var(--teal, #14b8a6);cursor:pointer;font-weight:500">Forgot password?</span>
           </div>
 
@@ -98,8 +99,13 @@
           </div>
           <div class="form-group">
             <label class="form-label">New Password</label>
-            <input class="form-control" id="staff-new-password" type="password" placeholder="At least 8 characters"
-              oninput="renderPasswordStrength(this.value, 'staff-pw')" />
+            <div style="position:relative">
+              <input class="form-control" id="staff-new-password" type="password" placeholder="At least 8 characters"
+                style="padding-right:40px" oninput="renderPasswordStrength(this.value, 'staff-pw')" />
+              <span onclick="togglePwVisibility('staff-new-password', 'staff-pw-eye-icon')"
+                style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px"
+                id="staff-pw-eye-icon">👁</span>
+            </div>
             <ul style="list-style:none;padding:0;margin:8px 0 0;font-size:12.5px">
               <li id="staff-pw-check-length" style="color:var(--slate-light)">○ At least 8 characters</li>
               <li id="staff-pw-check-number" style="color:var(--slate-light)">○ At least 1 number</li>
@@ -162,17 +168,17 @@
     let lastCaptchaAnswer = null;
 
     async function loadCaptcha() {
-      const q = document.getElementById("captcha-question");
+      const box = document.getElementById("captcha-image-box");
       const answerInput = document.getElementById("login-captcha-answer");
-      q.textContent = "Loading captcha…";
+      box.innerHTML = "Loading captcha…";
       answerInput.value = "";
       try {
         const res = await fetch(`${BASE}/auth/captcha`);
         const json = await res.json();
-        q.textContent = json.question;
+        box.innerHTML = json.svg;
         currentCaptchaToken = json.token;
       } catch (e) {
-        q.textContent = "Couldn't load captcha — tap 🔄 to retry";
+        box.innerHTML = "Couldn't load captcha — tap 🔄 to retry";
         currentCaptchaToken = null;
       }
     }

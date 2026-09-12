@@ -1,4 +1,3 @@
-import random
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -9,7 +8,7 @@ from app.schemas.doctor import DoctorCreate, DoctorLogin, DoctorOut, EditMeIn, T
 from app.schemas.doctor import ForgotPasswordRequestIn, ForgotPasswordVerifyIn, ForgotPasswordVerifyOut, ResetPasswordIn
 from app.utils.auth import hash_password, verify_password, create_access_token
 from app.utils.auth import blacklist_token, get_current_doctor
-from app.utils.auth import create_captcha_token, verify_captcha_token
+from app.utils.auth import create_captcha_token, verify_captcha_token, generate_captcha_code, generate_captcha_svg
 from app.utils.auth import create_password_reset_token, verify_password_reset_token
 from app.config import settings
 from app.utils.timezone import now_ist_naive
@@ -31,9 +30,8 @@ def signup(request: Request):
 @router.get("/captcha", response_model=CaptchaOut)
 @limiter.limit("20/minute")
 def get_captcha(request: Request):
-    a = random.randint(1, 9)
-    b = random.randint(1, 9)
-    return CaptchaOut(question=f"What is {a} + {b}?", token=create_captcha_token(a + b))
+    code = generate_captcha_code()
+    return CaptchaOut(svg=generate_captcha_svg(code), token=create_captcha_token(code))
 
 @router.post("/login", response_model=StaffLoginResultOut)
 @limiter.limit("5/minute")

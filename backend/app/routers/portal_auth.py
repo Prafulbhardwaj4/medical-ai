@@ -1,20 +1,26 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.config import settings
 from app.models.patient import Patient
 from app.models.portal import PatientAccount, PatientProfileLink
 from app.schemas.portal import LoginIn, CompleteRegisterIn, TokenOut, PatientSessionOut, LoginResultOut, ChangePasswordIn, AddressUpdateIn, PatientAddressIn, PatientAddressOut, ConfirmProfileIn, DeactivateAccountIn
+from app.schemas.portal import PortalForgotPasswordRequestIn, PortalForgotPasswordVerifyIn, PortalForgotPasswordVerifyOut, PortalResetPasswordIn
 from app.models.portal import PatientAddress
 from app.utils.portal_auth import create_portal_access_token, hash_password, verify_password, get_current_patient_account
+from app.utils.portal_auth import create_patient_password_reset_token, verify_patient_password_reset_token
+from app.utils.auth import verify_captcha_token
 from app.utils.timezone import now_ist_naive
 from app.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/portal/auth", tags=["portal-auth"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 def _session_payload(account: PatientAccount) -> PatientSessionOut:
@@ -174,6 +180,66 @@ def change_password(
     account.password_hash = hash_password(body.new_password)
     db.commit()
     return {"message": "Password changed successfully"}
+
+
+@router.post("/forgot-password/request")
+@limiter.limit("5/minute")
+def forgot_password_request(request: Request, body: PortalForgotPasswordRequestIn, db: Session = Depends(get_db)):
+    if not verify_captcha_token(body.captcha_token, body.captcha_answer):
+        raise HTTPException(status_code=400, detail="Incorrect captcha. Please try again.")
+
+    account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="No account found for this phone number.")
+    if not account.is_active:
+        raise HTTPException(status_code=403, detail="This account has been deactivated")
+
+    # TODO: send a real WhatsApp OTP here once delivery is wired up. For now
+    # every account accepts settings.PORTAL_FORGOT_PASSWORD_OTP (see config.py).
+    return {"message": "An OTP has been sent to your phone on WhatsApp."}
+
+
+@router.post("/forgot-password/verify", response_model=PortalForgotPasswordVerifyOut)
+@limiter.limit("5/minute")
+def forgot_password_verify(request: Request, body: PortalForgotPasswordVerifyIn, db: Session = Depends(get_db)):
+    account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="No account found for this phone number.")
+
+    if body.otp.strip() != settings.PORTAL_FORGOT_PASSWORD_OTP:
+        raise HTTPException(status_code=400, detail="Incorrect OTP. Please try again.")
+
+    return PortalForgotPasswordVerifyOut(reset_token=create_patient_password_reset_token(account.id, body.otp.strip()))
+
+
+@router.post("/reset-password", response_model=TokenOut)
+@limiter.limit("5/minute")
+def reset_password(request: Request, body: PortalResetPasswordIn, db: Session = Depends(get_db)):
+    account_id, otp = verify_patient_password_reset_token(body.reset_token)
+    if account_id is None:
+        raise HTTPException(status_code=400, detail="This reset link has expired. Please request a new OTP.")
+
+    account = db.query(PatientAccount).filter(PatientAccount.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if not account.is_active:
+        raise HTTPException(status_code=403, detail="This account has been deactivated")
+
+    new_password = body.new_password
+    if len(new_password) < 8 or not any(c.isdigit() for c in new_password) or not any(c.isupper() for c in new_password):
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters, with 1 number and 1 capital letter")
+    if otp and new_password == otp:
+        raise HTTPException(status_code=400, detail="New password cannot be the same as the OTP.")
+    if verify_password(new_password, account.password_hash):
+        raise HTTPException(status_code=400, detail="New password must be different from your previous password.")
+
+    account.password_hash = hash_password(new_password)
+    db.commit()
+
+    return TokenOut(
+        access_token=create_portal_access_token(account.id),
+        doctor=_session_payload(account),
+    )
 
 
 @router.post("/deactivate")

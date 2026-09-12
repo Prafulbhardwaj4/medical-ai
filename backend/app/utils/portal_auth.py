@@ -71,6 +71,27 @@ def decode_link_confirm_token(token: str) -> dict:
         raise HTTPException(status_code=400, detail="This confirmation link is invalid or has expired")
 
 
+def create_patient_password_reset_token(account_id: int, otp: str) -> str:
+    payload = {
+        "sub": str(account_id),
+        "otp": otp,
+        "purpose": "password_reset",
+        "exp": datetime.utcnow() + timedelta(minutes=10),
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def verify_patient_password_reset_token(token: str):
+    """Returns (account_id, otp) on success, or (None, None) if invalid/expired."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("purpose") != "password_reset":
+            return None, None
+        return int(payload.get("sub")), payload.get("otp")
+    except (JWTError, TypeError, ValueError):
+        return None, None
+
+
 def get_current_patient_account(
     credentials: HTTPAuthorizationCredentials = Depends(portal_security),
     db: Session = Depends(get_db),
