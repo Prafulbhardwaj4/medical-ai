@@ -284,7 +284,17 @@
     return d.innerHTML;
   }
 
+  // Fetches a role/page's steps and device-filters them, without also
+  // rendering — for callers that need to inspect or mutate steps (e.g.
+  // attach a custom onNext) before handing them to startLocalTour, since a
+  // backend-driven TutorialStep can't carry a JS callback through JSON.
+  async function fetchTutorialSteps(role, page) {
+    const allSteps = await api("GET", `/tutorials/${role}/${page}`);
+    return allSteps.filter(_matchesDevice);
+  }
+
   window.initTutorial = initTutorial;
   window.startTutorial = startTutorial;
   window.startLocalTour = startLocalTour;
+  window.fetchTutorialSteps = fetchTutorialSteps;
 })();

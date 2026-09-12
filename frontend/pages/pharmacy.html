@@ -2583,8 +2583,9 @@
 
     function replayPharmacyTutorial() {
       closeProfileMenu();
-      if (currentPharmacyTutorialPage() === 'pharmacy-catalog') maybeRunCatalogTutorial(true);
-      else startTutorial('staff', 'pharmacy', 'pharmacy-home', true);
+      if (currentPharmacyTutorialPage() === 'pharmacy-catalog') { maybeRunCatalogTutorial(true); return; }
+      if (window.innerWidth >= 901) showPharmDesktopTab('home'); else showPharmSection('home');
+      startTutorial('staff', 'pharmacy', 'pharmacy-home', true);
     }
 
     if (sessionStorage.getItem("ms_just_set_password")) {

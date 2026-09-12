@@ -921,20 +921,28 @@
     async function maybeRunAdmissionsTutorial(isReplay) {
       const onDone = () => { admissionsListTutorialActive = false; loadAdmissions(document.getElementById("admissions-search").value.trim()); };
       const page = admissionsTutorialPage();
-      if (isReplay) {
-        admissionsListTutorialActive = true;
-        loadAdmissions();
-        startTutorial("staff", getDoctor()?.role, page, true, onDone);
-        return;
+      if (!isReplay) {
+        try {
+          const status = await api("GET", `/tutorials/status/staff?page=${page}`);
+          if (status.completed) return;
+          api("POST", `/tutorials/status/staff/complete?page=${page}`).catch(() => {});
+        } catch (e) { return; }
       }
+      let steps;
       try {
-        const status = await api("GET", `/tutorials/status/staff?page=${page}`);
-        if (status.completed) return;
-        api("POST", `/tutorials/status/staff/complete?page=${page}`).catch(() => {});
-      } catch (e) { return; }
+        steps = await fetchTutorialSteps(getDoctor()?.role, page);
+      } catch (e) { if (isReplay) toast("Could not load the tutorial right now.", "error"); return; }
+      if (!steps.length) { if (isReplay) toast("No tutorial is set up for this page yet.", "info"); return; }
       admissionsListTutorialActive = true;
       loadAdmissions();
-      startTutorial("staff", getDoctor()?.role, page, false, onDone);
+      // Last step targets the demo card specifically (not the whole list)
+      // and opens it instead of finishing — same card the demo row itself
+      // links to, so either one works.
+      const lastStep = steps[steps.length - 1];
+      lastStep.target_selector = "[data-tutorial-id='admissions-demo-card']";
+      lastStep.nextLabel = "Open";
+      lastStep.onNext = () => { location.href = "admission-detail.html?id=demo"; return false; };
+      startLocalTour(steps, { onSkip: onDone, onFinish: onDone });
     }
     maybeRunAdmissionsTutorial(false);
 

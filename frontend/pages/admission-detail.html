@@ -1453,8 +1453,17 @@
         <div style="font-size:13px;color:var(--slate)">Room charges (2 days) — ₹2,400</div>
         <div style="font-size:13px;color:var(--slate);margin-top:4px">Medicines — ₹640</div>
         <div style="font-weight:700;color:var(--navy);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">Total due: ₹3,040</div>`;
-      document.getElementById("discharge-body").innerHTML = `
-        <p style="color:var(--slate);font-size:13.5px">Once the doctor marks this patient fit for discharge, collect any pending balance and discharge them from here.</p>`;
+      // Discharge card is genuinely hidden here for an admitted (not yet
+      // discharged) patient in the real app too — the action now lives in
+      // the header's Discharge button instead, see renderDemoAdmissionDetail.
+      document.getElementById("discharge-card").style.display = "none";
+      document.getElementById("med-list").innerHTML = `
+        <div style="padding:10px 0;border-bottom:1px solid var(--border)"><strong>Paracetamol 650mg</strong><div style="font-size:12.5px;color:var(--slate)">1-0-1 · 3 days</div></div>
+        <div style="padding:10px 0"><strong>Cetirizine 10mg</strong><div style="font-size:12.5px;color:var(--slate)">0-0-1 · 3 days</div></div>`;
+      document.getElementById("test-list").innerHTML = `
+        <div style="padding:10px 0"><strong>CBC</strong><div style="font-size:12.5px;color:var(--slate)">Ordered today</div></div>`;
+      document.getElementById("progress-notes-list").innerHTML = `
+        <div style="padding:10px 0"><div style="font-size:12.5px;color:var(--slate-light)">Day 2</div><div style="font-size:13.5px;color:var(--slate)">Fever settling, continuing same medication.</div></div>`;
     }
 
     async function loadAdmission() {
@@ -1748,11 +1757,17 @@
     function runAdmissionDemoTour() {
       const steps = [
         { target_selector: "#patient-header", placement: "bottom", device: "both",
-          title: "Patient Overview", description: "Everything about this admission — status, ward, bed, and quick actions — lives at the top of the page." },
+          title: "Patient Overview", description: "Everything about this admission — status, ward, bed, and quick actions, including Discharge — lives at the top of the page." },
         { target_selector: "#running-bill-card", placement: "top", device: "both",
           title: "Running Bill", description: "Room charges, medicines, and any other charges add up here as the stay continues." },
-        { target_selector: "#discharge-card", placement: "top", device: "both",
-          title: "Discharge", nextLabel: "Finish Demo",
+        { target_selector: "#med-list", placement: "top", device: "both",
+          title: "Medications", description: "Every medicine ordered for this admission, with dosage and duration." },
+        { target_selector: "#test-list", placement: "top", device: "both",
+          title: "Tests", description: "Lab tests ordered during this stay show up here." },
+        { target_selector: "#progress-notes-list", placement: "top", device: "both",
+          title: "Progress Notes", description: "Day-by-day notes from the doctor tracking how the patient's doing." },
+        { target_selector: "#demo-discharge-btn", placement: "bottom", device: "both",
+          title: "Discharge", nextLabel: "Finish",
           description: "Once the doctor clears the patient, collect the balance and discharge them from here.",
           onNext: () => { location.href = "admissions.html"; return false; } },
       ];
