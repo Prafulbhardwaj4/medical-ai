@@ -132,7 +132,7 @@
         <strong id="profile-menu-name"></strong>
         <span id="profile-menu-clinic"></span>
       </div>
-      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('staff', getDoctor()?.role, admissionsTutorialPage(), true)">
+      <button class="profile-menu-item" onclick="closeProfileMenu(); maybeRunAdmissionsTutorial(true)">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -917,7 +917,26 @@
     // own content (once built) is independent; a role with nothing seeded
     // yet just gets the normal "nothing set up" behavior on manual replay.
     function admissionsTutorialPage() { return getDoctor()?.role + "-admissions"; }
-    initTutorial("staff", getDoctor()?.role, admissionsTutorialPage());
+
+    async function maybeRunAdmissionsTutorial(isReplay) {
+      const onDone = () => { admissionsListTutorialActive = false; loadAdmissions(document.getElementById("admissions-search").value.trim()); };
+      const page = admissionsTutorialPage();
+      if (isReplay) {
+        admissionsListTutorialActive = true;
+        loadAdmissions();
+        startTutorial("staff", getDoctor()?.role, page, true, onDone);
+        return;
+      }
+      try {
+        const status = await api("GET", `/tutorials/status/staff?page=${page}`);
+        if (status.completed) return;
+        api("POST", `/tutorials/status/staff/complete?page=${page}`).catch(() => {});
+      } catch (e) { return; }
+      admissionsListTutorialActive = true;
+      loadAdmissions();
+      startTutorial("staff", getDoctor()?.role, page, false, onDone);
+    }
+    maybeRunAdmissionsTutorial(false);
 
     let wardTypesCache = [];
 
@@ -1473,6 +1492,27 @@
       sel.value = current;
     }
 
+    let admissionsListTutorialActive = false;
+    function demoAdmissionCardHtml() {
+      if (!admissionsListTutorialActive) return '';
+      return `
+        <div class="ward-card" style="background:#f0fdfa;border-color:var(--teal)" data-tutorial-id="admissions-demo-card" onclick="location.href='admission-detail.html?id=demo'">
+          <div class="ward-card-main" style="display:flex;gap:14px;align-items:center">
+            <div class="ward-avatar">RK</div>
+            <div>
+              <div style="font-weight:700;color:var(--navy)">Rina Kumari (Demo)</div>
+              <div style="font-size:13px;color:var(--slate)">General Ward · Bed 4 · DEMO-0001</div>
+              <div style="font-size:12.5px;color:var(--slate-light);margin-top:2px">Viral fever</div>
+              <div style="font-size:11px;color:var(--teal);font-weight:700;margin-top:2px">DEMO — tap to see a patient's own page</div>
+            </div>
+          </div>
+          <div class="ward-card-side" style="text-align:right">
+            <span class="badge badge-teal">2 days</span>
+            <div style="font-size:11px;color:var(--slate-light);margin-top:4px">Since 10 Sep</div>
+          </div>
+        </div>`;
+    }
+
     let admissionsView = 'active';
     function setAdmissionsView(mode) {
       admissionsView = mode;
@@ -1493,13 +1533,14 @@
         const qs = params.toString() ? `?${params.toString()}` : "";
         const endpoint = admissionsView === 'history' ? '/admissions/history' : '/admissions/active';
         const admissions = await api("GET", `${endpoint}${qs}`);
+        const demoCard = demoAdmissionCardHtml();
         if (!admissions.length) {
           const emptyMsg = admissionsView === 'history'
             ? (search ? 'No matching discharged patients.' : 'No discharge history yet.')
             : (search ? 'No matching admissions.' : 'No patients currently admitted.');
-          list.innerHTML = `<div class="card"><p style="color:var(--slate-light)">${emptyMsg}</p></div>`; return;
+          list.innerHTML = demoCard || `<div class="card"><p style="color:var(--slate-light)">${emptyMsg}</p></div>`; return;
         }
-        list.innerHTML = admissions.map(a => `
+        list.innerHTML = demoCard + admissions.map(a => `
           <div class="ward-card" onclick="location.href='admission-detail.html?id=${a.id}'">
             <div class="ward-card-main" style="display:flex;gap:14px;align-items:center">
               <div class="ward-avatar">${a.patient_name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('')}</div>

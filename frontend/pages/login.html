@@ -360,6 +360,10 @@
         const json = await res.json();
         if (!res.ok) throw new Error(json.detail || "Could not set new password");
         saveSession(json.access_token, json.doctor);
+        // One-time flag, consumed by the landing page — the tutorial should
+        // only ever auto-show right after this exact moment (first login)
+        // or when the Tutorial button is pressed, never on a plain reload.
+        sessionStorage.setItem("ms_just_set_password", "1");
         redirectByRole(json.doctor.role);
       } catch (e) {
         err.textContent = e.message;

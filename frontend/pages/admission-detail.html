@@ -1252,6 +1252,7 @@
   <script src="../js/upgrade-gate.js"></script>
   <script src="../js/chat-widget.js?v=1"></script>
   <script src="../js/suggestion-widget.js?v=1"></script>
+  <script src="../js/tutorial.js"></script>
   <script>
     if (!requireAuth()) { }
     if (getDoctor()?.role === "receptionist") {
@@ -1400,6 +1401,7 @@
 
     const admissionId = new URLSearchParams(window.location.search).get("id");
     if (!admissionId) location.href = "admissions.html";
+    const isAdmissionDemoMode = admissionId === "demo";
 
     const ADMISSION_TYPE_LABELS = {
       planned: "Planned / Elective", emergency: "Emergency", maternity: "Maternity / Delivery",
@@ -1417,7 +1419,46 @@
     let progressNotesData = [];
     let vitalsData = [];
 
+    function renderDemoAdmissionDetail() {
+      document.getElementById("patient-header").innerHTML = `
+        <div style="background:#f0fdfa;border:1px solid var(--teal);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:13px;color:var(--navy)">🧪 Demo mode — this is a made-up patient. Nothing here is saved.</span>
+          <button class="btn btn-outline btn-sm" onclick="location.href='admissions.html'">Exit Demo</button>
+        </div>
+        <div class="ph-top-row">
+          <div>
+            <h2 class="ph-name">Rina Kumari (Demo)</h2>
+            <div class="ph-badges">
+              <span class="badge badge-teal">admitted</span>
+              <span class="badge badge-navy">Planned / Elective</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="toast('Just for the tutorial — nothing to open here.','info')">Deposit &amp; Balance</button>
+            <button class="btn btn-outline btn-sm" onclick="toast('Just for the tutorial — nothing to open here.','info')">Other Charges</button>
+            <button class="btn btn-outline btn-sm" id="demo-discharge-btn" onclick="toast('Just for the tutorial — nothing to open here.','info')">Discharge</button>
+          </div>
+        </div>
+        <div class="ph-info-grid">
+          <div>
+            <div class="ph-info-label">Patient</div>
+            <div class="ph-info-value">34 yrs, Female<br>98765 43210 · DEMO-0001</div>
+          </div>
+          <div>
+            <div class="ph-info-label">Ward &amp; Bed</div>
+            <div class="ph-info-value">General Ward · Bed 4</div>
+          </div>
+        </div>`;
+      document.getElementById("bill-body").innerHTML = `
+        <div style="font-size:13px;color:var(--slate)">Room charges (2 days) — ₹2,400</div>
+        <div style="font-size:13px;color:var(--slate);margin-top:4px">Medicines — ₹640</div>
+        <div style="font-weight:700;color:var(--navy);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">Total due: ₹3,040</div>`;
+      document.getElementById("discharge-body").innerHTML = `
+        <p style="color:var(--slate);font-size:13.5px">Once the doctor marks this patient fit for discharge, collect any pending balance and discharge them from here.</p>`;
+    }
+
     async function loadAdmission() {
+      if (isAdmissionDemoMode) { renderDemoAdmissionDetail(); runAdmissionDemoTour(); return; }
       try {
         admissionData = await api("GET", `/admissions/${admissionId}`);
         if (admissionData.status === 'discharged') {
@@ -1702,6 +1743,20 @@
         toast(e.message, "error");
         btn.disabled = false; btn.textContent = 'Yes, Send';
       }
+    }
+
+    function runAdmissionDemoTour() {
+      const steps = [
+        { target_selector: "#patient-header", placement: "bottom", device: "both",
+          title: "Patient Overview", description: "Everything about this admission — status, ward, bed, and quick actions — lives at the top of the page." },
+        { target_selector: "#running-bill-card", placement: "top", device: "both",
+          title: "Running Bill", description: "Room charges, medicines, and any other charges add up here as the stay continues." },
+        { target_selector: "#discharge-card", placement: "top", device: "both",
+          title: "Discharge", nextLabel: "Finish Demo",
+          description: "Once the doctor clears the patient, collect the balance and discharge them from here.",
+          onNext: () => { location.href = "admissions.html"; return false; } },
+      ];
+      startLocalTour(steps, { onSkip: () => { location.href = "admissions.html"; } });
     }
 
     function renderHeader() {
