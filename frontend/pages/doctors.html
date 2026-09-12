@@ -560,12 +560,6 @@
       titleSel.dispatchEvent(new Event('change'));
       toggleRoleFields();
       document.getElementById('modal-err').textContent = '';
-      ['check-length', 'check-number', 'check-upper'].forEach(id => {
-        document.getElementById(id).style.color = 'var(--slate-light)';
-      });
-      ['icon-length', 'icon-number', 'icon-upper'].forEach(id => {
-        document.getElementById(id).textContent = '○';
-      });
       document.getElementById('modal-overlay').style.display = 'flex';
     }
 
