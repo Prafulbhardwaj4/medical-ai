@@ -16,20 +16,15 @@ except ImportError:
 router = APIRouter(prefix="/tutorials", tags=["tutorials"])
 
 
-@router.get("/{role}/{page}", response_model=List[TutorialStepOut])
-def get_tutorial_steps(role: str, page: str, db: Session = Depends(get_db)):
-    """No auth requirement beyond just being logged in somewhere — tutorial
-    content itself isn't hospital-scoped or sensitive, it's the same
-    static walkthrough content for every account of a given role."""
-    steps = (
-        db.query(TutorialStep)
-        .filter(TutorialStep.role == role, TutorialStep.page == page, TutorialStep.is_active == True)  # noqa: E712
-        .order_by(TutorialStep.step_order.asc())
-        .all()
-    )
-    return steps
-
-
+# NOTE: the literal /status/... routes MUST be declared before the
+# parameterized /{role}/{page} route below. Starlette matches routes in
+# declaration order, and "/status/staff" structurally matches
+# "/{role}/{page}" too (role="status", page="staff") — so if the generic
+# route came first, it would silently swallow every /status/* request,
+# returning an empty steps list instead of a real completion flag. That
+# was the actual cause of the tutorial re-showing on every reload: the
+# frontend read `.completed` off an array (always undefined/falsy), not a
+# real status object.
 @router.get("/status/staff", response_model=TutorialStatusOut)
 def get_staff_tutorial_status(page: Optional[str] = None, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     role = current_doctor.role.value
@@ -62,6 +57,20 @@ def complete_staff_tutorial(page: Optional[str] = None, current_doctor: Doctor =
         db.add(TutorialProgress(subject_type="doctor", subject_id=current_doctor.id, role=role, page=page, completed_at=now_ist_naive()))
         db.commit()
     return {"message": "Tutorial marked complete"}
+
+
+@router.get("/{role}/{page}", response_model=List[TutorialStepOut])
+def get_tutorial_steps(role: str, page: str, db: Session = Depends(get_db)):
+    """No auth requirement beyond just being logged in somewhere — tutorial
+    content itself isn't hospital-scoped or sensitive, it's the same
+    static walkthrough content for every account of a given role."""
+    steps = (
+        db.query(TutorialStep)
+        .filter(TutorialStep.role == role, TutorialStep.page == page, TutorialStep.is_active == True)  # noqa: E712
+        .order_by(TutorialStep.step_order.asc())
+        .all()
+    )
+    return steps
 
 
 if get_current_patient_account:

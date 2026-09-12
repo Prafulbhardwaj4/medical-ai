@@ -164,6 +164,49 @@ STEPS = [
      "description": "Your account settings — and you can replay any tab's tutorial from here any time.",
      "placement": "bottom"},
 
+    # ═══ receptionist / receptionist.html — "receptionist-portal" page (Appointments tab) ═══
+    # 4 cards, no header, no attendance — identical layout on both devices.
+    {"role": "receptionist", "page": "receptionist-portal", "device": "both", "step_order": 1,
+     "target_selector": "#expected-today-card", "title": "Expected Today",
+     "description": "Patients who already paid for a booked or queue-from-home slot today — just a heads-up, it doesn't change how you check anyone in.",
+     "placement": "bottom"},
+    {"role": "receptionist", "page": "receptionist-portal", "device": "both", "step_order": 2,
+     "target_selector": "#upcoming-bookings-card", "title": "Next 15 Days",
+     "description": "All upcoming appointments booked over the next two weeks, across every doctor.",
+     "placement": "top"},
+    {"role": "receptionist", "page": "receptionist-portal", "device": "both", "step_order": 3,
+     "target_selector": "#slot-preview-card", "title": "Slot Preview",
+     "description": "Pick a doctor and date to see their open slots before booking one over the phone.",
+     "placement": "top"},
+    {"role": "receptionist", "page": "receptionist-portal", "device": "both", "step_order": 4,
+     "target_selector": "#pending-review-card", "title": "Pending Appointment Reviews",
+     "description": "Paid bookings that need a decision — usually because the doctor became unavailable after the patient booked.",
+     "placement": "top"},
+
+    # ═══ receptionist / admissions.html — "receptionist-admissions" page ═══
+    # admissions.html is shared across roles (receptionist/nurse/assistant/
+    # admin), each seeing a different subset of controls — this is
+    # receptionist's view only. No sidebar/bottom-nav or header steps here:
+    # that nav rail duplicates receptionist.html's own tabs, already
+    # covered in receptionist-home. Same content on both devices — this
+    # page has no mobile-section tab switching, just responsive CSS.
+    {"role": "receptionist", "page": "receptionist-admissions", "device": "both", "step_order": 1,
+     "target_selector": "#btn-admit-patient", "title": "Admit a Patient",
+     "description": "Admit a new patient to a ward — sets their room, doctor, and expected stay.",
+     "placement": "bottom"},
+    {"role": "receptionist", "page": "receptionist-admissions", "device": "both", "step_order": 2,
+     "target_selector": "#ward-vacancy-card", "title": "Ward Vacancy",
+     "description": "See how many beds are free in each ward at a glance.",
+     "placement": "top"},
+    {"role": "receptionist", "page": "receptionist-admissions", "device": "both", "step_order": 3,
+     "target_selector": "#admissions-search", "title": "Find a Patient",
+     "description": "Search by name, phone, ID, or diagnosis, or use the ward filter next to it to narrow the list.",
+     "placement": "bottom"},
+    {"role": "receptionist", "page": "receptionist-admissions", "device": "both", "step_order": 4,
+     "target_selector": "#admissions-list", "title": "Admitted Patients",
+     "description": "Toggle between Currently Admitted and History above, and tap any patient to see their details.",
+     "placement": "top"},
+
     # ═══ nurse / nurse.html — continuous 1-2 (Vitals module only, first slice) ═══
     # Desktop's "Home" sidebar tab shows Vitals Queue and Post-Consultation
     # Tasks stacked together (no separate desktop tab for each, unlike

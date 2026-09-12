@@ -132,6 +132,13 @@
         <strong id="profile-menu-name"></strong>
         <span id="profile-menu-clinic"></span>
       </div>
+      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('staff', getDoctor()?.role, admissionsTutorialPage(), true)">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Tutorial
+      </button>
       <button class="profile-menu-item" onclick="closeProfileMenu(); toggleNotifPanel()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -789,6 +796,7 @@
   <script src="../js/upgrade-gate.js"></script>
   <script src="../js/chat-widget.js?v=1"></script>
   <script src="../js/suggestion-widget.js?v=1"></script>
+  <script src="../js/tutorial.js"></script>
   <script>
     if (!requireAuth()) { }
     fillTopbar();
@@ -904,6 +912,12 @@
       document.getElementById("bottom-nav-assistant").style.display = "";
       document.getElementById("btn-admit-patient").style.display = "none";
     }
+
+    // Same page, multiple roles — page name is role-derived so each role's
+    // own content (once built) is independent; a role with nothing seeded
+    // yet just gets the normal "nothing set up" behavior on manual replay.
+    function admissionsTutorialPage() { return getDoctor()?.role + "-admissions"; }
+    initTutorial("staff", getDoctor()?.role, admissionsTutorialPage());
 
     let wardTypesCache = [];
 
