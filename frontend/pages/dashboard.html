@@ -90,6 +90,13 @@
         <strong id="profile-menu-name"></strong>
         <span id="profile-menu-clinic"></span>
       </div>
+      <button class="profile-menu-item" onclick="closeProfileMenu(); startDoctorProductTour()">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Product Tour
+      </button>
       <button class="profile-menu-item" onclick="closeProfileMenu(); toggleNotifPanel()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -291,6 +298,18 @@
 
         <!-- Home tab: Today's Queue only -->
         <div class="mobile-section active" id="section-home">
+          <div class="card" id="demo-tour-card" style="display:none;margin-bottom:16px;border:2px dashed var(--teal);background:#f0fdfa">
+            <div style="font-size:12px;color:var(--teal);font-weight:700;margin-bottom:4px">TRY IT — DEMO PATIENT</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <strong>Rina Kumari (Demo)</strong>
+              <span style="font-size:13px;color:var(--slate)">BP 122/80 · Pulse 78</span>
+            </div>
+            <div style="font-size:13px;color:var(--slate);margin-top:2px">DEMO-0001 · Fever and body ache for 3 days</div>
+            <div style="display:flex;justify-content:flex-end;margin-top:8px">
+              <button class="btn btn-primary btn-sm" onclick="window.location.href='/pages/patient.html?demo=1'">Consult</button>
+            </div>
+          </div>
+
           <div class="card" id="up-next-card-doctor" style="display:none;margin-bottom:16px;background:var(--smoke)">
             <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px">UP NEXT</div>
             <p id="up-next-empty-msg-doctor" style="display:none;margin:0;color:var(--slate);font-size:14px">No next patient currently.</p>
@@ -606,6 +625,8 @@
   <script src="../js/upgrade-gate.js"></script>
   <script src="../js/chat-widget.js?v=1"></script>
   <script src="../js/suggestion-widget.js?v=1"></script>
+  <script src="../js/tutorial.js"></script>
+  <script src="../js/doctor-demo.js"></script>
   <script>
 
     async function toggleNotifPanel() {

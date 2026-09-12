@@ -39,6 +39,13 @@ AI_SCRIBE_TOPUP_PRICING = {
     500: 4999,
 }
 
+TIER_MONTHLY_PRICE = {
+    "foundation": 9999,
+    "growth": 29999,
+    "scale": 44999,       # not sellable yet, priced now per the pricing decision
+    "enterprise": 0,      # quotation-based — no fixed number to sum without per-hospital custom pricing storage
+}
+
 GRACE_DAYS = 3           # days after cycle-end that non-AI-Scribe services keep working
 RENEW_WINDOW_LEAD_DAYS = 2  # days before cycle-end that the Renew button activates
 

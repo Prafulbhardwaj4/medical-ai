@@ -20,6 +20,9 @@ class PlanInquiry(Base):
     contact_name = Column(String, nullable=False)
     contact_phone = Column(String, nullable=False)
     contact_email = Column(String, nullable=False)
+    state = Column(String, nullable=False)
+    city = Column(String, nullable=False)
+    preferred_language = Column(String, nullable=False)
     message = Column(Text, nullable=True)
     status = Column(String, default="new", nullable=False)  # new | contacted
     created_at = Column(DateTime, default=now_ist_naive, nullable=False)

@@ -405,7 +405,7 @@ function ensureEditDetailsModal() {
         </div>
         <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border)">
           <button type="button" style="flex:1;padding:8px 4px;background:none;border:none;border-bottom:2px solid var(--teal);font-size:13px;font-weight:600;color:var(--navy);cursor:default;text-transform:uppercase;letter-spacing:0.3px">Edit My Details</button>
-          <button type="button" onclick="closeEditDetailsModal();if(typeof openUpgradeModal==='function')openUpgradeModal();" style="flex:1;padding:8px 4px;background:none;border:none;border-bottom:2px solid transparent;font-size:13px;font-weight:600;color:var(--slate);cursor:pointer;text-transform:uppercase;letter-spacing:0.3px">Upgrade</button>
+          <button type="button" id="ed-upgrade-tab" onclick="closeEditDetailsModal();if(typeof openUpgradeModal==='function')openUpgradeModal();" style="flex:1;padding:8px 4px;background:none;border:none;border-bottom:2px solid transparent;font-size:13px;font-weight:600;color:var(--slate);cursor:pointer;text-transform:uppercase;letter-spacing:0.3px">Upgrade</button>
         </div>
         <div style="margin-bottom:12px">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Name</label>
@@ -422,7 +422,7 @@ function ensureEditDetailsModal() {
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Contact Number</label>
           <input class="form-control" id="ed-phone" />
         </div>
-        <div style="margin-bottom:16px">
+        <div style="margin-bottom:16px" id="ed-reg-group">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Registration / Credential No. <span style="color:var(--slate-light);font-weight:400">(optional)</span></label>
           <input class="form-control" id="ed-reg" />
         </div>
@@ -448,6 +448,11 @@ function openEditDetailsModal() {
   document.getElementById('ed-title').style.display = isDoctorRole ? 'none' : '';
   document.getElementById('ed-title-fixed').style.display = isDoctorRole ? 'flex' : 'none';
   if (!isDoctorRole) document.getElementById('ed-title').value = (doc.title === 'Ms.') ? 'Ms.' : 'Mr.';
+
+  const isSuperAdmin = doc.role === 'super_admin';
+  document.getElementById('ed-upgrade-tab').style.display = isSuperAdmin ? 'none' : '';
+  document.getElementById('ed-reg-group').style.display = isSuperAdmin ? 'none' : '';
+
   document.getElementById('modal-edit-details').classList.add('open');
 }
 

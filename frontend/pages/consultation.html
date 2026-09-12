@@ -536,6 +536,8 @@
   <script src="../js/api.js?v=4"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
+  <script src="../js/tutorial.js"></script>
+  <script src="../js/doctor-demo.js"></script>
   <script>
     if (!requireAuth()) throw new Error();
     fillTopbar();
@@ -1629,28 +1631,32 @@
       }
     }
 
-    // Applied synchronously, before the patient-resolve call below, so
-    // Foundation-tier doctors never see the AI Scribe recording panel
-    // flash on screen while that request is in flight.
-    applyFoundationTierGating();
+    if (isDoctorDemoMode()) {
+      runDoctorDemoConsultation();
+    } else {
+      // Applied synchronously, before the patient-resolve call below, so
+      // Foundation-tier doctors never see the AI Scribe recording panel
+      // flash on screen while that request is in flight.
+      applyFoundationTierGating();
 
-    (async () => {
-      try {
-        const r = await api("GET", `/patients/resolve/${patientToken}`);
-        patientId = r.id;
-        await ensureManualDraftConsultation();  // catches Foundation-tier gating, which ran before patientId was available
-        loadPatient();
-        loadLastVisit();
-        loadTestCatalog();
-        loadRadiologyCatalog();
-        loadMedicineCatalog();
-        loadNurseVitals();
-        await checkAiScribeAvailability();
-        await checkReopenMode();
-      } catch (e) {
-        window.location.href = "/pages/dashboard.html";
-      }
-    })();
+      (async () => {
+        try {
+          const r = await api("GET", `/patients/resolve/${patientToken}`);
+          patientId = r.id;
+          await ensureManualDraftConsultation();  // catches Foundation-tier gating, which ran before patientId was available
+          loadPatient();
+          loadLastVisit();
+          loadTestCatalog();
+          loadRadiologyCatalog();
+          loadMedicineCatalog();
+          loadNurseVitals();
+          await checkAiScribeAvailability();
+          await checkReopenMode();
+        } catch (e) {
+          window.location.href = "/pages/dashboard.html";
+        }
+      })();
+    }
   </script>
 </body>
 

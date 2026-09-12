@@ -16,8 +16,10 @@ class PlanInquiryIn(BaseModel):
     contact_name: str
     contact_phone: str
     contact_email: str
+    state: str
+    city: str
+    preferred_language: str
     message: Optional[str] = None
-
 
 @router.post("")
 def submit_plan_inquiry(body: PlanInquiryIn, db: Session = Depends(get_db)):
@@ -30,6 +32,9 @@ def submit_plan_inquiry(body: PlanInquiryIn, db: Session = Depends(get_db)):
         contact_name=body.contact_name.strip(),
         contact_phone=body.contact_phone.strip(),
         contact_email=body.contact_email.strip(),
+        state=body.state.strip(),
+        city=body.city.strip(),
+        preferred_language=body.preferred_language.strip(),
         message=(body.message or "").strip() or None,
     ))
     db.commit()

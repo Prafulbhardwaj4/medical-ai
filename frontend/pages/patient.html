@@ -428,6 +428,8 @@
   <script src="../js/upgrade-gate.js"></script>
   <script src="../js/chat-widget.js?v=1"></script>
   <script src="../js/suggestion-widget.js"></script>
+  <script src="../js/tutorial.js"></script>
+  <script src="../js/doctor-demo.js"></script>
   <script>
     if (!requireAuth()) throw new Error();
     fillTopbar();
@@ -436,6 +438,11 @@
     const patientToken = location.search.slice(1);
     if (!patientToken) window.location.href = "/pages/dashboard.html";
     let patientId = null;
+
+    if (isDoctorDemoMode()) {
+      renderDoctorDemoPatientPage();
+      runDoctorDemoPatientTour();
+    }
 
     async function loadPatient() {
       try {
@@ -672,17 +679,19 @@
       });
     }
 
-    (async () => {
-      try {
-        const r = await api("GET", `/patients/resolve/${patientToken}`);
-        patientId = r.id;
-        loadPatient();
-        loadHistory();
-        loadVitalsStatus();
-      } catch (e) {
-        window.location.href = "/pages/dashboard.html";
-      }
-    })();
+    if (!isDoctorDemoMode()) {
+      (async () => {
+        try {
+          const r = await api("GET", `/patients/resolve/${patientToken}`);
+          patientId = r.id;
+          loadPatient();
+          loadHistory();
+          loadVitalsStatus();
+        } catch (e) {
+          window.location.href = "/pages/dashboard.html";
+        }
+      })();
+    }
 
     function confirmSendAdmit() {
       if (typeof isFoundationTier === 'function' && isFoundationTier()) {

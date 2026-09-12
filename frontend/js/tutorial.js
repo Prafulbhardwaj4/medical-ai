@@ -35,6 +35,7 @@
   let _arrowEl = null;
   let _resizeHandler = null;
   let _wheelBlocker = null;
+  let _localOptions = null; // set only by startLocalTour — marks "local" (non-backend) mode
 
   function _statusEndpoint(subjectType) {
     return subjectType === "patient" ? "/tutorials/status/patient" : "/tutorials/status/staff";
@@ -70,11 +71,35 @@
       _stepIndex = 0;
       _subjectType = subjectType;
       _role = role;
+      _localOptions = null;
       _buildOverlay();
       _renderStep();
     } catch (e) {
       if (isReplay) toast("Could not load the tutorial right now.", "error");
     }
+  }
+
+  // Local, non-backend-driven tour for flows that don't fit the per-role
+  // TutorialStep/status-endpoint model — e.g. a scripted cross-page demo.
+  // Steps are passed in directly (same shape as a TutorialStep row: title,
+  // description, target_selector, placement, device) plus two optional
+  // extras per step:
+  //   - nextLabel: overrides the Next/Finish button text for this step.
+  //   - onNext(): called when Next/Finish is pressed, before advancing.
+  //               Returning false stops the tour from auto-advancing —
+  //               use this when the step itself navigates away (e.g. to
+  //               another page) instead of moving to the next step here.
+  // options: { onSkip(), onFinish() } run instead of the normal
+  // tutorial-complete API call, since a local tour has no subjectType.
+  function startLocalTour(steps, options) {
+    const filtered = steps.filter(_matchesDevice);
+    if (!filtered.length) return;
+    _steps = filtered;
+    _stepIndex = 0;
+    _subjectType = null;
+    _localOptions = options || {};
+    _buildOverlay();
+    _renderStep();
   }
 
   function _buildOverlay() {
@@ -136,13 +161,20 @@
         <div style="display:flex;gap:5px;align-items:center">${dots}</div>
         <div style="display:flex;gap:8px">
           ${_stepIndex > 0 ? `<button id="tutorial-back-btn" class="btn btn-outline btn-sm">Back</button>` : ''}
-          <button id="tutorial-next-btn" class="btn btn-primary btn-sm">${isLast ? 'Finish' : 'Next'}</button>
+          <button id="tutorial-next-btn" class="btn btn-primary btn-sm">${step.nextLabel || (isLast ? 'Finish' : 'Next')}</button>
         </div>
       </div>
     `;
     _arrowEl = document.getElementById("tutorial-arrow");
-    document.getElementById("tutorial-skip-btn").addEventListener("click", _finish);
+    document.getElementById("tutorial-skip-btn").addEventListener("click", () => {
+      if (_localOptions) { _teardownOverlay(); if (_localOptions.onSkip) _localOptions.onSkip(); }
+      else { _finish(); }
+    });
     document.getElementById("tutorial-next-btn").addEventListener("click", () => {
+      if (step.onNext) {
+        const shouldAdvance = step.onNext();
+        if (shouldAdvance === false) return; // step itself is handling the transition (e.g. navigating away)
+      }
       if (isLast) { _finish(); } else { _stepIndex++; _renderStep(); }
     });
     const backBtn = document.getElementById("tutorial-back-btn");
@@ -212,6 +244,10 @@
 
   async function _finish() {
     _teardownOverlay();
+    if (_localOptions) {
+      if (_localOptions.onFinish) _localOptions.onFinish();
+      return;
+    }
     try { await api("POST", _completeEndpoint(_subjectType)); } catch (e) { /* best-effort — don't block the user on this */ }
   }
 
@@ -223,4 +259,5 @@
 
   window.initTutorial = initTutorial;
   window.startTutorial = startTutorial;
+  window.startLocalTour = startLocalTour;
 })();

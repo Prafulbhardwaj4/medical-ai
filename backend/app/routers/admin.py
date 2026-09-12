@@ -137,6 +137,9 @@ def list_plan_inquiries(
             "contact_name": i.contact_name,
             "contact_phone": i.contact_phone,
             "contact_email": i.contact_email,
+            "state": i.state,
+            "city": i.city,
+            "preferred_language": i.preferred_language,
             "message": i.message,
             "status": i.status,
             "created_at": i.created_at.isoformat() if i.created_at else None,
@@ -1414,27 +1417,25 @@ def superadmin_stats(
 
     month_start = now_ist_naive().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    total_hospitals = db.query(Hospital).filter(Hospital.is_active == True).count()
-    total_doctors = db.query(Doctor).filter(
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
-        Doctor.is_active == True
-    ).count()
+    active_hospitals = db.query(Hospital).filter(Hospital.is_active == True).all()
+    total_hospitals = len(active_hospitals)
     new_hospitals_this_month = db.query(Hospital).filter(
         Hospital.created_at >= month_start
     ).count()
-    new_doctors_this_month = db.query(Doctor).filter(
-        Doctor.role.in_([UserRole.doctor, UserRole.sub_admin]),
-        Doctor.created_at >= month_start
-    ).count()
 
-    monthly_revenue = total_doctors * 499
+    from app.utils.billing_cycle import TIER_MONTHLY_PRICE
+    monthly_revenue = sum(TIER_MONTHLY_PRICE.get(h.tier, 0) for h in active_hospitals)
+
+    hospitals_by_tier = {"foundation": 0, "growth": 0, "scale": 0, "enterprise": 0}
+    for h in active_hospitals:
+        if h.tier in hospitals_by_tier:
+            hospitals_by_tier[h.tier] += 1
 
     return {
         "total_hospitals": total_hospitals,
-        "total_doctors": total_doctors,
         "new_hospitals_this_month": new_hospitals_this_month,
-        "new_doctors_this_month": new_doctors_this_month,
-        "monthly_revenue": monthly_revenue
+        "monthly_revenue": monthly_revenue,
+        "hospitals_by_tier": hospitals_by_tier,
     }
 
 @router.patch("/hospital/{hospital_id}/details")

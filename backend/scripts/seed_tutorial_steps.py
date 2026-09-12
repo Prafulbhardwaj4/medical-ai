@@ -25,6 +25,13 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Importing app.main (not just the two models this script needs) registers
+# every SQLAlchemy model in the app, including Hospital — without this,
+# Doctor's relationship("Hospital") can't be resolved and configuring the
+# mapper raises InvalidRequestError the moment any query touches Doctor's
+# mapper graph, even though this script never queries Doctor directly.
+import app.main  # noqa: F401
+
 from app.database import SessionLocal
 from app.models.tutorial_step import TutorialStep
 

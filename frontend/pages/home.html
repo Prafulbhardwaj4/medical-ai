@@ -731,10 +731,15 @@
       font-size: 0.88rem;
       font-weight: 600;
       text-decoration: none;
-      background: var(--smoke);
-      color: var(--navy);
-      border: 1px solid var(--border);
+      background: var(--teal);
+      color: var(--white);
+      border: none;
+      box-shadow: 0 1px 3px rgba(13, 148, 136, 0.3);
       transition: all 0.15s ease;
+    }
+
+    .lp-price-cta:hover:not(.lp-price-cta-disabled) {
+      background: #0b8078;
     }
 
     .lp-price-cta:hover {
@@ -867,19 +872,19 @@
     .lp-price-card-premium .lp-yearly-price span { color: rgba(255, 255, 255, 0.5); }
 
     .lp-yearly-benefits-btn {
-      background: none;
+      background: var(--teal);
       border: none;
-      color: var(--teal);
-      font-size: 0.82rem;
+      color: var(--white);
+      font-size: 0.8rem;
       font-weight: 600;
       cursor: pointer;
-      text-decoration: underline;
-      text-underline-offset: 2px;
-      padding: 2px;
+      padding: 7px 14px;
+      border-radius: var(--radius);
       font-family: inherit;
     }
 
-    .lp-price-card-premium .lp-yearly-benefits-btn { color: var(--teal-light); }
+    .lp-yearly-benefits-btn:hover { background: #0b8078; }
+    .lp-price-card-premium .lp-yearly-benefits-btn { background: var(--teal-light); }
 
     /* ── Benefits + Contact modals (public page — no shared app modal CSS
        here, so these are fully self-contained) ── */
@@ -1281,7 +1286,7 @@
   <!-- Hero -->
   <section class="lp-hero">
     <div class="lp-hero-inner">
-      <div class="lp-vande-badge"><span class="lp-flag-dot"></span> Vande Mataram — Proudly built in India, for India's hospitals</div>
+      <div class="lp-vande-badge"><span class="lp-flag-dot"></span> Vande Mataram — Proudly built in Bharat, for Hospitals of Bharat</div>
       <h1>Hospital management that <em>listens, structures,</em> and keeps up with your OPD.</h1>
       <p class="lp-hero-sub">
         MedScribe is an AI-powered hospital management system built specifically for Indian hospitals —
@@ -1479,11 +1484,26 @@
       </div>
       <div class="lp-modal-form-group">
         <label>Phone number</label>
-        <input id="lp-contact-phone" placeholder="10-digit mobile number" />
+        <div style="display:flex;gap:8px">
+          <span style="display:flex;align-items:center;padding:0 12px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--smoke);color:var(--slate);font-size:0.88rem;flex-shrink:0">+91</span>
+          <input id="lp-contact-phone" inputmode="numeric" maxlength="10" placeholder="10-digit mobile number" style="flex:1" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)" />
+        </div>
       </div>
       <div class="lp-modal-form-group">
         <label>Email</label>
         <input id="lp-contact-email" type="email" placeholder="you@hospital.com" />
+      </div>
+      <div class="lp-modal-form-group">
+        <label>State</label>
+        <input id="lp-contact-state" placeholder="e.g. Uttar Pradesh" />
+      </div>
+      <div class="lp-modal-form-group">
+        <label>City</label>
+        <input id="lp-contact-city" placeholder="e.g. Lucknow" />
+      </div>
+      <div class="lp-modal-form-group">
+        <label>Most commonly used language</label>
+        <input id="lp-contact-language" placeholder="e.g. Hindi" />
       </div>
       <div class="lp-modal-form-group">
         <label>Anything else? <span style="font-weight:400;color:var(--slate-light)">(optional)</span></label>
@@ -1492,6 +1512,16 @@
 
       <div class="lp-modal-err" id="lp-contact-err"></div>
       <button type="button" class="lp-modal-submit-btn" id="lp-contact-submit-btn" onclick="submitPlanInquiry()">Send — We'll Reach Out</button>
+    </div>
+  </div>
+
+  <!-- Thanks Modal -->
+  <div class="lp-modal-overlay" id="lp-thanks-modal">
+    <div class="lp-modal" style="text-align:center">
+      <button class="lp-modal-close" onclick="closeLpModal('lp-thanks-modal')">&times;</button>
+      <div style="width:52px;height:52px;border-radius:50%;background:var(--teal-subtle);color:var(--teal);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:26px">✓</div>
+      <h3 style="padding-right:0">Thanks — our team will reach out shortly.</h3>
+      <button type="button" class="lp-modal-submit-btn" onclick="closeLpModal('lp-thanks-modal')">Okay</button>
     </div>
   </div>
 
@@ -1516,10 +1546,11 @@
           ${t.comingSoon
             ? '<span class="lp-price-cta lp-price-cta-disabled">Coming Soon</span>'
             : `<button type="button" class="lp-price-cta" style="border:none;cursor:pointer;font:inherit" onclick="openContactModal('${t.key}','yearly')">Contact Us</button>`}
+          ${t.comingSoon ? '' : `
           <div class="lp-yearly-row">
             <div class="lp-yearly-price">${t.yearlyPrice}<span>${t.yearlyPeriod}</span></div>
-            <button type="button" class="lp-yearly-benefits-btn" onclick="openBenefitsModal('${t.key}')">+ Additional yearly benefits</button>
-          </div>
+            <button type="button" class="lp-yearly-benefits-btn" onclick="openBenefitsModal('${t.key}')">${t.yearlyPeriod ? t.yearlyPrice + t.yearlyPeriod + ' ' : ''}Benefits</button>
+          </div>`}
         </div>
       `).join('');
     })();
@@ -1534,6 +1565,11 @@
 
     function closeLpModal(id) {
       document.getElementById(id).classList.remove('open');
+      if (!document.querySelector('.lp-modal-overlay.open')) document.body.style.overflow = '';
+    }
+
+    function lpLockScroll() {
+      document.body.style.overflow = 'hidden';
     }
 
     function openBenefitsModal(tierKey) {
@@ -1547,6 +1583,7 @@
       document.getElementById('lp-benefits-contact-btn').style.display = t.comingSoon ? 'none' : 'block';
       closeLpModal('lp-contact-modal');
       document.getElementById('lp-benefits-modal').classList.add('open');
+      lpLockScroll();
     }
 
     function openContactModal(tierKey, period) {
@@ -1562,6 +1599,7 @@
       document.getElementById('lp-contact-err').textContent = '';
       closeLpModal('lp-benefits-modal');
       document.getElementById('lp-contact-modal').classList.add('open');
+      lpLockScroll();
     }
 
     function lpUpdateContactPriceLine() {
@@ -1596,11 +1634,18 @@
       const name = document.getElementById('lp-contact-name').value.trim();
       const phone = document.getElementById('lp-contact-phone').value.trim();
       const email = document.getElementById('lp-contact-email').value.trim();
+      const state = document.getElementById('lp-contact-state').value.trim();
+      const city = document.getElementById('lp-contact-city').value.trim();
+      const language = document.getElementById('lp-contact-language').value.trim();
       const message = document.getElementById('lp-contact-message').value.trim();
       const period = document.getElementById('lp-contact-period').value;
 
-      if (!hospital || !name || !phone || !email) {
-        err.textContent = 'Please fill in hospital name, your name, phone, and email.';
+      if (!hospital || !name || !phone || !email || !state || !city || !language) {
+        err.textContent = 'Please fill in all required fields.';
+        return;
+      }
+      if (phone.length !== 10) {
+        err.textContent = 'Phone number must be exactly 10 digits.';
         return;
       }
 
@@ -1617,8 +1662,11 @@
             billing_period: period,
             hospital_name: hospital,
             contact_name: name,
-            contact_phone: phone,
+            contact_phone: '+91' + phone,
             contact_email: email,
+            state: state,
+            city: city,
+            preferred_language: language,
             message: message || null,
           }),
         });
@@ -1627,7 +1675,8 @@
           throw new Error(data.detail || 'Something went wrong — please try again.');
         }
         closeLpModal('lp-contact-modal');
-        alert("Thanks — our team will reach out shortly.");
+        document.getElementById('lp-thanks-modal').classList.add('open');
+        lpLockScroll();
       } catch (e) {
         err.textContent = e.message;
       } finally {
