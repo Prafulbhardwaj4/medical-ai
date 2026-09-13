@@ -40,11 +40,40 @@
   let _onDone = null; // optional callback for backend-driven tutorials — fires on Finish OR Skip, after the completion API call
   let _guardedElement = null; // target element currently carrying a click-guard listener, if any
   let _guardedHandler = null;
+  let _blockerEls = []; // 4 panels (top/bottom/left/right) framing the highlight — block clicks on everything else on the page while a tour is active
 
   function _clearGuard() {
     if (_guardedElement && _guardedHandler) _guardedElement.removeEventListener("click", _guardedHandler, true);
     _guardedElement = null;
     _guardedHandler = null;
+  }
+
+  function _buildBlockers() {
+    _blockerEls = [0, 1, 2, 3].map(() => {
+      const d = document.createElement("div");
+      d.style.cssText = "position:fixed;pointer-events:auto;z-index:10499;background:transparent";
+      d.addEventListener("click", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        toast("Finish or skip this tutorial first to use the rest of the page.", "info");
+      });
+      document.body.appendChild(d);
+      return d;
+    });
+  }
+
+  function _positionBlockers(rect) {
+    if (_blockerEls.length !== 4) return;
+    const [top, bottom, left, right] = _blockerEls;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    top.style.cssText += `top:0px;left:0px;width:${vw}px;height:${Math.max(0, rect.top)}px`;
+    bottom.style.cssText += `top:${Math.max(0, rect.bottom)}px;left:0px;width:${vw}px;height:${Math.max(0, vh - rect.bottom)}px`;
+    left.style.cssText += `top:${Math.max(0, rect.top)}px;left:0px;width:${Math.max(0, rect.left)}px;height:${Math.max(0, rect.bottom - rect.top)}px`;
+    right.style.cssText += `top:${Math.max(0, rect.top)}px;left:${Math.max(0, rect.right)}px;width:${Math.max(0, vw - rect.right)}px;height:${Math.max(0, rect.bottom - rect.top)}px`;
+  }
+
+  function _removeBlockers() {
+    _blockerEls.forEach(d => d.remove());
+    _blockerEls = [];
   }
 
   function _statusEndpoint(subjectType, page) {
@@ -141,6 +170,7 @@
 
     _resizeHandler = () => _positionForCurrentStep();
     window.addEventListener("resize", _resizeHandler);
+    _buildBlockers();
   }
 
   function _teardownOverlay() {
@@ -148,6 +178,7 @@
     if (_overlayEl) _overlayEl.remove();
     _unlockScroll();
     _clearGuard();
+    _removeBlockers();
     _overlayEl = null; _tooltipEl = null; _highlightEl = null; _arrowEl = null; _resizeHandler = null;
   }
 
@@ -248,6 +279,7 @@
     _highlightEl.style.left = `${rect.left - pad}px`;
     _highlightEl.style.width = `${rect.width + pad * 2}px`;
     _highlightEl.style.height = `${rect.height + pad * 2}px`;
+    _positionBlockers({ top: rect.top - pad, bottom: rect.bottom + pad, left: rect.left - pad, right: rect.right + pad });
 
     const placement = step.placement || "bottom";
     const gap = 16;
