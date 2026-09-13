@@ -284,7 +284,14 @@
     // wherever the target used to be once the animation finished. Instant
     // scroll removes that race entirely; positioning is always measured
     // post-scroll now.
-    target.scrollIntoView({ block: "center", behavior: "instant" });
+    // "start" (top of target aligned to top of viewport) is the default —
+    // "center" was the actual root cause behind nearly every "tooltip is
+    // covering the card" report: centering a target pushes its bottom edge
+    // (or whatever the tooltip is anchored to) off-screen just as often as
+    // it helps, and a bottom-anchored tooltip has nowhere left to go once
+    // that happens. A step can still opt into "center" explicitly if it
+    // genuinely needs it.
+    target.scrollIntoView({ block: step.scrollBlock || "start", behavior: "instant" });
     const rect = target.getBoundingClientRect();
     const pad = 6;
     _highlightEl.style.top = `${rect.top - pad}px`;
@@ -293,19 +300,39 @@
     _highlightEl.style.height = `${rect.height + pad * 2}px`;
     _positionBlockers({ top: rect.top - pad, bottom: rect.bottom + pad, left: rect.left - pad, right: rect.right + pad });
 
-    const placement = step.placement || "bottom";
+    const declaredPlacement = step.placement || "bottom";
     const gap = 16;
-    const tw = Math.min(300, window.innerWidth - 24);
+    const tw = Math.min(step.tooltipWidth || 300, window.innerWidth - 24); // optional per-step override for a title/button that doesn't fit the default width
     _tooltipEl.style.width = `${tw}px`;
     const th = _tooltipEl.offsetHeight;
 
-    let top, left;
-    if (placement === "top") { top = rect.top - gap - th; left = rect.left; }
-    else if (placement === "left") { top = rect.top; left = rect.left - tw - gap; }
-    else if (placement === "right") { top = rect.top; left = rect.right + gap; }
-    else { top = rect.bottom + gap; left = rect.left; }
+    function _computeFor(pl) {
+      if (pl === "top") return { top: rect.top - gap - th, left: rect.left };
+      if (pl === "left") return { top: rect.top, left: rect.left - tw - gap };
+      if (pl === "right") return { top: rect.top, left: rect.right + gap };
+      return { top: rect.bottom + gap, left: rect.left };
+    }
+    function _fits(pl, p) {
+      if (pl === "top" || pl === "bottom") return p.top >= 12 && p.top + th <= window.innerHeight - 12;
+      return p.left >= 12 && p.left + tw <= window.innerWidth - 12;
+    }
 
-    top += step.offsetY || 0; // optional per-step nudge — for a target where the default placement still ends up a little too close to something below/above it
+    // Auto-flip: the declared placement is only a preference — if it
+    // genuinely doesn't fit in the viewport at this target's position
+    // (e.g. a card near the very top of the page with placement:"top" has
+    // nowhere to go), the opposite side is tried instead, before falling
+    // back to the plain viewport clamp. This is what actually stops the
+    // tooltip from landing on top of the highlighted card.
+    let placement = declaredPlacement;
+    let pos = _computeFor(placement);
+    const opposite = { top: "bottom", bottom: "top", left: "right", right: "left" };
+    if (!_fits(placement, pos) && opposite[placement]) {
+      const flipped = _computeFor(opposite[placement]);
+      if (_fits(opposite[placement], flipped)) { placement = opposite[placement]; pos = flipped; }
+    }
+
+    let top = pos.top, left = pos.left;
+    top += step.offsetY || 0; // optional per-step nudge — for a target where the resolved placement still ends up a little too close to something below/above it
     left = Math.max(12, Math.min(left, window.innerWidth - tw - 12));
     top = Math.max(12, Math.min(top, window.innerHeight - th - 12));
     _tooltipEl.style.top = `${top}px`;
@@ -319,7 +346,7 @@
     const targetCenterY = rect.top + rect.height / 2;
     const border = "1px solid var(--border,#e2e8f0)";
     const base = "position:absolute;width:14px;height:14px;background:#fff;pointer-events:none;transform:rotate(45deg);";
-    if (placement === "top") {
+    if (placement === "top") { // note: this is the resolved placement (post auto-flip), not necessarily step.placement
       const x = Math.max(14, Math.min(targetCenterX - left - 7, tw - 28));
       _arrowEl.style.cssText = `${base}bottom:-8px;left:${x}px;border-right:${border};border-bottom:${border};border-top:none;border-left:none;`;
     } else if (placement === "left") {

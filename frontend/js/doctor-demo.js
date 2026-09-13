@@ -196,7 +196,7 @@ function runDoctorDemoPatientTour() {
       title: "Patient Overview", description: "Every patient's details and quick actions live at the top of their own page like this." },
     { target_selector: "#vitals-card", placement: "top", device: "both",
       title: "Vitals Recorded", description: "Once a nurse records vitals for this visit, they show up here." },
-    { target_selector: "#visit-history-card", placement: "bottom", device: "both",
+    { target_selector: "#visit-history-card", placement: "left", device: "both",
       title: "Visit History", description: "Every past visit for this patient, expandable for the full details of each one." },
     { target_selector: "#btn-send-admit", placement: "bottom", device: "both",
       title: "Send Admit", description: "Admit this patient to a ward directly from their own page." },
@@ -204,7 +204,7 @@ function runDoctorDemoPatientTour() {
       title: "Reports", description: "Lab and radiology reports for this patient, all in one place." },
     { target_selector: "#btn-continue-consult", placement: "bottom", device: "both",
       title: "Continue Consultation", description: "If a patient returns the same day, pick up their consultation right where it was left off instead of starting fresh." },
-    { target_selector: "#btn-new-consult", placement: "bottom", device: "both",
+    { target_selector: "#btn-new-consult", placement: "bottom", device: "both", tooltipWidth: 340,
       title: "Start the Consultation", nextLabel: "New Consultation →",
       description: "This is where a real consultation begins. Click New Consultation to see how MedScribe helps you record and structure a visit.",
       onNext: () => { window.location.href = "/pages/consultation.html?demo=1"; return false; } },
@@ -266,15 +266,16 @@ function _demoAnalyseClick() {
 
 function _runDemoTopTour() {
   const steps = [
-    { target_selector: "#nurse-vitals-wrap", placement: "bottom", device: "both",
+    { target_selector: "#nurse-vitals-wrap", placement: "bottom", scrollBlock: "start", device: "both",
       title: "Vitals", description: "Vitals a nurse recorded for this visit, before the consultation even starts." },
     { target_selector: "#consult-reports-btn", placement: "bottom", device: "both",
       title: "Reports", description: "Lab and radiology reports for this patient, right from the consultation screen." },
-    { target_selector: "#record-consultation-box", placement: "bottom", device: "both",
+    { target_selector: "#record-consultation-box", placement: "bottom", scrollBlock: "start", device: "both",
       title: "Record Consultation", description: "This is where a real consultation gets recorded — tap the mic to start, tap again to stop." },
     { target_selector: "#transcript", placement: "top", device: "both", nextLabel: "Next",
       title: "The Transcript", description: "In a real consultation this fills in automatically as you record — we've filled in a sample here so you can see what comes next." },
     { target_selector: "#btn-structure", placement: "top", device: "both",
+      guard_message: "Use the button in the tutorial card below to continue.",
       title: "Analyse with AI", nextLabel: "Analyse with AI →",
       description: "This is the core of MedScribe — click here and AI turns the raw transcript into a structured prescription: complaint, diagnosis, medicines, and advice.",
       onNext: () => { _demoAnalyseClick(); return false; } },
@@ -305,11 +306,11 @@ function _runDemoReviewTour(cameFromRecording) {
     ? "MedScribe just structured the whole consultation from that transcript — vitals, complaint, diagnosis, and medicines, all filled in automatically."
     : "On the Foundation plan, AI Scribe isn't included, so consultations are entered directly here instead of via recording — same fields, just typed in by hand.";
   const steps = [
-    { target_selector: "#vitals-section", placement: "bottom", device: "both",
+    { target_selector: "#vitals-section", placement: "bottom", scrollBlock: "start", device: "both",
       title: "Vitals", description: introDescription },
     { target_selector: "#diagnosis-section", placement: "bottom", device: "both",
       title: "Diagnosis", description: "Chief complaint and diagnosis — edit freely, this is a normal text field either way." },
-    { target_selector: "#medicines-section", placement: "bottom", device: "both",
+    { target_selector: "#medicines-section", placement: "bottom", scrollBlock: "start", device: "both",
       title: "Medicines", description: "Add, edit, or remove medicines here. Search the box above to add from your hospital's medicine list." },
     { target_selector: "#test-catalog-block", placement: "top", device: "both",
       title: "Tests / Investigations", description: "Order lab tests for this patient the same way — search and add from your hospital's test list." },
@@ -319,7 +320,7 @@ function _runDemoReviewTour(cameFromRecording) {
       title: "Follow-up Instructions", description: "When the patient should come back, if at all." },
     { target_selector: "#nurse-instructions-section", placement: "top", device: "both",
       title: "Post-Consultation Nurse Instructions", description: "Optional — a dressing, an injection, anything a nurse should do right after this consultation." },
-    { target_selector: "#confirm-btn", placement: "bottom", device: "both",
+    { target_selector: "#confirm-btn", placement: "top", device: "both", tooltipWidth: 340,
       title: "Generate the Prescription", nextLabel: "Confirm & Generate PDF →",
       description: "This is the last step — confirming generates a token and a PDF prescription for the patient. For this demo, nothing is actually saved or sent.",
       onNext: () => { _showDemoConfirmedPanel(); return false; } },
@@ -337,7 +338,7 @@ function _showDemoConfirmedPanel() {
     btn.setAttribute("onclick", "exitDoctorDemo()");
   });
   const steps = [
-    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "bottom", device: "both",
+    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "top", device: "both",
       title: "Done", nextLabel: "Finish",
       description: "That's the full flow, start to finish. Done takes you back to your dashboard.",
       onNext: () => { exitDoctorDemo(); return false; } },
