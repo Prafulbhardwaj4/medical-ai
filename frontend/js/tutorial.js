@@ -297,4 +297,5 @@
   window.startTutorial = startTutorial;
   window.startLocalTour = startLocalTour;
   window.fetchTutorialSteps = fetchTutorialSteps;
+  window.endTutorial = _teardownOverlay; // close whatever's on screen — used before switching tabs, so a still-open tour never survives a real nav click underneath it
 })();

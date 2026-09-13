@@ -1834,6 +1834,7 @@
     let selectedCategory = null;
 
     function showRecSection(id) {
+      endTutorial();
       closeAllOverlays();
       ['home', 'attendance', 'patients', 'portal', 'availability'].forEach(s => {
         document.getElementById('section-' + s).classList.toggle('active', s === id);
@@ -1847,6 +1848,7 @@
     }
 
     function showRecDesktopTab(id) {
+      endTutorial();
       const groups = { home: ['section-home'], patients: ['section-patients'], portal: ['section-portal'], availability: ['section-availability'] };
       Object.values(groups).flat().forEach(elId => document.getElementById(elId).classList.remove('d-active'));
       groups[id].forEach(elId => document.getElementById(elId).classList.add('d-active'));
@@ -1859,7 +1861,15 @@
     }
 
     function currentReceptionistTutorialPage() {
-      const active = document.querySelector('.mobile-section.active, .mobile-section.d-active');
+      // Desktop and mobile use separate class conventions (.d-active vs
+      // .active) — checking whichever one actually applies to the current
+      // device avoids #section-home's static "active" class (its hardcoded
+      // HTML default, never removed by showRecDesktopTab) always winning
+      // the query on desktop regardless of the real current tab.
+      const isDesktop = window.innerWidth >= 901;
+      const active = isDesktop
+        ? document.querySelector('.mobile-section.d-active')
+        : document.querySelector('.mobile-section.active');
       const id = active ? active.id.replace('section-', '') : 'home';
       return 'receptionist-' + id;
     }
