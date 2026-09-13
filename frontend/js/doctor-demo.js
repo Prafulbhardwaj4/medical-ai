@@ -338,7 +338,7 @@ function _showDemoConfirmedPanel() {
     btn.setAttribute("onclick", "exitDoctorDemo()");
   });
   const steps = [
-    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "top", device: "both",
+    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "top", align: "center", highlightPad: 12, device: "both",
       title: "Done", nextLabel: "Finish",
       description: "That's the full flow, start to finish. Done takes you back to your dashboard.",
       onNext: () => { exitDoctorDemo(); return false; } },

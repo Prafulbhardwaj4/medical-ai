@@ -290,8 +290,16 @@
     // opts into "start" instead. Changing the default itself was wrong —
     // it silently shifted scroll position for every step on every page.
     target.scrollIntoView({ block: step.scrollBlock || "center", behavior: "instant" });
+    if (step.scrollBlock === "start") {
+      // "start" aligns the target flush to the very top of the viewport —
+      // exactly where the sticky .topbar sits, so it clips behind it.
+      // Nudge back down by the header's real height (+12px breathing room).
+      const header = document.querySelector(".topbar");
+      const headerH = header ? header.getBoundingClientRect().height : 0;
+      if (headerH) window.scrollBy(0, -(headerH + 12));
+    }
     const rect = target.getBoundingClientRect();
-    const pad = 6;
+    const pad = step.highlightPad || 6; // optional per-step override — a small target (like an icon-sized button) can look cramped with the default pad
     _highlightEl.style.top = `${rect.top - pad}px`;
     _highlightEl.style.left = `${rect.left - pad}px`;
     _highlightEl.style.width = `${rect.width + pad * 2}px`;
@@ -304,13 +312,17 @@
     _tooltipEl.style.width = `${tw}px`;
     const th = _tooltipEl.offsetHeight;
 
+    // Left-aligned to the target is the default (matches every existing
+    // step) — a step opts into horizontal centering explicitly via
+    // align:"center", for the specific case of a wide tooltip next to a
+    // narrow target where left-alignment drifts it too far to one side.
+    const horizX = step.align === "center" ? (rect.left + rect.width / 2 - tw / 2) : rect.left;
     function _computeFor(pl) {
-      const centerX = rect.left + rect.width / 2 - tw / 2;
       const centerY = rect.top + rect.height / 2 - th / 2;
-      if (pl === "top") return { top: rect.top - gap - th, left: centerX };
+      if (pl === "top") return { top: rect.top - gap - th, left: horizX };
       if (pl === "left") return { top: centerY, left: rect.left - tw - gap };
       if (pl === "right") return { top: centerY, left: rect.right + gap };
-      return { top: rect.bottom + gap, left: centerX };
+      return { top: rect.bottom + gap, left: horizX };
     }
     function _fits(pl, p) {
       if (pl === "top" || pl === "bottom") return p.top >= 12 && p.top + th <= window.innerHeight - 12;
