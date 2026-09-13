@@ -38,6 +38,14 @@
   let _localOptions = null; // set only by startLocalTour — marks "local" (non-backend) mode
   let _page = null; // which tab's tutorial is currently loaded — passed back on completion
   let _onDone = null; // optional callback for backend-driven tutorials — fires on Finish OR Skip, after the completion API call
+  let _guardedElement = null; // target element currently carrying a click-guard listener, if any
+  let _guardedHandler = null;
+
+  function _clearGuard() {
+    if (_guardedElement && _guardedHandler) _guardedElement.removeEventListener("click", _guardedHandler, true);
+    _guardedElement = null;
+    _guardedHandler = null;
+  }
 
   function _statusEndpoint(subjectType, page) {
     const base = subjectType === "patient" ? "/tutorials/status/patient" : "/tutorials/status/staff";
@@ -139,6 +147,7 @@
     if (_resizeHandler) window.removeEventListener("resize", _resizeHandler);
     if (_overlayEl) _overlayEl.remove();
     _unlockScroll();
+    _clearGuard();
     _overlayEl = null; _tooltipEl = null; _highlightEl = null; _arrowEl = null; _resizeHandler = null;
   }
 
@@ -213,6 +222,18 @@
       if (_stepIndex < _steps.length - 1) { _stepIndex++; _renderStep(); }
       else _finish();
       return;
+    }
+    _clearGuard();
+    if (step.guard_message) {
+      // A step describing a real nav/action button (History, Admissions,
+      // Suggest, Chat, Profile, ...) — clicking it directly mid-tour would
+      // navigate away or open something else instead of advancing the
+      // tour, so it's intercepted with an explanatory toast instead. Only
+      // applies to the CURRENT step's target; cleared on every step change
+      // and on teardown, so normal clicks work again immediately after.
+      _guardedHandler = function (e) { e.preventDefault(); e.stopPropagation(); toast(step.guard_message, "info"); };
+      target.addEventListener("click", _guardedHandler, true);
+      _guardedElement = target;
     }
     // Scroll BEFORE measuring, not after — scrollIntoView's smooth-scroll
     // animation used to run *after* the highlight/tooltip were already

@@ -12,6 +12,7 @@ class TutorialStepOut(BaseModel):
     placement: str
     device: str
     click_before: Optional[str] = None
+    guard_message: Optional[str] = None
 
     class Config:
         from_attributes = True

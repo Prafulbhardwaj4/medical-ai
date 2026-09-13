@@ -303,69 +303,64 @@ STEPS = [
      "description": "Toggle between Currently Admitted and History above — try the demo patient below to see what a patient's own page looks like.",
      "placement": "top"},
 
-    # ═══ nurse / nurse.html — continuous 1-2 (Vitals module only, first slice) ═══
-    # Desktop's "Home" sidebar tab shows Vitals Queue and Post-Consultation
-    # Tasks stacked together (no separate desktop tab for each, unlike
-    # mobile's bottom-nav) — this module covers Vitals only; Tasks is a
-    # separate later seed reusing the same #sidebar-nav-home nav step.
-    {"role": "nurse", "page": "nurse", "device": "desktop", "step_order": 1,
-     "target_selector": "#sidebar-nav-home", "title": "Home",
-     "description": "Vitals Queue and Post-Consultation Tasks are both here.",
-     "placement": "right"},
-    {"role": "nurse", "page": "nurse", "device": "mobile", "step_order": 1,
-     "target_selector": "#tab-btn-vitals", "title": "Vitals Queue",
+    # ═══ nurse / admissions.html — "nurse-admissions" page ═══
+    # Nurse's view hides both #btn-admit-patient and #ward-vacancy-card
+    # (see the role branch above), so this is a single step straight to
+    # the admitted list — nothing else is visible to skip past.
+    {"role": "nurse", "page": "nurse-admissions", "device": "both", "step_order": 1,
+     "target_selector": "#admissions-list", "title": "Admitted Patients",
+     "description": "Toggle between Currently Admitted and History above — try the demo patient below to see what a patient's own page looks like.",
+     "placement": "top"},
+
+    # ═══ nurse / nurse.html — "nurse-home" page ═══
+    {"role": "nurse", "page": "nurse-home", "device": "desktop", "step_order": 1,
+     "target_selector": "#nurse-attendance-card", "title": "Today's Status",
+     "description": "Mark yourself present, on break, or off duty for the day — right from here.",
+     "placement": "top"},
+    {"role": "nurse", "page": "nurse-home", "device": "mobile", "step_order": 1,
+     "target_selector": "#nurse-attendance-card", "click_before": "#tab-btn-attendance", "title": "Today's Status",
+     "description": "Mark yourself present, on break, or off duty for the day — right from here.",
+     "placement": "top"},
+    {"role": "nurse", "page": "nurse-home", "device": "both", "step_order": 2,
+     "target_selector": "#nurse-vitals-card", "title": "Vitals Queue",
      "description": "Patients waiting for vitals to be recorded, or a doctor-requested recheck, show up here.",
      "placement": "top"},
-    {"role": "nurse", "page": "nurse", "device": "both", "step_order": 2,
-     "target_selector": "#vitals-list", "title": "Record Vitals",
-     "description": "Mark yourself Present first, then tap Record Vitals (or Recheck) on a patient's card.",
-     "placement": "top"},
-    # Post-Consultation Tasks — mobile has its own bottom-nav tab for this
-    # (desktop already showed it under Home in step 1, so desktop just
-    # gets the content step; mobile needs its nav step first, one order
-    # position later than desktop's equivalent content step).
-    {"role": "nurse", "page": "nurse", "device": "mobile", "step_order": 3,
-     "target_selector": "#tab-btn-tasks", "title": "Post-Consultation Tasks",
+    {"role": "nurse", "page": "nurse-home", "device": "desktop", "step_order": 3,
+     "target_selector": "#nurse-tasks-card", "title": "Post-Consultation Tasks",
      "description": "Tasks a doctor left for after the consultation — a follow-up measurement, a note to check on — land here.",
      "placement": "top"},
-    {"role": "nurse", "page": "nurse", "device": "desktop", "step_order": 3,
-     "target_selector": "#postconsult-list", "title": "Mark Tasks Done",
-     "description": "Mark yourself Present first, then tap Mark Done once you've completed a task.",
+    {"role": "nurse", "page": "nurse-home", "device": "mobile", "step_order": 3,
+     "target_selector": "#nurse-tasks-card", "click_before": "#tab-btn-tasks", "title": "Post-Consultation Tasks",
+     "description": "Tasks a doctor left for after the consultation — a follow-up measurement, a note to check on — land here.",
      "placement": "top"},
-    {"role": "nurse", "page": "nurse", "device": "mobile", "step_order": 4,
-     "target_selector": "#postconsult-list", "title": "Mark Tasks Done",
-     "description": "Mark yourself Present first, then tap Mark Done once you've completed a task.",
-     "placement": "top"},
-    # History — has its own dedicated nav on both devices, but lands one
-    # position later on mobile (5) than desktop (4) because mobile needed
-    # an extra Tasks-nav step desktop didn't. The two content steps below
-    # it are split by device rather than "both" for the same reason —
-    # a single shared step_order can't be correct for both device sequences
-    # at once here.
-    {"role": "nurse", "page": "nurse", "device": "desktop", "step_order": 4,
-     "target_selector": "#sidebar-nav-history", "title": "History",
+    {"role": "nurse", "page": "nurse-home", "device": "desktop", "step_order": 4,
+     "target_selector": "#sidebar-nav-history", "guard_message": "Finish or skip this tutorial first, then tap here to explore History.", "title": "History",
      "description": "Everything you've recorded today — vitals and post-consult tasks together — for a quick recheck.",
      "placement": "right"},
-    {"role": "nurse", "page": "nurse", "device": "mobile", "step_order": 5,
-     "target_selector": "#tab-btn-history", "title": "History",
+    {"role": "nurse", "page": "nurse-home", "device": "mobile", "step_order": 4,
+     "target_selector": "#tab-btn-history", "guard_message": "Finish or skip this tutorial first, then tap here to explore History.", "title": "History",
      "description": "Everything you've recorded today — vitals and post-consult tasks together — for a quick recheck.",
      "placement": "top"},
-    {"role": "nurse", "page": "nurse", "device": "desktop", "step_order": 5,
-     "target_selector": "#nurse-history-search", "title": "Search",
-     "description": "Search by patient name, ID, or token to find a specific record.",
-     "placement": "bottom"},
-    {"role": "nurse", "page": "nurse", "device": "mobile", "step_order": 6,
-     "target_selector": "#nurse-history-search", "title": "Search",
-     "description": "Search by patient name, ID, or token to find a specific record.",
-     "placement": "bottom"},
-    {"role": "nurse", "page": "nurse", "device": "desktop", "step_order": 6,
-     "target_selector": "#history-list", "title": "Edit a Record",
-     "description": "Tap Edit on any entry to correct a recorded vitals or task value.",
+    {"role": "nurse", "page": "nurse-home", "device": "desktop", "step_order": 5,
+     "target_selector": "#sidebar-nav-admissions", "guard_message": "Finish or skip this tutorial first, then tap here to explore Admissions.", "title": "Admissions",
+     "description": "Admitted patients and their wards — separate from your daily vitals/tasks queue.",
+     "placement": "right"},
+    {"role": "nurse", "page": "nurse-home", "device": "mobile", "step_order": 5,
+     "target_selector": "#tab-btn-admissions", "guard_message": "Finish or skip this tutorial first, then tap here to explore Admissions.", "title": "Admissions",
+     "description": "Admitted patients and their wards — separate from your daily vitals/tasks queue.",
      "placement": "top"},
-    {"role": "nurse", "page": "nurse", "device": "mobile", "step_order": 7,
-     "target_selector": "#history-list", "title": "Edit a Record",
-     "description": "Tap Edit on any entry to correct a recorded vitals or task value.",
-     "placement": "top"},
+    {"role": "nurse", "page": "nurse-home", "device": "both", "step_order": 6,
+     "target_selector": "#suggestion-header-btn", "guard_message": "Finish or skip this tutorial first, then tap here to send a suggestion.", "title": "Suggest",
+     "description": "Have an idea to improve MedScribe? Send it here.",
+     "placement": "bottom"},
+    {"role": "nurse", "page": "nurse-home", "device": "both", "step_order": 7,
+     "target_selector": "#chat-header-btn", "guard_message": "Finish or skip this tutorial first, then tap here to chat.", "title": "Chat",
+     "description": "Message your hospital admin directly from here.",
+     "placement": "bottom"},
+    {"role": "nurse", "page": "nurse-home", "device": "both", "step_order": 8,
+     "target_selector": ".topbar-profile-btn", "guard_message": "Finish or skip this tutorial first, then tap here for your profile.", "title": "Profile",
+     "description": "Your account settings — and you can replay any tab's tutorial from here any time.",
+     "placement": "bottom"},
 
     # ═══ assistant / assistant.html — continuous 1-3 (Home module: Up Next + Walk-ins) ═══
     # #up-next-card is set to display:'' unconditionally inside renderQueues()
