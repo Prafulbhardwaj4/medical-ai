@@ -79,7 +79,7 @@ def verify_captcha_token(token: str, submitted_answer: str) -> bool:
     expected = payload.get("answer")
     if not expected:
         return False
-    return str(expected).strip().upper() == str(submitted_answer).strip().upper()
+    return str(expected).strip() == str(submitted_answer).strip()
 
 PASSWORD_RESET_EXPIRE_MINUTES = 10
 

@@ -1457,8 +1457,8 @@
       // the header's Discharge button instead, see renderDemoAdmissionDetail.
       document.getElementById("discharge-card").style.display = "none";
       document.getElementById("med-list").innerHTML = `
-        <div style="padding:10px 0;border-bottom:1px solid var(--border)"><strong>Paracetamol 650mg</strong></div>
-        <div style="padding:10px 0"><strong>Cetirizine 10mg</strong></div>`;
+        <div class="med-card"><div style="font-weight:600">Paracetamol 650mg</div></div>
+        <div class="med-card"><div style="font-weight:600">Cetirizine 10mg</div></div>`;
       document.getElementById("test-list").innerHTML = `
         <div style="padding:10px 0"><strong>CBC</strong><div style="font-size:12.5px;color:var(--slate)">Ordered today</div></div>`;
       document.getElementById("progress-notes-list").innerHTML = `

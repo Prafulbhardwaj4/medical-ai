@@ -280,7 +280,7 @@
       <div class="card" style="margin-bottom:16px" id="patient-context-card">
         <div class="card-header">
           <p id="patient-label" style="margin:0">Loading patient…</p>
-          <button class="btn btn-primary" onclick="openReportsModal(patientId)">📋 Reports</button>
+          <button class="btn btn-primary" onclick="openReportsModal(patientId)" data-tutorial-id="consult-reports-btn">📋 Reports</button>
         </div>
         <div class="consult-context-grid">
           <div id="nurse-vitals-wrap" class="context-card blue">
@@ -308,6 +308,7 @@
 
       <!-- STEP 1: Record -->
       <div id="panel-1" class="card">
+        <div id="record-consultation-box">
         <div class="card-header">
           <h2>Record Consultation</h2>
         </div>
@@ -334,6 +335,7 @@
           </div>
           <div class="timer" id="timer">00:00</div>
           <p id="record-hint" class="record-status">Click to start recording</p>
+        </div>
         </div>
 
         <div style="margin-top:20px">

@@ -16,7 +16,7 @@ const DEMO_PATIENT = {
   gender: "Female",
   phone: "98765 43210",
   address: "123 MG Road, Ambala (demo address)",
-  vitalsSummary: "BP 122/80 · Pulse 78 · Temp 98.4°F · SpO2 98%",
+  vitalsSummary: "BP 122/80 · Pulse 78 · Temp 98.4°F",
   transcript:
     "Doctor: What brings you in today?\n" +
     "Patient: I've had fever and body ache for the last three days, it's worse at night.\n" +
@@ -27,7 +27,7 @@ const DEMO_PATIENT = {
   diagnosis: "Viral fever (suspected)",
   advice: "Plenty of fluids, rest, and light home-cooked food. Return immediately if fever crosses 102°F or breathing becomes difficult.",
   followup: "Review after 3 days if fever persists",
-  vitals: { bp: "122/80", temperature: "98.4°F", pulse: "78", spo2: "98%" },
+  vitals: { bp: "122/80", temperature: "98.4°F", pulse: "78" },
   medicines: [
     { name: "Paracetamol", brand_name: "Crocin", dosage: "650mg", frequency: "1-0-1", duration: "3 days", times_per_day: 2, duration_days: 3, schedule: "otc" },
     { name: "Cetirizine", brand_name: "", dosage: "10mg", frequency: "0-0-1", duration: "3 days", times_per_day: 1, duration_days: 3, schedule: "otc" },
@@ -45,6 +45,8 @@ const DEMO_PATIENT = {
   },
 };
 
+const DEMO_TOAST = "Just for the tutorial — nothing to open here.";
+
 function isDoctorDemoMode() {
   return location.search === "?demo=1";
 }
@@ -60,15 +62,17 @@ function startDoctorProductTour() {
 
   const steps = [
     { target_selector: "#attendance-card", placement: "bottom", device: "desktop",
+      guard_message: "Just for the tutorial — attendance isn't actually marked here.",
       title: "Today's Status", description: "Mark yourself present, on break, or off duty for the day — right from here." },
     { target_selector: "#attendance-card", click_before: "#bn-attendance", placement: "bottom", device: "mobile",
+      guard_message: "Just for the tutorial — attendance isn't actually marked here.",
       title: "Today's Status", description: "Mark yourself present, on break, or off duty for the day — right from here." },
     { target_selector: "#up-next-card-doctor", placement: "bottom", device: "both",
       title: "Up Next", description: "The next patient in line for you shows up here." },
-    { target_selector: "#queue-card-walkin", placement: "bottom", device: "both",
+    { target_selector: "#queue-card-walkin", placement: "top", device: "both",
       title: "Walk-ins", description: "Patients who walked in today and checked in at reception show up here, in order." },
     { target_selector: "#queue-card-online", placement: "top", device: "both",
-      title: "Online Appointments", description: "Patients who booked an appointment online land in this second queue." },
+      title: "Appointments", description: "Patients who booked an appointment online land in this second queue." },
     { target_selector: "#nav-patients-tab", placement: "right", device: "desktop",
       title: "Patients", description: "Every patient you've ever seen, searchable from here." },
     { target_selector: "a.nav-item[href='admissions.html']", placement: "right", device: "desktop",
@@ -76,16 +80,19 @@ function startDoctorProductTour() {
     { target_selector: "a.bottom-nav-item[href='admissions.html']", placement: "top", device: "mobile",
       title: "Admissions", description: "Ward vacancy and every currently admitted patient live here." },
     { target_selector: "a.nav-item[href='doctor-slots.html']", placement: "right", device: "desktop",
-      title: "My Availability", description: "Set which days and times you're open for booking." },
+      title: "My Availability", description: "Set your availability for appointments." },
     { target_selector: "[data-tutorial-id='doctor-mobile-menu-btn']", placement: "top", device: "mobile",
       title: "More", description: "Patients and My Availability live here on mobile." },
     { target_selector: "#suggestion-header-btn", placement: "bottom", device: "both",
+      guard_message: DEMO_TOAST,
       title: "Suggest", description: "Have an idea to improve MedScribe? Send it here." },
     { target_selector: "#chat-header-btn", placement: "bottom", device: "both",
+      guard_message: DEMO_TOAST,
       title: "Chat", description: "Message your hospital admin directly from here." },
     { target_selector: ".topbar-profile-btn", placement: "bottom", device: "both",
+      guard_message: DEMO_TOAST,
       title: "Profile", description: "Your account settings — and you can replay this tutorial from here any time." },
-    { target_selector: "#demo-tour-card", placement: "bottom", offsetY: 12, device: "both",
+    { target_selector: "#demo-tour-card", placement: "bottom", offsetY: 40, device: "both",
       title: "Try a Demo Patient", nextLabel: "Consult →",
       description: "We've added a demo patient below so you can walk through a full consultation end to end. Nothing you do here is saved or sent to your hospital's records — it's just for you to learn the flow.",
       onNext: () => { window.location.href = "/pages/patient.html?demo=1"; return false; } },
@@ -108,9 +115,12 @@ function renderDoctorDemoPatientPage() {
 
   // Real onclicks stay neutralized in demo mode — these would otherwise
   // fire real API calls against a patient id that doesn't exist. Only
-  // "+ New Consultation" actually navigates anywhere.
-  document.getElementById("btn-send-admit")?.setAttribute("onclick", "toast('Just for the tutorial — nothing to open here.','info')");
-  document.querySelector('[onclick="openReportsModal(patientId)"]')?.setAttribute("onclick", "toast('Just for the tutorial — nothing to open here.','info')");
+  // "+ New Consultation" actually navigates anywhere. data-tutorial-id is
+  // set on the ones the tour also targets directly, rather than matching
+  // on the (now-identical) toast text, which was ambiguous the moment more
+  // than one button got the same override.
+  document.getElementById("btn-send-admit")?.setAttribute("onclick", `toast('${DEMO_TOAST}','info')`);
+  document.getElementById("patient-reports-btn")?.setAttribute("onclick", `toast('${DEMO_TOAST}','info')`);
   document.querySelectorAll('[onclick*="openEditPatient"]').forEach(el => { el.style.display = "none"; });
 
   const continueBtn = document.getElementById("btn-continue-consult");
@@ -186,15 +196,15 @@ function runDoctorDemoPatientTour() {
       title: "Patient Overview", description: "Every patient's details and quick actions live at the top of their own page like this." },
     { target_selector: "#vitals-card", placement: "top", device: "both",
       title: "Vitals Recorded", description: "Once a nurse records vitals for this visit, they show up here." },
-    { target_selector: "#visit-history-card", placement: "top", device: "both",
+    { target_selector: "#visit-history-card", placement: "bottom", device: "both",
       title: "Visit History", description: "Every past visit for this patient, expandable for the full details of each one." },
     { target_selector: "#btn-send-admit", placement: "bottom", device: "both",
       title: "Send Admit", description: "Admit this patient to a ward directly from their own page." },
-    { target_selector: "[onclick*=\"toast('Just for the tutorial\"]", placement: "bottom", device: "both",
+    { target_selector: "#patient-reports-btn", placement: "bottom", device: "both",
       title: "Reports", description: "Lab and radiology reports for this patient, all in one place." },
-    { target_selector: "#btn-continue-consult", placement: "top", device: "both",
+    { target_selector: "#btn-continue-consult", placement: "bottom", device: "both",
       title: "Continue Consultation", description: "If a patient returns the same day, pick up their consultation right where it was left off instead of starting fresh." },
-    { target_selector: "#btn-new-consult", placement: "top", device: "both",
+    { target_selector: "#btn-new-consult", placement: "bottom", device: "both",
       title: "Start the Consultation", nextLabel: "New Consultation →",
       description: "This is where a real consultation begins. Click New Consultation to see how MedScribe helps you record and structure a visit.",
       onNext: () => { window.location.href = "/pages/consultation.html?demo=1"; return false; } },
@@ -207,8 +217,7 @@ function runDoctorDemoConsultation() {
   document.getElementById("patient-label").textContent = `Patient: ${DEMO_PATIENT.name} · ${DEMO_PATIENT.uid}`;
   const vitalsSummaryEl = document.getElementById("nurse-vitals-summary");
   if (vitalsSummaryEl) vitalsSummaryEl.textContent = DEMO_PATIENT.vitalsSummary;
-  document.querySelector('#patient-context-card [onclick="openReportsModal(patientId)"]')
-    ?.setAttribute("onclick", "toast('Just for the tutorial — nothing to open here.','info')");
+  document.getElementById("consult-reports-btn")?.setAttribute("onclick", `toast('${DEMO_TOAST}','info')`);
 
   const banner = document.createElement("div");
   banner.style.cssText = "background:#f0fdfa;border:1px solid var(--teal);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--navy);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap";
@@ -226,47 +235,49 @@ function runDoctorDemoConsultation() {
     goStep(2);
     _runDemoReviewTour(/* cameFromRecording */ false);
   } else {
+    // Everything that could fire a real API call is neutralized up front,
+    // before any tour step renders — not just while its own step is
+    // showing. The real mic button starts a real recording/WebSocket
+    // session; the real Analyse with AI button hits the live structure
+    // endpoint with no real patient behind it, which is exactly what was
+    // 422-ing. The transcript is filled in now too, read-only, so step 4
+    // shows the real-looking text immediately instead of only after
+    // advancing past it.
+    document.getElementById("record-btn")?.setAttribute("onclick", `toast('${DEMO_TOAST}','info')`);
+    document.getElementById("btn-structure")?.setAttribute("onclick", "_demoAnalyseClick()");
+    const transcriptEl = document.getElementById("transcript");
+    if (transcriptEl) {
+      transcriptEl.value = DEMO_PATIENT.transcript;
+      transcriptEl.readOnly = true;
+    }
     _runDemoTopTour();
   }
+}
+
+function _demoAnalyseClick() {
+  toast("Analysing transcript…", "info");
+  setTimeout(() => {
+    document.getElementById("panel-2-title").textContent = "Review & Edit Prescription";
+    _fillDemoReviewPanel();
+    goStep(2);
+    _runDemoReviewTour(true);
+  }, 900);
 }
 
 function _runDemoTopTour() {
   const steps = [
     { target_selector: "#nurse-vitals-wrap", placement: "bottom", device: "both",
       title: "Vitals", description: "Vitals a nurse recorded for this visit, before the consultation even starts." },
-    { target_selector: "#patient-context-card [onclick*=\"toast('Just for the tutorial\"]", placement: "bottom", device: "both",
+    { target_selector: "#consult-reports-btn", placement: "bottom", device: "both",
       title: "Reports", description: "Lab and radiology reports for this patient, right from the consultation screen." },
-    { target_selector: "#panel-1", placement: "bottom", device: "both",
-      title: "Record Consultation", description: "This is where a real consultation gets recorded and transcribed automatically." },
-    { target_selector: "#transcript", placement: "top", device: "both",
-      title: "The Transcript", nextLabel: "Analyse with AI →",
-      description: "We've filled in a sample transcript here so you can see what comes next — in a real consultation this fills in automatically as you record.",
-      onNext: () => {
-        document.getElementById("recorder-wrap").style.display = "none";
-        document.getElementById("transcript").value = DEMO_PATIENT.transcript;
-        document.getElementById("btn-structure").disabled = false;
-        _runDemoStructureTour();
-        return false;
-      } },
-  ];
-  startLocalTour(steps, { onSkip: exitDoctorDemo });
-}
-
-function _runDemoStructureTour() {
-  const steps = [
+    { target_selector: "#record-consultation-box", placement: "bottom", device: "both",
+      title: "Record Consultation", description: "This is where a real consultation gets recorded — tap the mic to start, tap again to stop." },
+    { target_selector: "#transcript", placement: "top", device: "both", nextLabel: "Next",
+      title: "The Transcript", description: "In a real consultation this fills in automatically as you record — we've filled in a sample here so you can see what comes next." },
     { target_selector: "#btn-structure", placement: "top", device: "both",
       title: "Analyse with AI", nextLabel: "Analyse with AI →",
       description: "This is the core of MedScribe — click here and AI turns the raw transcript into a structured prescription: complaint, diagnosis, medicines, and advice.",
-      onNext: () => {
-        toast("Analysing transcript…", "info");
-        setTimeout(() => {
-          document.getElementById("panel-2-title").textContent = "Review & Edit Prescription";
-          _fillDemoReviewPanel();
-          goStep(2);
-          _runDemoReviewTour(true);
-        }, 900);
-        return false;
-      } },
+      onNext: () => { _demoAnalyseClick(); return false; } },
   ];
   startLocalTour(steps, { onSkip: exitDoctorDemo });
 }
@@ -298,7 +309,7 @@ function _runDemoReviewTour(cameFromRecording) {
       title: "Vitals", description: introDescription },
     { target_selector: "#diagnosis-section", placement: "bottom", device: "both",
       title: "Diagnosis", description: "Chief complaint and diagnosis — edit freely, this is a normal text field either way." },
-    { target_selector: "#medicines-section", placement: "top", device: "both",
+    { target_selector: "#medicines-section", placement: "bottom", device: "both",
       title: "Medicines", description: "Add, edit, or remove medicines here. Search the box above to add from your hospital's medicine list." },
     { target_selector: "#test-catalog-block", placement: "top", device: "both",
       title: "Tests / Investigations", description: "Order lab tests for this patient the same way — search and add from your hospital's test list." },
@@ -308,7 +319,7 @@ function _runDemoReviewTour(cameFromRecording) {
       title: "Follow-up Instructions", description: "When the patient should come back, if at all." },
     { target_selector: "#nurse-instructions-section", placement: "top", device: "both",
       title: "Post-Consultation Nurse Instructions", description: "Optional — a dressing, an injection, anything a nurse should do right after this consultation." },
-    { target_selector: "#confirm-btn", placement: "top", device: "both",
+    { target_selector: "#confirm-btn", placement: "bottom", device: "both",
       title: "Generate the Prescription", nextLabel: "Confirm & Generate PDF →",
       description: "This is the last step — confirming generates a token and a PDF prescription for the patient. For this demo, nothing is actually saved or sent.",
       onNext: () => { _showDemoConfirmedPanel(); return false; } },
@@ -326,8 +337,8 @@ function _showDemoConfirmedPanel() {
     btn.setAttribute("onclick", "exitDoctorDemo()");
   });
   const steps = [
-    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "right", device: "both",
-      title: "Done", nextLabel: "Done",
+    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "bottom", device: "both",
+      title: "Done", nextLabel: "Finish",
       description: "That's the full flow, start to finish. Done takes you back to your dashboard.",
       onNext: () => { exitDoctorDemo(); return false; } },
   ];

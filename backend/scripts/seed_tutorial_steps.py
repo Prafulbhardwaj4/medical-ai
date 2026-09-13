@@ -290,6 +290,15 @@ STEPS = [
      "description": "Toggle between Currently Admitted and History above — try the demo patient below to see what a patient's own page looks like.",
      "placement": "top"},
 
+    # ═══ nurse / admissions.html — "nurse-admissions" page ═══
+    # Nurse's #ward-vacancy-card and #btn-admit-patient are both hidden by
+    # that role branch — the admissions list (with the demo card) is the
+    # only visible content here for this role.
+    {"role": "nurse", "page": "nurse-admissions", "device": "both", "step_order": 1,
+     "target_selector": "#admissions-list", "title": "Admitted Patients",
+     "description": "Toggle between Currently Admitted and History above — try the demo patient below to see what a patient's own page looks like.",
+     "placement": "top"},
+
     # ═══ doctor / admissions.html — "doctor-admissions" page ═══
     # Doctor's #btn-admit-patient is hidden by default (no explicit role
     # branch shows it — only receptionist gets it) — doctor's view here is
