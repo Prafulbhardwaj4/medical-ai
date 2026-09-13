@@ -92,16 +92,36 @@
     return _isMobile() ? step.device === "mobile" : step.device === "desktop";
   }
 
+  function _startWithSteps(subjectType, role, page, steps, onDone) {
+    _steps = steps;
+    _stepIndex = 0;
+    _subjectType = subjectType;
+    _role = role;
+    _page = page;
+    _localOptions = null;
+    _onDone = onDone || null;
+    _buildOverlay();
+    _renderStep();
+  }
+
   async function initTutorial(subjectType, role, page, onDone) {
     try {
       const status = await api("GET", _statusEndpoint(subjectType, page));
       if (status.completed) return; // already seen/skipped this tab — only manual replay from here on
+      const allSteps = await api("GET", `/tutorials/${role}/${page}`);
+      const steps = allSteps.filter(_matchesDevice);
+      // Nothing seeded yet for this page/device — do NOT mark complete.
+      // Marking it here regardless of whether steps existed was the bug:
+      // a page visited before its content was seeded got permanently
+      // (wrongly) marked "seen", so it never auto-showed once real
+      // content was added later.
+      if (!steps.length) return;
       // Marked seen the moment it auto-shows, not only on Finish/Skip — a
       // reload or navigating away mid-tour must never bring it back
       // automatically. Manual replay (startTutorial with isReplay=true)
       // never goes through here, so it's unaffected.
       api("POST", _completeEndpoint(subjectType, page)).catch(() => {});
-      startTutorial(subjectType, role, page, false, onDone);
+      _startWithSteps(subjectType, role, page, steps, onDone);
     } catch (e) { /* silent — a broken tutorial fetch should never block the real page */ }
   }
 
@@ -113,15 +133,7 @@
         if (isReplay) toast("No tutorial is set up for this page yet.", "info");
         return;
       }
-      _steps = steps;
-      _stepIndex = 0;
-      _subjectType = subjectType;
-      _role = role;
-      _page = page;
-      _localOptions = null;
-      _onDone = onDone || null;
-      _buildOverlay();
-      _renderStep();
+      _startWithSteps(subjectType, role, page, steps, onDone);
     } catch (e) {
       if (isReplay) toast("Could not load the tutorial right now.", "error");
     }
