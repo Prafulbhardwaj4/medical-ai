@@ -284,14 +284,12 @@
     // wherever the target used to be once the animation finished. Instant
     // scroll removes that race entirely; positioning is always measured
     // post-scroll now.
-    // "start" (top of target aligned to top of viewport) is the default —
-    // "center" was the actual root cause behind nearly every "tooltip is
-    // covering the card" report: centering a target pushes its bottom edge
-    // (or whatever the tooltip is anchored to) off-screen just as often as
-    // it helps, and a bottom-anchored tooltip has nowhere left to go once
-    // that happens. A step can still opt into "center" explicitly if it
-    // genuinely needs it.
-    target.scrollIntoView({ block: step.scrollBlock || "start", behavior: "instant" });
+    // "center" stays the default for every step that doesn't ask for
+    // something else — only a step that explicitly sets scrollBlock (e.g.
+    // a tall section where centering pushes its bottom edge off-screen)
+    // opts into "start" instead. Changing the default itself was wrong —
+    // it silently shifted scroll position for every step on every page.
+    target.scrollIntoView({ block: step.scrollBlock || "center", behavior: "instant" });
     const rect = target.getBoundingClientRect();
     const pad = 6;
     _highlightEl.style.top = `${rect.top - pad}px`;
@@ -307,10 +305,12 @@
     const th = _tooltipEl.offsetHeight;
 
     function _computeFor(pl) {
-      if (pl === "top") return { top: rect.top - gap - th, left: rect.left };
-      if (pl === "left") return { top: rect.top, left: rect.left - tw - gap };
-      if (pl === "right") return { top: rect.top, left: rect.right + gap };
-      return { top: rect.bottom + gap, left: rect.left };
+      const centerX = rect.left + rect.width / 2 - tw / 2;
+      const centerY = rect.top + rect.height / 2 - th / 2;
+      if (pl === "top") return { top: rect.top - gap - th, left: centerX };
+      if (pl === "left") return { top: centerY, left: rect.left - tw - gap };
+      if (pl === "right") return { top: centerY, left: rect.right + gap };
+      return { top: rect.bottom + gap, left: centerX };
     }
     function _fits(pl, p) {
       if (pl === "top" || pl === "bottom") return p.top >= 12 && p.top + th <= window.innerHeight - 12;

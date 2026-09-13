@@ -69,7 +69,7 @@ function startDoctorProductTour() {
       title: "Today's Status", description: "Mark yourself present, on break, or off duty for the day — right from here." },
     { target_selector: "#up-next-card-doctor", placement: "bottom", device: "both",
       title: "Up Next", description: "The next patient in line for you shows up here." },
-    { target_selector: "#queue-card-walkin", placement: "top", device: "both",
+    { target_selector: "#queue-card-walkin", placement: "top", scrollBlock: "start", device: "both",
       title: "Walk-ins", description: "Patients who walked in today and checked in at reception show up here, in order." },
     { target_selector: "#queue-card-online", placement: "top", device: "both",
       title: "Appointments", description: "Patients who booked an appointment online land in this second queue." },
@@ -178,7 +178,7 @@ function renderDoctorDemoPatientPage() {
         </div>
         <div class="detail-section">
           <div class="detail-label">Medicines</div>
-          <div>${pv.medicines.map(m => `<span class="med-pill">${m.name} ${m.dosage} — ${m.frequency} × ${m.duration}</span>`).join("")}</div>
+          <div>${pv.medicines.map(m => `<span class="med-pill">${m.name} ${m.dosage}</span>`).join("")}</div>
         </div>
       </div>
     </div>`;
@@ -196,7 +196,7 @@ function runDoctorDemoPatientTour() {
       title: "Patient Overview", description: "Every patient's details and quick actions live at the top of their own page like this." },
     { target_selector: "#vitals-card", placement: "top", device: "both",
       title: "Vitals Recorded", description: "Once a nurse records vitals for this visit, they show up here." },
-    { target_selector: "#visit-history-card", placement: "left", device: "both",
+    { target_selector: "#visit-history-card", placement: "left", tooltipWidth: 250, offsetY: 130, device: "both",
       title: "Visit History", description: "Every past visit for this patient, expandable for the full details of each one." },
     { target_selector: "#btn-send-admit", placement: "bottom", device: "both",
       title: "Send Admit", description: "Admit this patient to a ward directly from their own page." },
@@ -320,7 +320,7 @@ function _runDemoReviewTour(cameFromRecording) {
       title: "Follow-up Instructions", description: "When the patient should come back, if at all." },
     { target_selector: "#nurse-instructions-section", placement: "top", device: "both",
       title: "Post-Consultation Nurse Instructions", description: "Optional — a dressing, an injection, anything a nurse should do right after this consultation." },
-    { target_selector: "#confirm-btn", placement: "top", device: "both", tooltipWidth: 340,
+    { target_selector: "#confirm-btn", placement: "top", device: "both", tooltipWidth: 380,
       title: "Generate the Prescription", nextLabel: "Confirm & Generate PDF →",
       description: "This is the last step — confirming generates a token and a PDF prescription for the patient. For this demo, nothing is actually saved or sent.",
       onNext: () => { _showDemoConfirmedPanel(); return false; } },
