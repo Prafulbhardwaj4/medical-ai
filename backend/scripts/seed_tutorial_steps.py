@@ -290,6 +290,19 @@ STEPS = [
      "description": "Toggle between Currently Admitted and History above — try the demo patient below to see what a patient's own page looks like.",
      "placement": "top"},
 
+    # ═══ doctor / admissions.html — "doctor-admissions" page ═══
+    # Doctor's #btn-admit-patient is hidden by default (no explicit role
+    # branch shows it — only receptionist gets it) — doctor's view here is
+    # read-only: ward vacancy + admitted list, no admit step.
+    {"role": "doctor", "page": "doctor-admissions", "device": "both", "step_order": 1,
+     "target_selector": "#ward-vacancy-card", "title": "Ward Vacancy",
+     "description": "See how many beds are free in each ward at a glance.",
+     "placement": "bottom"},
+    {"role": "doctor", "page": "doctor-admissions", "device": "both", "step_order": 2,
+     "target_selector": "#admissions-list", "title": "Admitted Patients",
+     "description": "Toggle between Currently Admitted and History above — try the demo patient below to see what a patient's own page looks like.",
+     "placement": "top"},
+
     # ═══ nurse / nurse.html — continuous 1-2 (Vitals module only, first slice) ═══
     # Desktop's "Home" sidebar tab shows Vitals Queue and Post-Consultation
     # Tasks stacked together (no separate desktop tab for each, unlike
@@ -360,14 +373,10 @@ STEPS = [
     # it's reliably visible by the time the tutorial runs despite its
     # display:none default in the raw HTML. Online Appointments and the
     # Doctors tab are separate, later modules.
-    {"role": "assistant", "page": "assistant", "device": "desktop", "step_order": 1,
-     "target_selector": "#sidebar-nav-home", "title": "Home",
-     "description": "Your Up Next patient and both queues live here.",
-     "placement": "right"},
-    {"role": "assistant", "page": "assistant", "device": "mobile", "step_order": 1,
-     "target_selector": "#tab-btn-home", "title": "Home",
-     "description": "Your Up Next patient and both queues live here.",
-     "placement": "top"},
+    {"role": "assistant", "page": "assistant", "device": "both", "step_order": 1,
+     "target_selector": "#section-attendance", "title": "Today's Status",
+     "description": "Mark yourself present, on break, or off duty for the day — right from here.",
+     "placement": "bottom"},
     {"role": "assistant", "page": "assistant", "device": "both", "step_order": 2,
      "target_selector": "#up-next-card", "title": "Up Next",
      "description": "The next patient in line, across both walk-in and online queues, always shows here.",

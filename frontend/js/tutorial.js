@@ -240,6 +240,7 @@
     else if (placement === "right") { top = rect.top; left = rect.right + gap; }
     else { top = rect.bottom + gap; left = rect.left; }
 
+    top += step.offsetY || 0; // optional per-step nudge — for a target where the default placement still ends up a little too close to something below/above it
     left = Math.max(12, Math.min(left, window.innerWidth - tw - 12));
     top = Math.max(12, Math.min(top, window.innerHeight - th - 12));
     _tooltipEl.style.top = `${top}px`;
