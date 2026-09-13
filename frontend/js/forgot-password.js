@@ -124,10 +124,11 @@
     const btn = document.getElementById("fp-btn-send");
     err.textContent = "";
 
-    const identifier = document.getElementById("fp-identifier").value.trim();
+    const rawIdentifier = document.getElementById("fp-identifier").value.trim();
+    const isEmailId = isEmail(rawIdentifier);
+    const isPhoneId = isPhone(rawIdentifier);
+    const identifier = isEmailId ? rawIdentifier.toLowerCase() : rawIdentifier;
     const captchaAnswer = document.getElementById("fp-captcha-answer").value.trim();
-    const isEmailId = isEmail(identifier);
-    const isPhoneId = isPhone(identifier);
     if (!isEmailId && !isPhoneId) { err.textContent = "Enter a valid email or 10-digit phone number."; return; }
     if (!fpCaptchaToken || !captchaAnswer) { err.textContent = "Please answer the captcha question."; return; }
 

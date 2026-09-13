@@ -26,7 +26,7 @@ def create_access_token(data: dict) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 CAPTCHA_EXPIRE_MINUTES = 5
-CAPTCHA_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no O/0, I/1/L — avoids ambiguous reads
+CAPTCHA_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"  # no O/o/0, I/i/l/L/1 — avoids ambiguous reads. Verification is already case-insensitive (see verify_captcha_token), so mixing case here is purely visual.
 
 def generate_captcha_code(length: int = 5) -> str:
     return "".join(random.choice(CAPTCHA_ALPHABET) for _ in range(length))

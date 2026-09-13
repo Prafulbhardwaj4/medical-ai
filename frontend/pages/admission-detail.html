@@ -299,7 +299,7 @@
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-        Expected Today
+        Appointments
       </a>
       <a class="nav-item active" href="admissions.html">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -523,7 +523,7 @@
 
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;" id="main-grid" class="admission-detail-grid">
         <div>
-          <div class="card" style="margin-bottom:20px">
+          <div class="card" style="margin-bottom:20px" id="med-card">
             <div class="card-header">
               <h2>Medications (MAR)</h2>
               <div style="display:flex;gap:8px">
@@ -536,7 +536,7 @@
             </div>
           </div>
 
-          <div class="card" style="margin-bottom:20px">
+          <div class="card" style="margin-bottom:20px" id="test-card">
             <div class="card-header">
               <h2>Tests</h2>
               <button class="btn btn-outline btn-sm" id="btn-add-test" onclick="openAddTestModal()">+ Order
@@ -557,8 +557,7 @@
               <p>Loading...</p>
             </div>
           </div>
-
-          <div class="card" style="margin-bottom:20px">
+          <div class="card" style="margin-bottom:20px" id="progress-notes-card">
             <div class="card-header">
               <h2>Progress Notes</h2>
               <button class="btn btn-primary btn-sm" id="btn-add-progress-note" style="display:none" onclick="submitProgressNote()">Add Note</button>
@@ -1760,11 +1759,11 @@
           title: "Patient Overview", description: "Everything about this admission — status, ward, bed, and quick actions, including Discharge — lives at the top of the page." },
         { target_selector: "#running-bill-card", placement: "top", device: "both",
           title: "Running Bill", description: "Room charges, medicines, and any other charges add up here as the stay continues." },
-        { target_selector: "#med-list", placement: "top", device: "both",
+        { target_selector: "#med-card", placement: "top", device: "both",
           title: "Medications", description: "Every medicine ordered for this admission, with dosage and duration." },
-        { target_selector: "#test-list", placement: "top", device: "both",
+        { target_selector: "#test-card", placement: "top", device: "both",
           title: "Tests", description: "Lab tests ordered during this stay show up here." },
-        { target_selector: "#progress-notes-list", placement: "top", device: "both",
+        { target_selector: "#progress-notes-card", placement: "top", device: "both",
           title: "Progress Notes", description: "Day-by-day notes from the doctor tracking how the patient's doing." },
         { target_selector: "#demo-discharge-btn", placement: "bottom", device: "both",
           title: "Discharge", nextLabel: "Finish",

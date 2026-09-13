@@ -512,7 +512,7 @@
         <strong id="profile-menu-name"></strong>
         <span id="profile-menu-clinic"></span>
       </div>
-      <button class="profile-menu-item" onclick="closeProfileMenu(); startTutorial('staff', 'receptionist', currentReceptionistTutorialPage(), true)">
+      <button class="profile-menu-item" onclick="replayReceptionistTutorial()">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1862,6 +1862,17 @@
       const active = document.querySelector('.mobile-section.active, .mobile-section.d-active');
       const id = active ? active.id.replace('section-', '') : 'home';
       return 'receptionist-' + id;
+    }
+
+    function replayReceptionistTutorial() {
+      closeProfileMenu();
+      const page = currentReceptionistTutorialPage();
+      if (page === 'receptionist-availability' || page === 'receptionist-patients') {
+        if (window.innerWidth >= 901) showRecDesktopTab('home'); else showRecSection('home');
+        startTutorial('staff', 'receptionist', 'receptionist-home', true);
+        return;
+      }
+      startTutorial('staff', 'receptionist', page, true);
     }
 
     const __startTab = (() => {
