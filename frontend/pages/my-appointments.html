@@ -310,7 +310,7 @@
         <span>Patient</span>
       </div>
       <button class="profile-menu-item"
-        onclick="closeProfileMenu(); startTutorial('patient', 'patient', 'my-appointments', true)">
+        onclick="closeProfileMenu(); runAppointmentDemoTour(true)">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -528,15 +528,12 @@
 
   <script src="../js/api.js"></script>
   <script src="../js/tutorial.js"></script>
+  <script src="../js/patient-appointment-demo.js"></script>
   <script>
     if (!requireAuth()) { }
     if (getDoctor()?.role !== 'patient') redirectByRole(getDoctor()?.role);
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = getDoctor()?.name || "Patient";
-    if (!localStorage.getItem("ms_seen_appointments_tour")) {
-      localStorage.setItem("ms_seen_appointments_tour", "1");
-      startTutorial('patient', 'patient', 'my-appointments', false);
-    }
 
     const state = {
       step: "location",
@@ -609,7 +606,7 @@
       if (pushHistory) state.history.push(state.step);
       state.step = step;
       updateHeader();
-      renderStep();
+      return renderStep();
     }
     function updateHeader() {
       const meta = STEP_META[state.step];
@@ -646,7 +643,7 @@
         try {
           const states = await api("GET", "/portal/hospitals/states");
           area.innerHTML = `
-            <div class="state-city-row" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div class="state-city-row" id="state-city-row" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
               <div class="form-group" style="margin:0">
                 <label class="form-label">State</label>
                 <select class="form-control" id="pick-state">
@@ -1319,7 +1316,12 @@
     }
 
     updateHeader();
-    setStep("location", false);
+    setStep("location", false).then(() => {
+      if (!localStorage.getItem("ms_seen_appointments_tour")) {
+        localStorage.setItem("ms_seen_appointments_tour", "1");
+        runAppointmentDemoTour(false);
+      }
+    });
   </script>
 </body>
 
