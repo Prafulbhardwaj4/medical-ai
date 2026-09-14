@@ -312,15 +312,6 @@ STEPS = [
      "description": "Toggle between Currently Admitted and History above — try the demo patient below to see what a patient's own page looks like.",
      "placement": "top"},
 
-    # ═══ nurse / admissions.html — "nurse-admissions" page ═══
-    # Nurse's view hides both #btn-admit-patient and #ward-vacancy-card
-    # (see the role branch above), so this is a single step straight to
-    # the admitted list — nothing else is visible to skip past.
-    {"role": "nurse", "page": "nurse-admissions", "device": "both", "step_order": 1,
-     "target_selector": "#admissions-list", "title": "Admitted Patients",
-     "description": "Toggle between Currently Admitted and History above — try the demo patient below to see what a patient's own page looks like.",
-     "placement": "top"},
-
     # ═══ nurse / nurse.html — "nurse-home" page ═══
     {"role": "nurse", "page": "nurse-home", "device": "desktop", "step_order": 1,
      "target_selector": "#nurse-attendance-card", "title": "Today's Status",
