@@ -20,6 +20,7 @@ Revises: p8q9r0s1t2u3
 Create Date: 2026-09-14
 """
 from alembic import op
+import sqlalchemy as sa
 
 revision = 'r1s2t3u4v5w6'
 down_revision = 'p8q9r0s1t2u3'
@@ -28,18 +29,35 @@ depends_on = None
 
 
 def upgrade():
-    op.drop_index('ix_tutorial_progress_subject_role', table_name='tutorial_progress')
-    op.create_index(
-        'ix_tutorial_progress_subject_role_page',
-        'tutorial_progress', ['subject_type', 'subject_id', 'role', 'page'],
-        unique=True,
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_index_names = {ix["name"] for ix in inspector.get_indexes("tutorial_progress")}
+
+    # The old index may or may not actually exist — on this app's production
+    # DB, tutorial_progress was created by main.py's runtime schema-sync
+    # (straight from the model class, via table.create()) rather than by
+    # this table's original migration, and the model never declared this
+    # index at all. Only drop it if it's really there.
+    if "ix_tutorial_progress_subject_role" in existing_index_names:
+        op.drop_index("ix_tutorial_progress_subject_role", table_name="tutorial_progress")
+
+    if "ix_tutorial_progress_subject_role_page" not in existing_index_names:
+        op.create_index(
+            "ix_tutorial_progress_subject_role_page",
+            "tutorial_progress", ["subject_type", "subject_id", "role", "page"],
+            unique=True,
+        )
 
 
 def downgrade():
-    op.drop_index('ix_tutorial_progress_subject_role_page', table_name='tutorial_progress')
-    op.create_index(
-        'ix_tutorial_progress_subject_role',
-        'tutorial_progress', ['subject_type', 'subject_id', 'role'],
-        unique=True,
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_index_names = {ix["name"] for ix in inspector.get_indexes("tutorial_progress")}
+    if "ix_tutorial_progress_subject_role_page" in existing_index_names:
+        op.drop_index("ix_tutorial_progress_subject_role_page", table_name="tutorial_progress")
+    if "ix_tutorial_progress_subject_role" not in existing_index_names:
+        op.create_index(
+            "ix_tutorial_progress_subject_role",
+            "tutorial_progress", ["subject_type", "subject_id", "role"],
+            unique=True,
+        )
