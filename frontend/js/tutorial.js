@@ -402,5 +402,12 @@
   window.startTutorial = startTutorial;
   window.startLocalTour = startLocalTour;
   window.fetchTutorialSteps = fetchTutorialSteps;
-  window.endTutorial = _teardownOverlay; // close whatever's on screen — used before switching tabs, so a still-open tour never survives a real nav click underneath it
+  window.endTutorial = _teardownOverlay;
+  window.advanceLocalTour = function () {
+    // For real elements that can be clicked directly instead of the
+    // tour's own Next button — moves the tour forward in sync with
+    // whatever the click just did to the real page.
+    if (_stepIndex < _steps.length - 1) { _stepIndex++; _renderStep(); }
+    else { _finish(); }
+  }; // close whatever's on screen — used before switching tabs, so a still-open tour never survives a real nav click underneath it
 })();
