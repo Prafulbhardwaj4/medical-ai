@@ -934,7 +934,7 @@
         } catch (e) { return; }
       }
       admissionsListTutorialActive = true;
-      loadAdmissions();
+      await loadAdmissions();
       // Last step targets the demo card specifically (not the whole list)
       // and opens it instead of finishing — same card the demo row itself
       // links to, so either one works.
