@@ -218,7 +218,7 @@ STEPS = [
      "description": "Mark yourself present, on break, or off duty for the day — right from here.",
      "placement": "top"},
     {"role": "pharmacy", "page": "pharmacy-home", "device": "mobile", "step_order": 5,
-     "target_selector": "#pharm-mobile-menu-body", "click_before": "[data-tutorial-id='pharm-mobile-menu-btn']", "title": "More",
+     "target_selector": "#pharm-menu-catalog-link", "click_before": "[data-tutorial-id='pharm-mobile-menu-btn']", "title": "More",
      "description": "Patients and Medicine Catalog live here on mobile.",
      "placement": "top"},
     {"role": "pharmacy", "page": "pharmacy-home", "device": "mobile", "step_order": 6,
@@ -426,7 +426,11 @@ STEPS = [
     # it's reliably visible by the time the tutorial runs despite its
     # display:none default in the raw HTML. Online Appointments and the
     # Doctors tab are separate, later modules.
-    {"role": "assistant", "page": "assistant", "device": "both", "step_order": 1,
+    # Today's Status is embedded, always-visible content on desktop only
+    # (#section-attendance has display:block!important there) — on mobile
+    # it's a separate bottom-nav tab, introduced later as its own step
+    # instead, matching every other "different tab" step elsewhere.
+    {"role": "assistant", "page": "assistant", "device": "desktop", "step_order": 1,
      "target_selector": "#section-attendance", "title": "Today's Status",
      "description": "Mark yourself present, on break, or off duty for the day — right from here.",
      "placement": "bottom"},
@@ -437,13 +441,12 @@ STEPS = [
     {"role": "assistant", "page": "assistant", "device": "both", "step_order": 3,
      "target_selector": "#queue-card-walkin", "title": "Walk-ins",
      "description": "Patients who walked in today — check their status and vitals, and track their progress here.",
-     "placement": "top"},
+     "placement": "bottom"},
     {"role": "assistant", "page": "assistant", "device": "both", "step_order": 4,
-     "target_selector": "#queue-card-online", "title": "Online Appointments",
+     "target_selector": "#queue-card-online", "title": "Appointments",
      "description": "Patients who booked online — same queue, same actions, just a different source.",
      "placement": "top"},
-    # Doctors — its own nav on both devices, staying in sync since
-    # assistant's desktop/mobile step counts haven't diverged so far.
+    # Doctors — same step_order on both devices, still in sync here.
     {"role": "assistant", "page": "assistant", "device": "desktop", "step_order": 5,
      "target_selector": "#sidebar-nav-doctors", "title": "Doctors",
      "description": "See who's available for consultation right now, and who you're currently assisting.",
@@ -452,15 +455,34 @@ STEPS = [
      "target_selector": "#tab-btn-doctors", "title": "Doctors",
      "description": "See who's available for consultation right now, and who you're currently assisting.",
      "placement": "top"},
-    {"role": "assistant", "page": "assistant", "device": "both", "step_order": 6,
+    # Attendance tab — mobile only, one position later than Doctors, which
+    # pushes Suggest/Chat/Profile one step later on mobile than desktop
+    # from here on (desktop: 6/7/8, mobile: 7/8/9).
+    {"role": "assistant", "page": "assistant", "device": "mobile", "step_order": 6,
+     "target_selector": "#tab-btn-attendance", "title": "Today's Status",
+     "description": "Mark yourself present, on break, or off duty for the day — right from here.",
+     "placement": "top"},
+    {"role": "assistant", "page": "assistant", "device": "desktop", "step_order": 6,
      "target_selector": "#suggestion-header-btn", "title": "Suggest",
      "description": "Have an idea to improve MedScribe? Send it here.",
      "placement": "bottom"},
-    {"role": "assistant", "page": "assistant", "device": "both", "step_order": 7,
+    {"role": "assistant", "page": "assistant", "device": "desktop", "step_order": 7,
      "target_selector": "#chat-header-btn", "title": "Chat",
      "description": "Message your hospital admin directly from here.",
      "placement": "bottom"},
-    {"role": "assistant", "page": "assistant", "device": "both", "step_order": 8,
+    {"role": "assistant", "page": "assistant", "device": "desktop", "step_order": 8,
+     "target_selector": ".topbar-profile-btn", "title": "Profile",
+     "description": "Your account settings — and you can replay this tutorial from here any time.",
+     "placement": "bottom"},
+    {"role": "assistant", "page": "assistant", "device": "mobile", "step_order": 7,
+     "target_selector": "#suggestion-header-btn", "title": "Suggest",
+     "description": "Have an idea to improve MedScribe? Send it here.",
+     "placement": "bottom"},
+    {"role": "assistant", "page": "assistant", "device": "mobile", "step_order": 8,
+     "target_selector": "#chat-header-btn", "title": "Chat",
+     "description": "Message your hospital admin directly from here.",
+     "placement": "bottom"},
+    {"role": "assistant", "page": "assistant", "device": "mobile", "step_order": 9,
      "target_selector": ".topbar-profile-btn", "title": "Profile",
      "description": "Your account settings — and you can replay this tutorial from here any time.",
      "placement": "bottom"},
