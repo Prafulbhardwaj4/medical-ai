@@ -441,7 +441,7 @@ STEPS = [
     {"role": "assistant", "page": "assistant", "device": "both", "step_order": 3,
      "target_selector": "#queue-card-walkin", "title": "Walk-ins",
      "description": "Patients who walked in today — check their status and vitals, and track their progress here.",
-     "placement": "bottom"},
+     "placement": "top"},
     {"role": "assistant", "page": "assistant", "device": "both", "step_order": 4,
      "target_selector": "#queue-card-online", "title": "Appointments",
      "description": "Patients who booked online — same queue, same actions, just a different source.",
