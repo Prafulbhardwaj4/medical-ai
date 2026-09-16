@@ -356,15 +356,17 @@ function _showDemoConfirmedPanel() {
   if (editBtn) editBtn.style.display = "none";
   const viewPdfBtn = document.querySelector('#panel-3 [onclick="viewPdf()"]');
   if (viewPdfBtn) viewPdfBtn.setAttribute("onclick", "toast('This is a demo — no real PDF is generated.', 'info')");
-  document.querySelectorAll('#panel-3 [onclick="goBack()"]').forEach(btn => {
-    btn.setAttribute("onclick", "exitDoctorDemo()");
-  });
+  const doneBtn = document.querySelector('#panel-3 [onclick="goBack()"]');
+  if (doneBtn) {
+    doneBtn.id = "demo-done-btn";
+    doneBtn.setAttribute("onclick", "exitDoctorDemo()");
+  }
   const steps = [
-    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "top", align: "center", highlightPad: 12, device: "desktop",
+    { target_selector: '#demo-done-btn', placement: "top", align: "center", highlightPad: 12, device: "desktop",
       title: "Done", nextLabel: "Finish",
       description: "That's the full flow, start to finish. Done takes you back to your dashboard.",
       onNext: () => { exitDoctorDemo(); return false; } },
-    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "bottom", device: "mobile",
+    { target_selector: '#demo-done-btn', placement: "bottom", device: "mobile",
       title: "Done", nextLabel: "Finish",
       description: "That's the full flow, start to finish. Done takes you back to your dashboard.",
       onNext: () => { exitDoctorDemo(); return false; } },
