@@ -61,28 +61,39 @@ function startDoctorProductTour() {
   if (card) card.style.display = "";
 
   const steps = [
+    // --- desktop (unchanged) ---
     { target_selector: "#attendance-card", placement: "bottom", device: "desktop",
       guard_message: "Just for the tutorial — attendance isn't actually marked here.",
       title: "Today's Status", description: "Mark yourself present, on break, or off duty for the day — right from here." },
-    { target_selector: "#attendance-card", click_before: "#bn-attendance", placement: "bottom", device: "mobile",
-      guard_message: "Just for the tutorial — attendance isn't actually marked here.",
-      title: "Today's Status", description: "Mark yourself present, on break, or off duty for the day — right from here." },
-    { target_selector: "#up-next-card-doctor", placement: "bottom", device: "both",
+    { target_selector: "#up-next-card-doctor", placement: "bottom", device: "desktop",
       title: "Up Next", description: "The next patient in line for you shows up here." },
-    { target_selector: "#queue-card-walkin", placement: "top", scrollBlock: "start", device: "both",
+    { target_selector: "#queue-card-walkin", placement: "top", scrollBlock: "start", device: "desktop",
       title: "Walk-ins", description: "Patients who walked in today and checked in at reception show up here, in order." },
-    { target_selector: "#queue-card-online", placement: "top", device: "both",
+    { target_selector: "#queue-card-online", placement: "top", device: "desktop",
       title: "Appointments", description: "Patients who booked an appointment online land in this second queue." },
     { target_selector: "#nav-patients-tab", placement: "right", device: "desktop",
       title: "Patients", description: "Every patient you've ever seen, searchable from here." },
     { target_selector: "a.nav-item[href='admissions.html']", placement: "right", device: "desktop",
-      title: "Admissions", description: "Ward vacancy and every currently admitted patient live here." },
-    { target_selector: "a.bottom-nav-item[href='admissions.html']", placement: "top", device: "mobile",
-      title: "Admissions", description: "Ward vacancy and every currently admitted patient live here." },
+      title: "Admissions", description: "Every currently admitted patient lives here." },
     { target_selector: "a.nav-item[href='doctor-slots.html']", placement: "right", device: "desktop",
       title: "My Availability", description: "Set your availability for appointments." },
+
+    // --- mobile: separate sequence. Step 1 forces the Home tab active
+    // first via click_before, regardless of which tab the tour started
+    // from — Admissions is the one exception (it gets its own tutorial on
+    // admissions.html itself, so this step here is just a pointer). ---
+    { target_selector: "#up-next-card-doctor", click_before: "#bn-home", placement: "bottom", device: "mobile",
+      title: "Up Next", description: "The next patient in line for you shows up here." },
+    { target_selector: "#queue-card-walkin", placement: "top", scrollBlock: "start", device: "mobile",
+      title: "Walk-ins", description: "Patients who walked in today and checked in at reception show up here, in order." },
+    { target_selector: "#queue-card-online", placement: "top", device: "mobile",
+      title: "Appointments", description: "Patients who booked an appointment online land in this second queue." },
+    { target_selector: "a.bottom-nav-item[href='admissions.html']", placement: "top", device: "mobile",
+      title: "Admissions", description: "Every currently admitted patient lives here." },
+    { target_selector: "#bn-attendance", placement: "top", device: "mobile",
+      title: "Today's Status", description: "Mark yourself present, on break, or off duty for the day — right from here." },
     { target_selector: "[data-tutorial-id='doctor-mobile-menu-btn']", placement: "top", device: "mobile",
-      title: "More", description: "Patients and My Availability live here on mobile." },
+      title: "More", description: "Patients, your stats, and My Availability all live here on mobile." },
     { target_selector: "#suggestion-header-btn", placement: "bottom", device: "both",
       guard_message: DEMO_TOAST,
       title: "Suggest", description: "Have an idea to improve MedScribe? Send it here." },

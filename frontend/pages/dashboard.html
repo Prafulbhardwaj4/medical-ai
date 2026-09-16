@@ -1554,8 +1554,13 @@
       openAddPatient();
       window.history.replaceState({}, '', window.location.pathname);
     }
-    if (urlParams.get('tab') === 'patients') {
-      switchDesktopTab('patients');
+    const __linkedTab = urlParams.get('tab');
+    if (['patients', 'stats', 'attendance'].includes(__linkedTab)) {
+      if (window.innerWidth >= 901) {
+        switchDesktopTab(__linkedTab === 'attendance' ? 'home' : __linkedTab);
+      } else {
+        showMobileSection(__linkedTab);
+      }
       window.history.replaceState({}, '', window.location.pathname);
     }
     if (urlParams.get('tutorial') === '1') {

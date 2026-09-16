@@ -358,14 +358,10 @@ STEPS = [
      "placement": "top"},
 
     # ═══ doctor / admissions.html — "doctor-admissions" page ═══
-    # Doctor's #btn-admit-patient is hidden by default (no explicit role
-    # branch shows it — only receptionist gets it) — doctor's view here is
-    # read-only: ward vacancy + admitted list, no admit step.
+    # Doctor's #btn-admit-patient AND #ward-vacancy-card are both hidden
+    # (see the role branch in admissions.html) — doctor's view here is
+    # read-only, straight to the admitted list, no admit/vacancy steps.
     {"role": "doctor", "page": "doctor-admissions", "device": "both", "step_order": 1,
-     "target_selector": "#ward-vacancy-card", "title": "Ward Vacancy",
-     "description": "See how many beds are free in each ward at a glance.",
-     "placement": "bottom"},
-    {"role": "doctor", "page": "doctor-admissions", "device": "both", "step_order": 2,
      "target_selector": "#admissions-list", "title": "Admitted Patients",
      "description": "Toggle between Currently Admitted and History above — try the demo patient below to see what a patient's own page looks like.",
      "placement": "top"},
