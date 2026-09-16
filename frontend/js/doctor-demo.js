@@ -30,7 +30,6 @@ const DEMO_PATIENT = {
   vitals: { bp: "122/80", temperature: "98.4°F", pulse: "78" },
   medicines: [
     { name: "Paracetamol", brand_name: "Crocin", dosage: "650mg", frequency: "1-0-1", duration: "3 days", times_per_day: 2, duration_days: 3, schedule: "otc" },
-    { name: "Cetirizine", brand_name: "", dosage: "10mg", frequency: "0-0-1", duration: "3 days", times_per_day: 1, duration_days: 3, schedule: "otc" },
   ],
   // For the one demo entry shown in Visit History on patient.html — a past,
   // already-confirmed visit, distinct from today's in-progress one above.
@@ -203,11 +202,15 @@ function renderDoctorDemoPatientPage() {
 
 function runDoctorDemoPatientTour() {
   const steps = [
-    { target_selector: "#patient-header", placement: "bottom", device: "both",
+    { target_selector: "#patient-header", placement: "bottom", device: "desktop",
       title: "Patient Overview", description: "Every patient's details and quick actions live at the top of their own page like this." },
+    { target_selector: "#patient-details-block", placement: "bottom", device: "mobile",
+      title: "Patient Overview", description: "Every patient's details live at the top of their own page like this — the buttons below have their own steps." },
     { target_selector: "#vitals-card", placement: "top", device: "both",
       title: "Vitals Recorded", description: "Once a nurse records vitals for this visit, they show up here." },
-    { target_selector: "#visit-history-card", placement: "left", tooltipWidth: 250, offsetY: 130, device: "both",
+    { target_selector: "#visit-history-card", placement: "left", tooltipWidth: 250, offsetY: 130, device: "desktop",
+      title: "Visit History", description: "Every past visit for this patient, expandable for the full details of each one." },
+    { target_selector: "#visit-history-card", placement: "bottom", device: "mobile",
       title: "Visit History", description: "Every past visit for this patient, expandable for the full details of each one." },
     { target_selector: "#btn-send-admit", placement: "bottom", device: "both",
       title: "Send Admit", description: "Admit this patient to a ward directly from their own page." },
@@ -343,13 +346,25 @@ function _showDemoConfirmedPanel() {
   document.getElementById("token-display").textContent = "DEMO-0001";
   document.getElementById("patient-context-card").style.display = "none"; // the raw vitals summary above is redundant once the prescription's already generated
   goStep(3);
+  // "← Edit" (goStep(2)) doesn't set isReopenMode, so confirming again from
+  // here wouldn't go through the safe update path — it's a dead-end
+  // affordance even in the real app. Hiding it in the demo rather than
+  // pointing the tour at a button that doesn't really work, and it leaves
+  // just two buttons, which also fixes the wrap-around on narrow screens
+  // that was pushing "Done" somewhere the tooltip didn't expect.
+  const editBtn = document.querySelector('#panel-3 [onclick="goStep(2)"]');
+  if (editBtn) editBtn.style.display = "none";
   const viewPdfBtn = document.querySelector('#panel-3 [onclick="viewPdf()"]');
   if (viewPdfBtn) viewPdfBtn.setAttribute("onclick", "toast('This is a demo — no real PDF is generated.', 'info')");
   document.querySelectorAll('#panel-3 [onclick="goBack()"]').forEach(btn => {
     btn.setAttribute("onclick", "exitDoctorDemo()");
   });
   const steps = [
-    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "top", align: "center", highlightPad: 12, device: "both",
+    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "top", align: "center", highlightPad: 12, device: "desktop",
+      title: "Done", nextLabel: "Finish",
+      description: "That's the full flow, start to finish. Done takes you back to your dashboard.",
+      onNext: () => { exitDoctorDemo(); return false; } },
+    { target_selector: '#panel-3 [onclick="exitDoctorDemo()"]', placement: "bottom", device: "mobile",
       title: "Done", nextLabel: "Finish",
       description: "That's the full flow, start to finish. Done takes you back to your dashboard.",
       onNext: () => { exitDoctorDemo(); return false; } },
