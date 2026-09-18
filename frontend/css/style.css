@@ -2506,6 +2506,66 @@ tbody tr:hover {
     margin-left: 16px;
   }
 
+  #bills-header-btn {
+  margin-left: auto;
+}
+
+  .ward-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.ward-card:hover {
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.07);
+  border-color: var(--teal, #14b8a6);
+}
+
+.ward-card-main {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+}
+
+.ward-avatar {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--teal-subtle, #ccfbf1);
+  color: var(--teal, #0d9488);
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ward-card-side {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+@media (max-width: 600px) {
+  .ward-card {
+    flex-wrap: wrap;
+  }
+  .ward-card-side {
+    text-align: left;
+    padding-left: 56px;
+    width: 100%;
+  }
+}
+
   .topbar-doctor {
     margin-left: auto;
     margin-right: 16px;

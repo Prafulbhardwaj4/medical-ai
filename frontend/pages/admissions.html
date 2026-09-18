@@ -877,12 +877,25 @@
       document.getElementById("bottom-nav-receptionist").style.display = "";
       document.getElementById("btn-admit-patient").style.display = "";
       document.getElementById("app-mobile-menu-body").innerHTML = `
+        <a class="mobile-menu-item" href="receptionist.html?tab=portal">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          Appointments
+        </a>
         <a class="mobile-menu-item" href="receptionist.html?tab=patients">
           <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round"
               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
           </svg>
           Patients
+        </a>
+        <a class="mobile-menu-item" href="receptionist.html?tab=availability">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          Manage Availability
         </a>`;
     } else if (getDoctor()?.role === "nurse") {
       document.getElementById("sidebar-doctor").style.display = "none";
@@ -1591,15 +1604,15 @@
         }
         list.innerHTML = demoCard + admissions.map(a => `
           <div class="ward-card" onclick="location.href='admission-detail.html?id=${a.id}'">
-            <div class="ward-card-main" style="display:flex;gap:14px;align-items:center">
+            <div class="ward-card-main">
               <div class="ward-avatar">${a.patient_name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('')}</div>
-              <div>
+              <div style="min-width:0">
                 <div style="font-weight:700;color:var(--navy)">${sanitize(a.patient_name)}</div>
-                <div style="font-size:13px;color:var(--slate)">${a.is_emergency_ward ? `<span style="color:#dc2626;font-weight:700">${sanitize(a.ward)}</span>` : sanitize(a.ward)} · Bed ${sanitize(a.bed_number)}${a.patient_uid ? ' · ' + sanitize(a.patient_uid) : ''}</div>
-                ${(admissionsView === 'history' ? a.discharge_diagnosis : a.diagnosis) ? `<div style="font-size:12.5px;color:var(--slate-light);margin-top:2px">${sanitize(admissionsView === 'history' ? a.discharge_diagnosis : a.diagnosis)}</div>` : ''}
+                <div style="font-size:13px;color:var(--slate);margin-top:2px">${a.is_emergency_ward ? `<span style="color:#dc2626;font-weight:700">${sanitize(a.ward)}</span>` : sanitize(a.ward)} · Bed ${sanitize(a.bed_number)}${a.patient_uid ? ' · ' + sanitize(a.patient_uid) : ''}</div>
+                ${(admissionsView === 'history' ? a.discharge_diagnosis : a.diagnosis) ? `<div style="font-size:12.5px;color:var(--slate-light);margin-top:3px">${sanitize(admissionsView === 'history' ? a.discharge_diagnosis : a.diagnosis)}</div>` : ''}
               </div>
             </div>
-            <div class="ward-card-side" style="text-align:right">
+            <div class="ward-card-side">
               ${admissionsView === 'history'
             ? `<span class="badge badge-grey">${sanitize((a.discharge_type || 'planned').replace('_', '/'))}</span><div style="font-size:11px;color:var(--slate-light);margin-top:4px">Discharged ${a.discharge_date ? new Date(a.discharge_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</div>`
             : `<span class="badge badge-teal">${a.days_admitted} day${a.days_admitted === 1 ? '' : 's'}</span><div style="font-size:11px;color:var(--slate-light);margin-top:4px">Since ${new Date(a.admission_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>`}

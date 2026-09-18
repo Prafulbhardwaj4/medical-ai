@@ -1910,7 +1910,7 @@
     if (window.innerWidth >= 901) {
       showRecDesktopTab(__startTab === 'attendance' ? 'home' : __startTab);
     } else {
-      showRecSection(__startTab);
+      showRecSection(__startTab === 'attendance' ? 'home' : __startTab);
     }
     checkEmergencyWardAvailable();
     if (__startTab === 'portal') {
