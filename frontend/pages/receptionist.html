@@ -585,13 +585,7 @@
       </div>
       <div class="nav-divider"></div>
       <div class="sidebar-section-label">Quick Actions</div>
-      <div class="nav-item" onclick="showRecDesktopTab('home');openNewPatient()">
-        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-        </svg>
-        Add Patient
-      </div>
-      <div class="nav-item" onclick="openDayEndModal()">
+      <div class="nav-item" id="sidebar-nav-dayend" onclick="openDayEndModal()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
@@ -643,6 +637,22 @@
         <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
       </div>
       <div class="mobile-menu-body">
+        <a class="mobile-menu-item" href="#"
+          onclick="closeMobileMenu();showRecSection('portal');return false;">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          Appointments
+        </a>
+        <a class="mobile-menu-item" href="#"
+          onclick="closeMobileMenu();showRecDesktopTab('patients');return false;">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
+          </svg>
+          Patients
+        </a>
         <a class="mobile-menu-item" href="#" id="tab-btn-availability"
           onclick="closeMobileMenu();showRecSection('availability');return false;">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1858,6 +1868,13 @@
       if (id === 'portal') { loadExpectedToday(); loadPendingReview(); loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter(); }
       if (id === 'availability') loadAvailabilityDoctorList();
       initTutorial('staff', 'receptionist', 'receptionist-' + id);
+    }
+
+    function replayReceptionistTutorial() {
+      closeProfileMenu();
+      if (window.innerWidth >= 901) showRecDesktopTab('home');
+      else showRecSection('home');
+      startTutorial('staff', 'receptionist', 'receptionist-home', true);
     }
 
     function currentReceptionistTutorialPage() {

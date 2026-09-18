@@ -2508,6 +2508,7 @@ tbody tr:hover {
 
   .topbar-doctor .topbar-divider,
   #topbar-clinic,
+  #topbar-doctor-name,
   .topbar-doctor .notif-bell-btn,
   .topbar-doctor button[onclick="logout()"] {
     display: none !important;
