@@ -308,7 +308,8 @@
 
     const declaredPlacement = step.placement || "bottom";
     const gap = 16;
-    const tw = Math.min(step.tooltipWidth || 300, window.innerWidth - 24); // optional per-step override for a title/button that doesn't fit the default width
+    const defaultWidth = _page && _page.startsWith("receptionist") ? 340 : 300;
+    const tw = Math.min(step.tooltipWidth || defaultWidth, window.innerWidth - 24); // optional per-step override for a title/button that doesn't fit the default width
     _tooltipEl.style.width = `${tw}px`;
     const th = _tooltipEl.offsetHeight;
 

@@ -355,14 +355,15 @@
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
 
+      <button class="btn btn-outline btn-sm" id="bills-header-btn" onclick="openBillsModal()">
+        🧾 Bills
+      </button>
+
       <!-- Merged into one .topbar-doctor block — two separate elements with
            this class each got margin-left:auto on desktop, so the leftover
            header space split between them and pulled Bills/name toward the
            center instead of sitting flush right next to Suggest/Profile. -->
       <div class="topbar-doctor">
-        <button class="btn btn-outline btn-sm" id="bills-header-btn" onclick="openBillsModal()">
-          🧾 Bills
-        </button>
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <span id="topbar-clinic" style="color:var(--slate)"></span>
@@ -706,7 +707,7 @@
             <div id="search-results" style="margin-bottom:14px"></div>
             <button class="btn btn-outline" style="width:100%" onclick="openNewPatient()">+ Add as New Patient</button>
             <button class="btn btn-outline" style="width:100%;margin-top:8px;border-color:var(--teal);color:var(--teal)"
-              onclick="openPhoneBookingModal()">📅 Book Appointment</button>
+              onclick="openPhoneBookingModal()"><svg width="14" height="14" style="vertical-align:-2px;margin-right:4px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>Book Appointment</button>
             <button class="btn btn-sm" id="btn-emergency-intake"
               style="width:100%;margin-top:8px;background:#dc2626;color:#fff;border-color:#dc2626"
               onclick="onEmergencyIntakeBtnClick()">🚨 Emergency Intake</button>
