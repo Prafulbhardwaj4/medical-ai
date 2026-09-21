@@ -215,6 +215,50 @@
       background: #cbd3da;
     }
 
+    @media (max-width: 600px) {
+      .state-city-row {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+      }
+
+      .select-row-card {
+        padding: 14px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .select-row-card .src-name {
+        font-size: 14px;
+      }
+
+      .date-pill {
+        width: 48px;
+        padding: 9px 0;
+      }
+
+      .date-pill .dnum {
+        font-size: 0.95rem;
+      }
+
+      .slot-grid {
+        gap: 8px;
+      }
+
+      .slot-chip {
+        flex: 1 1 calc(50% - 8px);
+        justify-content: center;
+        padding: 10px 8px;
+      }
+
+      #wizard-card {
+        padding: 16px;
+      }
+
+      .wizard-step-title {
+        font-size: 1rem;
+      }
+    }
+
     .pay-summary-row {
       display: flex;
       justify-content: space-between;
@@ -372,6 +416,13 @@
         </svg>
         Home
       </button>
+      <button class="bottom-nav-item" onclick="location.href='my-health.html?tab=admissions'">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3m8-14v4m-2-2h4m-8 6h.01M17 15h.01" />
+        </svg>
+        Admissions
+      </button>
       <button class="bottom-nav-item" onclick="location.href='my-health.html?tab=records'">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -526,6 +577,7 @@
     </div>
   </div>
 
+  <script src="../js/suggestion-widget.js?v=1"></script>
   <script src="../js/api.js"></script>
   <script src="../js/tutorial.js?v=2"></script>
   <script src="../js/patient-appointment-demo.js?v=2"></script> 

@@ -241,7 +241,16 @@
       if (isLast) { _finish(); } else { _stepIndex++; _renderStep(); }
     });
     const backBtn = document.getElementById("tutorial-back-btn");
-    if (backBtn) backBtn.addEventListener("click", () => { _stepIndex--; _renderStep(); });
+    if (backBtn) backBtn.addEventListener("click", () => {
+      const leavingStep = _steps[_stepIndex];
+      _stepIndex--;
+      // A step can re-render whatever screen state Back needs to land on —
+      // without this, Back moves the tooltip but the page underneath it
+      // (already advanced by the previous step's onNext) stays wherever
+      // Next last left it.
+      if (leavingStep.onBack) leavingStep.onBack();
+      _renderStep();
+    });
 
     _positionForCurrentStep();
   }
@@ -333,15 +342,21 @@
     // Auto-flip: the declared placement is only a preference — if it
     // genuinely doesn't fit in the viewport at this target's position
     // (e.g. a card near the very top of the page with placement:"top" has
-    // nowhere to go), the opposite side is tried instead, before falling
-    // back to the plain viewport clamp. This is what actually stops the
-    // tooltip from landing on top of the highlighted card.
+    // nowhere to go), alternatives are tried in order — opposite side
+    // first, then the two perpendicular sides — before falling back to
+    // the plain viewport clamp. This is what actually stops the tooltip
+    // from landing on top of the highlighted card in most cases, without
+    // needing a hand-picked placement for every single step.
     let placement = declaredPlacement;
     let pos = _computeFor(placement);
     const opposite = { top: "bottom", bottom: "top", left: "right", right: "left" };
-    if (!_fits(placement, pos) && opposite[placement]) {
-      const flipped = _computeFor(opposite[placement]);
-      if (_fits(opposite[placement], flipped)) { placement = opposite[placement]; pos = flipped; }
+    const perpendicular = { top: ["left", "right"], bottom: ["left", "right"], left: ["top", "bottom"], right: ["top", "bottom"] };
+    if (!_fits(placement, pos)) {
+      const candidates = [opposite[placement], ...perpendicular[placement]];
+      for (const candidate of candidates) {
+        const alt = _computeFor(candidate);
+        if (_fits(candidate, alt)) { placement = candidate; pos = alt; break; }
+      }
     }
 
     let top = pos.top, left = pos.left;

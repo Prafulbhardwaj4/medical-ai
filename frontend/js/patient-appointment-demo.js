@@ -36,26 +36,27 @@ async function runAppointmentDemoTour(isReplay) {
   }
   try { _demoProfiles = await api("GET", "/portal/dashboard/profiles"); } catch (e) { _demoProfiles = []; }
 
+  const goToMyAppointments = () => { window.location.href = "my-appointments.html"; };
+
   const steps = [
-    { target_selector: "[data-tutorial-id='my-appointments-list-btn']", placement: "left", device: "both",
+    { target_selector: "[data-tutorial-id='my-appointments-list-btn']", placement: "bottom", device: "both",
       title: "My Appointments", description: "See all your booked appointments, past and upcoming, here." },
-    { target_selector: "#state-city-row", placement: "bottom", device: "both",
-      title: "Select State & City", description: "Pick your state and city to find nearby hospitals." },
-    { target_selector: "#pick-state", placement: "bottom", device: "both",
-      title: "State", description: "Choose the state you're looking for a hospital in." },
-    { target_selector: "#pick-city", placement: "bottom", device: "both", nextLabel: "Next",
-      title: "City", description: "Then the city — this narrows down the hospital list.",
+    { target_selector: "#wizard-card", placement: "bottom", device: "both", nextLabel: "Next",
+      title: "Select State & City", description: "Pick your state and city to find nearby hospitals.",
       onNext: () => { _renderDemoHospitalStep(); } },
     { target_selector: "#wizard-hospital-lead-btn", placement: "bottom", device: "both",
-      title: "Can't Find Your Hospital?", description: "Tell us which hospital you'd like to see on MedScribe, and we'll reach out to them." },
+      title: "Can't Find Your Hospital?", description: "Tell us which hospital you'd like to see on MedScribe, and we'll reach out to them.",
+      onBack: () => { setStep("location", false); } },
     { target_selector: "[data-tutorial-id='demo-hospital-card']", placement: "top", device: "both", nextLabel: "Next",
       title: "Hospital", description: "Pick a hospital from the list — we've added a demo one here so you can see what comes next.",
       onNext: () => { _renderDemoDoctorStep(); } },
     { target_selector: "[data-tutorial-id='demo-doctor-card']", placement: "top", device: "both", nextLabel: "Next",
       title: "Doctor", description: "Pick the doctor you'd like to see, along with their consultation fee.",
-      onNext: () => { _renderDemoProfileStep(); } },
+      onNext: () => { _renderDemoProfileStep(); },
+      onBack: () => { _renderDemoHospitalStep(); } },
     { target_selector: "#demo-profile-list", placement: "top", device: "both",
-      title: "Your Linked Accounts", description: "Accounts already linked to you show up here — pick one to book for them." },
+      title: "Your Linked Accounts", description: "Accounts already linked to you show up here — pick one to book for them.",
+      onBack: () => { _renderDemoDoctorStep(); } },
     { target_selector: "#family-account-card", placement: "top", device: "both",
       title: "Someone With Their Own Account", description: "Booking for a family member who already has a separate portal login? Add them here." },
     { target_selector: "#new-patient-card", placement: "top", device: "both", nextLabel: "Next",
@@ -63,14 +64,18 @@ async function runAppointmentDemoTour(isReplay) {
       onNext: () => { _renderDemoDatetimeStep(); } },
     { target_selector: "#demo-datetime-area", placement: "top", device: "both", nextLabel: "Next",
       title: "Date & Time", description: "Pick a date, then an open time slot. Green means plenty of slots left, yellow means filling up, red means full.",
-      onNext: () => { _openDemoConfirmModal(); } },
-    { target_selector: "#btn-pay-book", placement: "top", device: "both", nextLabel: "Confirm Booking →",
+      onNext: () => { _openDemoConfirmModal(); },
+      onBack: () => { _renderDemoProfileStep(); } },
+    { target_selector: "#btn-pay-book", placement: "top", device: "both", nextLabel: "Confirm Booking →", tooltipWidth: 340,
       title: "Confirm Booking", description: "Check the details, then confirm — you pay at the hospital when you arrive, nothing is charged online.",
-      onNext: () => { _renderDemoConfirmedStep(); } },
+      onNext: () => { _renderDemoConfirmedStep(); },
+      onBack: () => { document.getElementById("modal-confirm").classList.remove("open"); _renderDemoDatetimeStep(); } },
     { target_selector: "#demo-confirmed-card", placement: "right", device: "both", nextLabel: "Finish",
-      title: "Booking Confirmed", description: "That's it — your appointment is booked. This is what you'll see once it's confirmed." },
+      title: "Booking Confirmed", description: "That's it — your appointment is booked. This is what you'll see once it's confirmed.",
+      onNext: goToMyAppointments,
+      onBack: () => { _openDemoConfirmModal(); } },
   ];
-  startLocalTour(steps, { onSkip: () => {} });
+  startLocalTour(steps, { onSkip: goToMyAppointments });
 }
 
 function _renderDemoHospitalStep() {
@@ -149,11 +154,7 @@ function _renderDemoDatetimeStep() {
         </div>
       </div>
       <div class="slot-period-title">Morning</div>
-      ${slotRow([["9:00 AM", "green"], ["9:30 AM", "green"], ["10:00 AM", "yellow"]])}
-      <div class="slot-period-title">Afternoon</div>
-      ${slotRow([["1:00 PM", "yellow"], ["1:30 PM", "red"], ["2:00 PM", "green"]])}
-      <div class="slot-period-title">Evening</div>
-      ${slotRow([["6:00 PM", "green"], ["6:30 PM", "red"], ["7:00 PM", "yellow"]])}
+      ${slotRow([["9:00 AM", "green"], ["9:30 AM", "yellow"], ["10:00 AM", "green"]])}
     </div>`;
 }
 
@@ -189,7 +190,7 @@ function _renderDemoConfirmedStep() {
       <div class="pay-summary-row" style="font-size:16px"><span>Amount Due at Hospital</span><strong style="color:var(--teal)">₹${DEMO_APPOINTMENT.fee}</strong></div>
       <p style="font-size:12px;color:var(--slate-light);margin:14px 0 16px">Please reach the hospital by your slot time.</p>
       <div style="display:flex;gap:10px">
-        <button class="btn btn-teal" style="flex:1" onclick="location.reload()">Done</button>
+        <button class="btn btn-teal" style="flex:1" onclick="window.location.href='my-appointments.html'">Done</button>
       </div>
     </div>`;
 }
