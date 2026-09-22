@@ -2024,8 +2024,6 @@ tbody tr:hover {
   }
 
   #bills-header-btn {
-    margin-left: auto;
-    margin-right: 8px;
     display: flex;
     align-items: center;
   }
@@ -2241,12 +2239,11 @@ tbody tr:hover {
 
   #bills-header-btn {
     display: flex;
-    margin-left: auto;
   }
 
   .topbar-profile-btn {
     display: flex;
-    margin-left: auto;
+    margin-left: 16px;
   }
 
   .topbar-right-group {
