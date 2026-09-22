@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -31,9 +31,13 @@ from app.schemas.billing import DayEndCloseIn, CreditDebitNoteIn, WaiverIn
 from app.utils.gst import apply_gst
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
-from app.services.pdf_service import generate_invoice_pdf
+from app.services.pdf_service import generate_invoice_pdf, generate_credit_debit_note_pdf
 from app.utils.timezone import ist_today, ist_day_bounds, ist_date, now_ist_naive
-from app.utils.receipts import next_receipt_number, next_note_number
+from app.utils.receipts import next_receipt_number, next_note_number, generate_verify_hash
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -202,6 +206,43 @@ def gather_invoice_items(db: Session, checkin: Checkin):
 
     return items
 
+def _derive_payment_method(db: Session, checkin: Checkin):
+    """Best-effort single payment_method for the whole OPD invoice, derived
+    from the underlying paid rows for this visit (Checkin/TestOrder/
+    RadiologyOrder/OpdCharge each carry their own — MedicineOrder does not,
+    pharmacy items are settled separately). Returns the common mode if every
+    row agrees, else "mixed" — flagged for Praful's review, this exact
+    mixed-method handling was never specified as a business rule."""
+    modes = set()
+    if checkin.payment_method:
+        modes.add(checkin.payment_method)
+    consultation_ids = [
+        c.id for c in db.query(Consultation).filter(
+            Consultation.patient_id == checkin.patient_id,
+            Consultation.is_voided == False,
+            or_(
+                Consultation.token_number == checkin.token_number,
+                Consultation.token_number.like(f"{checkin.token_number}-%")
+            )
+        ).all()
+    ]
+    if consultation_ids:
+        for t in db.query(TestOrder).filter(TestOrder.consultation_id.in_(consultation_ids)).all():
+            if t.payment_method:
+                modes.add(t.payment_method)
+        for r in db.query(RadiologyOrder).filter(RadiologyOrder.consultation_id.in_(consultation_ids)).all():
+            if r.payment_method:
+                modes.add(r.payment_method)
+    for oc in db.query(OpdCharge).filter(OpdCharge.checkin_id == checkin.id).all():
+        if oc.payment_method:
+            modes.add(oc.payment_method)
+    if len(modes) == 1:
+        return modes.pop()
+    if len(modes) > 1:
+        return "mixed"
+    return None
+
+
 @router.post("/checkins/{checkin_id}/finalize-invoice")
 def finalize_invoice(
     checkin_id: int,
@@ -226,6 +267,7 @@ def finalize_invoice(
     consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first()
 
     items, subtotal, gst_total, grand_total = apply_gst(items, hospital)
+    payment_method = _derive_payment_method(db, checkin)
 
     if checkin.is_finalized and checkin.invoice_id:
         # Combined bill regenerates in place when something new was paid later in the
@@ -238,9 +280,16 @@ def finalize_invoice(
         invoice.gst_total = gst_total
         invoice.generated_by = current_doctor.id
         invoice.generated_from = current_doctor.role.value
+        invoice.payment_method = payment_method
         if not invoice.place_of_supply:
             invoice.place_of_supply = hospital.state
-        pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply)
+        if not invoice.verify_hash:
+            invoice.verify_hash = generate_verify_hash(invoice.id, invoice.hospital_id)
+        pdf_path = generate_invoice_pdf(
+            invoice.id, hospital, items, grand_total, patient, consulting_doctor,
+            receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply,
+            subtotal=subtotal, gst_total=gst_total, verify_hash=invoice.verify_hash, is_duplicate=False,
+        )
         invoice.pdf_path = pdf_path
         db.commit()
         db.refresh(invoice)
@@ -264,13 +313,19 @@ def finalize_invoice(
         gst_total=gst_total,
         generated_by=current_doctor.id,
         generated_from=current_doctor.role.value,
+        payment_method=payment_method,
         receipt_number=next_receipt_number(db, hospital),
         place_of_supply=hospital.state,
     )
     db.add(invoice)
     db.flush()
+    invoice.verify_hash = generate_verify_hash(invoice.id, invoice.hospital_id)
 
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply)
+    pdf_path = generate_invoice_pdf(
+        invoice.id, hospital, items, grand_total, patient, consulting_doctor,
+        receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply,
+        subtotal=subtotal, gst_total=gst_total, verify_hash=invoice.verify_hash, is_duplicate=False,
+    )
     invoice.pdf_path = pdf_path
 
     checkin.is_finalized = True
@@ -371,7 +426,14 @@ def download_invoice_pdf(
 
     checkin_for_doctor = db.query(Checkin).filter(Checkin.id == invoice.checkin_id).first()
     consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin_for_doctor.doctor_id).first() if checkin_for_doctor else None
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, invoice.grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number)
+    if not invoice.verify_hash:
+        invoice.verify_hash = generate_verify_hash(invoice.id, invoice.hospital_id)
+        db.commit()
+    pdf_path = generate_invoice_pdf(
+        invoice.id, hospital, items, invoice.grand_total, patient, consulting_doctor,
+        receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply,
+        subtotal=invoice.subtotal, gst_total=invoice.gst_total, verify_hash=invoice.verify_hash, is_duplicate=True,
+    )
     if invoice.pdf_path != pdf_path:
         invoice.pdf_path = pdf_path
         db.commit()
@@ -412,6 +474,7 @@ def list_invoices(
             "grand_total": inv.grand_total,
             "item_count": len(json.loads(inv.items_json)),
             "generated_from": inv.generated_from,
+            "payment_method": inv.payment_method,
             "generated_at": inv.generated_at.isoformat() if inv.generated_at else None
         })
     return result
@@ -503,6 +566,56 @@ def list_credit_debit_notes(
         CreditDebitNote.invoice_id == invoice_id
     ).order_by(CreditDebitNote.created_at.desc()).all()
     return [serialize_credit_debit_note(n) for n in notes]
+
+
+@router.get("/credit-debit-notes/{note_id}/pdf")
+def download_credit_debit_note_pdf(
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Item 4 fix — CN/DN never had a document before this."""
+    require_billing_staff(current_doctor)
+    note = db.query(CreditDebitNote).filter(
+        CreditDebitNote.id == note_id,
+        CreditDebitNote.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    invoice = db.query(Invoice).filter(Invoice.id == note.invoice_id).first()
+    patient = db.query(Patient).filter(Patient.id == note.patient_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    pdf_path = generate_credit_debit_note_pdf(note, invoice, hospital, patient)
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{note.note_number}.pdf")
+
+
+@router.get("/verify/{invoice_id}")
+@limiter.limit("10/minute")
+def verify_invoice(request: Request, invoice_id: int, hash: str, db: Session = Depends(get_db)):
+    """Public, unauthenticated — item 9 fix, mirrors consultations.py's
+    prescription verify endpoint. Masks the patient name."""
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        return {"valid": False, "reason": "Invoice not found"}
+    if not invoice.verify_hash or invoice.verify_hash != hash:
+        return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
+
+    patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == invoice.hospital_id).first()
+    name_parts = (patient.name if patient else "").split()
+    masked_name = name_parts[0] if name_parts else ""
+    if len(name_parts) > 1:
+        masked_name += f" {name_parts[1][0]}."
+
+    return {
+        "valid": True,
+        "invoice_id": invoice.id,
+        "receipt_number": invoice.receipt_number,
+        "hospital_name": hospital.name if hospital else None,
+        "patient_name": masked_name,
+        "grand_total": invoice.grand_total,
+        "date": invoice.generated_at.isoformat() if invoice.generated_at else None,
+    }
 
 
 def _waiver_threshold(hospital, bill_total: float) -> float:

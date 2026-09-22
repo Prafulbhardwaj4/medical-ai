@@ -14,6 +14,10 @@
     const doctor = getDoctor();
     if (!doctor || !getToken()) return;
     if (EXCLUDED_ROLES.includes(doctor.role)) return;
+    // A patient session (no .role — that field only exists on staff/Doctor
+    // sessions) can only submit; it has no "my past suggestions" list here,
+    // since that's a separate, staff-only endpoint.
+    const isPatientSession = !doctor.role;
 
     const profileBtn = document.querySelector(".topbar-profile-btn");
     if (!profileBtn || !profileBtn.parentNode) return;
@@ -151,7 +155,8 @@
         toast("Suggestion updated", "success");
         delete btn.dataset.editingId;
       } else {
-        await api("POST", "/suggestions", { message });
+        if (isPatientSession) await api("POST", "/portal/dashboard/suggestion", { message });
+        else await api("POST", "/suggestions", { message });
         toast("Suggestion sent", "success");
       }
       textarea.value = "";
@@ -186,7 +191,7 @@
     const el = document.getElementById("suggestion-mine-list");
     el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Loading…</p>';
     try {
-      mineCache = await api("GET", "/suggestions/mine");
+      mineCache = isPatientSession ? [] : await api("GET", "/suggestions/mine");
       renderMine();
     } catch (e) {
       el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`;

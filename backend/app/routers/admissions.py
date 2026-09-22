@@ -46,10 +46,11 @@ from app.routers.patients import generate_patient_uid, generate_url_token
 from sqlalchemy.exc import IntegrityError
 from app.utils.inventory import deduct_stock_fefo
 from app.utils.notify import notify_ward_change_request, notify_emergency_alert, notify_admission_medicines_ordered, notify_admission_tests_ordered
-from app.utils.receipts import next_receipt_number, next_note_number
+from app.utils.receipts import next_receipt_number, next_note_number, generate_verify_hash
 from app.utils.gst import apply_gst
 from app.services.pdf_service import generate_invoice_pdf
 import json
+import os
 
 router = APIRouter(prefix="/admissions", tags=["admissions"])
 
@@ -2367,12 +2368,15 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     db.add(invoice)
     db.commit()
     db.refresh(invoice)
+    invoice.verify_hash = generate_verify_hash(invoice.id, invoice.hospital_id)
 
     admitting_doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
     pdf_path = generate_invoice_pdf(
         invoice.id, hospital, items, charges_total, patient, admitting_doctor,
         receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply,
         admission_date=a.admission_date, discharge_date=a.discharge_date,
+        subtotal=subtotal, gst_total=gst_total, verify_hash=invoice.verify_hash, is_duplicate=False,
+        deposit_paid=deposit_total, amount_collected_now=amount_due, refund_due=refund_due,
     )
     invoice.pdf_path = pdf_path
     a.discharge_invoice_id = invoice.id
@@ -2400,8 +2404,31 @@ def download_discharge_invoice(admission_id: str, current_doctor: Doctor = Depen
     if not a.discharge_invoice_id:
         raise HTTPException(status_code=404, detail="No discharge invoice yet")
     invoice = db.query(Invoice).filter(Invoice.id == a.discharge_invoice_id).first()
-    if not invoice or not invoice.pdf_path:
-        raise HTTPException(status_code=404, detail="Invoice PDF not found")
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    if not invoice.pdf_path or not os.path.exists(invoice.pdf_path):
+        # Self-heal (item 12): the file was lost (redeploy/disk swap/manual
+        # cleanup) — regenerate from the invoice's own stored data instead
+        # of permanently 404ing, same as the OPD download path already does.
+        patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
+        hospital = db.query(Hospital).filter(Hospital.id == invoice.hospital_id).first()
+        admitting_doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
+        if not invoice.verify_hash:
+            invoice.verify_hash = generate_verify_hash(invoice.id, invoice.hospital_id)
+        _items, _subtotal, _gst_total, _charges_total, deposit_total, _tpa_covered, balance = _settlement_summary(db, a)
+        refund_due = max(-balance, 0)
+        pdf_path = generate_invoice_pdf(
+            invoice.id, hospital, json.loads(invoice.items_json), invoice.grand_total, patient, admitting_doctor,
+            receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply,
+            admission_date=a.admission_date, discharge_date=a.discharge_date,
+            subtotal=invoice.subtotal, gst_total=invoice.gst_total, verify_hash=invoice.verify_hash,
+            is_duplicate=True, deposit_paid=deposit_total, amount_collected_now=invoice.amount_collected,
+            refund_due=refund_due,
+        )
+        invoice.pdf_path = pdf_path
+        db.commit()
+
     return FileResponse(invoice.pdf_path, media_type="application/pdf", filename=f"discharge_invoice_{admission_id}.pdf")
 
 

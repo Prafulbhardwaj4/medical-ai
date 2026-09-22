@@ -463,8 +463,29 @@ def submit_suggestion(
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Please enter a suggestion")
 
-    from app.models.feedback import PortalSuggestion
-    db.add(PortalSuggestion(account_id=account.id, hospital_id=body.hospital_id, message=body.message.strip()))
+    from app.models.suggestion import Suggestion
+    from app.models.hospital import Hospital
+    from app.models.portal import PatientProfileLink
+    from app.models.patient import Patient
+
+    patient_name = account.phone
+    link = db.query(PatientProfileLink).filter(PatientProfileLink.account_id == account.id).first()
+    if link:
+        patient = db.query(Patient).filter(Patient.id == link.patient_id).first()
+        if patient and patient.name:
+            patient_name = patient.name
+
+    hospital_name = "—"
+    if body.hospital_id:
+        hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id).first()
+        if hospital:
+            hospital_name = hospital.name
+
+    db.add(Suggestion(
+        hospital_id=body.hospital_id, hospital_name=hospital_name,
+        submitted_by=None, submitted_by_name=patient_name, submitted_by_role="patient",
+        message=body.message.strip(),
+    ))
     db.commit()
     return {"message": "Thanks for the suggestion"}
 
@@ -595,12 +616,45 @@ def download_invoice_pdf(
     import json as _json
     items = _json.loads(invoice.items_json)
 
-    checkin = db.query(Checkin).filter(Checkin.id == invoice.checkin_id).first()
-    consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first() if checkin else None
+    # Item 10 fix: build args the same way the staff-side callers do, instead
+    # of a second divergent implementation. checkin_id is always NULL for a
+    # discharge invoice (admission_id is set instead) — the old code looked
+    # doctor up via checkin_id only, silently losing the doctor's name and
+    # admission/discharge dates on a discharge invoice's patient-portal copy.
+    admission_date = discharge_date = None
+    consulting_doctor = None
+    deposit_paid = refund_due = None
+    if invoice.checkin_id:
+        checkin = db.query(Checkin).filter(Checkin.id == invoice.checkin_id).first()
+        consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first() if checkin else None
+    elif invoice.admission_id:
+        from app.models.admission import Admission
+        from app.routers.admissions import _settlement_summary
+        admission = db.query(Admission).filter(Admission.id == invoice.admission_id).first()
+        if admission:
+            consulting_doctor = db.query(Doctor).filter(Doctor.id == admission.admitting_doctor_id).first()
+            admission_date = admission.admission_date
+            discharge_date = admission.discharge_date
+            # Item 2 fix: same Payment Summary block the staff-side discharge
+            # invoice already shows — patient's own portal copy of this
+            # exact invoice was silently missing it.
+            _items, _subtotal, _gst_total, _charges_total, deposit_paid, _tpa_covered, _balance = _settlement_summary(db, admission)
+            refund_due = max(-_balance, 0)
 
-    pdf_path = generate_invoice_pdf(invoice.id, hospital, items, invoice.grand_total, patient, consulting_doctor, receipt_number=invoice.receipt_number)
+    if not invoice.verify_hash:
+        from app.utils.receipts import generate_verify_hash
+        invoice.verify_hash = generate_verify_hash(invoice.id, invoice.hospital_id)
+        db.commit()
+
+    pdf_path = generate_invoice_pdf(
+        invoice.id, hospital, items, invoice.grand_total, patient, consulting_doctor,
+        receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply,
+        admission_date=admission_date, discharge_date=discharge_date,
+        subtotal=invoice.subtotal, gst_total=invoice.gst_total, verify_hash=invoice.verify_hash, is_duplicate=True,
+        deposit_paid=deposit_paid, amount_collected_now=invoice.amount_collected, refund_due=refund_due,
+    )
     return FileResponse(
         pdf_path, media_type="application/pdf",
         filename=f"invoice_{invoice_id}.pdf",
         headers={"Cache-Control": "no-store"}
-    )
+    )   

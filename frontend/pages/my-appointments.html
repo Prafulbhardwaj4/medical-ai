@@ -332,8 +332,7 @@
         <div class="topbar-brand">Med<span>Scribe</span></div>
       </div>
       <div class="topbar-doctor">
-        <button class="btn btn-sm" onclick="openSuggestionModal()"
-          style="background:var(--teal,#0d9488);color:#fff;border:none;margin-right:10px">Suggestions</button>
+
         <span><strong id="topbar-doctor-name"></strong></span>
         <div class="topbar-divider"></div>
         <button class="btn-logout" onclick="logout()">Sign out</button>
@@ -557,23 +556,6 @@
       </div>
       <div class="err-msg" id="hl-err"></div>
       <button class="btn btn-primary" style="width:100%" onclick="submitHospitalLead()">Submit</button>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="modal-suggestion">
-    <div class="modal" style="max-width:420px;background:#f0fdfa">
-      <div class="modal-header">
-        <h3>Suggestions</h3>
-        <button class="modal-close" onclick="closeSuggestionModal()">&times;</button>
-      </div>
-      <div style="padding:16px">
-        <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?"
-          rows="4"></textarea>
-        <div style="display:flex;gap:8px;margin-top:12px">
-          <button class="btn btn-primary btn-sm" onclick="submitSuggestion()">Send</button>
-          <button class="btn btn-outline btn-sm" onclick="closeSuggestionModal()">Cancel</button>
-        </div>
-      </div>
     </div>
   </div>
 

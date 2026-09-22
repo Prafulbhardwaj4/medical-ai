@@ -1049,6 +1049,9 @@
                 const dt = new Date(/[+-]\d\d:\d\d$|Z$/.test(inv.generated_at) ? inv.generated_at : inv.generated_at + "+05:30");
                 const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
                 const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                const paymentLabel = inv.payment_method
+                    ? inv.payment_method.charAt(0).toUpperCase() + inv.payment_method.slice(1)
+                    : '—';
                 return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div style="flex:1;min-width:200px">
@@ -1057,8 +1060,10 @@
             </div>
             <div style="font-size:12px;color:var(--slate);min-width:150px">${dateStr} · ${timeStr}</div>
             <div style="font-size:12px;color:var(--slate);min-width:90px">${inv.item_count} item${inv.item_count === 1 ? '' : 's'}</div>
+            <div style="font-size:12px;color:var(--slate);min-width:70px">${sanitize(paymentLabel)}</div>
             <div style="font-weight:600;min-width:80px">Rs.${inv.grand_total}</div>
             <button class="btn btn-outline btn-sm" onclick="downloadInvoicePdf(${inv.id})">View PDF</button>
+            <button class="btn btn-outline btn-sm" onclick="openCreditDebitNotesModal(${inv.id})">Notes</button>
           </div>
         `;
             }).join('');
@@ -1072,6 +1077,75 @@
                 const blob = await response.blob();
                 window.open(URL.createObjectURL(blob), "_blank");
             } catch (e) { toast('Could not load invoice', 'error'); }
+        }
+
+        // ---------- Credit/Debit Notes (item 4) ----------
+        let cdnInvoiceId = null;
+
+        async function openCreditDebitNotesModal(invoiceId) {
+            cdnInvoiceId = invoiceId;
+            document.getElementById('cdn-amount').value = '';
+            document.getElementById('cdn-reason').value = '';
+            document.getElementById('cdn-err').textContent = '';
+            document.getElementById('modal-credit-debit-notes').classList.add('open');
+            await loadCreditDebitNotes();
+        }
+
+        async function loadCreditDebitNotes() {
+            const list = document.getElementById('cdn-list');
+            list.innerHTML = '<p style="color:var(--slate-light)">Loading…</p>';
+            try {
+                const notes = await api("GET", `/billing/invoices/${cdnInvoiceId}/credit-debit-notes`);
+                if (!notes.length) {
+                    list.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No credit/debit notes on this invoice yet.</p>';
+                    return;
+                }
+                list.innerHTML = notes.map(n => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:8px">
+            <div>
+              <span class="badge ${n.note_type === 'credit' ? 'badge-green' : 'badge-amber'}">${n.note_type.toUpperCase()}</span>
+              <strong style="margin-left:6px">${sanitize(n.note_number)}</strong>
+              <div style="font-size:12px;color:var(--slate)">${sanitize(n.reason)}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-weight:600">Rs.${n.amount.toFixed(2)}</div>
+              <button class="btn btn-outline btn-sm" onclick="downloadCreditDebitNotePdf(${n.id})">PDF</button>
+            </div>
+          </div>
+        `).join('');
+            } catch (e) {
+                list.innerHTML = '<p style="color:var(--red)">Could not load notes.</p>';
+            }
+        }
+
+        async function downloadCreditDebitNotePdf(noteId) {
+            try {
+                const response = await fetch(`${BASE}/billing/credit-debit-notes/${noteId}/pdf`, {
+                    headers: { "Authorization": `Bearer ${getToken()}` }
+                });
+                const blob = await response.blob();
+                window.open(URL.createObjectURL(blob), "_blank");
+            } catch (e) { toast('Could not load note', 'error'); }
+        }
+
+        async function submitCreditDebitNote(noteType) {
+            const err = document.getElementById('cdn-err');
+            err.textContent = '';
+            const amount = parseFloat(document.getElementById('cdn-amount').value);
+            const reason = document.getElementById('cdn-reason').value.trim();
+            if (!amount || amount <= 0) { err.textContent = 'Enter a valid amount.'; return; }
+            if (!reason) { err.textContent = 'A reason is required.'; return; }
+            try {
+                await api("POST", `/billing/invoices/${cdnInvoiceId}/credit-debit-note`, {
+                    note_type: noteType, amount, reason
+                });
+                toast(`${noteType === 'credit' ? 'Credit' : 'Debit'} note created.`, 'success');
+                document.getElementById('cdn-amount').value = '';
+                document.getElementById('cdn-reason').value = '';
+                await loadCreditDebitNotes();
+            } catch (e) {
+                err.textContent = e.message;
+            }
         }
 
         let currentLogoBase64 = null; // null = unchanged, '' = removed, data URI = new upload
@@ -1756,6 +1830,26 @@
                 <button class="modal-close" onclick="closeModal('modal-feedback-notes')">×</button>
             </div>
             <p id="fbn-comment" style="white-space:pre-wrap;color:var(--slate)"></p>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-credit-debit-notes">
+        <div class="modal" style="max-width:480px">
+            <div class="modal-header">
+                <h2>Credit / Debit Notes</h2>
+                <button class="modal-close" onclick="closeModal('modal-credit-debit-notes')">×</button>
+            </div>
+            <div id="cdn-list" style="margin-bottom:16px;max-height:240px;overflow-y:auto"></div>
+            <div class="section-title" style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:8px">Add a manual note</div>
+            <div class="form-group"><label class="form-label">Amount (₹)</label>
+                <input class="form-control" type="number" min="0" step="0.01" id="cdn-amount"></div>
+            <div class="form-group"><label class="form-label">Reason</label>
+                <input class="form-control" id="cdn-reason" placeholder="e.g. Overcharged test fee"></div>
+            <div class="err-msg" id="cdn-err"></div>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-outline" style="flex:1" onclick="submitCreditDebitNote('debit')">Add Debit Note</button>
+                <button class="btn btn-primary" style="flex:1" onclick="submitCreditDebitNote('credit')">Add Credit Note</button>
+            </div>
         </div>
     </div>
 

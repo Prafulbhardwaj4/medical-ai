@@ -190,23 +190,6 @@
       </button>
     </header>
 
-    <div class="modal-overlay" id="modal-suggestion">
-      <div class="modal" style="max-width:420px;background:#f0fdfa">
-        <div class="modal-header">
-          <h3>Suggestions</h3>
-          <button class="modal-close" onclick="closeSuggestionModal()">&times;</button>
-        </div>
-        <div style="padding:16px">
-          <textarea class="form-control" id="suggestion-text" placeholder="Anything we could do better?"
-            rows="4"></textarea>
-          <div style="display:flex;gap:8px;margin-top:12px">
-            <button class="btn btn-primary btn-sm" onclick="submitSuggestion()">Send</button>
-            <button class="btn btn-outline btn-sm" onclick="closeSuggestionModal()">Cancel</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div class="sidebar-backdrop" id="profile-menu-backdrop" onclick="closeProfileMenu()" style="display:none"></div>
     <div class="profile-menu" id="profile-menu">
       <div class="profile-menu-header">
@@ -318,7 +301,10 @@
         Records
       </button>
       <button class="bottom-nav-item" id="bn-appointments" onclick="location.href='my-appointments.html'">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
         Appointments
       </button>
     </nav>
@@ -422,6 +408,7 @@
 
   <script src="../js/suggestion-widget.js?v=1"></script>
   <script src="../js/api.js"></script>
+  <script src="../js/tutorial.js"></script>
   <script src="../js/tutorial.js?v=2"></script>
   <script>
     if (!requireAuth()) { }
@@ -744,6 +731,7 @@
         loadPendingProfiles();
         openConfirmProfilesModal();
         loadStats();
+        initTutorial('patient', 'patient', 'my-health');
         loadRecords();
         loadAdmissions();
       } catch (e) { toast(e.message, "error"); }

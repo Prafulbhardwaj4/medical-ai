@@ -70,7 +70,10 @@ def _link_all_hospital_records(db: Session, account: PatientAccount, phone: str)
 
 
 @router.post("/login", response_model=LoginResultOut)
-def login(body: LoginIn, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, body: LoginIn, db: Session = Depends(get_db)):
+    if not verify_captcha_token(body.captcha_token, body.captcha_answer):
+        raise HTTPException(status_code=400, detail="Incorrect captcha. Please try again.")
     account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
 
     if account:

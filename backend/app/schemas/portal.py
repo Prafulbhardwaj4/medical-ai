@@ -26,6 +26,8 @@ class CompleteSignupIn(BaseModel):
 class LoginIn(BaseModel):
     phone: str
     password: str
+    captcha_token: str
+    captcha_answer: str
 
 
 class PatientSessionOut(BaseModel):

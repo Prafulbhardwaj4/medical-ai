@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
 
-
 class RefundIn(BaseModel):
     patient_id: int
     source_type: str  # "appointment" | "pharmacy" | "ipd_deposit" | "opd_charge" | "tpa" | "other"
@@ -10,7 +9,7 @@ class RefundIn(BaseModel):
     channel: str  # "cash" | "card" | "upi" | "online"
     reason: Optional[str] = None
     invoice_id: Optional[int] = None  # link to the invoice this refund corrects — auto-generates a credit note
-
+    checkin_id: Optional[int] = None  # item 4: pre-finalization refund — nets out as a negative OPD charge line instead of silently vanishing from the eventual invoice. Mutually exclusive with invoice_id (checkin has no invoice yet).
 
 class CreditDebitNoteIn(BaseModel):
     note_type: str  # "credit" | "debit"

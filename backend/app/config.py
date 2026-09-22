@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     FAST2SMS_API_KEY: str = ""
     BASE_URL: str = "http://localhost:8000"
 
+    # Main staff-frontend deployment — used to build the verify.html QR
+    # links on prescriptions and invoices. Single source of truth so it
+    # can never drift from what verify.html's own "only valid at..." copy
+    # says (item 6).
+    PUBLIC_FRONTEND_URL: str = "https://medical-s-ai.vercel.app"
+
     # --- Patient Portal ---
     PORTAL_INVITE_SECRET: str = "changeme-invite-secret"
     PORTAL_INVITE_EXPIRE_DAYS: int = 30

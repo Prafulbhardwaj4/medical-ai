@@ -186,7 +186,7 @@
     document.getElementById("login-id").addEventListener("input", () => {
       const val = document.getElementById("login-id").value.trim();
       const group = document.getElementById("login-captcha-group");
-      if (isEmail(val)) {
+      if (isEmail(val) || isPhone(val)) {
         if (group.style.display === "none") {
           group.style.display = "block";
           loadCaptcha();
@@ -263,13 +263,19 @@
           saveSession(json.access_token, json.doctor);
           redirectByRole(json.doctor.role);
         } else if (isPhone(identifier)) {
+          if (!currentCaptchaToken) { err.textContent = "Please wait for the captcha to load."; return; }
+          const captchaAnswer = document.getElementById("login-captcha-answer").value.trim();
+          if (!captchaAnswer) { err.textContent = "Please answer the captcha question."; return; }
           const res = await fetch(`${BASE}/portal/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ phone: identifier, password })
+            body: JSON.stringify({ phone: identifier, password, captcha_token: currentCaptchaToken, captcha_answer: captchaAnswer })
           });
           const json = await res.json();
-          if (!res.ok) throw new Error(json.detail || "Login failed");
+          if (!res.ok) {
+            if (json.detail && json.detail.toLowerCase().includes("captcha")) loadCaptcha();
+            throw new Error(json.detail || "Login failed");
+          }
 
           if (json.status === "needs_registration") {
             pendingPatientPhone = identifier;

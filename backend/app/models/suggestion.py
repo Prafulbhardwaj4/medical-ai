@@ -12,7 +12,7 @@ class Suggestion(Base):
     id = Column(Integer, primary_key=True, index=True)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     hospital_name = Column(String, nullable=False)  # snapshot at submission time — stays correct even if the hospital is later renamed
-    submitted_by = Column(Integer, ForeignKey("doctors.id"), nullable=False)
+    submitted_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # null for a patient submission — see submitted_by_role
     submitted_by_name = Column(String, nullable=False)  # snapshot
     submitted_by_role = Column(String, nullable=False)  # snapshot
     message = Column(Text, nullable=False)

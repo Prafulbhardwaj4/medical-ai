@@ -102,9 +102,14 @@
         const params = new URLSearchParams(location.search);
         const token = params.get("token");
         const hash = params.get("hash");
+        const verifyType = params.get("type"); // "invoice" or absent (prescription)
+        const invoiceId = params.get("id");
 
         async function loadVerification() {
             const content = document.getElementById("content");
+            if (verifyType === "invoice") {
+                return loadInvoiceVerification();
+            }
             if (!token || !hash) {
                 content.innerHTML = `<div class="status-banner status-invalid">⚠ Invalid verification link</div>`;
                 return;
@@ -174,6 +179,41 @@
                 }
             } catch (e) {
                 toast("Failed to update", "error");
+            }
+        }
+
+        async function loadInvoiceVerification() {
+            const content = document.getElementById("content");
+            document.querySelector(".verify-card p").textContent = "Invoice Verification";
+            if (!invoiceId || !hash) {
+                content.innerHTML = `<div class="status-banner status-invalid">⚠ Invalid verification link</div>`;
+                return;
+            }
+            try {
+                const res = await fetch(`${BASE}/billing/verify/${invoiceId}?hash=${hash}`);
+                const data = await res.json();
+                if (!data.valid) {
+                    content.innerHTML = `
+          <div class="status-banner status-invalid">⚠ ${data.reason}</div>
+          <p style="text-align:center;color:var(--slate);font-size:0.85rem">This invoice could not be verified.</p>
+        `;
+                    return;
+                }
+                content.innerHTML = `
+        <div class="status-banner status-valid">✅ Valid Invoice</div>
+        <div style="font-size:0.85rem;margin-bottom:12px">
+          <div><strong>Receipt No:</strong> ${data.receipt_number || '-'}</div>
+          <div><strong>Hospital:</strong> ${data.hospital_name || '-'}</div>
+          <div><strong>Patient:</strong> ${data.patient_name}</div>
+          <div><strong>Amount:</strong> Rs.${Number(data.grand_total).toFixed(2)}</div>
+          <div><strong>Date:</strong> ${formatDate(data.date)}</div>
+        </div>
+        <p style="text-align:center;color:var(--slate);font-size:0.75rem;margin-top:16px">
+          Only valid at medscribe.in — do not trust other domains.
+        </p>
+      `;
+            } catch (e) {
+                content.innerHTML = `<div class="status-banner status-invalid">⚠ Could not connect to verification server</div>`;
             }
         }
 

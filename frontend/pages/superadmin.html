@@ -517,7 +517,6 @@
           style="padding:9px 12px;background:var(--smoke-mid);border:1.5px solid var(--border);border-radius:var(--radius);font-size:0.9rem;color:var(--slate);white-space:nowrap;font-weight:500">+91</span>
         <input class="form-control" id="a-phone" type="tel" placeholder="9876543210" maxlength="10" style="flex:1" />
       </div>
-      <input class="form-control" id="a-specialization" placeholder="Specialization" style="margin-bottom:14px" />
 
       <div style="margin-bottom:20px;font-size:12.5px;color:var(--slate-light);background:var(--smoke-mid);padding:10px 12px;border-radius:var(--radius)">
         New accounts start with a temporary password. The admin sets their own password the first time they sign in.
@@ -1350,7 +1349,7 @@
       const name = document.getElementById('a-name').value.trim();
       const email = document.getElementById('a-email').value.trim();
       const phone = document.getElementById('a-phone').value.trim();
-      const specialization = document.getElementById('a-specialization').value.trim();
+      const specialization = "Hospital Admin";
 
       if (!name || !email || !phone) {
         err.textContent = 'All required fields must be filled.'; return;

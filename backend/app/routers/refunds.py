@@ -8,9 +8,12 @@ from app.models.refund import Refund
 from app.models.invoice import Invoice
 from app.models.hospital import Hospital
 from app.models.credit_debit_note import CreditDebitNote
+from app.models.checkin import Checkin
+from app.models.opd_charge import OpdCharge
 from app.schemas.billing import RefundIn
 from app.utils.auth import get_current_doctor
 from app.utils.receipts import next_note_number
+from app.utils.timezone import now_ist_naive
 
 router = APIRouter(prefix="/refunds", tags=["refunds"])
 
@@ -47,6 +50,21 @@ def create_refund(body: RefundIn, db: Session = Depends(get_db), current_doctor:
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found for this patient")
 
+    if body.checkin_id and body.invoice_id:
+        raise HTTPException(status_code=400, detail="Provide only one of checkin_id or invoice_id")
+
+    checkin = None
+    if body.checkin_id:
+        checkin = db.query(Checkin).filter(
+            Checkin.id == body.checkin_id,
+            Checkin.hospital_id == current_doctor.hospital_id,
+            Checkin.patient_id == body.patient_id
+        ).first()
+        if not checkin:
+            raise HTTPException(status_code=404, detail="Visit not found for this patient")
+        if checkin.is_finalized:
+            raise HTTPException(status_code=400, detail="This visit's invoice is already finalized — link this refund to the invoice instead so it issues a credit note")
+
     refund = Refund(
         patient_id=body.patient_id, hospital_id=current_doctor.hospital_id,
         source_type=body.source_type, source_id=body.source_id, amount=body.amount,
@@ -56,6 +74,20 @@ def create_refund(body: RefundIn, db: Session = Depends(get_db), current_doctor:
     db.add(refund)
     db.commit()
     db.refresh(refund)
+
+    # Item 4 fix: a refund against a visit that hasn't been billed yet has
+    # nothing to correct — instead of just logging cash out the door, add a
+    # negative OPD charge (same mechanism waivers already use) so the item
+    # nets out automatically the next time this checkin's invoice is
+    # finalized, rather than the refunded item still showing up as a full,
+    # uncredited charge.
+    if checkin:
+        db.add(OpdCharge(
+            checkin_id=checkin.id, patient_id=checkin.patient_id, hospital_id=checkin.hospital_id,
+            description=f"Refund adjustment — {body.reason or 'refund issued'}", amount=-abs(body.amount), quantity=1,
+            added_by=current_doctor.id, status="paid", paid_at=now_ist_naive(),
+        ))
+        db.commit()
 
     # A refund against a real invoice is a GST-relevant correction — it
     # can't just be a cash-transaction log entry, it needs its own

@@ -38,6 +38,43 @@ def cap_sentence(text: str) -> str:
             result.append(s)
     return "".join(result)
 
+def _num_to_words_below_1000(n: int) -> str:
+    ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+            "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+            "Seventeen", "Eighteen", "Nineteen"]
+    tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+    if n == 0:
+        return ""
+    if n < 20:
+        return ones[n]
+    if n < 100:
+        return (tens[n // 10] + (" " + ones[n % 10] if n % 10 else "")).strip()
+    return (ones[n // 100] + " Hundred" + (" " + _num_to_words_below_1000(n % 100) if n % 100 else "")).strip()
+
+def amount_to_words_inr(amount: float) -> str:
+    """Converts a rupee amount into words using the Indian numbering system
+    (lakh/crore) — the mandatory 'Amount in Words' line on a GST tax invoice."""
+    try:
+        rupees = int(round(amount or 0))
+    except (TypeError, ValueError):
+        return ""
+    if rupees == 0:
+        return "Rupees Zero Only"
+    parts = []
+    crore, rupees = divmod(rupees, 10000000)
+    lakh, rupees = divmod(rupees, 100000)
+    thousand, rupees = divmod(rupees, 1000)
+    hundred = rupees
+    if crore:
+        parts.append(_num_to_words_below_1000(crore) + " Crore")
+    if lakh:
+        parts.append(_num_to_words_below_1000(lakh) + " Lakh")
+    if thousand:
+        parts.append(_num_to_words_below_1000(thousand) + " Thousand")
+    if hundred:
+        parts.append(_num_to_words_below_1000(hundred))
+    return "Rupees " + " ".join(parts) + " Only"
+
 def _decode_logo_image(logo_base64):
     """Decode a data URI (data:image/...;base64,...) into a small ReportLab Image flowable.
     Returns None if missing or unreadable — logo is optional everywhere it's used."""
@@ -369,7 +406,7 @@ def generate_prescription_pdf(
         elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
         elements.append(Spacer(1, 3*mm))
 
-        verify_url = f"https://medical-s-ai.vercel.app/pages/verify.html?token={token_number}&hash={verify_hash}"
+        verify_url = f"{settings.PUBLIC_FRONTEND_URL}/pages/verify.html?token={token_number}&hash={verify_hash}"
         verify_url_display = verify_url.replace("&", "&amp;")
 
         qr = qrcode.QRCode(version=1, box_size=4, border=1)
@@ -787,7 +824,12 @@ def generate_radiology_report_pdf(order: object, patient: object, ordering_docto
     return filepath
 
 
-def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None, receipt_number=None, place_of_supply=None, admission_date=None, discharge_date=None) -> str:
+def generate_invoice_pdf(
+    invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None,
+    receipt_number=None, place_of_supply=None, admission_date=None, discharge_date=None,
+    subtotal=None, gst_total=None, verify_hash=None, is_duplicate=False,
+    deposit_paid=None, amount_collected_now=None, refund_due=None,
+) -> str:
     ensure_reports_dir()
     invoices_dir = os.path.join(os.path.dirname(__file__), "..", "..", "invoices")
     os.makedirs(invoices_dir, exist_ok=True)
@@ -801,18 +843,29 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
     styles = getSampleStyleSheet()
     elements = []
 
-    header_style = ParagraphStyle("header", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"))
-    sub_style = ParagraphStyle("sub", fontSize=9, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
+    gst_registered = bool(hospital and hospital.gstin)
 
     elements.extend(build_letterhead(hospital))
     elements.append(Spacer(1, 3*mm))
-    elements.append(Paragraph("INVOICE", ParagraphStyle("inv", fontSize=13, fontName="Helvetica-Bold", alignment=TA_CENTER)))
+    elements.append(Paragraph("TAX INVOICE" if gst_registered else "INVOICE",
+                               ParagraphStyle("inv", fontSize=13, fontName="Helvetica-Bold", alignment=TA_CENTER)))
+    elements.append(Paragraph("DUPLICATE COPY" if is_duplicate else "ORIGINAL FOR RECIPIENT",
+                               ParagraphStyle("copy", fontSize=8, fontName="Helvetica-Oblique", alignment=TA_CENTER, textColor=colors.grey)))
     elements.append(Spacer(1, 4*mm))
     elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#1a237e")))
     elements.append(Spacer(1, 4*mm))
 
-    elements.append(Paragraph(f"<b>Patient:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", styles["Normal"]))
+    # ── Bill To ──
+    bill_to_style = ParagraphStyle("billto", fontSize=9.5, fontName="Helvetica", leading=13)
+    elements.append(Paragraph("<b>Bill To:</b>", bill_to_style))
+    elements.append(Paragraph(patient.name.title(), bill_to_style))
+    elements.append(Paragraph(f"{patient.age}yr | {patient.gender.capitalize()} | Patient ID: {patient.patient_uid}", bill_to_style))
+    if getattr(patient, "address", None):
+        elements.append(Paragraph(patient.address, bill_to_style))
+    if getattr(patient, "phone", None):
+        elements.append(Paragraph(f"Ph: {patient.phone}", bill_to_style))
+    elements.append(Spacer(1, 3*mm))
+
     if receipt_number:
         elements.append(Paragraph(f"<b>Receipt No:</b> {receipt_number} &nbsp;&nbsp; <b>Date:</b> {now_ist().strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     else:
@@ -826,48 +879,234 @@ def generate_invoice_pdf(invoice_id: int, hospital, items: list, grand_total: fl
         elements.append(Paragraph(f"<b>Admission Date:</b> {admission_date.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     if discharge_date:
         elements.append(Paragraph(f"<b>Discharge Date:</b> {discharge_date.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
+    if place_of_supply:
+        elements.append(Paragraph(f"<b>Place of Supply:</b> {place_of_supply}", styles["Normal"]))
     elements.append(Spacer(1, 5*mm))
 
-    # By design, the printed invoice never shows GST/HSN-SAC/tax breakdown —
-    # description, qty, unit price, amount only. Any tax_amount/gst_rate/
-    # hsn_sac fields the caller still passes on `items` (e.g. for internal
-    # reporting) are simply ignored here, not rendered.
-    desc_style = ParagraphStyle("desc", fontSize=9.5, fontName="Helvetica", leading=12)
-    desc_note_style = ParagraphStyle("desc_note", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.grey, leading=10)
-    table_data = [["Description", "Qty", "Unit Price", "Amount"]]
-    for item in items:
-        description_cell = Paragraph(item["name"], desc_style)
-        if item.get("_dispensed_at_pharmacy"):
-            # Admission medicines are only ever billed at the moment pharmacy
-            # actually hands the strip over — so anything in this list was,
-            # by definition, dispensed. Stated as its own line rather than
-            # folded into the item name itself.
-            description_cell = [description_cell, Paragraph("Dispensed at Pharmacy Counter", desc_note_style)]
-        table_data.append([
-            description_cell,
-            str(item.get("qty", 1)),
-            f"Rs.{item['unit_price']:.2f}",
-            f"Rs.{item['line_total']:.2f}"
-        ])
-    table_data.append(["", "", "Grand Total", f"Rs.{grand_total:.2f}"])
-    col_widths = [85*mm, 20*mm, 30*mm, 30*mm]
-    footer_rows = 1
+    payable_items = [i for i in items if i.get("payable_here", True) is not False]
+    pharmacy_items = [i for i in items if i.get("payable_here", True) is False]
+
+    gst_enabled = gst_registered and any(i.get("gst_rate") for i in payable_items)
+    desc_style = ParagraphStyle("desc", fontSize=8 if gst_enabled else 9.5, fontName="Helvetica", leading=11)
+    desc_note_style = ParagraphStyle("desc_note", fontSize=7.5, fontName="Helvetica-Oblique", textColor=colors.grey, leading=9)
+
+    if gst_enabled:
+        # ── Full GST breakdown per line item — item 1/2 fix ──
+        table_data = [["#", "Description", "HSN/SAC", "Qty", "Rate", "Taxable", "GST%", "CGST", "SGST", "Amount"]]
+        for idx, item in enumerate(payable_items, 1):
+            table_data.append([
+                str(idx),
+                Paragraph(item["name"], desc_style),
+                item.get("hsn_sac") or "-",
+                str(item.get("qty", 1)),
+                f"{item.get('unit_price', 0):.2f}",
+                f"{item.get('taxable_amount', item.get('line_total', 0)):.2f}",
+                f"{item.get('gst_rate', 0):.1f}%" if item.get("gst_rate") else "-",
+                f"{item.get('cgst_amount', 0):.2f}",
+                f"{item.get('sgst_amount', 0):.2f}",
+                f"{item.get('total_with_tax', item.get('line_total', 0)):.2f}",
+            ])
+        subtotal_val = subtotal if subtotal is not None else sum(i.get("taxable_amount", i.get("line_total", 0)) for i in payable_items)
+        gst_total_val = gst_total if gst_total is not None else sum(i.get("tax_amount", 0) for i in payable_items)
+        table_data.append(["", "", "", "", "", "Subtotal", f"{subtotal_val:.2f}", "GST", "", f"{gst_total_val:.2f}"])
+        table_data.append(["", "", "", "", "", "", "", "", "Grand Total", f"Rs.{grand_total:.2f}"])
+        col_widths = [8*mm, 38*mm, 15*mm, 9*mm, 15*mm, 17*mm, 12*mm, 16*mm, 16*mm, 24*mm]
+        footer_rows = 2
+    else:
+        table_data = [["Description", "Qty", "Unit Price", "Amount"]]
+        for item in payable_items:
+            table_data.append([
+                Paragraph(item["name"], desc_style),
+                str(item.get("qty", 1)),
+                f"Rs.{item.get('unit_price', 0):.2f}",
+                f"Rs.{item.get('line_total', 0):.2f}"
+            ])
+        table_data.append(["", "", "Grand Total", f"Rs.{grand_total:.2f}"])
+        col_widths = [85*mm, 20*mm, 30*mm, 30*mm]
+        footer_rows = 1
 
     t = Table(table_data, colWidths=col_widths)
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTNAME", (0, -footer_rows), (-1, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        ("FONTSIZE", (0, 0), (-1, -1), 7.5 if gst_enabled else 9.5),
         ("GRID", (0, 0), (-1, -footer_rows - 1), 0.4, colors.lightgrey),
         ("LINEABOVE", (0, -footer_rows), (-1, -footer_rows), 1, colors.HexColor("#1a237e")),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(t)
+    elements.append(Spacer(1, 3*mm))
+    elements.append(Paragraph(f"<b>Amount Chargeable (in words):</b> {amount_to_words_inr(grand_total)}",
+                               ParagraphStyle("words", fontSize=8.5, fontName="Helvetica-Oblique")))
+    elements.append(Spacer(1, 6*mm))
+
+    # ── Items dispensed at pharmacy — unambiguous "not included" section (item 6) ──
+    if pharmacy_items:
+        elements.append(Paragraph("Dispensed at Pharmacy Counter — Not Included in This Bill",
+                                   ParagraphStyle("pharmnote", fontSize=9, fontName="Helvetica-Bold", textColor=colors.HexColor("#92400e"))))
+        ph_data = [["Description", "Qty", "Unit Price", "Amount"]]
+        ph_subtotal = 0.0
+        for item in pharmacy_items:
+            ph_subtotal += item.get("line_total", 0)
+            ph_data.append([
+                Paragraph(item["name"], desc_style),
+                str(item.get("qty", 1)),
+                f"Rs.{item.get('unit_price', 0):.2f}",
+                f"Rs.{item.get('line_total', 0):.2f}"
+            ])
+        ph_data.append(["", "", "Billed separately at Pharmacy", f"Rs.{ph_subtotal:.2f}"])
+        ph_table = Table(ph_data, colWidths=[85*mm, 20*mm, 30*mm, 30*mm])
+        ph_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fef3c7")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Oblique"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+            ("GRID", (0, 0), (-1, -2), 0.4, colors.HexColor("#fde68a")),
+            ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#f59e0b")),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(Spacer(1, 2*mm))
+        elements.append(ph_table)
+        elements.append(Spacer(1, 6*mm))
+
+    # ── Payment summary — deposit / collected / refund (item 7) ──
+    if deposit_paid is not None or amount_collected_now is not None or refund_due is not None:
+        elements.append(Paragraph("Payment Summary", ParagraphStyle("paysum", fontSize=9.5, fontName="Helvetica-Bold")))
+        pay_rows = []
+        if deposit_paid is not None:
+            pay_rows.append(["Deposit Paid (during stay)", f"Rs.{deposit_paid:.2f}"])
+        pay_rows.append(["Total Bill (Grand Total)", f"Rs.{grand_total:.2f}"])
+        if amount_collected_now is not None:
+            pay_rows.append(["Amount Collected at Discharge", f"Rs.{amount_collected_now:.2f}"])
+        if refund_due and refund_due > 0:
+            pay_rows.append(["Refund Due to Patient", f"Rs.{refund_due:.2f}"])
+        pay_table = Table(pay_rows, colWidths=[110*mm, 50*mm])
+        pay_table.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.lightgrey),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(Spacer(1, 2*mm))
+        elements.append(pay_table)
+        elements.append(Spacer(1, 6*mm))
+
+    # ── Declaration / signatory (item 8) ──
+    decl_style = ParagraphStyle("decl", fontSize=7.5, fontName="Helvetica", textColor=colors.grey, leading=10)
+    elements.append(Paragraph(
+        "Declaration: We hereby certify that the goods/services described above are true and correct, "
+        "and the amount charged does not exceed the amount permissible under applicable GST law. "
+        "This is a computer-generated invoice and does not require a physical signature.",
+        decl_style
+    ))
+    elements.append(Spacer(1, 8*mm))
+    sig_style = ParagraphStyle("sig", fontSize=9, fontName="Helvetica", alignment=TA_RIGHT)
+    elements.append(Paragraph(f"For {hospital.name if hospital else ''}", sig_style))
+    elements.append(Spacer(1, 10*mm))
+    elements.append(Paragraph("Authorized Signatory", sig_style))
+    elements.append(Spacer(1, 6*mm))
+
+    # ── QR Code + Verification (item 9) ──
+    if verify_hash:
+        elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
+        elements.append(Spacer(1, 3*mm))
+        verify_url = f"{settings.PUBLIC_FRONTEND_URL}/pages/verify.html?type=invoice&id={invoice_id}&hash={verify_hash}"
+        verify_url_display = verify_url.replace("&", "&amp;")
+        qr = qrcode.QRCode(version=1, box_size=4, border=1)
+        qr.add_data(verify_url)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="#0f1f3d", back_color="white")
+        qr_buffer = io.BytesIO()
+        qr_img.save(qr_buffer, format="PNG")
+        qr_buffer.seek(0)
+        qr_image = Image(qr_buffer, width=22*mm, height=22*mm)
+        verify_text_style = ParagraphStyle("verifytext", fontSize=8, fontName="Helvetica", leading=12, textColor=colors.HexColor("#334155"))
+        verify_block = [[
+            qr_image,
+            Paragraph(
+                f"<b>Verify this invoice</b><br/>"
+                f"Scan QR code to verify authenticity.<br/>"
+                f"Verification Code: <b>{verify_hash}</b><br/>"
+                f"Link: {verify_url_display}",
+                verify_text_style
+            )
+        ]]
+        verify_table = Table(verify_block, colWidths=[28*mm, 142*mm])
+        verify_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+        elements.append(verify_table)
+        elements.append(Spacer(1, 4*mm))
+
+    elements.append(Paragraph("Thank you for visiting.", ParagraphStyle("thanks", fontSize=9, alignment=TA_CENTER, textColor=colors.grey)))
+
+    doc.build(elements)
+    return filepath
+
+def generate_credit_debit_note_pdf(note, invoice, hospital, patient) -> str:
+    """Credit/debit note PDF — mirrors generate_invoice_pdf's letterhead
+    conventions (item 4). `note` is a CreditDebitNote row, `invoice` the
+    original Invoice it corrects (may be None if that row was later purged
+    — the invoice_number/invoice_date snapshot on the note covers that)."""
+    ensure_reports_dir()
+    invoices_dir = os.path.join(os.path.dirname(__file__), "..", "..", "invoices")
+    os.makedirs(invoices_dir, exist_ok=True)
+    filepath = os.path.join(invoices_dir, f"note_{note.id}.pdf")
+
+    doc = SimpleDocTemplate(
+        filepath, pagesize=A4,
+        rightMargin=20*mm, leftMargin=20*mm, topMargin=15*mm, bottomMargin=15*mm
+    )
+    elements = []
+    elements.extend(build_letterhead(hospital))
+    elements.append(Spacer(1, 3*mm))
+
+    title = "CREDIT NOTE" if note.note_type == "credit" else "DEBIT NOTE"
+    elements.append(Paragraph(title, ParagraphStyle("cdn", fontSize=13, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"))))
+    elements.append(Spacer(1, 4*mm))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#1a237e")))
+    elements.append(Spacer(1, 4*mm))
+
+    body_style = ParagraphStyle("body", fontSize=9.5, fontName="Helvetica", leading=13)
+    elements.append(Paragraph(f"<b>{title.title()} No:</b> {note.note_number} &nbsp;&nbsp; <b>Date:</b> {note.created_at.strftime('%d %b %Y, %I:%M %p')}", body_style))
+    elements.append(Paragraph(
+        f"<b>Against Invoice:</b> {note.invoice_number or (invoice.receipt_number if invoice else note.invoice_id)} "
+        f"dated {note.invoice_date.strftime('%d %b %Y') if note.invoice_date else '-'}", body_style))
+    elements.append(Spacer(1, 3*mm))
+    if patient:
+        elements.append(Paragraph(f"<b>Bill To:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}", body_style))
+        elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", body_style))
+    elements.append(Spacer(1, 5*mm))
+
+    table_data = [
+        ["Description", "Amount"],
+        [Paragraph(note.reason, body_style), f"Rs.{note.amount:.2f}"],
+        [f"Total {'Credited' if note.note_type == 'credit' else 'Debited'}", f"Rs.{note.amount:.2f}"],
+    ]
+    t = Table(table_data, colWidths=[130*mm, 40*mm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        ("GRID", (0, 0), (-1, 1), 0.4, colors.lightgrey),
+        ("LINEABOVE", (0, -1), (-1, -1), 1, colors.HexColor("#1a237e")),
         ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     elements.append(t)
-    elements.append(Spacer(1, 8*mm))
-    elements.append(Paragraph("Thank you for visiting.", ParagraphStyle("thanks", fontSize=9, alignment=TA_CENTER, textColor=colors.grey)))
+    elements.append(Spacer(1, 6*mm))
+    elements.append(Paragraph(
+        f"This {title.lower()} is issued under GST law to "
+        f"{'reduce' if note.note_type == 'credit' else 'increase'} the value of the original invoice referenced above. "
+        f"This is a computer-generated document and does not require a physical signature.",
+        ParagraphStyle("decl", fontSize=7.5, fontName="Helvetica", textColor=colors.grey, leading=10)
+    ))
 
     doc.build(elements)
     return filepath

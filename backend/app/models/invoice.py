@@ -15,13 +15,13 @@ class Invoice(Base):
     subtotal = Column(Float, nullable=True)  # pre-tax amount; null on invoices generated before GST was wired in
     gst_total = Column(Float, nullable=True)
     generated_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
-    generated_from = Column(String, nullable=True)  # "reception" or "pharmacy"
+    generated_from = Column(String, nullable=True)  # actual stored values: current_doctor.role.value (e.g. "receptionist"/"admin"/"sub_admin"/"pharmacy") or the literal "admission_discharge" — see billing.py::finalize_invoice and admissions.py::discharge_patient
     pdf_path = Column(String, nullable=True)
-    payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi"
+    payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi" | "mixed"
     receipt_number = Column(String, unique=True, nullable=True, index=True)
     amount_collected = Column(Float, nullable=True)  # actual cash/card/upi taken at discharge (shortfall vs deposit) — distinct from grand_total, which is the full bill
     generated_at = Column(DateTime, default=now_ist_naive)
-    place_of_supply = Column(String, nullable=True)  # GST-mandatory invoice field — state name, snapshotted from the hospital's own state at generation time (see app.utils.gst's documented intra-state assumption)
+    verify_hash = Column(String, nullable=True, unique=True, index=True)  # QR/verify.html code, same pattern as Consultation.verify_hash
 
     # Reserved for e-invoicing (IRN/QR via the government IRP) — columns
     # only, nothing populates or reads these yet. Actual IRP integration is
@@ -30,5 +30,5 @@ class Invoice(Base):
     irn_ack_no = Column(String, nullable=True)  # IRP acknowledgement number
     irn_ack_date = Column(DateTime, nullable=True)  # IRP acknowledgement timestamp
     einvoice_qr_data = Column(Text, nullable=True)  # signed QR payload string returned by the IRP
-    einvoice_status = Column(String, nullable=True)  # "not_applicable" | "pending" | "generated" | "failed" — null today since nothing sets it yet
-    place_of_supply = Column(String, nullable=True)  # snapshot of the hospital's state at generation time — see app.utils.gst's intra-state assumption
+    einvoice_status = Column(String, nullable=True)  # "not_applicable" | "pending" | "generated" | "failed" — null today since nothing sets it yet. NOTE: verify_hash/QR above is MedScribe's own authenticity check, NOT this — don't conflate the two when talking to a CA or in a pitch deck.
+    place_of_supply = Column(String, nullable=True)  # GST-mandatory invoice field — state name, snapshotted from the hospital's own state at generation time (see app.utils.gst's documented intra-state assumption)

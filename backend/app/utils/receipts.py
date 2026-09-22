@@ -64,3 +64,13 @@ def next_note_number(db: Session, hospital, note_type: str) -> str:
     prefix = "CN" if note_type == "credit" else "DN"
     n = _next_sequence_number(db, hospital.id, f"note_{note_type}", fy)
     return f"{hospital.hospital_code}-{prefix}-{fy}-{n:05d}"
+
+
+def generate_verify_hash(invoice_id: int, hospital_id: int) -> str:
+    """Deterministic-but-unguessable verification code for the invoice QR /
+    verify.html flow (item 9) — same SECRET_KEY-salted sha256-truncation
+    pattern already used for prescriptions (Consultation.verify_hash)."""
+    import hashlib
+    from app.config import settings
+    hash_input = f"invoice-{invoice_id}-{hospital_id}-{settings.SECRET_KEY}"
+    return hashlib.sha256(hash_input.encode()).hexdigest()[:16].upper()
