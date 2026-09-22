@@ -9,15 +9,17 @@
 
 (function () {
   const EXCLUDED_ROLES = ["super_admin"];
+  // A patient session (no .role — that field only exists on staff/Doctor
+  // sessions) can only submit; it has no "my past suggestions" list here,
+  // since that's a separate, staff-only endpoint. Module-scoped so every
+  // function below (mount, submit, loadMine) can see it, not just mount().
+  let isPatientSession = false;
 
   function mount() {
     const doctor = getDoctor();
     if (!doctor || !getToken()) return;
     if (EXCLUDED_ROLES.includes(doctor.role)) return;
-    // A patient session (no .role — that field only exists on staff/Doctor
-    // sessions) can only submit; it has no "my past suggestions" list here,
-    // since that's a separate, staff-only endpoint.
-    const isPatientSession = !doctor.role;
+    isPatientSession = !doctor.role;
 
     const profileBtn = document.querySelector(".topbar-profile-btn");
     if (!profileBtn || !profileBtn.parentNode) return;

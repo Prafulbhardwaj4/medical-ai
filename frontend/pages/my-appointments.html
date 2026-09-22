@@ -15,6 +15,33 @@
       margin-bottom: 18px;
       padding-bottom: 14px;
       border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 600px) {
+      .wizard-topbar {
+        gap: 8px;
+      }
+
+      #wizard-hospital-lead-btn {
+        white-space: normal !important;
+        margin-left: 0 !important;
+        flex: 1 1 100%;
+        order: 3;
+      }
+
+      .wizard-step-title {
+        font-size: 0.98rem;
+      }
+
+      #wizard-card {
+        padding: 16px 14px;
+      }
+
+      .modal-confirm .modal,
+      #modal-confirm .modal {
+        max-width: 92vw;
+      }
     }
 
     .wizard-back-btn {
@@ -1351,10 +1378,7 @@
 
     updateHeader();
     setStep("location", false).then(() => {
-      if (!localStorage.getItem("ms_seen_appointments_tour")) {
-        localStorage.setItem("ms_seen_appointments_tour", "1");
-        runAppointmentDemoTour(false);
-      }
+      runAppointmentDemoTour(false);
     });
   </script>
 </body>

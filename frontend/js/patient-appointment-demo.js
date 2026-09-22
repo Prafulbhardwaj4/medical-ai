@@ -33,6 +33,17 @@ async function runAppointmentDemoTour(isReplay) {
     // definitely exist before the tour tries to point at them, regardless
     // of wherever the person currently is in a real booking attempt.
     await setStep("location", false);
+  } else {
+    // This is a *local* tour (startLocalTour), so it never went through
+    // initTutorial's completion tracking — it was firing on literally
+    // every page load. Same 2-scenario rule as everywhere else: auto-show
+    // once, mark seen immediately, only manual replay (isReplay=true,
+    // handled above) bypasses this.
+    try {
+      const status = await api("GET", "/tutorials/status/patient?page=my-appointments-booking");
+      if (status.completed) return;
+      api("POST", "/tutorials/status/patient/complete?page=my-appointments-booking").catch(() => {});
+    } catch (e) { return; }
   }
   try { _demoProfiles = await api("GET", "/portal/dashboard/profiles"); } catch (e) { _demoProfiles = []; }
 
@@ -66,7 +77,7 @@ async function runAppointmentDemoTour(isReplay) {
       title: "Date & Time", description: "Pick a date, then an open time slot. Green means plenty of slots left, yellow means filling up, red means full.",
       onNext: () => { _openDemoConfirmModal(); },
       onBack: () => { _renderDemoProfileStep(); } },
-    { target_selector: "#btn-pay-book", placement: "bottom", align: "center", device: "both", nextLabel: "Confirm Booking →", tooltipWidth: 340,
+    { target_selector: "#btn-pay-book", placement: "left", device: "both", nextLabel: "Confirm Booking →", tooltipWidth: 340,
       title: "Confirm Booking", description: "Check the details, then confirm — you pay at the hospital when you arrive, nothing is charged online.",
       onNext: () => { _renderDemoConfirmedStep(); },
       onBack: () => { document.getElementById("modal-confirm").classList.remove("open"); _renderDemoDatetimeStep(); } },
@@ -143,7 +154,9 @@ function _renderDemoDatetimeStep() {
     return { dayNum: d.getDate(), abbr: d.toLocaleDateString('en-IN', { weekday: 'short' }) };
   });
   const slotRow = (times) => `<div class="slot-grid">${times.map(([t, level]) =>
-    `<div class="slot-chip ${level}" onclick="_openDemoConfirmModal(); advanceLocalTour();"><span class="dot"></span>${t}</div>`).join('')}</div>`;
+    level === "red"
+      ? `<div class="slot-chip red" style="cursor:not-allowed;opacity:0.6" onclick="toast('This slot is full.','info')"><span class="dot"></span>${t}</div>`
+      : `<div class="slot-chip ${level}" onclick="_openDemoConfirmModal(); advanceLocalTour();"><span class="dot"></span>${t}</div>`).join('')}</div>`;
 
   area.innerHTML = `
     <div id="demo-datetime-area">
@@ -154,7 +167,7 @@ function _renderDemoDatetimeStep() {
         </div>
       </div>
       <div class="slot-period-title">Morning</div>
-      ${slotRow([["9:00 AM", "green"], ["9:30 AM", "yellow"], ["10:00 AM", "green"]])}
+      ${slotRow([["9:00 AM", "green"], ["9:30 AM", "yellow"], ["10:00 AM", "red"]])}
     </div>`;
 }
 

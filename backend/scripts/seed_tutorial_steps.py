@@ -146,6 +146,10 @@ STEPS = [
      "target_selector": "#suggestion-header-btn", "title": "Suggest",
      "description": "Have an idea to improve MedScribe? Send it here.",
      "placement": "bottom"},
+    {"role": "patient", "page": "my-health", "device": "both", "step_order": 6,
+     "target_selector": ".topbar-profile-btn", "title": "Profile",
+     "description": "Your account settings — and you can replay this tutorial from here any time.",
+     "placement": "bottom"},
 
     # ═══ pharmacy / pharmacy.html — "pharmacy-catalog" page (Medicine Catalog
     # tab) — uses a DEMO medicine row (injected only while this tutorial is
