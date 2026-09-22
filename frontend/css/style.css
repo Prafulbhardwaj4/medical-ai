@@ -2247,7 +2247,7 @@ tbody tr:hover {
   }
 
   .topbar-right-group {
-    margin-left: auto;
+    margin-left: 0;
   }
 
   .topbar-brand {
