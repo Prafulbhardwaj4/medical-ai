@@ -1561,6 +1561,14 @@ def todays_queue(
             Doctor.id.in_([r.referring_doctor_id for r in referrals_by_checkin.values()])
         ).all()
     }
+    # A patient sent for admission has effectively been seen by the doctor
+    # even though no Consultation row exists for this visit — without this,
+    # they'd sit in the queue as "waiting" forever after Send Admit.
+    admitted_referral_patient_ids = set(
+        pid for (pid,) in db.query(AdmissionReferral.patient_id).filter(
+            AdmissionReferral.patient_id.in_(patient_ids)
+        ).all()
+    )
 
     result = []
     for c in checkins:
@@ -1580,7 +1588,7 @@ def todays_queue(
             "issue_category": c.issue_category,
             "created_at": c.created_at.isoformat(),
             "estimated_time": c.booked_time.isoformat() if c.booked_time else None,
-            "status": "returned" if c.is_returned else ("done" if c.token_number in confirmed_tokens else "waiting"),
+            "status": "returned" if c.is_returned else ("done" if (c.token_number in confirmed_tokens or c.patient_id in admitted_referral_patient_ids) else "waiting"),
             "is_emergency": c.is_emergency,
             "is_referral": ref is not None,
             "referral_note": ref.note if ref else None,

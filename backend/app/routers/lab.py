@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from datetime import date, datetime, timedelta
@@ -23,9 +23,13 @@ from app.utils.order_lifecycle import is_order_expired
 from app.routers.attendance import require_present
 from app.services.pdf_service import generate_test_report_pdf, generate_combined_test_report_pdf
 from fastapi.responses import FileResponse
+from app.utils.receipts import next_report_number, generate_verify_hash
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 import os
 
 router = APIRouter(prefix="/lab", tags=["lab"])
+limiter = Limiter(key_func=get_remote_address)
 
 VALID_TRANSITIONS = {"sample_collected", "processing", "result_entered"}
 
@@ -945,6 +949,9 @@ def update_order_status(
         order.verified_by = current_doctor.id
         order.verified_at = now_ist_naive()
         order.self_verified_sole_staff = True
+        release_hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+        order.report_reference = next_report_number(db, release_hospital, "lab")
+        order.verify_hash = generate_verify_hash(order.id, order.hospital_id, kind="lab_report")
 
     db.commit()
 
@@ -1131,6 +1138,9 @@ def verify_and_release_result(
     order.self_verified_sole_staff = self_verified_sole_staff
     if body and body.is_idsp_notifiable:
         order.is_idsp_notifiable = True
+    verify_hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    order.report_reference = next_report_number(db, verify_hospital, "lab")
+    order.verify_hash = generate_verify_hash(order.id, order.hospital_id, kind="lab_report")
     db.commit()
 
     log_action(
@@ -1242,13 +1252,26 @@ def get_test_report(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
+    if not order.verify_hash:
+        # Self-heal for orders verified before this migration ran.
+        order.report_reference = order.report_reference or next_report_number(db, current_doctor.hospital, "lab")
+        order.verify_hash = generate_verify_hash(order.id, order.hospital_id, kind="lab_report")
+        db.commit()
+
+    mlc_custody_count = 0
+    if order.is_mlc_sample:
+        from app.models.mlc_custody import MlcChainOfCustody
+        mlc_custody_count = db.query(MlcChainOfCustody).filter(MlcChainOfCustody.test_order_id == order.id).count()
+
     filepath = generate_test_report_pdf(
         order=order,
         patient=patient,
         catalog_item=catalog_item,
         ordering_doctor=ordering_doctor,
         lab_staff=lab_staff,
-        hospital=current_doctor.hospital
+        hospital=current_doctor.hospital,
+        verify_hash=order.verify_hash,
+        mlc_custody_count=mlc_custody_count,
     )
 
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
@@ -1519,15 +1542,84 @@ def get_combined_test_report(
             "accessioned_at": order.accessioned_at,
             "verified_at": order.verified_at,
             "is_nabl_accredited": catalog_item.is_nabl_accredited if catalog_item else False,
+            "report_reference": order.report_reference,
         })
 
+    sorted_ids = "-".join(str(i) for i in sorted(ids))
+    combined_verify_hash = generate_verify_hash(sorted_ids, current_doctor.hospital_id, kind="combined_lab_report")
+
     filepath = generate_combined_test_report_pdf(
-        order_id_key=f"{orders[0].patient_id}_{'-'.join(str(o.id) for o in orders)}",
+        order_id_key=f"{orders[0].patient_id}_{sorted_ids}",
         tests_payload=tests_payload,
         patient=patient,
         ordering_doctor=ordering_doctor,
         lab_staff=lab_staff,
-        hospital=current_doctor.hospital
+        hospital=current_doctor.hospital,
+        verify_hash=combined_verify_hash,
     )
 
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
+
+
+@router.get("/verify/{order_id}")
+@limiter.limit("10/minute")
+def verify_lab_report(request: Request, order_id: int, hash: str, db: Session = Depends(get_db)):
+    """Public, unauthenticated — item 1, same pattern as billing.py's
+    invoice verify endpoint. Masks the patient name."""
+    order = db.query(TestOrder).filter(TestOrder.id == order_id).first()
+    if not order:
+        return {"valid": False, "reason": "Report not found"}
+    if not order.verify_hash or order.verify_hash != hash:
+        return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
+
+    patient = db.query(Patient).filter(Patient.id == order.patient_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == order.hospital_id).first()
+    name_parts = (patient.name if patient else "").split()
+    masked_name = name_parts[0] if name_parts else ""
+    if len(name_parts) > 1:
+        masked_name += f" {name_parts[1][0]}."
+
+    return {
+        "valid": True,
+        "report_reference": order.report_reference,
+        "test_name": order.test_name,
+        "hospital_name": hospital.name if hospital else None,
+        "patient_name": masked_name,
+        "date": order.verified_at.isoformat() if order.verified_at else None,
+    }
+
+
+@router.get("/verify/combined")
+@limiter.limit("10/minute")
+def verify_combined_lab_report(request: Request, ids: str, hash: str, db: Session = Depends(get_db)):
+    """Public, unauthenticated — combined-report counterpart, same
+    sorted-ids-as-record-id hash used to build the QR at generation time."""
+    order_ids = sorted(int(x) for x in ids.split("-") if x.strip().isdigit())
+    if not order_ids:
+        return {"valid": False, "reason": "Invalid report link"}
+    orders = db.query(TestOrder).filter(TestOrder.id.in_(order_ids)).all()
+    if not orders or len(orders) != len(order_ids):
+        return {"valid": False, "reason": "Report not found"}
+    hospital_ids = set(o.hospital_id for o in orders)
+    if len(hospital_ids) != 1:
+        return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
+    hospital_id = hospital_ids.pop()
+    expected_hash = generate_verify_hash("-".join(str(i) for i in order_ids), hospital_id, kind="combined_lab_report")
+    if expected_hash != hash:
+        return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
+
+    patient = db.query(Patient).filter(Patient.id == orders[0].patient_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    name_parts = (patient.name if patient else "").split()
+    masked_name = name_parts[0] if name_parts else ""
+    if len(name_parts) > 1:
+        masked_name += f" {name_parts[1][0]}."
+    latest_verified = max((o.verified_at for o in orders if o.verified_at), default=None)
+
+    return {
+        "valid": True,
+        "test_names": [o.test_name for o in orders],
+        "hospital_name": hospital.name if hospital else None,
+        "patient_name": masked_name,
+        "date": latest_verified.isoformat() if latest_verified else None,
+    }

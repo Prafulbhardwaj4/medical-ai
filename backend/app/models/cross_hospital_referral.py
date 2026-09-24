@@ -39,7 +39,9 @@ class CrossHospitalReferral(Base):
     vitals_snapshot_json = Column(Text, nullable=True)
     medicines_snapshot_json = Column(Text, nullable=True)
     tests_snapshot_json = Column(Text, nullable=True)  # shaped like /lab/patient-reports/{id}'s response so the Reports modal can render it directly
+    radiology_snapshot_json = Column(Text, nullable=True)  # item 1 — RadiologyOrder was never captured before this
     progress_notes_snapshot_json = Column(Text, nullable=True)
+
 
     status = Column(String, nullable=False, default="pending")  # pending | rejected | departed | admitted | expired
     acknowledged_at = Column(DateTime, nullable=True)  # Foundation-tier "Acknowledge" only — informational, doesn't change status

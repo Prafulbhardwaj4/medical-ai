@@ -102,13 +102,21 @@
         const params = new URLSearchParams(location.search);
         const token = params.get("token");
         const hash = params.get("hash");
-        const verifyType = params.get("type"); // "invoice" or absent (prescription)
+        const verifyType = params.get("type"); // "invoice" | "lab_report" | "combined_lab_report" | absent (prescription)
         const invoiceId = params.get("id");
+        const reportId = params.get("id");
+        const reportIds = params.get("ids");
 
         async function loadVerification() {
             const content = document.getElementById("content");
             if (verifyType === "invoice") {
                 return loadInvoiceVerification();
+            }
+            if (verifyType === "lab_report") {
+                return loadLabReportVerification();
+            }
+            if (verifyType === "combined_lab_report") {
+                return loadCombinedLabReportVerification();
             }
             if (!token || !hash) {
                 content.innerHTML = `<div class="status-banner status-invalid">⚠ Invalid verification link</div>`;
@@ -206,6 +214,75 @@
           <div><strong>Hospital:</strong> ${data.hospital_name || '-'}</div>
           <div><strong>Patient:</strong> ${data.patient_name}</div>
           <div><strong>Amount:</strong> Rs.${Number(data.grand_total).toFixed(2)}</div>
+          <div><strong>Date:</strong> ${formatDate(data.date)}</div>
+        </div>
+        <p style="text-align:center;color:var(--slate);font-size:0.75rem;margin-top:16px">
+          Only valid at medscribe.in — do not trust other domains.
+        </p>
+      `;
+            } catch (e) {
+                content.innerHTML = `<div class="status-banner status-invalid">⚠ Could not connect to verification server</div>`;
+            }
+        }
+
+        async function loadLabReportVerification() {
+            const content = document.getElementById("content");
+            document.querySelector(".verify-card p").textContent = "Lab Report Verification";
+            if (!reportId || !hash) {
+                content.innerHTML = `<div class="status-banner status-invalid">⚠ Invalid verification link</div>`;
+                return;
+            }
+            try {
+                const res = await fetch(`${BASE}/lab/verify/${reportId}?hash=${hash}`);
+                const data = await res.json();
+                if (!data.valid) {
+                    content.innerHTML = `
+          <div class="status-banner status-invalid">⚠ ${data.reason}</div>
+          <p style="text-align:center;color:var(--slate);font-size:0.85rem">This report could not be verified.</p>
+        `;
+                    return;
+                }
+                content.innerHTML = `
+        <div class="status-banner status-valid">✅ Valid Report</div>
+        <div style="font-size:0.85rem;margin-bottom:12px">
+          <div><strong>Report Ref:</strong> ${data.report_reference || '-'}</div>
+          <div><strong>Test:</strong> ${data.test_name || '-'}</div>
+          <div><strong>Hospital:</strong> ${data.hospital_name || '-'}</div>
+          <div><strong>Patient:</strong> ${data.patient_name}</div>
+          <div><strong>Date:</strong> ${formatDate(data.date)}</div>
+        </div>
+        <p style="text-align:center;color:var(--slate);font-size:0.75rem;margin-top:16px">
+          Only valid at medscribe.in — do not trust other domains.
+        </p>
+      `;
+            } catch (e) {
+                content.innerHTML = `<div class="status-banner status-invalid">⚠ Could not connect to verification server</div>`;
+            }
+        }
+
+        async function loadCombinedLabReportVerification() {
+            const content = document.getElementById("content");
+            document.querySelector(".verify-card p").textContent = "Lab Report Verification";
+            if (!reportIds || !hash) {
+                content.innerHTML = `<div class="status-banner status-invalid">⚠ Invalid verification link</div>`;
+                return;
+            }
+            try {
+                const res = await fetch(`${BASE}/lab/verify/combined?ids=${reportIds}&hash=${hash}`);
+                const data = await res.json();
+                if (!data.valid) {
+                    content.innerHTML = `
+          <div class="status-banner status-invalid">⚠ ${data.reason}</div>
+          <p style="text-align:center;color:var(--slate);font-size:0.85rem">This report could not be verified.</p>
+        `;
+                    return;
+                }
+                content.innerHTML = `
+        <div class="status-banner status-valid">✅ Valid Report</div>
+        <div style="font-size:0.85rem;margin-bottom:12px">
+          <div><strong>Tests:</strong> ${(data.test_names || []).join(', ')}</div>
+          <div><strong>Hospital:</strong> ${data.hospital_name || '-'}</div>
+          <div><strong>Patient:</strong> ${data.patient_name}</div>
           <div><strong>Date:</strong> ${formatDate(data.date)}</div>
         </div>
         <p style="text-align:center;color:var(--slate);font-size:0.75rem;margin-top:16px">

@@ -2334,7 +2334,7 @@
         const sel = document.getElementById('doc-select');
         const defaultId = ordered[0].id;
         sel.innerHTML = ordered.map(d =>
-          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name} — ${d.specialization}${d.status === 'on_break' ? ' (On Break)' : ''}${d.location === 'on_rounds' ? ' (On Round)' : ''}</option>`
+          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name}${d.specialization ? ` — ${d.specialization}` : ''}${d.status === 'on_break' ? ' (On Break)' : ''}${d.location === 'on_rounds' ? ' (On Round)' : ''}</option>`
         ).join('');
         document.getElementById('doc-step-room-name').textContent = selectedRoom.display || selectedRoom.name || `Room ${selectedRoom.room_number}`;
         document.getElementById('fee-group').style.display = getDoctor()?.billing_enabled ? '' : 'none';

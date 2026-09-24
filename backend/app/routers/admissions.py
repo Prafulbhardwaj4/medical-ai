@@ -629,6 +629,22 @@ def send_to_admission(body: SendToAdmissionIn, current_doctor: Doctor = Depends(
     )
     db.add(referral)
 
+    # Sending straight to admission is a completed consultation outcome too —
+    # same OpdReferral status flip confirm_prescription does, so the patient
+    # doesn't sit stuck as "pending" in reception's queue just because the
+    # doctor admitted them instead of writing a prescription.
+    from app.models.checkin import Checkin
+    from app.models.opd_referral import OpdReferral
+    todays_checkin = db.query(Checkin).filter(
+        Checkin.patient_id == patient.id, Checkin.doctor_id == current_doctor.id, Checkin.visit_date == ist_today()
+    ).order_by(Checkin.created_at.desc()).first()
+    if todays_checkin:
+        opd_referral = db.query(OpdReferral).filter(
+            OpdReferral.checkin_id == todays_checkin.id, OpdReferral.status == "pending"
+        ).first()
+        if opd_referral:
+            opd_referral.status = "consulted"
+
     from app.utils.notify import notify_admission_referral
     notify_admission_referral(
         db, current_doctor.hospital_id, patient.id, patient.name,
@@ -754,6 +770,7 @@ def refer_to_hospital(admission_id: str, body: dict, current_doctor: Doctor = De
         vitals_snapshot_json=json.dumps(snapshot["vitals"]),
         medicines_snapshot_json=json.dumps(snapshot["medicines"]),
         tests_snapshot_json=json.dumps(snapshot["visits"]),
+        radiology_snapshot_json=json.dumps(snapshot["radiology"]),
         progress_notes_snapshot_json=json.dumps(snapshot["progress_notes"]),
         status="pending", expires_at=now_ist_naive() + timedelta(hours=24),
     )
@@ -762,7 +779,7 @@ def refer_to_hospital(admission_id: str, body: dict, current_doctor: Doctor = De
     referral.chain_id = chain_id_source or referral.id
 
     admission.pending_outbound_referral_id = referral.id
-    if current_doctor.role.value == "nurse":
+    if current_doctor.role.value in ("nurse", "doctor"):
         admission.referral_discharge_authorized = True
 
     to_hospital = db.query(Hospital).filter(Hospital.id == payload.to_hospital_id).first()

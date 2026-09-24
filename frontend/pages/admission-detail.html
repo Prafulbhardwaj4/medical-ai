@@ -1058,10 +1058,20 @@
       <div class="err-msg" id="discharge-err"></div>
       <button class="btn btn-primary" style="width:100%" id="btn-discharge-patient" onclick="submitDischarge()" disabled
         title="Collect payment first">Discharge Patient</button>
+    </div>
+  </div>
 
-      <div id="discharge-output-options"
-        style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
-        <p style="font-size:13px;color:var(--slate);margin-bottom:8px">Patient discharged. Share the invoice:</p>
+  <!-- Shown after a successful discharge, in place of the discharge form
+       modal (not appended inline below it) — a clean single-purpose screen
+       instead of the share options trailing a now-irrelevant form. -->
+  <div class="modal-overlay" id="modal-discharge-share">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header">
+        <h2>Patient Discharged</h2>
+        <button class="modal-close" onclick="closeModal('modal-discharge-share')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--slate);margin-bottom:12px">Share the invoice:</p>
         <div style="display:flex;gap:10px">
           <button class="btn btn-outline" style="flex:1" onclick="printDischargeInvoice()">Print</button>
           <button class="btn btn-outline" style="flex:1"
@@ -2045,10 +2055,12 @@
             <div style="font-weight:600;color:var(--navy);margin-bottom:6px">${sanitize(hop.hospital_name)}</div>
             ${hop.diagnosis ? `<div style="font-size:13px;color:var(--slate);margin-bottom:4px"><strong>Diagnosis:</strong> ${sanitize(hop.diagnosis)}</div>` : ''}
             ${hop.clinical_note ? `<div style="font-size:13px;color:var(--slate);margin-bottom:8px"><strong>Note:</strong> ${sanitize(hop.clinical_note)}</div>` : ''}
-            ${hop.progress_notes && hop.progress_notes.length ? `<div style="font-size:12.5px;color:var(--slate-light);margin-bottom:8px">${hop.progress_notes.length} progress note${hop.progress_notes.length > 1 ? 's' : ''} on file</div>` : ''}
             <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" onclick='openVitalsModalWithData("Vitals — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.vitals)})'>Vitals</button>
               <button class="btn btn-outline btn-sm" onclick='openReportsModalWithData("Reports — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.visits)})'>Test Reports</button>
+              <button class="btn btn-outline btn-sm" onclick='openRadiologyModalWithData("Radiology — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.radiology)})'>Radiology</button>
               <button class="btn btn-outline btn-sm" onclick='openMedicinesModalWithData("Medicines — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.medicines)})'>Medicines</button>
+              ${hop.progress_notes && hop.progress_notes.length ? `<button class="btn btn-outline btn-sm" onclick='openProgressNotesModalWithData("Progress Notes — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.progress_notes)})'>Progress Notes (${hop.progress_notes.length})</button>` : ''}
             </div>
           </div>
         `).join('');
@@ -2340,7 +2352,7 @@
         ? d.topup_requests.map(t => `
             <div class="bill-row" style="align-items:center">
               <span>₹${t.requested_amount.toFixed(2)}${t.reason ? ' — ' + sanitize(t.reason) : ''}
-                <span class="badge ${t.status === 'pending' ? 'badge-orange' : t.status === 'collected' ? 'badge-teal' : 'badge-grey'}" style="margin-left:6px">${t.status}</span>
+                <span class="badge ${t.status === 'pending' ? 'badge-amber' : t.status === 'collected' ? 'badge-teal' : 'badge-grey'}" style="margin-left:6px">${t.status}</span>
               </span>
               ${t.status === 'pending' && admissionData.status === 'admitted' && !isAdminViewer ? `
                 <span style="display:flex;gap:6px">
@@ -2424,7 +2436,7 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
-    const TPA_STATUS_BADGE = { pending: "badge-orange", query_raised: "badge-orange", approved: "badge-teal", denied: "badge-grey" };
+    const TPA_STATUS_BADGE = { pending: "badge-amber", query_raised: "badge-amber", approved: "badge-teal", denied: "badge-grey" };
     const TPA_STATUS_LABEL = { pending: "Pending", query_raised: "Query Raised", approved: "Approved", denied: "Denied" };
 
     function renderTpaCard() {
@@ -3203,7 +3215,31 @@
         closeModal("modal-add-charge");
         toast("Charge added", "success");
         loadAdmission();
+        await refreshDischargePreviewIfOpen();
       } catch (e) { err.textContent = e.message; }
+    }
+
+    async function refreshDischargePreviewIfOpen() {
+      // Shared by every action that can change the bill total while the
+      // discharge modal happens to be open (transfer/ambulance charge,
+      // generic add-charge) — factored out so the refund/due heading and
+      // amount can never drift out of sync between the two entry points.
+      if (!document.getElementById("modal-discharge").classList.contains("open")) return;
+      try {
+        const preview = await api("GET", `/admissions/${admissionId}/discharge-preview`);
+        dischargeAmountDue = preview.amount_due;
+        dischargeRefundDue = preview.refund_due;
+        if (preview.refund_due > 0) {
+          document.getElementById("discharge-amount-label").textContent = "Refund Due to Patient (deposit exceeds charges)";
+          document.getElementById("discharge-amount-due").textContent = `₹${preview.refund_due.toFixed(2)}`;
+        } else {
+          document.getElementById("discharge-amount-label").textContent = "Amount Due (excludes pharmacy — settled separately)";
+          document.getElementById("discharge-amount-due").textContent = `₹${preview.amount_due.toFixed(2)}`;
+        }
+        document.getElementById("discharge-refund-row").style.display = preview.refund_due > 0 ? "block" : "none";
+        document.getElementById("discharge-refund-channel").value = "";
+        document.getElementById("discharge-deposit-context").textContent = `Deposit paid: ₹${preview.deposit_total.toFixed(2)} · Charges accrued: ₹${preview.charges_total.toFixed(2)}`;
+      } catch (e) { /* discharge modal will show its own error on next real interaction */ }
     }
 
     async function addTransferCharge() {
@@ -3214,10 +3250,7 @@
         toast("Transfer charge added", "success");
         document.getElementById("discharge-transfer-charge").value = "";
         document.getElementById("btn-add-transfer-charge").disabled = true;
-        const preview = await api("GET", `/admissions/${admissionId}/discharge-preview`);
-        dischargeAmountDue = preview.amount_due;
-        document.getElementById("discharge-amount-due").textContent = preview.refund_due > 0 ? `₹${preview.refund_due.toFixed(2)}` : `₹${preview.amount_due.toFixed(2)}`;
-        document.getElementById("discharge-deposit-context").textContent = `Deposit paid: ₹${preview.deposit_total.toFixed(2)} · Charges accrued: ₹${preview.charges_total.toFixed(2)}`;
+        await refreshDischargePreviewIfOpen();
       } catch (e) { toast(e.message, "error"); }
     }
 
@@ -3286,7 +3319,12 @@
       document.getElementById("discharge-output-options").style.display = "none";
       document.getElementById("discharge-summary").disabled = false;
       document.getElementById("discharge-amount-due").textContent = "Loading…";
-      const hasActiveOutboundReferral = admissionData?.pending_outbound_referral && admissionData.pending_outbound_referral.status === "pending";
+      // Refresh before deciding the referral bypass — admissionData can be
+      // stale if a doctor placed the refer order in another session while
+      // this page was already open, which was silently defaulting the
+      // discharge type back to "planned" and losing the bypass.
+      try { admissionData = await api("GET", `/admissions/${admissionId}`); } catch (e) { /* fall back to whatever's cached */ }
+      const hasActiveOutboundReferral = admissionData?.pending_outbound_referral && ["pending", "departed"].includes(admissionData.pending_outbound_referral.status);
       hasActiveOutboundReferralFlag = !!hasActiveOutboundReferral;
       document.getElementById("discharge-capacity-note").value = "";
       document.getElementById("discharge-time-of-death").value = "";
@@ -3432,8 +3470,8 @@
           follow_up_instructions: document.getElementById("discharge-followup").value.trim() || null,
         });
         toast("Patient discharged", "success");
-        document.getElementById("discharge-output-options").style.display = "block";
-        document.getElementById("discharge-summary").disabled = true;
+        closeModal("modal-discharge");
+        openModal("modal-discharge-share");
         loadAdmission();
       } catch (e) {
         if (e.message && e.message.toLowerCase().includes("pending")) {

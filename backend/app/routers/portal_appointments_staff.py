@@ -19,7 +19,7 @@ from app.utils.portal_billing import current_doctor_fee, create_patient_cancella
 from app.utils.portal_checkin import convert_appointment_to_checkin
 from app.utils.portal_auth import hash_password
 from app.models.portal import PatientAccount, PatientProfileLink
-from app.routers.portal_appointments import _estimated_slot_datetime, _release_abandoned_holds, _check_no_duplicate_active_booking
+from app.routers.portal_appointments import _estimated_slot_datetime, _release_abandoned_holds, _check_no_duplicate_active_booking, _reassign_late_arrival_slot
 from app.schemas.portal import BookForCallerIn
 import random
 import string
@@ -146,37 +146,7 @@ def collect_payment_at_reception(
         raise HTTPException(status_code=400, detail="Payment already collected for this appointment")
 
     now = now_ist_naive()
-    reassigned = False
-
-    if appt.slot_id and now > appt.requested_time:
-        old_slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.slot_id).with_for_update().first()
-        candidates = db.query(DoctorSlot).filter(
-            DoctorSlot.doctor_id == appt.doctor_id,
-            DoctorSlot.hospital_id == current_doctor.hospital_id,
-            DoctorSlot.slot_date == now.date(),
-            DoctorSlot.id != appt.slot_id,
-        ).order_by(DoctorSlot.slot_time).all()
-
-        new_slot = None
-        for c in candidates:
-            if c.booked_count >= c.capacity:
-                continue
-            if _estimated_slot_datetime(c, c.booked_count + 1) < now:
-                continue
-            new_slot = c
-            break
-
-        if new_slot:
-            new_slot = db.query(DoctorSlot).filter(DoctorSlot.id == new_slot.id).with_for_update().first()
-            if old_slot and old_slot.booked_count > 0:
-                old_slot.booked_count -= 1
-            new_slot.booked_count += 1
-            appt.slot_id = new_slot.id
-            appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
-            appt.arrived_at = None  # fresh grace-window/arrival cycle applies to the new slot
-            reassigned = True
-        # else: no later slot free today — proceed on the original slot/time,
-        # reception handles the wait in person.
+    reassigned = _reassign_late_arrival_slot(db, appt, current_doctor.hospital_id, now)
 
     from app.utils.portal_billing import current_doctor_fee
     if body.fee_amount is not None:

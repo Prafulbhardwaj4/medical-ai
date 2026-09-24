@@ -66,11 +66,27 @@ def next_note_number(db: Session, hospital, note_type: str) -> str:
     return f"{hospital.hospital_code}-{prefix}-{fy}-{n:05d}"
 
 
-def generate_verify_hash(invoice_id: int, hospital_id: int) -> str:
-    """Deterministic-but-unguessable verification code for the invoice QR /
-    verify.html flow (item 9) — same SECRET_KEY-salted sha256-truncation
-    pattern already used for prescriptions (Consultation.verify_hash)."""
+def generate_verify_hash(record_id, hospital_id: int, kind: str = "invoice") -> str:
+    """Deterministic-but-unguessable verification code for the QR /
+    verify.html flow — same SECRET_KEY-salted sha256-truncation pattern
+    used across invoices, lab reports, and radiology reports. `kind`
+    namespaces the hash so an invoice id and a test_order id sharing the
+    same integer never collide. Default kind="invoice" keeps every
+    existing invoice.verify_hash value byte-identical to before — this
+    is a generalization, not a behavior change for invoices."""
     import hashlib
     from app.config import settings
-    hash_input = f"invoice-{invoice_id}-{hospital_id}-{settings.SECRET_KEY}"
+    hash_input = f"{kind}-{record_id}-{hospital_id}-{settings.SECRET_KEY}"
     return hashlib.sha256(hash_input.encode()).hexdigest()[:16].upper()
+
+
+def next_report_number(db: Session, hospital, report_type: str) -> str:
+    """Sequential, unique per financial year, per hospital, per report type
+    ("lab" | "radiology") — same atomic mechanism as next_receipt_number.
+    Format: <hospital_code>-LAB-<FY>-00001 / <hospital_code>-RAD-<FY>-00001
+    (item 3 — extends the existing numbering pattern, doesn't invent a new one)."""
+    from app.utils.timezone import now_ist_naive
+    fy = _financial_year_label(now_ist_naive())
+    prefix = "LAB" if report_type == "lab" else "RAD"
+    n = _next_sequence_number(db, hospital.id, f"report_{report_type}", fy)
+    return f"{hospital.hospital_code}-{prefix}-{fy}-{n:05d}"

@@ -33,6 +33,48 @@ def _estimated_slot_datetime(slot: DoctorSlot, position: int) -> datetime:
     return base + timedelta(minutes=offset_minutes)
 
 
+def _reassign_late_arrival_slot(db: Session, appt: Appointment, hospital_id: int, now: datetime) -> bool:
+    """Shared late-arrival bump, used by both collect_payment_at_reception
+    (staff) and mark_paid (portal) so the two payment paths can't drift out
+    of sync. If the patient is paying after their originally estimated slot
+    time has already passed, releases the old slot and moves them to the
+    next slot for the same doctor today that still has capacity and hasn't
+    itself already passed. Returns True if a reassignment happened."""
+    if not (appt.slot_id and now > appt.requested_time):
+        return False
+
+    old_slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.slot_id).with_for_update().first()
+    candidates = db.query(DoctorSlot).filter(
+        DoctorSlot.doctor_id == appt.doctor_id,
+        DoctorSlot.hospital_id == hospital_id,
+        DoctorSlot.slot_date == now.date(),
+        DoctorSlot.id != appt.slot_id,
+    ).order_by(DoctorSlot.slot_time).all()
+
+    new_slot = None
+    for c in candidates:
+        if c.booked_count >= c.capacity:
+            continue
+        if _estimated_slot_datetime(c, c.booked_count + 1) < now:
+            continue
+        new_slot = c
+        break
+
+    if not new_slot:
+        # No later slot free today — proceed on the original slot/time,
+        # reception (or, once live, the gateway flow) handles the wait.
+        return False
+
+    new_slot = db.query(DoctorSlot).filter(DoctorSlot.id == new_slot.id).with_for_update().first()
+    if old_slot and old_slot.booked_count > 0:
+        old_slot.booked_count -= 1
+    new_slot.booked_count += 1
+    appt.slot_id = new_slot.id
+    appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
+    appt.arrived_at = None  # fresh grace-window/arrival cycle applies to the new slot
+    return True
+
+
 def _to_out(a: Appointment, db: Session) -> AppointmentOut:
     hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
     doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
@@ -251,7 +293,10 @@ def mark_paid(
 ):
     """Static placeholder for a real payment gateway. Only once an
     appointment is marked paid does it show up in the hospital's queue /
-    'Expected Today' view or get auto-matched at check-in."""
+    'Expected Today' view or get auto-matched at check-in.
+    NOTE: when this is wired to a real gateway, the caller also needs to
+    pass payment_method through the same way collect_payment_at_reception
+    does — it's never set here today, only payment_status is."""
     appt = next((a for a in account.appointments if a.id == appointment_id), None)
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
@@ -269,6 +314,11 @@ def mark_paid(
             db.commit()
             db.refresh(appt)
             raise HTTPException(status_code=410, detail="This booking hold expired before payment was completed. Please book again.")
+
+    # Item 1(b) fix: same late-arrival bump collect_payment_at_reception
+    # already has — a patient paying online while running late now gets
+    # moved to the next open slot instead of being stuck on a passed one.
+    _reassign_late_arrival_slot(db, appt, appt.hospital_id, now_ist_naive())
 
     from app.utils.portal_billing import current_doctor_fee
     if appt.doctor_id:

@@ -619,16 +619,24 @@ def notify_referral_departed(db: Session, to_hospital_id: int, referral_id: int,
 
 
 def notify_referral_rejected(db: Session, from_hospital_id: int, admission_id: int, patient_name: str, to_hospital_name: str,
-                              nurse_id: int = None, doctor_id: int = None):
+                              nurse_id: int = None, doctor_id: int = None, already_forwarded_to: str = None):
     """Tells the referring hospital's nurse/doctor a target rejected the
     referral pre-departure, so they know to re-refer. Hospital-wide
     (reception's queue) plus a targeted copy for whoever actually initiated
     the referral, same pattern as notify_referral_admitted. link_id carries
     the admission's internal id (not the referral id) so the frontend can
     jump straight to admission-detail.html via the existing token-for
-    lookup."""
+    lookup.
+    already_forwarded_to: item 6 — reject-and-forward has already auto-
+    forwarded the patient to a new hospital by the time this fires, so
+    telling the referring clinician to "refer to a different hospital"
+    would be wrong; pass the new hospital's name here instead so the
+    message reflects what actually happened."""
     key = f"referral_rejected:{admission_id}:{now_ist_naive().isoformat()}"
-    message = f"{to_hospital_name} declined the referral for {patient_name}. Please refer to a different hospital."
+    if already_forwarded_to:
+        message = f"{to_hospital_name} declined the referral for {patient_name} and forwarded it to {already_forwarded_to}."
+    else:
+        message = f"{to_hospital_name} declined the referral for {patient_name}. Please refer to a different hospital."
     db.add(Notification(
         hospital_id=from_hospital_id, source_key=key, type="referral_rejected", severity="warning",
         title=f"Referral declined — {patient_name}", message=message,

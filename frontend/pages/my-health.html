@@ -860,11 +860,33 @@
       el.style.display = "block";
       el.innerHTML = `<p style="color:var(--slate-light);font-size:12.5px">Loading…</p>`;
       try {
-        const [meds, reports] = await Promise.all([
+        const [meds, reports, vitals] = await Promise.all([
           api("GET", `/portal/dashboard/admissions/${admissionId}/medications`),
           api("GET", `/portal/dashboard/admissions/${admissionId}/reports`),
+          api("GET", `/portal/dashboard/admissions/${admissionId}/vitals`),
         ]);
-        let html = `<div style="font-weight:600;font-size:13px;margin-bottom:4px">Medicines</div>`;
+        let html = `<div style="font-weight:600;font-size:13px;margin-bottom:4px">Vitals</div>`;
+        if (vitals.length) {
+          html += vitals.slice(0, 5).map(v => {
+            const d = v.data || {};
+            const fields = Object.keys(d).map(k => `
+              <span style="margin-right:12px"><span style="color:var(--slate-light)">${sanitize(k)}:</span> ${sanitize(String(d[k]))}</span>
+            `).join('');
+            return `
+              <div style="padding:6px 0;border-top:1px solid var(--border);font-size:13px">
+                <div style="font-size:11.5px;color:var(--slate-light);margin-bottom:2px">${new Date(v.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                ${fields}
+              </div>
+            `;
+          }).join('');
+          if (vitals.length > 5) {
+            html += `<div style="font-size:11.5px;color:var(--slate-light);padding-top:4px">+ ${vitals.length - 5} earlier reading${vitals.length - 5 > 1 ? 's' : ''}</div>`;
+          }
+        } else {
+          html += `<p style="color:var(--slate-light);font-size:12.5px;padding-top:4px">No vitals recorded yet.</p>`;
+        }
+
+        html += `<div style="font-weight:600;font-size:13px;margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--border)">Medicines</div>`;
         if (meds.length) {
           html += meds.map(m => `
             <div style="padding:8px 0;border-top:1px solid var(--border)">
@@ -889,9 +911,11 @@
         }
 
         html += `<div style="font-weight:600;font-size:13px;margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--border)">Reports</div>`;
-        if (reports.length) {
-          const statusLabel = { payment_pending: 'Ordered', paid: 'Ordered', sample_collected: 'Sample Collected', processing: 'Processing', result_entered: 'Processing', verified_released: 'Completed' };
-          html += reports.map(r => `
+        const labReports = reports.lab_reports || [];
+        const radReports = reports.radiology_reports || [];
+        const statusLabel = { payment_pending: 'Ordered', paid: 'Ordered', sample_collected: 'Sample Collected', processing: 'Processing', result_entered: 'Processing', reported: 'Reporting', verified_released: 'Completed' };
+        if (labReports.length) {
+          html += labReports.map(r => `
             <div style="padding:8px 0;border-top:1px solid var(--border)">
               <div style="display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:12px;color:var(--slate-light)">${new Date(r.order_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</span>
@@ -907,6 +931,25 @@
           `).join('');
         } else {
           html += `<p style="color:var(--slate-light);font-size:12.5px;padding-top:4px">No tests ordered yet.</p>`;
+        }
+
+        // Item 4 — radiology, kept as its own section so it isn't confused with lab tests.
+        html += `<div style="font-weight:600;font-size:13px;margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--border)">Radiology</div>`;
+        if (radReports.length) {
+          const studyTypeLabel = { xray: 'X-Ray', ct: 'CT', mri: 'MRI', ultrasound: 'Ultrasound' };
+          html += radReports.map(r => `
+            <div style="padding:8px 0;border-top:1px solid var(--border)">
+              <div style="font-size:12px;color:var(--slate-light)">${new Date(r.order_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</div>
+              ${r.studies.map(s => `
+                <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px">
+                  <span>${sanitize(s.study_name)} <span style="color:var(--slate-light)">(${studyTypeLabel[s.study_type] || sanitize(s.study_type)})</span></span>
+                  <span class="badge badge-grey">${statusLabel[s.status] || sanitize(s.status)}</span>
+                </div>
+              `).join('')}
+            </div>
+          `).join('');
+        } else {
+          html += `<p style="color:var(--slate-light);font-size:12.5px;padding-top:4px">No radiology ordered yet.</p>`;
         }
         el.innerHTML = html;
       } catch (e) {

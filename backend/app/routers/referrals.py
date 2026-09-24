@@ -16,6 +16,7 @@ from app.models.doctor import Doctor
 from app.models.hospital import Hospital
 from app.models.patient import Patient
 from app.models.test_order import TestOrder
+from app.models.radiology_order import RadiologyOrder
 from app.schemas.cross_hospital_referral import RejectReferralIn, RejectAndForwardIn
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
@@ -86,6 +87,19 @@ def _snapshot_admission_clinical_data(db: Session, admission: Admission) -> dict
         })
     visits_out = [{"date": now_ist_naive().isoformat(), "token_number": "", "tests": tests_out}] if tests_out else []
 
+    radiology_orders = db.query(RadiologyOrder).filter(RadiologyOrder.admission_id == admission.id, RadiologyOrder.status == "verified_released").all()
+    radiology_out = []
+    for o in radiology_orders:
+        try:
+            sections = json.loads(o.sections_data) if o.sections_data else {}
+        except Exception:
+            sections = {}
+        radiology_out.append({
+            "order_id": o.id, "study_name": o.study_name, "study_type": o.study_type,
+            "sections": sections, "impression": o.impression, "advised": o.advised,
+            "verified_at": o.verified_at.isoformat() if o.verified_at else None,
+        })
+
     notes = db.query(AdmissionProgressNote).filter(AdmissionProgressNote.admission_id == admission.id).order_by(AdmissionProgressNote.created_at.asc()).all()
     notes_out = [{"note": n.note, "created_at": n.created_at.isoformat()} for n in notes]
 
@@ -93,6 +107,7 @@ def _snapshot_admission_clinical_data(db: Session, admission: Admission) -> dict
         "vitals": vitals_out,
         "medicines": meds_out,
         "visits": visits_out,
+        "radiology": radiology_out,
         "progress_notes": notes_out,
     }
 
@@ -110,6 +125,7 @@ def _serialize_referral(db: Session, r: CrossHospitalReferral) -> dict:
         "vitals": json.loads(r.vitals_snapshot_json) if r.vitals_snapshot_json else [],
         "medicines": json.loads(r.medicines_snapshot_json) if r.medicines_snapshot_json else [],
         "visits": json.loads(r.tests_snapshot_json) if r.tests_snapshot_json else [],
+        "radiology": json.loads(r.radiology_snapshot_json) if r.radiology_snapshot_json else [],
         "progress_notes": json.loads(r.progress_notes_snapshot_json) if r.progress_notes_snapshot_json else [],
         "status": r.status,
         "acknowledged_at": r.acknowledged_at.isoformat() if r.acknowledged_at else None,
@@ -287,10 +303,12 @@ def reject_and_forward_referral(referral_id: int, body: RejectAndForwardIn, curr
         patient_name=r.patient_name, patient_age=r.patient_age, patient_gender=r.patient_gender,
         clinical_note=body.clinical_note.strip(), diagnosis_snapshot=r.diagnosis_snapshot,
         vitals_snapshot_json=r.vitals_snapshot_json, medicines_snapshot_json=r.medicines_snapshot_json,
-        tests_snapshot_json=r.tests_snapshot_json, progress_notes_snapshot_json=r.progress_notes_snapshot_json,
+        tests_snapshot_json=r.tests_snapshot_json, radiology_snapshot_json=r.radiology_snapshot_json,
+        progress_notes_snapshot_json=r.progress_notes_snapshot_json,
         status="pending", expires_at=now_ist_naive() + timedelta(hours=24),
     )
     db.add(forward)
+    db.flush()  # forward.id is None (autoincrement PK) until flushed — notify_referral_incoming below needs the real id, or every call produces the same "referral_incoming:None" source_key and the second one ever hits the unique constraint
 
     to_hospital_c = db.query(Hospital).filter(Hospital.id == body.to_hospital_id).first()
     notify_referral_incoming(db, body.to_hospital_id, forward.id, forward.patient_name, hospital.name)
@@ -303,6 +321,17 @@ def reject_and_forward_referral(referral_id: int, body: RejectAndForwardIn, curr
                            f"{from_hospital_a.name if from_hospital_a else 'A hospital'} referred {r.patient_name} to you.")
     notify_referral_admin(db, current_doctor.hospital_id, r.id, f"Referral rejected & forwarded — {r.patient_name}",
                            f"{r.patient_name}'s referral was rejected and forwarded to {to_hospital_c.name if to_hospital_c else 'another hospital'}.")
+    # Item 6 decision: admin-only left the referring hospital's actual
+    # clinician with no signal once the patient had already departed —
+    # same nurse/doctor targeting notify_referral_rejected already uses
+    # for the pre-departure case above.
+    initiator = db.query(Doctor).filter(Doctor.id == r.initiated_by).first() if r.initiated_by else None
+    notify_referral_rejected(
+        db, r.from_hospital_id, r.source_admission_id, r.patient_name,
+        to_hospital_c.name if to_hospital_c else "another hospital",
+        nurse_id=(initiator.id if initiator and initiator.role.value == "nurse" else None),
+        doctor_id=(initiator.id if initiator and initiator.role.value == "doctor" else None),
+    )
     log_action(
         db, current_doctor, action="referral_rejected_and_forwarded", target_type="cross_hospital_referral",
         target_id=r.id, target_label=r.patient_name,
@@ -337,6 +366,7 @@ def get_referral_chain_for_admission(admission_id: str, current_doctor: Doctor =
             "vitals": json.loads(hop.vitals_snapshot_json) if hop.vitals_snapshot_json else [],
             "medicines": json.loads(hop.medicines_snapshot_json) if hop.medicines_snapshot_json else [],
             "visits": json.loads(hop.tests_snapshot_json) if hop.tests_snapshot_json else [],
+            "radiology": json.loads(hop.radiology_snapshot_json) if hop.radiology_snapshot_json else [],
             "progress_notes": json.loads(hop.progress_notes_snapshot_json) if hop.progress_notes_snapshot_json else [],
         })
     return out

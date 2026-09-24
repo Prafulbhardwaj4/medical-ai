@@ -77,3 +77,6 @@ class TestOrder(Base):
     critical_ack_at = Column(DateTime, nullable=True)        # when the ordering doctor acknowledged the alert
     critical_escalated_at = Column(DateTime, nullable=True)  # set once escalated past the doctor (Phase 1 item 3)
     sample_overdue_notified_at = Column(DateTime, nullable=True)  # set once lab staff have been pinged that an admitted patient's sample is 2+ hours uncollected — prevents re-notifying on every sweep
+
+    verify_hash = Column(String, nullable=True, index=True)  # QR/verify.html code, set at verify-and-release — item 1
+    report_reference = Column(String, nullable=True, index=True)  # e.g. GEN-LAB-2025-26-00001, set at verify-and-release — item 3

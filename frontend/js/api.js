@@ -805,6 +805,75 @@ function openReportsModalWithData(title, visits) {
   body.innerHTML = _renderReportsVisitsHtml(visits || [], { allowPdf: false });
 }
 
+function openVitalsModalWithData(title, vitals) {
+  // Item 2 — vitals were captured into every referral snapshot but never
+  // had anywhere to be seen. Same pre-fetched-data modal pattern as
+  // openReportsModalWithData/openMedicinesModalWithData above.
+  const overlay = _createOverlayModal(title || "Vitals", 560);
+  const body = overlay.querySelector(".generic-modal-body");
+  if (!vitals || !vitals.length) {
+    body.innerHTML = `<p style="color:var(--slate)">No vitals recorded.</p>`;
+    return;
+  }
+  body.innerHTML = vitals.map(v => {
+    const d = v.data || {};
+    const fields = Object.keys(d).map(k => `
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0">
+        <span style="color:var(--slate)">${sanitize(k)}</span><span>${sanitize(String(d[k]))}</span>
+      </div>
+    `).join('');
+    return `
+      <div style="padding:8px 0;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--slate-light);margin-bottom:4px">${new Date(v.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+        ${fields || '<span style="color:var(--slate-light);font-size:12.5px">No values recorded</span>'}
+      </div>
+    `;
+  }).join('');
+}
+
+function openProgressNotesModalWithData(title, notes) {
+  // Item 3 — same pattern; the old UI only ever showed a bare count.
+  const overlay = _createOverlayModal(title || "Progress Notes", 560);
+  const body = overlay.querySelector(".generic-modal-body");
+  if (!notes || !notes.length) {
+    body.innerHTML = `<p style="color:var(--slate)">No progress notes recorded.</p>`;
+    return;
+  }
+  body.innerHTML = notes.map(n => `
+    <div style="padding:8px 0;border-top:1px solid var(--border)">
+      <div style="font-size:12px;color:var(--slate-light);margin-bottom:4px">${new Date(n.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+      <div style="font-size:13px;white-space:pre-wrap">${sanitize(n.note)}</div>
+    </div>
+  `).join('');
+}
+
+function openRadiologyModalWithData(title, radiology) {
+  // Item 1 (frontend half) — the snapshot now captures radiology; this is
+  // where it actually becomes visible to a clinician deciding on treatment.
+  const overlay = _createOverlayModal(title || "Radiology", 640);
+  const body = overlay.querySelector(".generic-modal-body");
+  if (!radiology || !radiology.length) {
+    body.innerHTML = `<p style="color:var(--slate)">No radiology reports recorded.</p>`;
+    return;
+  }
+  const studyTypeLabel = { xray: "X-Ray", ct: "CT", mri: "MRI", ultrasound: "Ultrasound" };
+  body.innerHTML = radiology.map(o => {
+    const sections = o.sections || {};
+    const sectionRows = Object.keys(sections).map(k => `
+      <div style="font-size:12.5px;padding:2px 0"><strong>${sanitize(k)}:</strong> ${sanitize(String(sections[k]))}</div>
+    `).join('');
+    return `
+      <div style="border:1.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px">
+        <div style="font-weight:600;margin-bottom:4px">${sanitize(o.study_name)} <span style="color:var(--slate-light);font-weight:400">(${studyTypeLabel[o.study_type] || sanitize(o.study_type)})</span></div>
+        <div style="font-size:12px;color:var(--slate-light);margin-bottom:6px">${o.verified_at ? new Date(o.verified_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</div>
+        ${sectionRows}
+        ${o.impression ? `<div style="font-size:13px;margin-top:6px"><strong>Impression:</strong> ${sanitize(o.impression)}</div>` : ''}
+        ${o.advised ? `<div style="font-size:13px;margin-top:4px"><strong>Advised:</strong> ${sanitize(o.advised)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
 function openOffDutyTimeModal(confirmLabel) {
   confirmLabel = confirmLabel || "Mark Present";
   return new Promise((resolve) => {

@@ -12,6 +12,47 @@
     @media (min-width: 901px) {
       .stats-row-4 { grid-template-columns: repeat(4, 1fr); }
     }
+    .mini-progress-track {
+      background: var(--border);
+      border-radius: 99px;
+      height: 6px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .mini-progress-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.3s ease;
+    }
+    .cap-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 8px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      border-radius: 8px;
+      transition: background 0.15s;
+    }
+    .cap-row:hover {
+      background: var(--bg-light, #f8fafc);
+    }
+    .comparison-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+    }
+    .comparison-pct {
+      font-weight: 700;
+      font-size: 13px;
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+    .comparison-pct.up { color: #0d9488; background: #ccfbf1; }
+    .comparison-pct.down { color: #dc2626; background: #fee2e2; }
+    .comparison-pct.flat { color: var(--slate); background: var(--border); }
     .hospital-detail-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -167,6 +208,12 @@
         </svg>
         Overview
       </a>
+      <a class="nav-item" id="nav-analytics" href="#" onclick="showSection('analytics')">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        Analytics
+      </a>
       <a class="nav-item" id="nav-hospitals" href="#" onclick="showSection('hospitals')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -216,6 +263,12 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
         </svg>
         Overview
+      </button>
+      <button class="bottom-nav-item" id="tab-btn-analytics" onclick="showSection('analytics')">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        Analytics
       </button>
       <button class="bottom-nav-item" id="tab-btn-hospitals" onclick="showSection('hospitals')">
         <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -286,6 +339,264 @@
         </div>
       </div>
 
+      <!-- ANALYTICS SECTION (Phase 1) -->
+      <div id="section-analytics" style="display:none">
+        <div class="page-header">
+          <h1>Platform Analytics</h1>
+          <p>Business-wide metrics across every hospital</p>
+        </div>
+
+        <div class="hospital-detail-grid">
+          <div class="card">
+            <div class="card-header"><h2>This Month vs Last Month</h2></div>
+            <div id="pc-comparison-list" style="display:flex;flex-direction:column;gap:10px">
+              <p style="color:var(--slate)">Loading...</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <h2>Needs Attention</h2>
+              <span class="badge badge-red" id="pc-alerts-count" style="display:none"></span>
+            </div>
+            <div id="pc-alerts-list" style="max-height:320px;overflow-y:auto">
+              <p style="color:var(--slate)">Loading...</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:18px">
+          <button class="chat-filter-tab active" id="analytics-trend-monthly" onclick="setAnalyticsTrendInterval('monthly')">Monthly</button>
+          <button class="chat-filter-tab" id="analytics-trend-weekly" onclick="setAnalyticsTrendInterval('weekly')">Weekly</button>
+        </div>
+
+        <div class="stats-row stats-row-4">
+          <div class="stat-card">
+            <div class="stat-label">Total Hospitals</div>
+            <div class="stat-value" id="ga-total-hospitals">—</div>
+            <div class="stat-sub" id="ga-active-count">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Tier Breakdown</div>
+            <div id="ga-tier-breakdown" style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
+              <span style="color:var(--slate)">—</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">In Grace Period</div>
+            <div class="stat-value" id="ga-grace-count">—</div>
+            <div class="stat-sub">billing lapsed, not yet deactivated</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Deactivated</div>
+            <div class="stat-value" id="ga-deactivated-count">—</div>
+            <div class="stat-sub">grace expired or manually disabled</div>
+          </div>
+        </div>
+
+        <div class="hospital-detail-grid">
+          <div class="card">
+            <div class="card-header"><h2>New Hospitals Onboarded</h2></div>
+            <canvas id="chart-onboarding-trend" height="220"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Tier Distribution</h2></div>
+            <canvas id="chart-tier-distribution" height="220"></canvas>
+          </div>
+        </div>
+
+        <div class="hospital-detail-grid">
+          <div class="card">
+            <div class="card-header"><h2>Tier Upgrades / Downgrades</h2></div>
+            <canvas id="chart-tier-changes" height="220"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Geographic Distribution</h2></div>
+            <div id="ga-geo-list" style="max-height:280px;overflow-y:auto">
+              <p style="color:var(--slate)">Loading...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="page-header" style="margin-top:8px">
+          <h1 style="font-size:1.3rem">Patient &amp; Usage</h1>
+        </div>
+
+        <div class="stats-row stats-row-4">
+          <div class="stat-card">
+            <div class="stat-label">Total Patients</div>
+            <div class="stat-value" id="pu-total-patients">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Portal Adoption</div>
+            <div class="stat-value" id="pu-portal-rate">—</div>
+            <div class="stat-sub" id="pu-portal-count">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total OPD Consultations</div>
+            <div class="stat-value" id="pu-total-consultations">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total IPD Admissions</div>
+            <div class="stat-value" id="pu-total-admissions">—</div>
+          </div>
+        </div>
+
+        <div class="hospital-detail-grid">
+          <div class="card">
+            <div class="card-header"><h2>OPD Consultations Trend</h2></div>
+            <canvas id="chart-consultation-trend" height="220"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>IPD Admissions Trend</h2></div>
+            <canvas id="chart-admission-trend" height="220"></canvas>
+          </div>
+        </div>
+
+        <div class="hospital-detail-grid">
+          <div class="card">
+            <div class="card-header"><h2>Online Bookings vs Walk-ins</h2></div>
+            <canvas id="chart-booking-ratio" height="220"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Note</h2></div>
+            <p style="color:var(--slate);font-size:13px;line-height:1.5">
+              Average consultation duration isn't shown — the app doesn't currently record a
+              consultation start/confirm timestamp pair to compute it from.
+            </p>
+          </div>
+        </div>
+
+        <div class="page-header" style="margin-top:8px">
+          <h1 style="font-size:1.3rem">AI Scribe &amp; Topups</h1>
+        </div>
+
+        <div class="stats-row stats-row-4">
+          <div class="stat-card">
+            <div class="stat-label">Current-Cycle Tier Usage</div>
+            <div class="stat-value" id="as-cycle-usage">—</div>
+            <div class="stat-sub">resets on renewal, not all-time</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Avg Usage / Hospital</div>
+            <div class="stat-value" id="as-avg-usage">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">All-Time Topup Usage</div>
+            <div class="stat-value" id="as-topup-usage">—</div>
+            <div class="stat-sub">genuinely cumulative</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Topup Revenue</div>
+            <div class="stat-value" id="as-topup-revenue">—</div>
+            <div class="stat-sub" id="as-topup-count">—</div>
+          </div>
+        </div>
+
+        <div class="hospital-detail-grid">
+          <div class="card">
+            <div class="card-header"><h2>Hospitals Approaching / At Cap</h2></div>
+            <div id="as-cap-list" style="max-height:280px;overflow-y:auto">
+              <p style="color:var(--slate)">Loading...</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Topup Purchases Trend</h2></div>
+            <canvas id="chart-topup-trend" height="220"></canvas>
+          </div>
+        </div>
+
+        <div class="page-header" style="margin-top:8px">
+          <h1 style="font-size:1.3rem">Business &amp; Revenue</h1>
+        </div>
+
+        <div class="stats-row stats-row-4">
+          <div class="stat-card">
+            <div class="stat-label">Monthly Recurring Revenue</div>
+            <div class="stat-value" id="biz-mrr">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Annual Recurring Revenue</div>
+            <div class="stat-value" id="biz-arr">—</div>
+            <div class="stat-sub">projected</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Hospital Leads</div>
+            <div class="stat-value" id="biz-leads">—</div>
+            <div class="stat-sub" id="biz-leads-contacted">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Upgrade Requests → Converted</div>
+            <div class="stat-value" id="biz-upgrade-rate">—</div>
+            <div class="stat-sub" id="biz-upgrade-count">—</div>
+          </div>
+        </div>
+
+        <div class="hospital-detail-grid">
+          <div class="card">
+            <div class="card-header"><h2>MRR by Tier</h2></div>
+            <canvas id="chart-mrr-tier" height="220"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Note</h2></div>
+            <p style="color:var(--slate);font-size:13px;line-height:1.5">
+              Lead → onboarded-hospital conversion rate isn't shown — <code>HospitalLead</code> has no
+              link to the actual <code>Hospital</code> row it may have become, and matching by name
+              would be a guess, not real data.
+            </p>
+          </div>
+        </div>
+
+        <div class="page-header" style="margin-top:8px">
+          <h1 style="font-size:1.3rem">Module Usage</h1>
+        </div>
+
+        <div class="stats-row stats-row-4">
+          <div class="stat-card">
+            <div class="stat-label">Radiology Orders</div>
+            <div class="stat-value" id="mu-radiology-total">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Cross-Hospital Referrals</div>
+            <div class="stat-value" id="mu-referral-total">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Suggestions Raised</div>
+            <div class="stat-value" id="mu-suggestion-total">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Suggestion Resolution Rate</div>
+            <div class="stat-value" id="mu-suggestion-rate">—</div>
+            <div class="stat-sub" id="mu-suggestion-resolved">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Avg Resolution Time</div>
+            <div class="stat-value" id="mu-suggestion-avg-hours">—</div>
+          </div>
+        </div>
+
+        <div class="hospital-detail-grid">
+          <div class="card">
+            <div class="card-header"><h2>Radiology &amp; Referrals Trend</h2></div>
+            <canvas id="chart-module-trend" height="220"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Radiology by Study Type</h2></div>
+            <canvas id="chart-radiology-type" height="220"></canvas>
+          </div>
+        </div>
+
+        <div class="hospital-detail-grid">
+          <div class="card">
+            <div class="card-header"><h2>Referral Outcomes</h2></div>
+            <canvas id="chart-referral-status" height="220"></canvas>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Suggestion Status Breakdown</h2></div>
+            <canvas id="chart-suggestion-status" height="220"></canvas>
+          </div>
+        </div>
+      </div>
+
       <!-- HOSPITALS SECTION -->
       <div id="section-hospitals" style="display:none">
 
@@ -344,6 +655,20 @@
               <h2>AI Scribe &amp; Billing Cycle</h2>
             </div>
             <div id="detail-ai-scribe"></div>
+          </div>
+
+          <div class="card" id="detail-analytics-card" style="margin-bottom:20px">
+            <div class="card-header">
+              <h2>Analytics</h2>
+              <div style="display:flex;gap:8px">
+                <button class="chat-filter-tab active" id="hosp-range-30d" onclick="setHospitalAnalyticsRange('30d')">30d</button>
+                <button class="chat-filter-tab" id="hosp-range-7d" onclick="setHospitalAnalyticsRange('7d')">7d</button>
+                <button class="chat-filter-tab" id="hosp-range-today" onclick="setHospitalAnalyticsRange('today')">Today</button>
+              </div>
+            </div>
+            <div id="detail-analytics-body">
+              <p style="color:var(--slate)">Loading...</p>
+            </div>
           </div>
 
         </div>
@@ -590,6 +915,19 @@
     let currentHospitalData = null;
     let revenueChart = null;
     let typeChart = null;
+    let onboardingTrendChart = null;
+    let tierDistributionChart = null;
+    let tierChangesChart = null;
+    let consultationTrendChart = null;
+    let admissionTrendChart = null;
+    let bookingRatioChart = null;
+    let topupTrendChart = null;
+    let mrrTierChart = null;
+    let moduleTrendChart = null;
+    let radiologyTypeChart = null;
+    let referralStatusChart = null;
+    let suggestionStatusChart = null;
+    let analyticsTrendInterval = 'monthly';
 
     // Section switching
     function showSection(name) {
@@ -599,6 +937,7 @@
       document.getElementById('section-upgrade-requests').style.display = name === 'upgrade-requests' ? 'block' : 'none';
       document.getElementById('section-hospital-leads').style.display = name === 'hospital-leads' ? 'block' : 'none';
       document.getElementById('section-plan-inquiries').style.display = name === 'plan-inquiries' ? 'block' : 'none';
+      document.getElementById('section-analytics').style.display = name === 'analytics' ? 'block' : 'none';
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       document.getElementById(`nav-${name}`).classList.add('active');
       document.querySelectorAll('.bottom-nav-item').forEach(el => el.classList.remove('active'));
@@ -609,6 +948,7 @@
       if (name === 'suggestions') loadSuggestions();
       if (name === 'hospital-leads') loadHospitalLeads();
       if (name === 'plan-inquiries') loadPlanInquiries();
+      if (name === 'analytics') { loadPlatformComparison(); loadPlatformAlerts(); loadPlatformGrowthAnalytics(); loadPlatformPatientsUsageAnalytics(); loadPlatformAiScribeAnalytics(); loadPlatformBusinessAnalytics(); loadPlatformModuleUsageAnalytics(); }
     }
 
     // ── UPGRADE REQUESTS ──
@@ -950,6 +1290,373 @@
       });
     }
 
+    // ── PLATFORM ANALYTICS (Phase 1: Hospital & growth) ──
+    async function loadPlatformComparison() {
+      const el = document.getElementById('pc-comparison-list');
+      try {
+        const data = await api('GET', '/admin/analytics/platform/comparison');
+        const rows = [
+          { label: 'Hospitals Onboarded', d: data.hospitals_onboarded },
+          { label: 'New Patients', d: data.new_patients },
+          { label: 'OPD Consultations', d: data.opd_consultations },
+          { label: 'IPD Admissions', d: data.ipd_admissions },
+          { label: 'MRR', d: data.mrr, isCurrency: true },
+        ];
+        el.innerHTML = rows.map(r => {
+          const pct = r.d.change_pct;
+          const cls = pct === null ? 'flat' : pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+          const arrow = pct === null ? '' : pct > 0 ? '▲' : pct < 0 ? '▼' : '';
+          const pctText = pct === null ? 'n/a' : `${arrow} ${Math.abs(pct)}%`;
+          const valText = r.isCurrency ? `Rs.${r.d.this_period.toLocaleString('en-IN')}` : r.d.this_period.toLocaleString('en-IN');
+          return `
+            <div class="comparison-row">
+              <div>
+                <div style="font-size:13px;color:var(--slate)">${r.label}</div>
+                <div style="font-weight:600">${valText}</div>
+              </div>
+              <span class="comparison-pct ${cls}">${pctText}</span>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        el.innerHTML = '<p style="color:var(--slate)">Failed to load comparison.</p>';
+        console.error('Failed to load platform comparison', e);
+      }
+    }
+
+    async function loadPlatformAlerts() {
+      const el = document.getElementById('pc-alerts-list');
+      const countBadge = document.getElementById('pc-alerts-count');
+      try {
+        const data = await api('GET', '/admin/analytics/platform/alerts');
+        countBadge.style.display = data.total_alerts > 0 ? '' : 'none';
+        countBadge.textContent = data.total_alerts;
+
+        const sections = [];
+        data.ai_scribe_no_topup.forEach(a => sections.push({
+          text: `${a.hospital_name} — ${a.used}/${a.cap} AI Scribe used (${a.percent_used}%), no topup`,
+          onclick: `showSection('hospitals'); openDetail(${a.hospital_id})`,
+        }));
+        data.billing_grace_period.forEach(a => sections.push({
+          text: `${a.hospital_name} — in grace period, deactivates ${a.deactivation_at}`,
+          onclick: `showSection('hospitals'); openDetail(${a.hospital_id})`,
+        }));
+        data.billing_ending_soon.forEach(a => sections.push({
+          text: `${a.hospital_name} — billing cycle ends ${a.cycle_end}`,
+          onclick: `showSection('hospitals'); openDetail(${a.hospital_id})`,
+        }));
+        data.stale_leads.forEach(a => sections.push({
+          text: `Lead "${a.hospital_name}" untouched since ${a.created_at}`,
+          onclick: `showSection('hospital-leads')`,
+        }));
+        data.stale_upgrade_requests.forEach(a => sections.push({
+          text: `Upgrade request (→ ${a.requested_tier}) untouched since ${a.created_at}`,
+          onclick: `showSection('upgrade-requests')`,
+        }));
+
+        el.innerHTML = sections.length === 0
+          ? '<p style="color:var(--slate)">Nothing needs attention right now.</p>'
+          : sections.map(s => `<div class="cap-row" onclick="${s.onclick}"><span style="font-size:13px">${sanitize(s.text)}</span></div>`).join('');
+      } catch (e) {
+        el.innerHTML = '<p style="color:var(--slate)">Failed to load alerts.</p>';
+        console.error('Failed to load platform alerts', e);
+      }
+    }
+
+    function setAnalyticsTrendInterval(interval) {
+      analyticsTrendInterval = interval;
+      document.getElementById('analytics-trend-monthly').classList.toggle('active', interval === 'monthly');
+      document.getElementById('analytics-trend-weekly').classList.toggle('active', interval === 'weekly');
+      loadPlatformGrowthAnalytics();
+      loadPlatformPatientsUsageAnalytics();
+      loadPlatformAiScribeAnalytics();
+      loadPlatformBusinessAnalytics();
+      loadPlatformModuleUsageAnalytics();
+    }
+
+    async function loadPlatformModuleUsageAnalytics() {
+      try {
+        const data = await api('GET', `/admin/analytics/platform/module-usage?trend_interval=${analyticsTrendInterval}`);
+
+        document.getElementById('mu-radiology-total').textContent = data.radiology.total_orders.toLocaleString('en-IN');
+        document.getElementById('mu-referral-total').textContent = data.referrals.total.toLocaleString('en-IN');
+        document.getElementById('mu-suggestion-total').textContent = data.suggestions.total.toLocaleString('en-IN');
+        document.getElementById('mu-suggestion-rate').textContent = `${data.suggestions.resolution_rate}%`;
+        document.getElementById('mu-suggestion-resolved').textContent = `${data.suggestions.resolved} of ${data.suggestions.total} resolved`;
+        document.getElementById('mu-suggestion-avg-hours').textContent = data.suggestions.avg_resolution_hours === null
+          ? 'n/a' : `${data.suggestions.avg_resolution_hours}h`;
+
+        const trendCtx = document.getElementById('chart-module-trend');
+        if (trendCtx && typeof Chart !== 'undefined') {
+          if (moduleTrendChart) moduleTrendChart.destroy();
+          moduleTrendChart = new Chart(trendCtx, {
+            type: 'line',
+            data: {
+              labels: data.radiology.trend.map(p => p.period),
+              datasets: [
+                { label: 'Radiology Orders', data: data.radiology.trend.map(p => p.count), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.08)', tension: 0.3, fill: true },
+                { label: 'Referrals', data: data.referrals.trend.map(p => p.count), borderColor: '#1e3a5f', backgroundColor: 'rgba(30,58,95,0.08)', tension: 0.3, fill: true }
+              ]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+
+        const typeLabels = { xray: 'X-Ray', ct: 'CT', mri: 'MRI', ultrasound: 'Ultrasound' };
+        const radTypeCtx = document.getElementById('chart-radiology-type');
+        if (radTypeCtx && typeof Chart !== 'undefined') {
+          if (radiologyTypeChart) radiologyTypeChart.destroy();
+          const entries = Object.entries(data.radiology.by_study_type);
+          radiologyTypeChart = new Chart(radTypeCtx, {
+            type: 'doughnut',
+            data: {
+              labels: entries.map(([t]) => typeLabels[t] || t),
+              datasets: [{ data: entries.map(([, c]) => c), backgroundColor: ['#0d9488', '#1e3a5f', '#c9a227', '#94a3b8'] }]
+            },
+            options: { responsive: true }
+          });
+        }
+
+        const referralLabels = { pending: 'Pending', rejected: 'Rejected', departed: 'Departed', admitted: 'Admitted', expired: 'Expired' };
+        const refCtx = document.getElementById('chart-referral-status');
+        if (refCtx && typeof Chart !== 'undefined') {
+          if (referralStatusChart) referralStatusChart.destroy();
+          const entries = Object.entries(data.referrals.by_status);
+          referralStatusChart = new Chart(refCtx, {
+            type: 'bar',
+            data: {
+              labels: entries.map(([s]) => referralLabels[s] || s),
+              datasets: [{ label: 'Referrals', data: entries.map(([, c]) => c), backgroundColor: '#1e3a5f' }]
+            },
+            options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+
+        const suggLabels = { sent: 'Received', seen: 'Seen', in_progress: 'In Progress', rejected: 'Rejected', completed: 'Completed' };
+        const suggCtx = document.getElementById('chart-suggestion-status');
+        if (suggCtx && typeof Chart !== 'undefined') {
+          if (suggestionStatusChart) suggestionStatusChart.destroy();
+          const entries = Object.entries(data.suggestions.by_status);
+          suggestionStatusChart = new Chart(suggCtx, {
+            type: 'bar',
+            data: {
+              labels: entries.map(([s]) => suggLabels[s] || s),
+              datasets: [{ label: 'Suggestions', data: entries.map(([, c]) => c), backgroundColor: '#c9a227' }]
+            },
+            options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load platform module usage analytics', e);
+      }
+    }
+
+    async function loadPlatformBusinessAnalytics() {
+      try {
+        const data = await api('GET', '/admin/analytics/platform/business');
+
+        document.getElementById('biz-mrr').textContent = `Rs.${data.mrr.toLocaleString('en-IN')}`;
+        document.getElementById('biz-arr').textContent = `Rs.${data.arr.toLocaleString('en-IN')}`;
+        document.getElementById('biz-leads').textContent = data.total_hospital_leads;
+        document.getElementById('biz-leads-contacted').textContent = `${data.contacted_hospital_leads} contacted`;
+        document.getElementById('biz-upgrade-rate').textContent = `${data.upgrade_conversion_rate}%`;
+        document.getElementById('biz-upgrade-count').textContent = `${data.converted_upgrade_requests} of ${data.total_upgrade_requests} converted`;
+
+        const tierLabels = { foundation: 'Foundation', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise' };
+        const mrrCtx = document.getElementById('chart-mrr-tier');
+        if (mrrCtx && typeof Chart !== 'undefined') {
+          if (mrrTierChart) mrrTierChart.destroy();
+          mrrTierChart = new Chart(mrrCtx, {
+            type: 'bar',
+            data: {
+              labels: Object.keys(data.mrr_by_tier).map(t => tierLabels[t] || t),
+              datasets: [{ label: 'MRR (Rs.)', data: Object.values(data.mrr_by_tier), backgroundColor: ['#94a3b8', '#0d9488', '#1e3a5f', '#c9a227'] }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load platform business analytics', e);
+      }
+    }
+
+    async function loadPlatformAiScribeAnalytics() {
+      try {
+        const data = await api('GET', `/admin/analytics/platform/ai-scribe?trend_interval=${analyticsTrendInterval}`);
+
+        document.getElementById('as-cycle-usage').textContent = data.current_cycle_tier_usage.toLocaleString('en-IN');
+        document.getElementById('as-avg-usage').textContent = data.average_usage_per_hospital.toLocaleString('en-IN');
+        document.getElementById('as-topup-usage').textContent = data.all_time_topup_usage.toLocaleString('en-IN');
+        document.getElementById('as-topup-revenue').textContent = `Rs.${data.total_topup_revenue.toLocaleString('en-IN')}`;
+        document.getElementById('as-topup-count').textContent = `${data.total_topup_count} purchase${data.total_topup_count !== 1 ? 's' : ''}`;
+
+        const capEl = document.getElementById('as-cap-list');
+        if (!data.approaching_or_at_cap.length) {
+          capEl.innerHTML = '<p style="color:var(--slate)">No hospitals near their cap right now.</p>';
+        } else {
+          capEl.innerHTML = data.approaching_or_at_cap.map(h => {
+            const color = h.status === 'at_cap' ? '#dc2626' : '#c9a227';
+            const badge = h.status === 'at_cap'
+              ? '<span class="badge" style="background:#fee2e2;color:#dc2626">At cap</span>'
+              : '<span class="badge" style="background:#fef3c7;color:#92400e">Approaching</span>';
+            const topupNote = h.topup_remaining ? ` <span style="color:var(--slate);font-size:12px">(+${h.topup_remaining} topup left)</span>` : '';
+            return `
+              <div class="cap-row" onclick="showSection('hospitals'); openDetail(${h.hospital_id})">
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                    <span style="font-weight:600">${sanitize(h.hospital_name)}</span>
+                    ${badge}
+                  </div>
+                  <div style="font-size:12px;color:var(--slate);margin-top:2px">${h.used}/${h.cap} used (${h.percent_used}%)${topupNote}</div>
+                  <div class="mini-progress-track"><div class="mini-progress-fill" style="width:${Math.min(h.percent_used, 100)}%;background:${color}"></div></div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        const topupCtx = document.getElementById('chart-topup-trend');
+        if (topupCtx && typeof Chart !== 'undefined') {
+          if (topupTrendChart) topupTrendChart.destroy();
+          topupTrendChart = new Chart(topupCtx, {
+            type: 'bar',
+            data: {
+              labels: data.topup_trend.map(p => p.period),
+              datasets: [{ label: 'Topups Purchased', data: data.topup_trend.map(p => p.count), backgroundColor: '#0d9488' }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load platform AI Scribe analytics', e);
+      }
+    }
+
+    async function loadPlatformPatientsUsageAnalytics() {
+      try {
+        const data = await api('GET', `/admin/analytics/platform/patients-usage?trend_interval=${analyticsTrendInterval}`);
+
+        document.getElementById('pu-total-patients').textContent = data.total_patients.toLocaleString('en-IN');
+        document.getElementById('pu-portal-rate').textContent = `${data.portal_adoption_rate}%`;
+        document.getElementById('pu-portal-count').textContent = `${data.portal_activated_patients.toLocaleString('en-IN')} activated`;
+        document.getElementById('pu-total-consultations').textContent = data.total_opd_consultations.toLocaleString('en-IN');
+        document.getElementById('pu-total-admissions').textContent = data.total_ipd_admissions.toLocaleString('en-IN');
+
+        const consultCtx = document.getElementById('chart-consultation-trend');
+        if (consultCtx && typeof Chart !== 'undefined') {
+          if (consultationTrendChart) consultationTrendChart.destroy();
+          consultationTrendChart = new Chart(consultCtx, {
+            type: 'line',
+            data: {
+              labels: data.opd_consultation_trend.map(p => p.period),
+              datasets: [{ label: 'OPD Consultations', data: data.opd_consultation_trend.map(p => p.count), borderColor: '#1e3a5f', backgroundColor: 'rgba(30,58,95,0.1)', tension: 0.3, fill: true }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+          });
+        }
+
+        const admitCtx = document.getElementById('chart-admission-trend');
+        if (admitCtx && typeof Chart !== 'undefined') {
+          if (admissionTrendChart) admissionTrendChart.destroy();
+          admissionTrendChart = new Chart(admitCtx, {
+            type: 'line',
+            data: {
+              labels: data.ipd_admission_trend.map(p => p.period),
+              datasets: [{ label: 'IPD Admissions', data: data.ipd_admission_trend.map(p => p.count), borderColor: '#c9a227', backgroundColor: 'rgba(201,162,39,0.1)', tension: 0.3, fill: true }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+          });
+        }
+
+        const ratioCtx = document.getElementById('chart-booking-ratio');
+        if (ratioCtx && typeof Chart !== 'undefined') {
+          if (bookingRatioChart) bookingRatioChart.destroy();
+          bookingRatioChart = new Chart(ratioCtx, {
+            type: 'doughnut',
+            data: {
+              labels: ['Online Bookings', 'Walk-ins'],
+              datasets: [{ data: [data.online_bookings, data.walk_in_registrations], backgroundColor: ['#0d9488', '#94a3b8'] }]
+            },
+            options: { responsive: true }
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load platform patient/usage analytics', e);
+      }
+    }
+
+    async function loadPlatformGrowthAnalytics() {
+      try {
+        const data = await api('GET', `/admin/analytics/platform/growth?trend_interval=${analyticsTrendInterval}`);
+
+        document.getElementById('ga-total-hospitals').textContent = data.total_hospitals;
+        document.getElementById('ga-active-count').textContent = `${data.active_count} active`;
+        document.getElementById('ga-grace-count').textContent = data.grace_period_count;
+        document.getElementById('ga-deactivated-count').textContent = data.deactivated_count;
+
+        const tierLabels = { foundation: 'Foundation', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise' };
+        document.getElementById('ga-tier-breakdown').innerHTML = Object.entries(data.by_tier)
+          .map(([tier, count]) => `<div style="display:flex;justify-content:space-between;font-size:13px"><span>${tierLabels[tier] || tier}</span><strong>${count}</strong></div>`)
+          .join('');
+
+        const geoEl = document.getElementById('ga-geo-list');
+        if (!data.geographic_distribution.length) {
+          geoEl.innerHTML = '<p style="color:var(--slate)">No hospitals yet.</p>';
+        } else {
+          geoEl.innerHTML = data.geographic_distribution.map(g => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+              <div><div style="font-weight:600">${sanitize(g.city)}</div><div style="color:var(--slate);font-size:12px">${sanitize(g.state)}</div></div>
+              <div style="font-weight:600;color:var(--teal)">${g.count}</div>
+            </div>
+          `).join('');
+        }
+
+        const trendCtx = document.getElementById('chart-onboarding-trend');
+        if (trendCtx && typeof Chart !== 'undefined') {
+          if (onboardingTrendChart) onboardingTrendChart.destroy();
+          onboardingTrendChart = new Chart(trendCtx, {
+            type: 'line',
+            data: {
+              labels: data.onboarding_trend.map(p => p.period),
+              datasets: [{ label: 'New Hospitals', data: data.onboarding_trend.map(p => p.count), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.1)', tension: 0.3, fill: true }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+
+        const tierCtx = document.getElementById('chart-tier-distribution');
+        if (tierCtx && typeof Chart !== 'undefined') {
+          if (tierDistributionChart) tierDistributionChart.destroy();
+          tierDistributionChart = new Chart(tierCtx, {
+            type: 'doughnut',
+            data: {
+              labels: Object.keys(data.by_tier).map(t => tierLabels[t] || t),
+              datasets: [{ data: Object.values(data.by_tier), backgroundColor: ['#94a3b8', '#0d9488', '#1e3a5f', '#c9a227'] }]
+            },
+            options: { responsive: true }
+          });
+        }
+
+        const changesCtx = document.getElementById('chart-tier-changes');
+        if (changesCtx && typeof Chart !== 'undefined') {
+          if (tierChangesChart) tierChangesChart.destroy();
+          tierChangesChart = new Chart(changesCtx, {
+            type: 'bar',
+            data: {
+              labels: data.tier_change_trend.map(p => p.period),
+              datasets: [
+                { label: 'Upgrades', data: data.tier_change_trend.map(p => p.upgrades), backgroundColor: '#0d9488' },
+                { label: 'Downgrades', data: data.tier_change_trend.map(p => p.downgrades), backgroundColor: '#dc2626' }
+              ]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load platform growth analytics', e);
+      }
+    }
+
     // ── HOSPITALS ──
     let hospitalFilter = 'all';
     let allHospitalsCache = [];
@@ -1160,6 +1867,292 @@
       }
     }
 
+    let currentDetailHospitalId = null;
+    let hospitalAnalyticsRange = '30d';
+    let hospPatientsPerDayChart = null;
+    let hospWeeklyPatternChart = null;
+
+    function renderAiScribeReferenceLine() {
+      const h = currentHospitalData;
+      if (!h || !h.has_ai_scribe) {
+        return `<p style="color:var(--slate);font-size:13px;margin-bottom:16px">AI Scribe isn't included on this hospital's tier.</p>`;
+      }
+      const capText = h.ai_scribe_cap === null ? 'Unlimited' : `${h.ai_scribe_used} / ${h.ai_scribe_cap}`;
+      const topupText = h.ai_scribe_topup_remaining ? ` (+${h.ai_scribe_topup_remaining} topup)` : '';
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;margin-bottom:16px">
+          <span style="font-size:13px"><strong>AI Scribe this cycle:</strong> ${capText}${topupText}</span>
+          <a href="#detail-ai-scribe-card" style="font-size:13px;color:var(--teal);font-weight:600;cursor:pointer" onclick="document.getElementById('detail-ai-scribe-card').scrollIntoView({behavior:'smooth'})">View billing cycle details ↓</a>
+        </div>
+      `;
+    }
+
+    function setHospitalAnalyticsRange(range) {
+      hospitalAnalyticsRange = range;
+      ['30d', '7d', 'today'].forEach(r => document.getElementById(`hosp-range-${r}`)?.classList.toggle('active', r === range));
+      if (currentDetailHospitalId) loadHospitalAnalytics(currentDetailHospitalId);
+      // loadHospitalBookingBehavior is chained off loadHospitalAnalytics's own
+      // render (see loadHospitalAnalytics), so no separate call needed here.
+    }
+
+    async function loadHospitalAnalytics(hospitalId) {
+      const body = document.getElementById('detail-analytics-body');
+      try {
+        const data = await api('GET', `/admin/analytics/hospital/${hospitalId}/staff-patients?range=${hospitalAnalyticsRange}`);
+
+        const roleLabels = { admin: 'Admin', doctor: 'Doctor', nurse: 'Nurse', receptionist: 'Receptionist', assistant: 'Assistant', lab: 'Lab', pharmacy: 'Pharmacy', radiology: 'Radiology' };
+        const staffChips = Object.entries(data.staff_by_role)
+          .map(([role, count]) => `<span class="badge badge-grey" style="margin-right:6px">${roleLabels[role] || role}: ${count}</span>`)
+          .join('');
+
+        body.innerHTML = `
+          <div class="stats-row stats-row-4" style="margin-bottom:16px">
+            <div class="stat-card">
+              <div class="stat-label">Total Staff</div>
+              <div class="stat-value">${data.total_staff}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Total Patients</div>
+              <div class="stat-value">${data.total_patients.toLocaleString('en-IN')}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Portal Adoption</div>
+              <div class="stat-value">${data.portal_adoption_rate}%</div>
+              <div class="stat-sub">${data.portal_activated_patients.toLocaleString('en-IN')} activated</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Staff by Role</div>
+              <div style="margin-top:6px">${staffChips || '<span style="color:var(--slate)">No staff yet</span>'}</div>
+            </div>
+          </div>
+          ${renderAiScribeReferenceLine()}
+          <div class="hospital-detail-grid">
+            <div class="card">
+              <div class="card-header"><h2>Patients Per Day (${data.range_start} → ${data.range_end})</h2></div>
+              <canvas id="chart-hosp-patients-day" height="200"></canvas>
+            </div>
+            <div class="card">
+              <div class="card-header"><h2>Weekly Pattern (all-time)</h2></div>
+              <canvas id="chart-hosp-weekly-pattern" height="200"></canvas>
+            </div>
+          </div>
+          <div id="detail-booking-body" style="margin-top:20px">
+            <p style="color:var(--slate)">Loading booking behavior...</p>
+          </div>
+          <div id="detail-clinical-body" style="margin-top:20px">
+            <p style="color:var(--slate)">Loading clinical volume...</p>
+          </div>
+          <div id="detail-module-body" style="margin-top:20px">
+            <p style="color:var(--slate)">Loading module usage...</p>
+          </div>
+        `;
+        loadHospitalBookingBehavior(hospitalId);
+        loadHospitalClinicalVolume(hospitalId);
+        loadHospitalModuleUsage(hospitalId);
+
+        const dayCtx = document.getElementById('chart-hosp-patients-day');
+        if (dayCtx && typeof Chart !== 'undefined') {
+          if (hospPatientsPerDayChart) hospPatientsPerDayChart.destroy();
+          hospPatientsPerDayChart = new Chart(dayCtx, {
+            type: 'line',
+            data: {
+              labels: data.patients_per_day.map(p => p.date),
+              datasets: [{ label: 'Patients', data: data.patients_per_day.map(p => p.count), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.1)', tension: 0.3, fill: true }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+
+        const weeklyCtx = document.getElementById('chart-hosp-weekly-pattern');
+        if (weeklyCtx && typeof Chart !== 'undefined') {
+          if (hospWeeklyPatternChart) hospWeeklyPatternChart.destroy();
+          hospWeeklyPatternChart = new Chart(weeklyCtx, {
+            type: 'bar',
+            data: {
+              labels: data.weekly_pattern.map(p => p.day),
+              datasets: [{ label: 'Patients', data: data.weekly_pattern.map(p => p.count), backgroundColor: '#1e3a5f' }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+      } catch (e) {
+        body.innerHTML = '<p style="color:var(--slate)">Failed to load analytics.</p>';
+        console.error('Failed to load hospital analytics', e);
+      }
+    }
+
+    let hospBookingTrendChart = null;
+
+    async function loadHospitalBookingBehavior(hospitalId) {
+      const el = document.getElementById('detail-booking-body');
+      if (!el) return;
+      try {
+        const data = await api('GET', `/admin/analytics/hospital/${hospitalId}/booking-behavior?range=${hospitalAnalyticsRange}`);
+
+        el.innerHTML = `
+          <div class="stats-row stats-row-4" style="margin-bottom:16px">
+            <div class="stat-card">
+              <div class="stat-label">Online Bookings</div>
+              <div class="stat-value">${data.online_checkins.toLocaleString('en-IN')}</div>
+              <div class="stat-sub">${data.online_ratio}% of check-ins</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Walk-ins</div>
+              <div class="stat-value">${data.walkin_checkins.toLocaleString('en-IN')}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">No-Show Rate</div>
+              <div class="stat-value">${data.no_show_rate}%</div>
+              <div class="stat-sub">${data.no_show_count} of ${data.resolved_online_appointments} online bookings</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Total Check-ins</div>
+              <div class="stat-value">${data.total_checkins.toLocaleString('en-IN')}</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Booking Source, Daily</h2></div>
+            <canvas id="chart-hosp-booking-trend" height="200"></canvas>
+          </div>
+        `;
+
+        const trendCtx = document.getElementById('chart-hosp-booking-trend');
+        if (trendCtx && typeof Chart !== 'undefined') {
+          if (hospBookingTrendChart) hospBookingTrendChart.destroy();
+          hospBookingTrendChart = new Chart(trendCtx, {
+            type: 'bar',
+            data: {
+              labels: data.booking_trend.map(p => p.date),
+              datasets: [
+                { label: 'Online', data: data.booking_trend.map(p => p.online), backgroundColor: '#0d9488' },
+                { label: 'Walk-in', data: data.booking_trend.map(p => p.walk_in), backgroundColor: '#94a3b8' }
+              ]
+            },
+            options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+      } catch (e) {
+        el.innerHTML = '<p style="color:var(--slate)">Failed to load booking behavior.</p>';
+        console.error('Failed to load hospital booking behavior', e);
+      }
+    }
+
+    let hospOpdIpdTrendChart = null;
+
+    async function loadHospitalClinicalVolume(hospitalId) {
+      const el = document.getElementById('detail-clinical-body');
+      if (!el) return;
+      try {
+        const data = await api('GET', `/admin/analytics/hospital/${hospitalId}/clinical-volume?range=${hospitalAnalyticsRange}`);
+
+        const occColor = data.occupancy_rate >= 90 ? '#dc2626' : data.occupancy_rate >= 70 ? '#c9a227' : '#0d9488';
+
+        el.innerHTML = `
+          <div class="stats-row stats-row-4" style="margin-bottom:16px">
+            <div class="stat-card">
+              <div class="stat-label">OPD Consultations</div>
+              <div class="stat-value">${data.total_opd_in_range.toLocaleString('en-IN')}</div>
+              <div class="stat-sub">in range</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">IPD Admissions</div>
+              <div class="stat-value">${data.total_ipd_in_range.toLocaleString('en-IN')}</div>
+              <div class="stat-sub">in range</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Bed Occupancy</div>
+              <div class="stat-value">${data.occupancy_rate}%</div>
+              <div class="stat-sub">${data.occupied_beds} / ${data.total_beds} beds</div>
+              <div class="mini-progress-track"><div class="mini-progress-fill" style="width:${Math.min(data.occupancy_rate, 100)}%;background:${occColor}"></div></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Avg Consultation Duration</div>
+              <div class="stat-value" style="font-size:1rem;color:var(--slate)">Not tracked</div>
+              <div class="stat-sub">no start/confirm timestamps recorded</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>OPD &amp; IPD Trend</h2></div>
+            <canvas id="chart-hosp-opd-ipd" height="200"></canvas>
+          </div>
+        `;
+
+        const ctx = document.getElementById('chart-hosp-opd-ipd');
+        if (ctx && typeof Chart !== 'undefined') {
+          if (hospOpdIpdTrendChart) hospOpdIpdTrendChart.destroy();
+          hospOpdIpdTrendChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: data.opd_trend.map(p => p.date),
+              datasets: [
+                { label: 'OPD Consultations', data: data.opd_trend.map(p => p.count), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.08)', tension: 0.3, fill: true },
+                { label: 'IPD Admissions', data: data.ipd_trend.map(p => p.count), borderColor: '#c9a227', backgroundColor: 'rgba(201,162,39,0.08)', tension: 0.3, fill: true }
+              ]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+      } catch (e) {
+        el.innerHTML = '<p style="color:var(--slate)">Failed to load clinical volume.</p>';
+        console.error('Failed to load hospital clinical volume', e);
+      }
+    }
+
+    let hospModuleUsageChart = null;
+
+    async function loadHospitalModuleUsage(hospitalId) {
+      const el = document.getElementById('detail-module-body');
+      if (!el) return;
+      try {
+        const data = await api('GET', `/admin/analytics/hospital/${hospitalId}/module-usage?range=${hospitalAnalyticsRange}`);
+
+        el.innerHTML = `
+          <div class="stats-row stats-row-4" style="margin-bottom:16px">
+            <div class="stat-card">
+              <div class="stat-label">Lab Test Orders</div>
+              <div class="stat-value">${data.lab_test_orders.toLocaleString('en-IN')}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Pharmacy Dispensed</div>
+              <div class="stat-value">${data.pharmacy_dispensed.toLocaleString('en-IN')}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Radiology Orders</div>
+              <div class="stat-value">${data.radiology_orders.toLocaleString('en-IN')}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Referrals Sent / Received</div>
+              <div class="stat-value" style="font-size:1.4rem">${data.referrals_sent} / ${data.referrals_received}</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>Module Usage, This Range</h2></div>
+            <canvas id="chart-hosp-module-usage" height="200"></canvas>
+          </div>
+        `;
+
+        const ctx = document.getElementById('chart-hosp-module-usage');
+        if (ctx && typeof Chart !== 'undefined') {
+          if (hospModuleUsageChart) hospModuleUsageChart.destroy();
+          hospModuleUsageChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+              labels: ['Lab Orders', 'Pharmacy Dispensed', 'Radiology Orders', 'Referrals Sent', 'Referrals Received'],
+              datasets: [{
+                label: 'Count',
+                data: [data.lab_test_orders, data.pharmacy_dispensed, data.radiology_orders, data.referrals_sent, data.referrals_received],
+                backgroundColor: ['#0d9488', '#1e3a5f', '#c9a227', '#94a3b8', '#64748b']
+              }]
+            },
+            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+          });
+        }
+      } catch (e) {
+        el.innerHTML = '<p style="color:var(--slate)">Failed to load module usage.</p>';
+        console.error('Failed to load hospital module usage', e);
+      }
+    }
+
     async function openDetail(hospitalId) {
       currentHospitalId = hospitalId;
       document.getElementById('hospitals-list-view').style.display = 'none';
@@ -1204,6 +2197,8 @@
 
         document.getElementById('admin-modal-sub').textContent = `For: ${h.name}`;
         renderAiScribeDetailCard(h);
+        currentDetailHospitalId = hospitalId;
+        loadHospitalAnalytics(hospitalId);
       } catch (e) {
         toast('Failed to load hospital details', 'error');
       }

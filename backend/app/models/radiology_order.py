@@ -45,4 +45,7 @@ class RadiologyOrder(Base):
     self_verified_sole_staff = Column(Boolean, default=False, nullable=False)  # same integrity-tracking pattern as TestOrder.self_verified_sole_staff
     verified_at = Column(DateTime, nullable=True)
 
+    verify_hash = Column(String, nullable=True, index=True)  # QR/verify.html code, set at verify-and-release — item 1
+    report_reference = Column(String, nullable=True, index=True)  # e.g. GEN-RAD-2025-26-00001, set at verify-and-release — item 3
+
     created_at = Column(DateTime, default=now_ist_naive)

@@ -168,6 +168,24 @@ def list_admissions(account: PatientAccount = Depends(get_current_patient_accoun
     return out
 
 
+@router.get("/admissions/{admission_id}/vitals")
+def admission_vitals(admission_id: int, account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
+    """Item 5 decision: vitals shown to the patient, progress notes not —
+    see the round's writeup for why. Same ownership check as every other
+    admission-scoped portal endpoint on this router."""
+    from app.models.admission_vitals import AdmissionVitals
+    patient_ids = _owned_patient_ids(account)
+    admission = db.query(Admission).filter(Admission.id == admission_id, Admission.patient_id.in_(patient_ids)).first()
+    if not admission:
+        raise HTTPException(status_code=404, detail="Admission not found")
+
+    vitals = db.query(AdmissionVitals).filter(
+        AdmissionVitals.admission_id == admission.id
+    ).order_by(AdmissionVitals.recorded_at.desc()).all()
+
+    return [{"data": json.loads(v.data) if v.data else {}, "recorded_at": v.recorded_at.isoformat()} for v in vitals]
+
+
 @router.get("/admissions/{admission_id}/reports")
 def admission_reports(admission_id: int, account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
     """Tests grouped into reports the same way they were ordered: everything
@@ -195,10 +213,10 @@ def admission_reports(admission_id: int, account: PatientAccount = Depends(get_c
             order_index.append(key)
         groups[key].append(t)
 
-    result = []
+    lab_result = []
     for key in order_index:
         tests = groups[key]
-        result.append({
+        lab_result.append({
             "batch_key": key,
             "order_date": min(t.created_at for t in tests).isoformat(),
             "tests": [{"id": t.id, "test_name": t.test_name, "status": t.status} for t in tests],
@@ -206,8 +224,39 @@ def admission_reports(admission_id: int, account: PatientAccount = Depends(get_c
             "any_verified": any(t.status == "verified_released" for t in tests),
         })
     # Most recent report first — reads most naturally for a stay-in-progress.
-    result.sort(key=lambda r: r["order_date"], reverse=True)
-    return result
+    lab_result.sort(key=lambda r: r["order_date"], reverse=True)
+
+    # Item 4 — radiology was never included here at all, for any admission
+    # (not just referral-related ones). Grouped by order_batch_id the same
+    # way lab tests are, kept as a separate key so the frontend can tell
+    # the two apart rather than merging them into one ambiguous list.
+    from app.models.radiology_order import RadiologyOrder
+    rad_orders = db.query(RadiologyOrder).filter(
+        RadiologyOrder.admission_id == admission.id
+    ).order_by(RadiologyOrder.created_at.asc()).all()
+
+    rad_groups = {}
+    rad_order_index = []
+    for r in rad_orders:
+        key = r.order_batch_id or f"__single_{r.id}"
+        if key not in rad_groups:
+            rad_groups[key] = []
+            rad_order_index.append(key)
+        rad_groups[key].append(r)
+
+    rad_result = []
+    for key in rad_order_index:
+        studies = rad_groups[key]
+        rad_result.append({
+            "batch_key": key,
+            "order_date": min(s.created_at for s in studies).isoformat(),
+            "studies": [{"id": s.id, "study_name": s.study_name, "study_type": s.study_type, "status": s.status} for s in studies],
+            "all_verified": all(s.status == "verified_released" for s in studies),
+            "any_verified": any(s.status == "verified_released" for s in studies),
+        })
+    rad_result.sort(key=lambda r: r["order_date"], reverse=True)
+
+    return {"lab_reports": lab_result, "radiology_reports": rad_result}
 
 
 @router.get("/admissions/{admission_id}/reports/{batch_key}/pdf")
@@ -266,11 +315,22 @@ def download_admission_report_pdf(
             unit = catalog_item.unit if catalog_item else ""
             rows = [{"name": order.test_name, "unit": unit or "", "range": range_str or "", "value": result_data.get("value", "")}]
 
-        tests_payload.append({"test_name": order.test_name, "rows": rows, "notes": result_data.get("notes", "")})
+        tests_payload.append({"test_name": order.test_name, "rows": rows, "notes": result_data.get("notes", ""), "report_reference": order.report_reference})
+
+    from app.utils.receipts import next_report_number, generate_verify_hash
+    for o in orders:
+        if not o.verify_hash:
+            # Self-heal for orders verified before the verify_hash/report_reference migration ran.
+            o.report_reference = o.report_reference or next_report_number(db, hospital, "lab")
+            o.verify_hash = generate_verify_hash(o.id, o.hospital_id, kind="lab_report")
+    db.commit()
+    sorted_ids = "-".join(str(i) for i in sorted(o.id for o in orders))
+    combined_verify_hash = generate_verify_hash(sorted_ids, hospital.id, kind="combined_lab_report")
 
     filepath = generate_combined_test_report_pdf(
         order_id_key=f"admission_{admission_id}_{batch_key}", tests_payload=tests_payload,
-        patient=patient, ordering_doctor=ordering_doctor, lab_staff=lab_staff, hospital=hospital
+        patient=patient, ordering_doctor=ordering_doctor, lab_staff=lab_staff, hospital=hospital,
+        verify_hash=combined_verify_hash,
     )
     return FileResponse(filepath, media_type="application/pdf", filename=f"test_report_admission_{admission_id}.pdf")
 
@@ -566,11 +626,21 @@ def download_consultation_test_report(
             unit = catalog_item.unit if catalog_item else ""
             rows = [{"name": order.test_name, "unit": unit or "", "range": range_str or "", "value": result_data.get("value", "")}]
 
-        tests_payload.append({"test_name": order.test_name, "rows": rows, "notes": result_data.get("notes", "")})
+        tests_payload.append({"test_name": order.test_name, "rows": rows, "notes": result_data.get("notes", ""), "report_reference": order.report_reference})
+
+    from app.utils.receipts import next_report_number, generate_verify_hash
+    for o in orders:
+        if not o.verify_hash:
+            o.report_reference = o.report_reference or next_report_number(db, hospital, "lab")
+            o.verify_hash = generate_verify_hash(o.id, o.hospital_id, kind="lab_report")
+    db.commit()
+    sorted_ids = "-".join(str(i) for i in sorted(o.id for o in orders))
+    combined_verify_hash = generate_verify_hash(sorted_ids, hospital.id, kind="combined_lab_report")
 
     filepath = generate_combined_test_report_pdf(
         order_id_key=f"portal_{consultation_id}", tests_payload=tests_payload,
-        patient=patient, ordering_doctor=ordering_doctor, lab_staff=lab_staff, hospital=hospital
+        patient=patient, ordering_doctor=ordering_doctor, lab_staff=lab_staff, hospital=hospital,
+        verify_hash=combined_verify_hash,
     )
     return FileResponse(filepath, media_type="application/pdf", filename=f"test_report_{consultation.token_number}.pdf")
 
