@@ -656,7 +656,6 @@ def checkin_today(
         additional_tokens_out.append({
             "checkin_id": ac.id,
             "token_number": ac.token_number,
-            "display_token": ac.display_token,
             "doctor_name": f"{ac_doctor.title} {ac_doctor.name}" if ac_doctor else "—",
             "specialization": ac_doctor.specialization if ac_doctor else None,
             "room_number": ac_doctor.room_number if ac_doctor else None,
@@ -666,7 +665,6 @@ def checkin_today(
     return {
         "exists": True,
         "token_number": checkin.token_number,
-        "display_token": checkin.display_token,
         "patient_name": patient.name,
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "doctor_specialization": doctor.specialization if doctor else None,
@@ -750,12 +748,31 @@ def get_checkin_slip(
     else:
         attending_nurse = db.query(Doctor).filter(Doctor.id == checkin.nurse_id).first() if checkin.nurse_id else None
 
+    additional_checkins = []
+    if checkin.visit_group_id:
+        additional_checkins = db.query(Checkin).filter(
+            Checkin.visit_group_id == checkin.visit_group_id,
+            Checkin.id != checkin.id,
+        ).all()
+    additional_tokens_out = []
+    for ac in additional_checkins:
+        ac_doctor = db.query(Doctor).filter(Doctor.id == ac.doctor_id).first()
+        additional_tokens_out.append({
+            "checkin_id": ac.id,
+            "token_number": ac.token_number,
+            "doctor_name": f"{ac_doctor.title} {ac_doctor.name}" if ac_doctor else "—",
+            "specialization": ac_doctor.specialization if ac_doctor else None,
+            "room_number": ac_doctor.room_number if ac_doctor else None,
+        })
+
     return {
         "token_number": checkin.token_number,
-        "display_token": checkin.display_token,
         "patient_name": patient.name if patient else "—",
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
+        "doctor_specialization": doctor.specialization if doctor else None,
+        "doctor_room_number": doctor.room_number if doctor else None,
         "issue_category": checkin.issue_category,
+        "additional_tokens": additional_tokens_out or None,
         "visit_date": checkin.visit_date.isoformat(),
         "checked_in_at": checkin.created_at.isoformat() if checkin.created_at else None,
         "nurse_name": f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
@@ -944,7 +961,7 @@ def refer_to_doctor(
         raise HTTPException(status_code=400, detail="No check-in found for today under you for this patient.")
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
-    token, display_num = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+    token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
     # Same fee resolution as a normal check-in — a referral isn't a
     # discounted/free consult, it's a regular visit with the receiving
@@ -957,7 +974,6 @@ def refer_to_doctor(
         hospital_id=current_doctor.hospital_id,
         patient_id=patient.id,
         token_number=token,
-        display_token=display_num,
         issue_category=origin_checkin.issue_category,
         doctor_id=to_doctor.id,
         created_by=current_doctor.id,
@@ -1136,29 +1152,16 @@ def update_patient(
 
     return patient
 
-def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> tuple[str, int]:
+def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> str:
     import secrets, string
-    today = ist_today()
     prefix = hospital_code.replace("-", "")[:4].upper()
     alphabet = string.ascii_uppercase + string.digits
     while True:
-        # Only count solo visits and the ANCHOR row of a multi-doctor visit
-        # (visit_group_id is null, or equals the row's own id — see
-        # checkin_patient's `checkin.visit_group_id = checkin.id` self-link).
-        # The secondary-doctor rows (visit_group_id pointing at a DIFFERENT
-        # checkin's id) reuse the anchor's display_token and must NOT eat a
-        # sequence slot — that's what was causing tokens to skip a number
-        # every time a walk-in saw more than one doctor.
-        count = db.query(Checkin).filter(
-            Checkin.hospital_id == hospital_id,
-            Checkin.visit_date == today,
-            or_(Checkin.visit_group_id.is_(None), Checkin.visit_group_id == Checkin.id)
-        ).count() + 1
         suffix = "".join(secrets.choice(alphabet) for _ in range(6))
         token = f"{prefix}-{suffix}"
         existing = db.query(Checkin).filter(Checkin.token_number == token).first()
         if not existing:
-            return token, count
+            return token
 
 def _apply_recent_vitals_if_available(db: Session, checkin, patient_id: int, hospital_id: int):
     """If this same patient had vitals recorded anywhere in this hospital
@@ -1238,7 +1241,7 @@ def checkin_patient(
         raise HTTPException(status_code=400, detail="A nurse/assistant covering this doctor is present — send the patient to them for vitals instead.")
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
-    token, display_num = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+    token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
     consultation_fee = payload.consultation_fee
     if consultation_fee is None:
@@ -1256,7 +1259,6 @@ def checkin_patient(
             hospital_id=current_doctor.hospital_id,
             patient_id=patient.id,
             token_number=token,
-            display_token=display_num,
             issue_category=payload.issue_category,
             doctor_id=doctor.id,
             created_by=current_doctor.id,
@@ -1274,7 +1276,7 @@ def checkin_patient(
             db.rollback()
             if attempt == max_token_attempts - 1:
                 raise HTTPException(status_code=500, detail="Could not generate a unique token — please try again")
-            token, display_num = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+            token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
     db.refresh(checkin)
 
     reused_vitals = _apply_recent_vitals_if_available(db, checkin, patient.id, current_doctor.hospital_id)
@@ -1328,7 +1330,6 @@ def checkin_patient(
                     hospital_id=current_doctor.hospital_id,
                     patient_id=patient.id,
                     token_number=extra_token,
-                    display_token=display_num,  # same visit as the primary checkin, same callable number — not a fresh draw
                     issue_category=payload.issue_category,
                     doctor_id=extra_doctor.id,
                     created_by=current_doctor.id,
@@ -1361,7 +1362,6 @@ def checkin_patient(
             additional_tokens_out.append({
                 "checkin_id": extra_checkin.id,
                 "token_number": extra_token,
-                "display_token": display_num,
                 "doctor_name": f"{extra_doctor.title} {extra_doctor.name}",
                 "specialization": extra_doctor.specialization,
                 "room_number": extra_doctor.room_number,
@@ -1374,7 +1374,6 @@ def checkin_patient(
     return CheckinOut(
         checkin_id=checkin.id,
         token_number=token,
-        display_token=display_num,
         patient_name=patient.name,
         doctor_name=f"{doctor.title} {doctor.name}",
         doctor_specialization=doctor.specialization,
@@ -1663,7 +1662,6 @@ def todays_queue(
             "patient_uid": p.patient_uid,
             "url_token": p.url_token,
             "token_number": c.token_number,
-            "display_token": c.display_token,
             "issue_category": c.issue_category,
             "created_at": c.created_at.isoformat(),
             "estimated_time": c.booked_time.isoformat() if c.booked_time else None,

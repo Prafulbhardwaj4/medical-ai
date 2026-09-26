@@ -179,16 +179,15 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     80mm receipt format used by receptionist.html's print flow (.receipt-slip).
     This is read on a phone screen, not torn off a thermal printer, so it
     gets the same letterhead treatment as the invoice/prescription PDFs.
-    display_token is still THE big number, and it's the only token number
-    shown now — the separate 'Ref:' line was dropped since it just showed
-    the same visit's internal token_number a second time, which read as a
-    different, more confusing number than the one already answered above.
+    The big number is checkin.token_number itself — the actual generated
+    token. (The separate display_token short-serial-number experiment was
+    reverted; see the migration that drops that column.)
 
-    additional_doctors: optional list of {doctor_name, specialization}
-    for the other doctors in the same visit_group (multi-doctor same-day
-    visit). When present, the single 'Doctor' row is replaced with a
-    'Doctor Visits: N' block listing every doctor (this one included)
-    with their specialization — no room, no fee, on any of them.
+    additional_doctors: optional list of {doctor_name, specialization,
+    room_number} for the other doctors in the same visit_group (multi-doctor
+    same-day visit). When present, the single 'Doctor'/'Room' rows are
+    replaced with a 'Doctor Visits: N' block listing every doctor (this one
+    included) with their room on the same line — no fee, on any of them.
 
     TEMP: currently only wired to a manual preview endpoint
     (/patients/checkins/{id}/token-slip-pdf) so it can be checked before
@@ -211,9 +210,8 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     label_style = ParagraphStyle("tok_label", fontSize=10, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey, spaceAfter=2)
     big_style = ParagraphStyle("tok_big", fontSize=48, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"), leading=54)
 
-    display_value = checkin.display_token if checkin.display_token is not None else checkin.token_number
     elements.append(Paragraph("YOUR TOKEN NUMBER", label_style))
-    elements.append(Paragraph(str(display_value), big_style))
+    elements.append(Paragraph(str(checkin.token_number), big_style))
     elements.append(Spacer(1, 10*mm))
     elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
     elements.append(Spacer(1, 6*mm))
@@ -224,27 +222,38 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     all_doctors = [{
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "specialization": doctor.specialization if doctor else None,
+        "room_number": doctor.room_number if doctor else None,
     }]
     if additional_doctors:
         all_doctors.extend(additional_doctors)
 
     if len(all_doctors) > 1:
         doctors_label_style = ParagraphStyle("doctors_label", fontSize=9, fontName="Helvetica-Bold", textColor=colors.HexColor("#334155"), spaceAfter=3)
-        doctor_line_style = ParagraphStyle("doctor_line", fontSize=10, fontName="Helvetica", textColor=colors.HexColor("#111827"), leftIndent=4, spaceAfter=4)
+        doctor_line_style = ParagraphStyle("doctor_line", fontSize=10, fontName="Helvetica", textColor=colors.HexColor("#111827"))
+        doctor_room_style = ParagraphStyle("doctor_room", fontSize=10, fontName="Helvetica", textColor=colors.HexColor("#111827"))
 
         elements.append(Paragraph(f"Doctor Visits: {len(all_doctors)}", doctors_label_style))
-        for d in all_doctors:
-            name_line = d["doctor_name"] + (f", {d['specialization']}" if d.get("specialization") else "")
-            elements.append(Paragraph(name_line, doctor_line_style))
+        doctor_rows = [[
+            Paragraph(d["doctor_name"] + (f", {d['specialization']}" if d.get("specialization") else ""), doctor_line_style),
+            Paragraph(d.get("room_number") or "—", doctor_room_style),
+        ] for d in all_doctors]
+        doctor_table = Table(doctor_rows, colWidths=[110*mm, 40*mm])
+        doctor_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3*mm),
+        ]))
+        elements.append(doctor_table)
         elements.append(Spacer(1, 3*mm))
 
-    rows = [("Patient", patient.name)]
+    rows = [("Patient Name", patient.name)]
     if len(all_doctors) == 1:
         rows.append(("Doctor", all_doctors[0]["doctor_name"]))
+        rows.append(("Room", all_doctors[0].get("room_number") or "—"))
     rows += [
-        ("Category", checkin.issue_category or "—"),
         ("Date", checkin.visit_date.strftime("%d %b %Y")),
-        ("Checked in", checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—"),
+        ("Time", checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—"),
     ]
     if nurse_name:
         rows.append(("Nurse/Assistant", nurse_name))
@@ -263,7 +272,8 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     elements.append(Spacer(1, 3*mm))
 
     footer_style = ParagraphStyle("footer", fontSize=8, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
-    elements.append(Paragraph(f"Please keep this for your visit. Generated by MedScribe | {now_ist().strftime('%d %b %Y %H:%M')}", footer_style))
+    elements.append(Paragraph("Please keep this for your visit.", footer_style))
+    elements.append(Paragraph("Generated by MedScribe", footer_style))
 
     doc.build(elements)
     return filepath
