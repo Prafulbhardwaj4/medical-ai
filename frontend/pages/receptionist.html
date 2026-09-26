@@ -1365,6 +1365,7 @@
       <div class="modal-header">
         <div>
           <h2 id="pt-toggle-patient-name">Payments</h2>
+          <p class="pay-toggle-subtitle" id="pt-toggle-patient-meta"></p>
           <p class="pay-toggle-subtitle">Manage today's visit</p>
         </div>
         <button class="modal-close" onclick="closePaymentToggleModal()">×</button>
@@ -2890,6 +2891,8 @@
     function openPaymentToggleModal(idx) {
       paymentToggleRow = pendingPaymentRows[idx];
       document.getElementById('pt-toggle-patient-name').textContent = paymentToggleRow.patient_name;
+      document.getElementById('pt-toggle-patient-meta').textContent =
+        `${paymentToggleRow.patient_uid || ''}${paymentToggleRow.patient_uid && paymentToggleRow.token_number ? '  ·  ' : ''}${paymentToggleRow.token_number ? 'Token: ' + paymentToggleRow.token_number : ''}`;
       renderPaymentToggleBody();
       document.getElementById('modal-payment-toggle').classList.add('open');
     }

@@ -1117,15 +1117,17 @@ def update_patient(
     return patient
 
 def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> tuple[str, int]:
+    import secrets, string
     today = ist_today()
     prefix = hospital_code.replace("-", "")[:4].upper()
-    date_part = today.strftime("%d%m%y")
+    alphabet = string.ascii_uppercase + string.digits
     while True:
         count = db.query(Checkin).filter(
             Checkin.hospital_id == hospital_id,
             Checkin.visit_date == today
         ).count() + 1
-        token = f"{prefix}-{date_part}-{count:03d}"
+        suffix = "".join(secrets.choice(alphabet) for _ in range(6))
+        token = f"{prefix}-{suffix}"
         existing = db.query(Checkin).filter(Checkin.token_number == token).first()
         if not existing:
             return token, count
@@ -1917,6 +1919,7 @@ def reception_pending_payments(
             "patient_name": patient.name,
             "patient_uid": patient.patient_uid,
             "patient_phone": patient.phone,
+            "token_number": c.token_number,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else None,
             "buckets": buckets,
             "is_finalized": c.is_finalized,
@@ -1942,6 +1945,7 @@ def reception_pending_payments(
                 "patient_name": row["patient_name"],
                 "patient_uid": row["patient_uid"],
                 "patient_phone": row["patient_phone"],
+                "token_number": row["token_number"],
                 "is_finalized": row["is_finalized"],
                 "doctors": [],
             }
