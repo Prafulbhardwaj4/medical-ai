@@ -877,7 +877,7 @@
                 <div id="slip-additional-doctors" class="r-extra" style="display:none"></div>
                 <div class="r-row"><span>Patient</span><span id="slip-name"></span></div>
                 <div class="r-row"><span>Doctor</span><span id="slip-doctor"></span></div>
-                <div class="r-row"><span>Room</span><span id="slip-room"></span></div>
+                <div class="r-row"><span>Category</span><span id="slip-room"></span></div>
                 <div class="r-row"><span>Date</span><span id="slip-date"></span></div>
                 <div class="r-row"><span>Time</span><span id="slip-checkin-time"></span></div>
                 <div class="r-dashed"></div>
@@ -1412,7 +1412,7 @@
           <div class="r-token" id="pslip-token"></div>
           <div class="r-row"><span>Patient</span><span id="pslip-name"></span></div>
           <div class="r-row"><span>Doctor</span><span id="pslip-doctor"></span></div>
-          <div class="r-row"><span>Room</span><span id="pslip-room"></span></div>
+          <div class="r-row"><span>Category</span><span id="pslip-room"></span></div>
           <div class="r-row"><span>Date</span><span id="pslip-date"></span></div>
           <div class="r-row"><span>Time</span><span id="pslip-checkin-time"></span></div>
           <div class="r-dashed"></div>
@@ -2102,30 +2102,26 @@
       const wrap = document.getElementById(elId);
       if (!wrap) return; // past-slip modal has no extra-doctors slot — skip rather than throw
       const doctorRow = document.getElementById(`${prefix}-doctor`)?.closest('.r-row');
-      const roomRow = document.getElementById(`${prefix}-room`)?.closest('.r-row');
       const extras = data.additional_tokens || [];
 
       if (!extras.length) {
         wrap.style.display = 'none';
         wrap.innerHTML = '';
         if (doctorRow) doctorRow.style.display = '';
-        if (roomRow) roomRow.style.display = '';
         return;
       }
 
       if (doctorRow) doctorRow.style.display = 'none';
-      if (roomRow) roomRow.style.display = 'none';
 
       const allDoctors = [
-        { doctor_name: data.doctor_name, specialization: data.doctor_specialization, room_number: data.doctor_room_number },
-        ...extras.map(t => ({ doctor_name: t.doctor_name, specialization: t.specialization, room_number: t.room_number })),
+        { doctor_name: data.doctor_name, specialization: data.doctor_specialization },
+        ...extras.map(t => ({ doctor_name: t.doctor_name, specialization: t.specialization })),
       ];
 
       wrap.style.display = '';
-      wrap.innerHTML = `<p style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Doctors visited: ${allDoctors.length}</p>` +
+      wrap.innerHTML = `<p style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Doctor Visits: ${allDoctors.length}</p>` +
         allDoctors.map(d => `
           <div class="r-row"><span>${d.doctor_name}${d.specialization ? ', ' + d.specialization : ''}</span><span></span></div>
-          <div class="r-row"><span style="color:#666">Room</span><span>${d.room_number || '—'}</span></div>
         `).join('');
     }
 

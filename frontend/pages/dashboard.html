@@ -1432,7 +1432,7 @@
       const isReturnVisit = q.status === 'returned';
       return `
       <tr>
-        <td data-label="Token" style="text-align:center"><strong>${(q.display_token != null ? q.display_token : q.token_number) || '—'}</strong></td>
+        <td data-label="Token" style="text-align:center"><strong>${q.token_number || '—'}</strong></td>
         <td data-label="Patient" style="text-align:center">${q.patient_name}${q.is_referral ? ` <span class="badge badge-navy" title="${(q.referral_note || '').replace(/"/g, '&quot;')}">Referred by ${q.referred_by_name || 'another doctor'}</span>` : ''}${isReturnVisit ? ' <span class="badge badge-purple" title="Same-day recheck — no new token">Recheck</span>' : ''}</td>
         <td data-label="Phone" style="text-align:center;color:var(--slate)">${q.patient_phone || '—'}</td>
         <td data-label="${q.source === 'online' ? 'Est. Time' : 'Checked In'}" style="color:var(--slate);text-align:center">${timeLabel}</td>

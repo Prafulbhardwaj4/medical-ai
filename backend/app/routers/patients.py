@@ -1142,9 +1142,17 @@ def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> 
     prefix = hospital_code.replace("-", "")[:4].upper()
     alphabet = string.ascii_uppercase + string.digits
     while True:
+        # Only count solo visits and the ANCHOR row of a multi-doctor visit
+        # (visit_group_id is null, or equals the row's own id — see
+        # checkin_patient's `checkin.visit_group_id = checkin.id` self-link).
+        # The secondary-doctor rows (visit_group_id pointing at a DIFFERENT
+        # checkin's id) reuse the anchor's display_token and must NOT eat a
+        # sequence slot — that's what was causing tokens to skip a number
+        # every time a walk-in saw more than one doctor.
         count = db.query(Checkin).filter(
             Checkin.hospital_id == hospital_id,
-            Checkin.visit_date == today
+            Checkin.visit_date == today,
+            or_(Checkin.visit_group_id.is_(None), Checkin.visit_group_id == Checkin.id)
         ).count() + 1
         suffix = "".join(secrets.choice(alphabet) for _ in range(6))
         token = f"{prefix}-{suffix}"
