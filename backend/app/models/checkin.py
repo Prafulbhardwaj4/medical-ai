@@ -9,6 +9,7 @@ class Checkin(Base):
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
     token_number = Column(String, unique=True, nullable=False, index=True)  # DB-level unique constraint — already the real hard backstop against the generate_token_number race (see checkin_patient / convert_appointment_to_checkin, which now retry on the IntegrityError this raises). Global uniqueness rather than a (hospital_id, visit_date, token_number) composite is equivalent here since the token string itself already embeds the hospital prefix and date.
+    display_token = Column(Integer, nullable=True)  # short, human-callable per-day/per-hospital sequential number — the {count:03d} part of generate_token_number's build, stored as its own int instead of discarded. token_number stays canonical for records/billing/URLs; this is only for what a receptionist reads aloud or a patient glances at. NOT globally unique (resets daily per hospital) — never use for lookups.
     issue_category = Column(String, nullable=False)
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     created_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # null = system-generated (online booking handoff), no staff actor

@@ -16,6 +16,7 @@ from app.schemas.portal import DeclineAppointmentIn, SuggestAppointmentIn
 from app.utils.auth import get_current_doctor
 from app.utils.timezone import now_ist_naive
 from app.utils.portal_billing import current_doctor_fee, create_patient_cancellation_refund
+from app.utils.notify import resolve_notification
 from app.utils.portal_checkin import convert_appointment_to_checkin
 from app.utils.portal_auth import hash_password
 from app.models.portal import PatientAccount, PatientProfileLink
@@ -692,6 +693,7 @@ def accept_appointment(
         appt.requested_reschedule_slot_id = None
 
     appt.status = AppointmentStatus.confirmed
+    resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
     db.commit()
     return {"message": "Appointment accepted"}
 
@@ -723,6 +725,7 @@ def decline_appointment(
         appt.review_deadline_at = None
         appt.review_followup_sent_at = None
         appt.status = AppointmentStatus.confirmed
+        resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
         db.commit()
         return {"message": "Reschedule request declined — patient can request a different slot within their 72hr window"}
 
@@ -734,6 +737,7 @@ def decline_appointment(
             slot.booked_count -= 1
 
     appt.status = AppointmentStatus.cancelled
+    resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
     db.commit()
     return {"message": "Appointment declined and fully refunded"}
 
@@ -799,5 +803,6 @@ def suggest_new_slot(
         appt.status = AppointmentStatus.booked
         appt.payment_status = "unpaid"
 
+    resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
     db.commit()
     return {"message": "Suggestion applied", "fee_delta": fee_delta, "status": appt.status.value}

@@ -741,6 +741,15 @@
         }
 
         async function onNotifClick(id, linkType, linkId) {
+          if (linkType === 'suggestion' && linkId) {
+            try {
+              await api("PATCH", `/notifications/${id}/read`, {});
+              loadNotifUnreadCount();
+              closeNotifPanel();
+              window.__suggestionWidget.openToThread(linkId);
+            } catch (e) { toast(e.message, "error"); }
+            return;
+          }
             try {
                 await api("PATCH", `/notifications/${id}/read`, {});
                 loadNotifUnreadCount();
@@ -749,6 +758,12 @@
                 } else if (linkType === 'upgrade') {
                     closeNotifPanel();
                     if (typeof openUpgradeModal === 'function') openUpgradeModal();
+                } else if (typeof handleAdminNotifClick === 'function') {
+                    // Item 3 — fallback to the shared admin handler (api.js)
+                    // for staff/room/admission_topup/admission/test_order/etc.
+                    // — previously built but never actually called from here.
+                    closeNotifPanel();
+                    await handleAdminNotifClick(linkType, linkId);
                 }
             } catch (e) { }
         }

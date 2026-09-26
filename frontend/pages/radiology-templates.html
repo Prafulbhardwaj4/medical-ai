@@ -334,6 +334,15 @@
     }
 
     async function onNotifClick(id, linkType, linkId) {
+      if (linkType === 'suggestion' && linkId) {
+        try {
+          await api("PATCH", `/notifications/${id}/read`, {});
+          loadNotifUnreadCount();
+          closeNotifPanel();
+          window.__suggestionWidget.openToThread(linkId);
+        } catch (e) { toast(e.message, "error"); }
+        return;
+      }
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();

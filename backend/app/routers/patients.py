@@ -656,6 +656,7 @@ def checkin_today(
         additional_tokens_out.append({
             "checkin_id": ac.id,
             "token_number": ac.token_number,
+            "display_token": ac.display_token,
             "doctor_name": f"{ac_doctor.title} {ac_doctor.name}" if ac_doctor else "—",
             "consultation_fee": ac.consultation_fee,
         })
@@ -663,6 +664,7 @@ def checkin_today(
     return {
         "exists": True,
         "token_number": checkin.token_number,
+        "display_token": checkin.display_token,
         "patient_name": patient.name,
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "issue_category": checkin.issue_category,
@@ -746,6 +748,7 @@ def get_checkin_slip(
 
     return {
         "token_number": checkin.token_number,
+        "display_token": checkin.display_token,
         "patient_name": patient.name if patient else "—",
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "issue_category": checkin.issue_category,
@@ -756,6 +759,42 @@ def get_checkin_slip(
         "total_fee": (checkin.consultation_fee or 0) + (checkin.test_fee or 0),
         "is_paid": checkin.is_paid
     }
+
+
+# TEMP — manual preview only, so the WhatsApp-bound PDF can be checked
+# before WhatsApp sending exists. Remove this endpoint (and the frontend
+# button that calls it) once real WhatsApp delivery calls
+# generate_token_slip_pdf directly instead of a person clicking a button.
+@router.get("/checkins/{checkin_id}/token-slip-pdf")
+def preview_token_slip_pdf(
+    checkin_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    checkin = db.query(Checkin).filter(
+        Checkin.id == checkin_id,
+        Checkin.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not checkin:
+        raise HTTPException(status_code=404, detail="Visit not found")
+
+    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
+    doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+
+    if checkin.vitals_status == "done" and checkin.vitals_recorded_by:
+        attending_nurse = db.query(Doctor).filter(Doctor.id == checkin.vitals_recorded_by).first()
+    else:
+        attending_nurse = db.query(Doctor).filter(Doctor.id == checkin.nurse_id).first() if checkin.nurse_id else None
+
+    from app.services.pdf_service import generate_token_slip_pdf
+    pdf_path = generate_token_slip_pdf(
+        checkin, patient, doctor, hospital,
+        nurse_name=f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None
+    )
+
+    from fastapi.responses import FileResponse
+    return FileResponse(pdf_path, media_type="application/pdf", filename=os.path.basename(pdf_path))
 
 @router.post("/{patient_id}/send-to-nurse")
 def send_to_nurse(
@@ -885,7 +924,7 @@ def refer_to_doctor(
         raise HTTPException(status_code=400, detail="No check-in found for today under you for this patient.")
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
-    token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+    token, display_num = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
     # Same fee resolution as a normal check-in — a referral isn't a
     # discounted/free consult, it's a regular visit with the receiving
@@ -898,6 +937,7 @@ def refer_to_doctor(
         hospital_id=current_doctor.hospital_id,
         patient_id=patient.id,
         token_number=token,
+        display_token=display_num,
         issue_category=origin_checkin.issue_category,
         doctor_id=to_doctor.id,
         created_by=current_doctor.id,
@@ -1076,7 +1116,7 @@ def update_patient(
 
     return patient
 
-def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> str:
+def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> tuple[str, int]:
     today = ist_today()
     prefix = hospital_code.replace("-", "")[:4].upper()
     date_part = today.strftime("%d%m%y")
@@ -1088,7 +1128,7 @@ def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> 
         token = f"{prefix}-{date_part}-{count:03d}"
         existing = db.query(Checkin).filter(Checkin.token_number == token).first()
         if not existing:
-            return token
+            return token, count
 
 def _apply_recent_vitals_if_available(db: Session, checkin, patient_id: int, hospital_id: int):
     """If this same patient had vitals recorded anywhere in this hospital
@@ -1168,7 +1208,7 @@ def checkin_patient(
         raise HTTPException(status_code=400, detail="A nurse/assistant covering this doctor is present — send the patient to them for vitals instead.")
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
-    token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+    token, display_num = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
     consultation_fee = payload.consultation_fee
     if consultation_fee is None:
@@ -1186,6 +1226,7 @@ def checkin_patient(
             hospital_id=current_doctor.hospital_id,
             patient_id=patient.id,
             token_number=token,
+            display_token=display_num,
             issue_category=payload.issue_category,
             doctor_id=doctor.id,
             created_by=current_doctor.id,
@@ -1203,7 +1244,7 @@ def checkin_patient(
             db.rollback()
             if attempt == max_token_attempts - 1:
                 raise HTTPException(status_code=500, detail="Could not generate a unique token — please try again")
-            token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
+            token, display_num = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
     db.refresh(checkin)
 
     reused_vitals = _apply_recent_vitals_if_available(db, checkin, patient.id, current_doctor.hospital_id)
@@ -1257,6 +1298,7 @@ def checkin_patient(
                     hospital_id=current_doctor.hospital_id,
                     patient_id=patient.id,
                     token_number=extra_token,
+                    display_token=display_num,  # same visit as the primary checkin, same callable number — not a fresh draw
                     issue_category=payload.issue_category,
                     doctor_id=extra_doctor.id,
                     created_by=current_doctor.id,
@@ -1289,6 +1331,7 @@ def checkin_patient(
             additional_tokens_out.append({
                 "checkin_id": extra_checkin.id,
                 "token_number": extra_token,
+                "display_token": display_num,
                 "doctor_name": f"{extra_doctor.title} {extra_doctor.name}",
                 "consultation_fee": extra_fee,
             })
@@ -1299,6 +1342,7 @@ def checkin_patient(
     return CheckinOut(
         checkin_id=checkin.id,
         token_number=token,
+        display_token=display_num,
         patient_name=patient.name,
         doctor_name=f"{doctor.title} {doctor.name}",
         issue_category=payload.issue_category,
@@ -1585,6 +1629,7 @@ def todays_queue(
             "patient_uid": p.patient_uid,
             "url_token": p.url_token,
             "token_number": c.token_number,
+            "display_token": c.display_token,
             "issue_category": c.issue_category,
             "created_at": c.created_at.isoformat(),
             "estimated_time": c.booked_time.isoformat() if c.booked_time else None,

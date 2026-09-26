@@ -39,6 +39,28 @@ def require_lab(current_doctor: Doctor):
         raise HTTPException(status_code=403, detail="Not authorized")
 
 
+@router.get("/test-orders/{order_id}/context")
+def test_order_context(order_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Item 2 fix — resolves a TestOrder id (from a critical_result /
+    critical_result_escalation / sample_rejected notification, link_type=
+    'test_order') to wherever staff can actually see the result: the
+    admission's Records view for an IPD order, or the patient's own page
+    for an OPD order. One shared resolver reused identically by doctor,
+    nurse, and reception rather than building three separate views."""
+    order = db.query(TestOrder).filter(TestOrder.id == order_id, TestOrder.hospital_id == current_doctor.hospital_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Test order not found")
+    if order.admission_id:
+        from app.models.admission import Admission
+        admission = db.query(Admission).filter(Admission.id == order.admission_id).first()
+        if admission:
+            return {"context": "admission", "token": admission.public_token}
+    patient = db.query(Patient).filter(Patient.id == order.patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return {"context": "patient", "patient_id": patient.id, "token": patient.url_token}
+
+
 def _is_hiv_order(db: Session, order: TestOrder) -> bool:
     if not order.test_id:
         return False
@@ -909,6 +931,12 @@ def update_order_status(
     order.status = status
     if status == "sample_collected":
         order.collected_at = now_ist_naive()
+        if order.redraw_of_order_id:
+            # Item 5 — this redraw's original order is what the
+            # sample_rejected notification was keyed on; resolve it now
+            # that the redraw has actually been collected.
+            from app.utils.notify import resolve_notification
+            resolve_notification(db, current_doctor.hospital_id, f"sample_rejected:{order.redraw_of_order_id}")
         if payload.fasting_confirmed is not None:
             order.fasting_confirmed = payload.fasting_confirmed
         if payload.drawn_from_iv_line is not None:
@@ -973,8 +1001,10 @@ def acknowledge_critical_result(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     """The ordering doctor (or admin) acknowledges a critical-result alert —
-    stops the escalation clock. Distinct from the generic notification
-    is_read toggle so this is explicit and auditable."""
+    stops the escalation clock, and clears both the critical_result and
+    critical_result_escalation bell notifications for this order (item 5).
+    The audit trail lives in critical_ack_at and the log_action entry
+    below, independent of the notifications' is_read state."""
     order = db.query(TestOrder).filter(
         TestOrder.id == order_id,
         TestOrder.hospital_id == current_doctor.hospital_id
@@ -989,6 +1019,11 @@ def acknowledge_critical_result(
         raise HTTPException(status_code=403, detail="Only the ordering doctor or an admin can acknowledge this")
 
     order.critical_ack_at = now_ist_naive()
+
+    from app.utils.notify import resolve_notifications_for_link
+    resolve_notifications_for_link(db, current_doctor.hospital_id, "critical_result", order.id)
+    resolve_notifications_for_link(db, current_doctor.hospital_id, "critical_result_escalation", order.id)
+
     db.commit()
 
     log_action(

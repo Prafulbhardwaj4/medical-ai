@@ -915,6 +915,15 @@
     }
 
     async function onNotifClick(id, linkType, linkId, wasAlreadyRead) {
+      if (linkType === 'suggestion' && linkId) {
+        try {
+          await api("PATCH", `/notifications/${id}/read`, {});
+          loadNotifUnreadCount();
+          closeNotifPanel();
+          window.__suggestionWidget.openToThread(linkId);
+        } catch (e) { toast(e.message, "error"); }
+        return;
+      }
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
@@ -923,7 +932,7 @@
           toast("This has already been taken care of.", "info");
           return;
         }
-        if ((linkType === 'admission' || linkType === 'ward_change_request') && linkId) {
+        if ((linkType === 'admission' || linkType === 'ward_change_request' || linkType === 'discharge_order_placed') && linkId) {
           const { token } = await api("GET", `/admissions/token-for/${linkId}`);
           location.href = `admission-detail.html?id=${token}`;
         } else if (linkType === 'admission_referral' && linkId) {

@@ -84,7 +84,16 @@
       }
     }
 
+    :root {
+      --receipt-width: 80mm; /* switch to 58mm here if a hospital's hardware needs it */
+    }
+
     @media print {
+      @page {
+        size: var(--receipt-width) auto;
+        margin: 4mm;
+      }
+
       body * {
         visibility: hidden;
       }
@@ -99,11 +108,64 @@
         top: 0;
         left: 0;
         width: 100%;
+        max-width: var(--receipt-width);
       }
 
       .no-print {
         display: none !important;
       }
+    }
+
+    .receipt-slip {
+      font-family: 'Courier New', Courier, monospace;
+      text-align: center;
+    }
+    .receipt-slip .r-hospital {
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+    .receipt-slip .r-rule {
+      border-top: 1px solid #000;
+      margin: 8px 0;
+    }
+    .receipt-slip .r-token-label {
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .receipt-slip .r-token {
+      font-size: 2.2rem;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+    .receipt-slip .r-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+      text-align: left;
+      padding: 2px 0;
+      gap: 8px;
+    }
+    .receipt-slip .r-row span:first-child {
+      color: #444;
+    }
+    .receipt-slip .r-extra {
+      text-align: left;
+      font-size: 11px;
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px dashed #999;
+    }
+    .receipt-slip .r-dashed {
+      border-top: 1px dashed #000;
+      margin: 10px 0 6px;
+    }
+    .receipt-slip .r-footer {
+      font-size: 10px;
+      color: #444;
     }
 
     /* #7 — Home / Patients List are switched from the sidebar nav on desktop now */
@@ -807,21 +869,19 @@
           <!-- STEP 4: Token slip -->
           <div id="step-token" style="display:none;text-align:center">
             <div id="print-area" class="print-area">
-              <p style="font-weight:700;color:var(--navy);margin-bottom:2px" id="slip-hospital"></p>
-              <div style="padding:20px 0">
-                <p style="color:var(--slate);margin-bottom:6px">Token Number</p>
-                <div style="font-size:2.4rem;font-weight:700;color:var(--navy);letter-spacing:1px" id="slip-token">
-                </div>
-                <div id="slip-additional-doctors"
-                  style="display:none;text-align:left;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-                </div>
-              </div>
-              <div style="text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:20px">
-                <p><strong>Patient:</strong> <span id="slip-name"></span></p>
-                <p><strong>Doctor:</strong> <span id="slip-doctor"></span></p>
-                <p><strong>Room:</strong> <span id="slip-room"></span></p>
-                <p><strong>Date:</strong> <span id="slip-date"></span></p>
-                <p><strong>Checked in:</strong> <span id="slip-checkin-time"></span></p>
+              <div class="receipt-slip">
+                <p class="r-hospital" id="slip-hospital"></p>
+                <div class="r-rule"></div>
+                <p class="r-token-label">Token</p>
+                <div class="r-token" id="slip-token"></div>
+                <div id="slip-additional-doctors" class="r-extra" style="display:none"></div>
+                <div class="r-row"><span>Patient</span><span id="slip-name"></span></div>
+                <div class="r-row"><span>Doctor</span><span id="slip-doctor"></span></div>
+                <div class="r-row"><span>Room</span><span id="slip-room"></span></div>
+                <div class="r-row"><span>Date</span><span id="slip-date"></span></div>
+                <div class="r-row"><span>Time</span><span id="slip-checkin-time"></span></div>
+                <div class="r-dashed"></div>
+                <p class="r-footer">Please keep this slip</p>
               </div>
             </div>
             <div id="slip-billing-row" class="no-print"
@@ -860,6 +920,9 @@
                 <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
                 <button class="btn btn-outline" style="flex:1" onclick="goToStep('search')">New Check-In</button>
               </div>
+              <!-- TEMP: preview-only until real WhatsApp sending exists — remove this button + previewWhatsappTokenPdf() once WhatsApp delivery is wired up -->
+              <button class="btn btn-outline no-print" style="width:100%;margin-top:10px"
+                onclick="previewWhatsappTokenPdf(currentCheckinId)">📱 Preview WhatsApp PDF</button>
             </div>
           </div>
 
@@ -1340,22 +1403,25 @@
         <h2>Token Slip</h2>
         <button class="modal-close" onclick="closePastSlipModal()">×</button>
       </div>
-      <div class="print-area" style="text-align:center">
-        <p style="font-weight:700;color:var(--navy);margin-bottom:2px" id="pslip-hospital"></p>
-        <div style="padding:20px 0">
-          <p style="color:var(--slate);margin-bottom:6px">Token Number</p>
-          <div style="font-size:2.4rem;font-weight:700;color:var(--navy);letter-spacing:1px" id="pslip-token"></div>
-        </div>
-        <div style="text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:20px">
-          <p><strong>Patient:</strong> <span id="pslip-name"></span></p>
-          <p><strong>Doctor:</strong> <span id="pslip-doctor"></span></p>
-          <p><strong>Room:</strong> <span id="pslip-room"></span></p>
-          <p><strong>Date:</strong> <span id="pslip-date"></span></p>
-          <p><strong>Checked in:</strong> <span id="pslip-checkin-time"></span></p>
+      <div class="print-area">
+        <div class="receipt-slip">
+          <p class="r-hospital" id="pslip-hospital"></p>
+          <div class="r-rule"></div>
+          <p class="r-token-label">Token</p>
+          <div class="r-token" id="pslip-token"></div>
+          <div class="r-row"><span>Patient</span><span id="pslip-name"></span></div>
+          <div class="r-row"><span>Doctor</span><span id="pslip-doctor"></span></div>
+          <div class="r-row"><span>Room</span><span id="pslip-room"></span></div>
+          <div class="r-row"><span>Date</span><span id="pslip-date"></span></div>
+          <div class="r-row"><span>Time</span><span id="pslip-checkin-time"></span></div>
+          <div class="r-dashed"></div>
+          <p class="r-footer">Please keep this slip</p>
         </div>
       </div>
-      <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px">
+      <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:8px">
         <button class="btn btn-outline" style="width:100%" onclick="window.print()">Print Slip</button>
+        <!-- TEMP: preview-only until real WhatsApp sending exists — remove once WhatsApp delivery is wired up -->
+        <button class="btn btn-outline" style="width:100%" onclick="previewWhatsappTokenPdf(currentPastSlipCheckinId)">📱 Preview WhatsApp PDF</button>
       </div>
     </div>
   </div>
@@ -1557,7 +1623,7 @@
           return;
         }
         body.innerHTML = data.notifications.map(n => `
-          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'}, ${n.is_read})">
+          <div class="notif-item ${n.is_read ? '' : 'unread'}" onclick="onNotifClick(${n.id}, '${n.link_type || ''}', ${n.link_id || 'null'}, ${n.is_read}, '${n.type || ''}')">
             <div class="notif-item-title">
               <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
               ${sanitize(n.title)}
@@ -1571,7 +1637,16 @@
       }
     }
 
-    async function onNotifClick(id, linkType, linkId, wasAlreadyRead) {
+    async function onNotifClick(id, linkType, linkId, wasAlreadyRead, notifType) {
+      if (linkType === 'suggestion' && linkId) {
+        try {
+          await api("PATCH", `/notifications/${id}/read`, {});
+          loadNotifUnreadCount();
+          closeNotifPanel();
+          window.__suggestionWidget.openToThread(linkId);
+        } catch (e) { toast(e.message, "error"); }
+        return;
+      }
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
@@ -1580,7 +1655,16 @@
           toast("This has already been taken care of.", "info");
           return;
         }
-        if (linkType === 'portal_appointment') {
+        if (linkType === 'portal_appointment' && notifType === 'appointment_needs_review') {
+          // Item 4a — link_type alone can't distinguish this from
+          // new_portal_patient/appointment_hospital_delay/portal_issue_reported/
+          // appointment_auto_declined, all of which share 'portal_appointment'.
+          // Branch on the notification's own type first.
+          if (typeof showRecSection === 'function') showRecSection('portal');
+          if (typeof showRecDesktopTab === 'function') showRecDesktopTab('portal');
+          await loadPendingReview();
+          document.getElementById('pending-review-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (linkType === 'portal_appointment') {
           const prefill = await api("GET", `/portal-appointments-staff/${linkId}/new-patient-prefill`);
           openNewPatient();
           document.getElementById('p-name').value = prefill.name || '';
@@ -1589,7 +1673,13 @@
           document.getElementById('p-address').value = prefill.address || '';
           if (prefill.age) document.getElementById('p-age').value = prefill.age;
           if (prefill.blood_group) document.getElementById('p-blood-group').value = prefill.blood_group;
+        } else if (linkType === 'admission_topup' && linkId) {
+          const { token } = await api("GET", `/admissions/token-for/${linkId}`);
+          location.href = `admission-detail.html?id=${token}`;
         } else if (linkType === 'ward_change_request') {
+          const { token } = await api("GET", `/admissions/token-for/${linkId}`);
+          location.href = `admission-detail.html?id=${token}`;
+        } else if (linkType === 'discharge_order_placed' && linkId) {
           const { token } = await api("GET", `/admissions/token-for/${linkId}`);
           location.href = `admission-detail.html?id=${token}`;
         } else if (linkType === 'admission_referral') {
@@ -1611,6 +1701,20 @@
             if (r.status === 'admitted') { toast("This patient has already been admitted.", "info"); return; }
           } catch (e) { }
           openReferralDepartedModal(linkId);
+        } else if ((linkType === 'referral_rejected' || linkType === 'referral_admitted') && linkId) {
+          const { token } = await api("GET", `/admissions/token-for/${linkId}`);
+          location.href = `admission-detail.html?id=${token}`;
+        } else if (linkType === 'test_order' && linkId) {
+          // Item 2 — sample_rejected lands here. Reception has no OPD
+          // patient-detail page to send this to, so for an admitted
+          // patient jump to the admission; otherwise surface who it's
+          // about rather than a dead click.
+          const ctx = await api("GET", `/lab/test-orders/${linkId}/context`);
+          if (ctx.context === 'admission') {
+            location.href = `admission-detail.html?id=${ctx.token}`;
+          } else {
+            toast("This is about an OPD patient — check with the lab directly.", "info");
+          }
         }
       } catch (e) { toast(e.message, "error"); }
     }
@@ -1986,28 +2090,46 @@
       }).catch(() => { });
     }
 
+    function renderExtraTokens(elId, tokens, issueCategory) {
+      const wrap = document.getElementById(elId);
+      if (!wrap) return; // past-slip modal has no extra-doctors slot — skip rather than throw
+      if (tokens && tokens.length) {
+        wrap.style.display = '';
+        wrap.innerHTML = '<p style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Also queued today</p>' +
+          tokens.map(t => `
+            <div class="r-row"><span>${t.doctor_name} (${issueCategory}) — Token ${t.display_token != null ? t.display_token : t.token_number}</span><span>₹${t.consultation_fee || 0}</span></div>`).join('');
+      } else {
+        wrap.style.display = 'none';
+        wrap.innerHTML = '';
+      }
+    }
+
+    // Single source of truth for both the live check-in slip (#slip-*) and
+    // the past-slip modal (#pslip-*) — same data shape from all three
+    // backend call sites (checkin_today, checkin_patient, checkins/{id}/slip),
+    // so one function fills whichever prefix is asked for. extraElId is
+    // omitted for the past-slip modal, which has no "also queued" section.
+    function renderTokenSlip(prefix, data, extraElId) {
+      const set = (suffix, val) => {
+        const el = document.getElementById(`${prefix}-${suffix}`);
+        if (el) el.textContent = val;
+      };
+      set('hospital', getDoctor()?.clinic_name || '');
+      set('token', data.display_token != null ? data.display_token : data.token_number);
+      set('name', data.patient_name);
+      set('doctor', data.doctor_name);
+      set('room', data.issue_category);
+      set('date', formatDate(data.visit_date));
+      set('checkin-time', formatCheckinTime(data.checked_in_at));
+      if (extraElId) {
+        renderExtraTokens(extraElId, data.additional_tokens, data.issue_category);
+      }
+    }
+
     function showExistingToken(t) {
-      document.getElementById('slip-hospital').textContent = getDoctor()?.clinic_name || '';
-      document.getElementById('slip-token').textContent = t.token_number;
-      document.getElementById('slip-name').textContent = t.patient_name;
-      document.getElementById('slip-doctor').textContent = t.doctor_name;
-      document.getElementById('slip-room').textContent = t.issue_category;
-      document.getElementById('slip-date').textContent = formatDate(t.visit_date);
-      document.getElementById('slip-checkin-time').textContent = formatCheckinTime(t.checked_in_at);
+      renderTokenSlip('slip', t, 'slip-additional-doctors');
       currentCheckinId = t.checkin_id;
 
-      const extraWrap = document.getElementById('slip-additional-doctors');
-      if (t.additional_tokens && t.additional_tokens.length) {
-        extraWrap.style.display = '';
-        extraWrap.innerHTML = '<p style="font-size:13px;color:var(--slate);margin:10px 0 4px">Also queued today:</p>' +
-          t.additional_tokens.map(at => `
-            <div style="font-size:13px;display:flex;justify-content:space-between;padding:2px 0">
-              <span>${at.doctor_name} (${t.issue_category}) — Token <strong>${at.token_number}</strong></span><span>₹${at.consultation_fee || 0}</span>
-            </div>`).join('');
-      } else {
-        extraWrap.style.display = 'none';
-        extraWrap.innerHTML = '';
-      }
       renderBillingRow(getDoctor()?.billing_enabled, t.total_fee, t.is_paid);
       ['search', 'room', 'doctor'].forEach(s => document.getElementById(`step-${s}`).style.display = 'none');
       document.getElementById('step-token').style.display = '';
@@ -2354,6 +2476,20 @@
 
     let currentCheckinId = null;
     let currentVisitGroupId = null;
+    let currentPastSlipCheckinId = null; // TEMP — only needed for the WhatsApp-PDF preview button; remove alongside it
+
+    // TEMP: preview-only until real WhatsApp sending exists.
+    async function previewWhatsappTokenPdf(checkinId) {
+      if (!checkinId) { toast('No check-in selected.', 'error'); return; }
+      try {
+        const response = await fetch(`${BASE}/patients/checkins/${checkinId}/token-slip-pdf`, {
+          headers: { "Authorization": `Bearer ${getToken()}` }
+        });
+        if (!response.ok) throw new Error("Could not load token slip PDF");
+        const blob = await response.blob();
+        window.open(URL.createObjectURL(blob), "_blank");
+      } catch (e) { toast(e.message, 'error'); }
+    }
 
     let _tokenGenerationInFlight = false;
     async function generateToken(force) {
@@ -2380,30 +2516,10 @@
         });
         currentCheckinId = result.checkin_id;
         currentVisitGroupId = result.visit_group_id || null;
-        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-        setText('slip-hospital', getDoctor()?.clinic_name || '');
-        setText('slip-token', result.token_number);
-        setText('slip-name', result.patient_name);
-        setText('slip-doctor', result.doctor_name);
-        setText('slip-room', result.issue_category);
-        setText('slip-date', formatDate(result.visit_date));
-        setText('slip-checkin-time', formatCheckinTime(result.checked_in_at));
+        renderTokenSlip('slip', result, 'slip-additional-doctors');
         renderBillingRow(billingOn, result.total_fee, result.is_paid);
         loadPendingTestFees(selectedPatient.id);
         loadPendingRadiologyFees(selectedPatient.id);
-
-        const extraWrap = document.getElementById('slip-additional-doctors');
-        if (result.additional_tokens && result.additional_tokens.length) {
-          extraWrap.style.display = '';
-          extraWrap.innerHTML = '<p style="font-size:13px;color:var(--slate);margin:10px 0 4px">Also queued today:</p>' +
-            result.additional_tokens.map(t => `
-              <div style="font-size:13px;display:flex;justify-content:space-between;padding:2px 0">
-                <span>${t.doctor_name} (${result.issue_category}) — Token <strong>${t.token_number}</strong></span><span>₹${t.consultation_fee || 0}</span>
-              </div>`).join('');
-        } else {
-          extraWrap.style.display = 'none';
-          extraWrap.innerHTML = '';
-        }
 
         selectedAdditionalDoctors = {};
         document.getElementById('additional-doctors-list').innerHTML = '';
@@ -2665,13 +2781,8 @@
     async function openPastSlipModal(checkinId) {
       try {
         const t = await api("GET", `/patients/checkins/${checkinId}/slip`);
-        document.getElementById('pslip-hospital').textContent = getDoctor()?.clinic_name || '';
-        document.getElementById('pslip-token').textContent = t.token_number;
-        document.getElementById('pslip-name').textContent = t.patient_name;
-        document.getElementById('pslip-doctor').textContent = t.doctor_name;
-        document.getElementById('pslip-room').textContent = t.issue_category;
-        document.getElementById('pslip-date').textContent = formatDate(t.visit_date);
-        document.getElementById('pslip-checkin-time').textContent = formatCheckinTime(t.checked_in_at);
+        renderTokenSlip('pslip', t);
+        currentPastSlipCheckinId = checkinId;
         document.getElementById('modal-past-slip').classList.add('open');
       } catch (e) { toast(e.message, 'error'); }
     }

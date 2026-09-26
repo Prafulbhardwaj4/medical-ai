@@ -1,4 +1,5 @@
 import secrets
+import re
 from datetime import datetime, date as date_cls, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,7 +33,7 @@ from app.models.refund import Refund
 from app.schemas.admission import (
     AdmitPatientIn, AddMedicationOrderIn, AddChargeIn, AddAdmissionTestIn, DischargeIn, CollectBalanceIn,
     WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn,
-    TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, EmergencyAlertIn,
+    TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, AdministerMedicationIn, EmergencyAlertIn,
     ProfessionalFeeIn, VALID_ADMISSION_TYPES, AdmissionConsentIn, VALID_CONSENT_TYPES, VALID_DISCHARGE_TYPES,
     VALID_WARD_CATEGORIES, TpaSettleIn, ProgressNoteIn, EmergencyAdmitIn, RoomCreateIn, RoomOut,
     AdmissionVitalsIn, AddAdmissionRadiologyOrderIn,
@@ -45,7 +46,8 @@ from app.utils.audit import log_action
 from app.routers.patients import generate_patient_uid, generate_url_token
 from sqlalchemy.exc import IntegrityError
 from app.utils.inventory import deduct_stock_fefo
-from app.utils.notify import notify_ward_change_request, notify_emergency_alert, notify_admission_medicines_ordered, notify_admission_tests_ordered
+from app.utils.notify import notify_ward_change_request, notify_emergency_alert, notify_admission_medicines_ordered, notify_admission_tests_ordered, notify_discharge_order_placed, notify_critical_vitals, notify_critical_vitals_escalation, resolve_notification, resolve_notifications_for_link
+from app.config import settings
 from app.utils.receipts import next_receipt_number, next_note_number, generate_verify_hash
 from app.utils.gst import apply_gst
 from app.services.pdf_service import generate_invoice_pdf
@@ -1197,10 +1199,13 @@ def list_admission_history(search: str = "", ward_type_id: int = None, limit: in
             break
     return out
 
-
 @router.get("/{admission_id}")
 def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    try:
+        _escalate_unacknowledged_critical_vitals(db, current_doctor.hospital_id)
+    except Exception:
+        db.rollback()
     patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
     doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
     current_ward_type = db.query(AdmissionWardType).filter(AdmissionWardType.id == a.ward_type_id).first() if a.ward_type_id else None
@@ -1213,7 +1218,10 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         med_out.append({
             "id": m.id, "medicine_id": m.medicine_id, "medicine_name": m.medicine_name, "quantity": m.quantity, "dosage": m.dosage, "route": m.route,
             "frequency_note": m.frequency_note, "is_active": m.is_active, "sourced_outside": m.sourced_outside,
-            "doses": [{"id": d.id, "administered_at": d.administered_at.isoformat(), "notes": d.notes} for d in doses],
+            "doses": [{
+                "id": d.id, "administered_at": d.administered_at.isoformat(), "notes": d.notes,
+                "administered_by_name": (lambda doc: f"{doc.title} {doc.name}" if doc else None)(db.query(Doctor).filter(Doctor.id == d.administered_by).first()),
+            } for d in doses],
             "returned_quantity": returned_qty,
         })
 
@@ -1535,6 +1543,29 @@ def resume_medication(admission_id: str, order_id: int, current_doctor: Doctor =
     return {"message": "Medication resumed"}
 
 
+@router.post("/{admission_id}/medications/{order_id}/administer")
+def administer_medication(admission_id: str, order_id: int, body: AdministerMedicationIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor or nurse can record a medication administration")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Medication order not found")
+
+    # Deliberately allowed even when the order is currently stopped (is_active
+    # == False) — this is a clinical/MAR log of a dose actually given at the
+    # bedside, not a dispensing or billing action, so there is no stock/bill
+    # reason to block it. A nurse catching up on logging a dose given just
+    # before a stop order came through shouldn't be locked out of recording it.
+    administration = AdmissionMedicationAdministration(
+        order_id=order.id, administered_by=current_doctor.id, administered_at=now_ist_naive(), notes=body.notes,
+    )
+    db.add(administration)
+    db.commit()
+    db.refresh(administration)
+    return {"id": administration.id, "message": "Dose recorded", "order_stopped": not order.is_active}
+
+
 @router.post("/{admission_id}/medications/{order_id}/return")
 def return_medication(admission_id: str, order_id: int, body: ReturnMedicationIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     if current_doctor.role.value not in ["assistant"]:
@@ -1670,6 +1701,12 @@ def place_discharge_order(admission_id: str, current_doctor: Doctor = Depends(ge
         raise HTTPException(status_code=400, detail="This patient is not currently admitted")
     a.discharge_order_at = now_ist_naive()
     a.discharge_ordered_by = current_doctor.id
+    patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+    notify_discharge_order_placed(
+        db, hospital_id=current_doctor.hospital_id, admission_id=a.id,
+        patient_name=patient.name if patient else "Unknown patient",
+        ordered_by_name=f"{current_doctor.title} {current_doctor.name}",
+    )
     db.commit()
     return {"message": "Discharge order placed", "discharge_order_at": a.discharge_order_at.isoformat()}
 
@@ -2003,6 +2040,7 @@ def cancel_topup_request(admission_id: str, request_id: int, current_doctor: Doc
         raise HTTPException(status_code=400, detail="Only a pending request can be cancelled")
     req.status = "cancelled"
     req.resolved_at = now_ist_naive()
+    resolve_notification(db, a.hospital_id, f"deposit_topup_request:{req.id}")
     db.commit()
     return {"message": "Top-up request cancelled"}
 
@@ -2029,9 +2067,9 @@ def collect_topup_request(admission_id: str, request_id: int, body: CollectTopup
     req.status = "collected"
     req.deposit_id = deposit.id
     req.resolved_at = now_ist_naive()
+    resolve_notification(db, a.hospital_id, f"deposit_topup_request:{req.id}")
     db.commit()
     return {"message": "Top-up collected", "amount_collected": req.requested_amount}
-
 
 VALID_TPA_STATUSES = {"pending", "query_raised", "approved", "denied"}
 
@@ -2449,6 +2487,114 @@ def download_discharge_invoice(admission_id: str, current_doctor: Doctor = Depen
     return FileResponse(invoice.pdf_path, media_type="application/pdf", filename=f"discharge_invoice_{admission_id}.pdf")
 
 
+# Ward-level critical thresholds for the standard IPD vitals fields — deliberately
+# tighter than IPD_VITALS_RULES' min/max in admission-detail.html, which are only
+# client-side "does this look like a typo" sanity bounds (e.g. SpO2 50-100 with no
+# warning), not clinical alert thresholds. Weight/Height are excluded — not acute,
+# time-sensitive vitals — and so is any freeform "+ Add" field a nurse can add,
+# since it has no fixed meaning to threshold-check against.
+VITALS_CRITICAL_THRESHOLDS = {
+    "Pulse": (50, 130),                 # bpm
+    "Temperature": (95, 103),           # °F
+    "SpO2": (90, None),                 # % — no clinically meaningful upper bound
+    "Respiratory Rate": (10, 30),       # /min
+    "Blood Sugar (GRBS)": (70, 400),    # mg/dL
+}
+BP_CRITICAL_SYSTOLIC = (90, 180)   # mmHg
+BP_CRITICAL_DIASTOLIC = (60, 120)  # mmHg
+
+
+def _parse_leading_number(raw: str):
+    """Vitals values are stored with their unit already appended by the
+    frontend (e.g. '98 %', '39.5 °F') — pull the leading number off before
+    comparing against a threshold."""
+    m = re.match(r"^\s*(\d+(?:\.\d+)?)", raw or "")
+    return float(m.group(1)) if m else None
+
+
+def _check_vitals_critical_breach(data: dict) -> list:
+    """Checks only the standard, structured vitals fields against the
+    thresholds above. Returns a list of human-readable breach descriptions,
+    empty if nothing crossed a threshold."""
+    breaches = []
+
+    bp_raw = data.get("Blood Pressure")
+    if bp_raw and "/" in bp_raw:
+        sys_part, dia_part = bp_raw.split("/", 1)
+        sys_val = _parse_leading_number(sys_part)
+        dia_val = _parse_leading_number(dia_part)
+        if sys_val is not None:
+            if sys_val < BP_CRITICAL_SYSTOLIC[0]:
+                breaches.append(f"Blood Pressure {bp_raw} (systolic critical low — threshold <{BP_CRITICAL_SYSTOLIC[0]})")
+            elif sys_val > BP_CRITICAL_SYSTOLIC[1]:
+                breaches.append(f"Blood Pressure {bp_raw} (systolic critical high — threshold >{BP_CRITICAL_SYSTOLIC[1]})")
+        if dia_val is not None:
+            if dia_val < BP_CRITICAL_DIASTOLIC[0]:
+                breaches.append(f"Blood Pressure {bp_raw} (diastolic critical low — threshold <{BP_CRITICAL_DIASTOLIC[0]})")
+            elif dia_val > BP_CRITICAL_DIASTOLIC[1]:
+                breaches.append(f"Blood Pressure {bp_raw} (diastolic critical high — threshold >{BP_CRITICAL_DIASTOLIC[1]})")
+
+    for field, (low, high) in VITALS_CRITICAL_THRESHOLDS.items():
+        raw = data.get(field)
+        if not raw:
+            continue
+        val = _parse_leading_number(raw)
+        if val is None:
+            continue
+        if low is not None and val < low:
+            breaches.append(f"{field} {raw} (critical low — threshold <{low})")
+        if high is not None and val > high:
+            breaches.append(f"{field} {raw} (critical high — threshold >{high})")
+
+    return breaches
+
+
+def _escalate_unacknowledged_critical_vitals(db: Session, hospital_id: int) -> None:
+    """Same lazy-sweep shape as lab.py's _escalate_unacknowledged_critical_results
+    — no background scheduler in this codebase. Escalates to nurse/ward coverage
+    if the admitting doctor hasn't acknowledged within VITALS_CRITICAL_ACK_MINUTES,
+    then to admin directly if still unacknowledged
+    VITALS_CRITICAL_ESCALATION_GRACE_MINUTES after that."""
+    now = now_ist_naive()
+    rows = db.query(AdmissionVitals).join(Admission, Admission.id == AdmissionVitals.admission_id).filter(
+        Admission.hospital_id == hospital_id,
+        AdmissionVitals.is_critical == True,  # noqa: E712
+        AdmissionVitals.critical_ack_at.is_(None),
+        AdmissionVitals.critical_detected_at.isnot(None),
+    ).all()
+
+    for v in rows:
+        ack_deadline = v.critical_detected_at + timedelta(minutes=settings.VITALS_CRITICAL_ACK_MINUTES)
+        if now < ack_deadline:
+            continue
+
+        a = db.query(Admission).filter(Admission.id == v.admission_id).first()
+        patient = db.query(Patient).filter(Patient.id == a.patient_id).first() if a else None
+
+        if not v.critical_escalated_at:
+            notify_critical_vitals_escalation(
+                db, hospital_id=hospital_id, vitals_id=v.id,
+                patient_name=patient.name if patient else "patient",
+                critical_note=v.critical_note, stage="nurse_ward",
+                ward=a.ward if a else None, bed_number=a.bed_number if a else None,
+            )
+            v.critical_escalated_at = now
+            db.commit()
+            continue
+
+        final_deadline = v.critical_escalated_at + timedelta(minutes=settings.VITALS_CRITICAL_ESCALATION_GRACE_MINUTES)
+        if now < final_deadline:
+            continue
+
+        notify_critical_vitals_escalation(
+            db, hospital_id=hospital_id, vitals_id=v.id,
+            patient_name=patient.name if patient else "patient",
+            critical_note=v.critical_note, stage="admin",
+            ward=a.ward if a else None, bed_number=a.bed_number if a else None,
+        )
+        db.commit()
+
+
 @router.get("/{admission_id}/vitals")
 def list_admission_vitals(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     # Visible to everyone with access to admission-detail.html (item 49) —
@@ -2466,6 +2612,8 @@ def list_admission_vitals(admission_id: str, current_doctor: Doctor = Depends(ge
             "id": v.id, "data": data,
             "recorded_by_name": f"{recorder.title} {recorder.name}" if recorder else "Unknown",
             "recorded_at": v.recorded_at.isoformat() if v.recorded_at else None,
+            "is_critical": v.is_critical, "critical_note": v.critical_note,
+            "critical_ack_at": v.critical_ack_at.isoformat() if v.critical_ack_at else None,
         })
     return out
 
@@ -2481,11 +2629,59 @@ def add_admission_vitals(admission_id: str, body: AdmissionVitalsIn, current_doc
     if not cleaned:
         raise HTTPException(status_code=400, detail="At least one vitals value is required")
     row = AdmissionVitals(admission_id=a.id, recorded_by=current_doctor.id, data=json.dumps(cleaned))
+    breaches = _check_vitals_critical_breach(cleaned)
+    if breaches:
+        row.is_critical = True
+        row.critical_note = "; ".join(breaches)
+        row.critical_detected_at = now_ist_naive()
     db.add(row)
     db.commit()
     db.refresh(row)
-    return {"id": row.id, "message": "Vitals recorded"}
+    if breaches:
+        patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+        notify_critical_vitals(
+            db, hospital_id=current_doctor.hospital_id, vitals_id=row.id,
+            patient_name=patient.name if patient else "patient",
+            doctor_id=a.admitting_doctor_id, critical_note=row.critical_note,
+            ward=a.ward, bed_number=a.bed_number,
+        )
+        db.commit()
+    return {"id": row.id, "message": "Vitals recorded", "is_critical": bool(breaches), "critical_note": row.critical_note}
 
+
+@router.post("/{admission_id}/vitals/{vitals_id}/acknowledge-critical")
+def acknowledge_critical_vitals(admission_id: str, vitals_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Same shape as lab.py's acknowledge_critical_result — stops the
+    escalation clock and clears both the critical_vitals and
+    critical_vitals_escalation bell notifications for this specific reading."""
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    v = db.query(AdmissionVitals).filter(AdmissionVitals.id == vitals_id, AdmissionVitals.admission_id == a.id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vitals reading not found")
+    if not v.is_critical:
+        raise HTTPException(status_code=400, detail="This reading has no active critical-vitals alert")
+    if current_doctor.role.value not in ("admin", "sub_admin") and current_doctor.id != a.admitting_doctor_id:
+        raise HTTPException(status_code=403, detail="Only the admitting doctor or an admin can acknowledge this")
+
+    v.critical_ack_at = now_ist_naive()
+    resolve_notifications_for_link(db, current_doctor.hospital_id, "critical_vitals", v.id)
+    resolve_notifications_for_link(db, current_doctor.hospital_id, "critical_vitals_escalation", v.id)
+    db.commit()
+    return {"id": v.id, "critical_ack_at": v.critical_ack_at.isoformat()}
+
+@router.get("/vitals-token-for/{vitals_id}")
+def token_for_vitals(vitals_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Used by the notification bell to deep-link a critical_vitals /
+    critical_vitals_escalation notification (keyed by the specific vitals
+    reading, not the admission) into admission-detail.html — same
+    token-for-admission navigation pattern as token_for_admission."""
+    v = db.query(AdmissionVitals).filter(AdmissionVitals.id == vitals_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vitals reading not found")
+    a = db.query(Admission).filter(Admission.id == v.admission_id, Admission.hospital_id == current_doctor.hospital_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Admission not found")
+    return {"token": a.public_token}
 
 @router.get("/{admission_id}/progress-notes")
 def list_progress_notes(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):

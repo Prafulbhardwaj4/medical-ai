@@ -1125,6 +1125,7 @@ def list_hospitals_jwt(
             "billing_enabled": h.billing_enabled,
             "tier": h.tier,
             "city": h.city,
+            "state": h.state,
             "is_active": h.is_active,
             **serialize_billing_block(db, h),
         }
@@ -1570,36 +1571,6 @@ def platform_growth_analytics(
         count = sum(1 for h in all_hospitals if b_start <= h.created_at < b_end)
         onboarding_trend.append({"period": label, "count": count})
 
-    # ── Tier upgrade/downgrade movements, parsed from AuditLog ──
-    tier_change_logs = db.query(AuditLog).filter(
-        AuditLog.action == "hospital_tier_changed",
-        AuditLog.created_at >= period_start
-    ).all()
-
-    tier_buckets = {label: {"upgrades": 0, "downgrades": 0} for label in period_labels}
-    tier_change_total = {"upgrades": 0, "downgrades": 0}
-    for log in tier_change_logs:
-        m = re.match(r"Tier changed from (\w+) to (\w+)", log.details or "")
-        if not m:
-            continue
-        from_tier, to_tier = m.group(1), m.group(2)
-        if from_tier not in TIER_RANK or to_tier not in TIER_RANK:
-            continue
-        direction = "upgrades" if TIER_RANK[to_tier] > TIER_RANK[from_tier] else "downgrades"
-        if trend_interval == "monthly":
-            label = log.created_at.replace(day=1).strftime("%Y-%m")
-        else:
-            log_monday = log.created_at - timedelta(days=log.created_at.weekday())
-            label = log_monday.strftime("%Y-%m-%d")
-        if label in tier_buckets:
-            tier_buckets[label][direction] += 1
-        tier_change_total[direction] += 1
-
-    tier_change_trend = [
-        {"period": label, "upgrades": tier_buckets[label]["upgrades"], "downgrades": tier_buckets[label]["downgrades"]}
-        for label in period_labels
-    ]
-
     # ── Geographic distribution ──
     geo_counts = {}
     for h in all_hospitals:
@@ -1618,79 +1589,219 @@ def platform_growth_analytics(
         "deactivated_count": deactivated_count,
         "grace_period_count": grace_period_count,
         "onboarding_trend": onboarding_trend,
-        "tier_change_trend": tier_change_trend,
-        "tier_change_total": tier_change_total,
         "geographic_distribution": geographic_distribution,
     }
 
-@router.get("/analytics/platform/patients-usage")
-def platform_patients_usage_analytics(
-    trend_interval: str = "monthly",
+
+@router.get("/analytics/platform/tier-changes")
+def platform_tier_changes(
+    filter: str = "all",
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    """Phase 1 — Patient & usage metrics, platform-wide. Average consultation
-    duration is deliberately NOT included: Consultation only stores
-    created_at, no start/confirm timestamp pair exists to compute a
-    duration from. Flagging again rather than guessing — let me know if
-    you want a started_at-style column added before this metric gets built.
-
-    Trends use DB-level GROUP BY date_trunc(), not Python loops over rows —
-    patient/consultation/admission volume can get large, unlike hospital
-    counts."""
+    """Individual tier-change events, platform-wide — replaces the old
+    aggregated upgrades/downgrades chart with a real, filterable, per-event
+    list (hospital, address, previous tier -> current tier, date)."""
     if current_doctor.role.value != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
-    if trend_interval not in ("monthly", "weekly"):
-        raise HTTPException(status_code=400, detail="trend_interval must be 'monthly' or 'weekly'")
+    if filter not in ("all", "upgrades", "downgrades"):
+        raise HTTPException(status_code=400, detail="filter must be one of: all, upgrades, downgrades")
+
+    TIER_ORDER = ["foundation", "growth", "scale", "enterprise"]
+    TIER_RANK = {t: i for i, t in enumerate(TIER_ORDER)}
+
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "hospital_tier_changed")
+        .order_by(AuditLog.created_at.desc())
+        .all()
+    )
+    hospitals_by_id = {h.id: h for h in db.query(Hospital).all()}
+
+    changes = []
+    for log in logs:
+        m = re.match(r"Tier changed from (\w+) to (\w+)", log.details or "")
+        if not m:
+            continue
+        from_tier, to_tier = m.group(1), m.group(2)
+        if from_tier not in TIER_RANK or to_tier not in TIER_RANK:
+            continue
+        direction = "upgrade" if TIER_RANK[to_tier] > TIER_RANK[from_tier] else "downgrade"
+        if filter == "upgrades" and direction != "upgrade":
+            continue
+        if filter == "downgrades" and direction != "downgrade":
+            continue
+        h = hospitals_by_id.get(log.hospital_id)
+        changes.append({
+            "hospital_id": log.hospital_id,
+            "hospital_name": h.name if h else "(deleted hospital)",
+            "address": h.address if h else None,
+            "city": h.city if h else None,
+            "state": h.state if h else None,
+            "from_tier": from_tier,
+            "to_tier": to_tier,
+            "direction": direction,
+            "changed_at": log.created_at.strftime("%Y-%m-%d"),
+        })
+
+    return {"filter": filter, "total": len(changes), "changes": changes}
+
+
+@router.get("/analytics/hospital/{hospital_id}/tier-trail")
+def hospital_tier_trail(
+    hospital_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Modal data for a hospital clicked from the tier-changes list —
+    a curated subset (not the full hospital-detail payload): primary
+    admin, total patients, average daily patients since they joined, and
+    the full tier trail from onboarding to now, reconstructed from
+    AuditLog tier-change events."""
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+
+    admins = db.query(Doctor).filter(
+        Doctor.hospital_id == hospital_id,
+        Doctor.role.in_([UserRole.admin, UserRole.sub_admin])
+    ).all()
+
+    total_patients = db.query(func.count(Patient.id)).filter(Patient.hospital_id == hospital_id).scalar() or 0
+    days_since_joined = max((now_ist_naive() - hospital.created_at).days, 1)
+    avg_daily_patients = round(total_patients / days_since_joined, 2)
+
+    change_logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.hospital_id == hospital_id, AuditLog.action == "hospital_tier_changed")
+        .order_by(AuditLog.created_at.asc())
+        .all()
+    )
+
+    tier_trail = []
+    cursor_tier = hospital.tier
+    cursor_date = hospital.created_at
+    # Reconstruct starting tier by walking the first change backwards, since
+    # the hospital's current .tier only reflects where it ended up.
+    if change_logs:
+        m0 = re.match(r"Tier changed from (\w+) to (\w+)", change_logs[0].details or "")
+        if m0:
+            cursor_tier = m0.group(1)
+
+    for log in change_logs:
+        m = re.match(r"Tier changed from (\w+) to (\w+)", log.details or "")
+        to_tier = m.group(2) if m else cursor_tier
+        tier_trail.append({
+            "tier": cursor_tier,
+            "from_date": cursor_date.strftime("%Y-%m-%d"),
+            "to_date": log.created_at.strftime("%Y-%m-%d"),
+        })
+        cursor_tier = to_tier
+        cursor_date = log.created_at
+
+    tier_trail.append({
+        "tier": cursor_tier,
+        "from_date": cursor_date.strftime("%Y-%m-%d"),
+        "to_date": "present",
+    })
+
+    return {
+        "hospital_id": hospital.id,
+        "hospital_name": hospital.name,
+        "address": hospital.address,
+        "city": hospital.city,
+        "state": hospital.state,
+        "joined_at": hospital.created_at.strftime("%Y-%m-%d"),
+        "current_tier": hospital.tier,
+        "admins": [
+            {"name": f"{a.title} {a.name}", "email": a.email, "phone": a.phone, "role": a.role.value}
+            for a in admins
+        ],
+        "total_patients": total_patients,
+        "avg_daily_patients": avg_daily_patients,
+        "tier_trail": tier_trail,
+    }
+
+
+@router.get("/analytics/platform/bookings-by-hospital")
+def platform_bookings_by_hospital(
+    range: str = "30d",
+    from_date: str = None,
+    to_date: str = None,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Online vs walk-in consultation counts, per hospital, platform-wide —
+    a real number breakdown rather than a single aggregated chart."""
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from app.models.checkin import Checkin
 
     now = now_ist_naive()
-    bucket_count = 12
-    trunc_unit = "month" if trend_interval == "monthly" else "week"
+    start, end = _resolve_date_range(range, from_date, to_date, now)
+    start_date, end_date = start.date(), end.date()
 
-    if trend_interval == "monthly":
-        period_start = (now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                         - relativedelta(months=bucket_count - 1))
-        bucket_starts = [period_start + relativedelta(months=i) for i in range(bucket_count)]
-        period_labels = [b.strftime("%Y-%m") for b in bucket_starts]
-        fmt = "%Y-%m"
-    else:
-        this_monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-        period_start = this_monday - timedelta(weeks=bucket_count - 1)
-        bucket_starts = [period_start + timedelta(weeks=i) for i in range(bucket_count)]
-        period_labels = [b.strftime("%Y-%m-%d") for b in bucket_starts]
-        fmt = "%Y-%m-%d"
+    rows = (
+        db.query(Checkin.hospital_id, Checkin.source, func.count(Checkin.id))
+        .filter(Checkin.visit_date >= start_date, Checkin.visit_date < end_date)
+        .group_by(Checkin.hospital_id, Checkin.source)
+        .all()
+    )
+    by_hospital = {}
+    for hid, source, count in rows:
+        by_hospital.setdefault(hid, {"online": 0, "walk_in": 0})[source] = count
 
-    def _trend_from(model, date_col):
-        rows = (
-            db.query(func.date_trunc(trunc_unit, date_col).label("bucket"), func.count(model.id))
-            .filter(date_col >= period_start)
-            .group_by("bucket")
-            .all()
-        )
-        counted = {r[0].strftime(fmt): r[1] for r in rows if r[0] is not None}
-        return [{"period": label, "count": counted.get(label, 0)} for label in period_labels]
+    hospitals_by_id = {h.id: h.name for h in db.query(Hospital).filter(Hospital.id.in_(by_hospital.keys())).all()}
+    results = [
+        {
+            "hospital_id": hid,
+            "hospital_name": hospitals_by_id.get(hid, "(unknown)"),
+            "online": vals.get("online", 0),
+            "walk_in": vals.get("walk_in", 0),
+            "total": vals.get("online", 0) + vals.get("walk_in", 0),
+        }
+        for hid, vals in by_hospital.items()
+    ]
+    results.sort(key=lambda r: -r["total"])
+
+    return {
+        "range": range,
+        "range_start": start_date.strftime("%Y-%m-%d"),
+        "range_end": (end_date - timedelta(days=1)).strftime("%Y-%m-%d"),
+        "hospitals": results,
+    }
+
+
+@router.get("/analytics/platform/patients-usage")
+def platform_patients_usage_analytics(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Phase 1 — Patient & usage metrics, platform-wide, as plain totals
+    (no trend charts — see chat). Average consultation duration is
+    deliberately NOT included: Consultation only stores created_at, no
+    start/confirm timestamp pair exists to compute a duration from. Will be
+    added once that's tracked (needed for usage-based hospital billing)."""
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
 
     total_patients = db.query(func.count(Patient.id)).scalar() or 0
     portal_activated = db.query(func.count(func.distinct(PatientProfileLink.patient_id))).scalar() or 0
-
     total_consultations = db.query(func.count(Consultation.id)).scalar() or 0
-    consultation_trend = _trend_from(Consultation, Consultation.created_at)
-
     total_admissions = db.query(func.count(Admission.id)).scalar() or 0
-    admission_trend = _trend_from(Admission, Admission.admission_date)
-
     online_count = db.query(func.count(Checkin.id)).filter(Checkin.source == "online").scalar() or 0
     walkin_count = db.query(func.count(Checkin.id)).filter(Checkin.source == "walk_in").scalar() or 0
 
     return {
-        "trend_interval": trend_interval,
         "total_patients": total_patients,
         "portal_activated_patients": portal_activated,
         "portal_adoption_rate": round((portal_activated / total_patients) * 100, 1) if total_patients else 0,
         "total_opd_consultations": total_consultations,
-        "opd_consultation_trend": consultation_trend,
         "total_ipd_admissions": total_admissions,
-        "ipd_admission_trend": admission_trend,
         "online_bookings": online_count,
         "walk_in_registrations": walkin_count,
         "average_consultation_duration": None,
@@ -1698,7 +1809,6 @@ def platform_patients_usage_analytics(
 
 @router.get("/analytics/platform/ai-scribe")
 def platform_ai_scribe_analytics(
-    trend_interval: str = "monthly",
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1713,25 +1823,6 @@ def platform_ai_scribe_analytics(
     nothing to sum for them."""
     if current_doctor.role.value != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
-    if trend_interval not in ("monthly", "weekly"):
-        raise HTTPException(status_code=400, detail="trend_interval must be 'monthly' or 'weekly'")
-
-    now = now_ist_naive()
-    bucket_count = 12
-    trunc_unit = "month" if trend_interval == "monthly" else "week"
-
-    if trend_interval == "monthly":
-        period_start = (now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                         - relativedelta(months=bucket_count - 1))
-        bucket_starts = [period_start + relativedelta(months=i) for i in range(bucket_count)]
-        period_labels = [b.strftime("%Y-%m") for b in bucket_starts]
-        fmt = "%Y-%m"
-    else:
-        this_monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-        period_start = this_monday - timedelta(weeks=bucket_count - 1)
-        bucket_starts = [period_start + timedelta(weeks=i) for i in range(bucket_count)]
-        period_labels = [b.strftime("%Y-%m-%d") for b in bucket_starts]
-        fmt = "%Y-%m-%d"
 
     eligible_hospitals = [
         h for h in db.query(Hospital).filter(Hospital.is_active == True).all()
@@ -1768,24 +1859,7 @@ def platform_ai_scribe_analytics(
         AiScribeTopup.payment_collected == True
     ).scalar() or 0
 
-    topup_rows = (
-        db.query(
-            func.date_trunc(trunc_unit, AiScribeTopup.purchased_at).label("bucket"),
-            func.count(AiScribeTopup.id),
-            func.sum(AiScribeTopup.price_paid),
-        )
-        .filter(AiScribeTopup.purchased_at >= period_start, AiScribeTopup.payment_collected == True)
-        .group_by("bucket")
-        .all()
-    )
-    topup_bucketed = {r[0].strftime(fmt): {"count": r[1], "revenue": r[2] or 0} for r in topup_rows if r[0] is not None}
-    topup_trend = [
-        {"period": label, "count": topup_bucketed.get(label, {}).get("count", 0), "revenue": topup_bucketed.get(label, {}).get("revenue", 0)}
-        for label in period_labels
-    ]
-
     return {
-        "trend_interval": trend_interval,
         "current_cycle_tier_usage": current_cycle_tier_usage,
         "average_usage_per_hospital": average_usage_per_hospital,
         "all_time_topup_usage": all_time_topup_usage,
@@ -1793,7 +1867,6 @@ def platform_ai_scribe_analytics(
         "approaching_or_at_cap": approaching_or_at_cap,
         "total_topup_count": total_topup_count,
         "total_topup_revenue": total_topup_revenue,
-        "topup_trend": topup_trend,
     }
 
 @router.get("/analytics/platform/business")
@@ -1859,112 +1932,6 @@ def platform_business_analytics(
         "total_upgrade_requests": total_upgrade_requests,
         "converted_upgrade_requests": converted_upgrade_requests,
         "upgrade_conversion_rate": upgrade_conversion_rate,
-    }
-
-@router.get("/analytics/platform/module-usage")
-def platform_module_usage_analytics(
-    trend_interval: str = "monthly",
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """Phase 1 — Module usage, platform-wide (Radiology, cross-hospital
-    Referrals, Suggestion box). CrossHospitalReferral has no single
-    'accepted' status — pending/rejected/departed/admitted/expired — so
-    'admitted' is used as the accepted-equivalent (referral resulted in a
-    real admission at the receiving hospital)."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
-    if trend_interval not in ("monthly", "weekly"):
-        raise HTTPException(status_code=400, detail="trend_interval must be 'monthly' or 'weekly'")
-
-    from app.models.radiology_order import RadiologyOrder
-    from app.models.cross_hospital_referral import CrossHospitalReferral
-
-    now = now_ist_naive()
-    bucket_count = 12
-    trunc_unit = "month" if trend_interval == "monthly" else "week"
-
-    if trend_interval == "monthly":
-        period_start = (now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                         - relativedelta(months=bucket_count - 1))
-        bucket_starts = [period_start + relativedelta(months=i) for i in range(bucket_count)]
-        period_labels = [b.strftime("%Y-%m") for b in bucket_starts]
-        fmt = "%Y-%m"
-    else:
-        this_monday = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-        period_start = this_monday - timedelta(weeks=bucket_count - 1)
-        bucket_starts = [period_start + timedelta(weeks=i) for i in range(bucket_count)]
-        period_labels = [b.strftime("%Y-%m-%d") for b in bucket_starts]
-        fmt = "%Y-%m-%d"
-
-    def _trend_from(model, date_col):
-        rows = (
-            db.query(func.date_trunc(trunc_unit, date_col).label("bucket"), func.count(model.id))
-            .filter(date_col >= period_start)
-            .group_by("bucket")
-            .all()
-        )
-        counted = {r[0].strftime(fmt): r[1] for r in rows if r[0] is not None}
-        return [{"period": label, "count": counted.get(label, 0)} for label in period_labels]
-
-    # ── Radiology ──
-    total_radiology_orders = db.query(func.count(RadiologyOrder.id)).scalar() or 0
-    radiology_by_type_rows = (
-        db.query(RadiologyOrder.study_type, func.count(RadiologyOrder.id))
-        .group_by(RadiologyOrder.study_type)
-        .all()
-    )
-    radiology_by_type = {t: c for t, c in radiology_by_type_rows}
-    radiology_trend = _trend_from(RadiologyOrder, RadiologyOrder.created_at)
-
-    # ── Cross-hospital referrals ──
-    total_referrals = db.query(func.count(CrossHospitalReferral.id)).scalar() or 0
-    referral_status_rows = (
-        db.query(CrossHospitalReferral.status, func.count(CrossHospitalReferral.id))
-        .group_by(CrossHospitalReferral.status)
-        .all()
-    )
-    referral_by_status = {s: c for s, c in referral_status_rows}
-    referral_trend = _trend_from(CrossHospitalReferral, CrossHospitalReferral.created_at)
-
-    # ── Suggestion box ──
-    total_suggestions = db.query(func.count(Suggestion.id)).scalar() or 0
-    resolved_suggestions = db.query(func.count(Suggestion.id)).filter(Suggestion.status == "completed").scalar() or 0
-    suggestion_status_rows = (
-        db.query(Suggestion.status, func.count(Suggestion.id))
-        .group_by(Suggestion.status)
-        .all()
-    )
-    suggestion_by_status = {s: c for s, c in suggestion_status_rows}
-    suggestion_resolution_rate = round((resolved_suggestions / total_suggestions) * 100, 1) if total_suggestions else 0
-
-    # Phase 3 addition — avg resolution time for completed suggestions
-    completed_with_times = db.query(Suggestion.created_at, Suggestion.updated_at).filter(Suggestion.status == "completed").all()
-    if completed_with_times:
-        total_hours = sum((updated - created).total_seconds() / 3600 for created, updated in completed_with_times)
-        avg_resolution_hours = round(total_hours / len(completed_with_times), 1)
-    else:
-        avg_resolution_hours = None
-
-    return {
-        "trend_interval": trend_interval,
-        "radiology": {
-            "total_orders": total_radiology_orders,
-            "by_study_type": radiology_by_type,
-            "trend": radiology_trend,
-        },
-        "referrals": {
-            "total": total_referrals,
-            "by_status": referral_by_status,
-            "trend": referral_trend,
-        },
-        "suggestions": {
-            "total": total_suggestions,
-            "resolved": resolved_suggestions,
-            "resolution_rate": suggestion_resolution_rate,
-            "by_status": suggestion_by_status,
-            "avg_resolution_hours": avg_resolution_hours,
-        },
     }
 
 @router.patch("/hospital/{hospital_id}/details")
@@ -2333,25 +2300,6 @@ def hospital_booking_behavior_analytics(
     walkin_checkins = source_counts.get("walk_in", 0)
     total_checkins = online_checkins + walkin_checkins
 
-    # ── Daily trend of online vs walk-in, zero-filled ──
-    daily_rows = (
-        db.query(Checkin.visit_date, Checkin.source, func.count(Checkin.id))
-        .filter(Checkin.hospital_id == hospital_id, Checkin.visit_date >= start_date, Checkin.visit_date < end_date)
-        .group_by(Checkin.visit_date, Checkin.source)
-        .all()
-    )
-    daily_map = {}
-    for d, src, cnt in daily_rows:
-        label = d.strftime("%Y-%m-%d")
-        daily_map.setdefault(label, {"online": 0, "walk_in": 0})[src] = cnt
-    booking_trend = []
-    cursor = start_date
-    while cursor < end_date:
-        label = cursor.strftime("%Y-%m-%d")
-        vals = daily_map.get(label, {"online": 0, "walk_in": 0})
-        booking_trend.append({"date": label, "online": vals.get("online", 0), "walk_in": vals.get("walk_in", 0)})
-        cursor += timedelta(days=1)
-
     # ── No-show rate on online bookings ──
     resolved_appointments = (
         db.query(func.count(Appointment.id))
@@ -2384,7 +2332,6 @@ def hospital_booking_behavior_analytics(
         "walkin_checkins": walkin_checkins,
         "total_checkins": total_checkins,
         "online_ratio": round((online_checkins / total_checkins) * 100, 1) if total_checkins else 0,
-        "booking_trend": booking_trend,
         "resolved_online_appointments": resolved_appointments,
         "no_show_count": no_show_count,
         "no_show_rate": no_show_rate,
@@ -2394,62 +2341,24 @@ def hospital_booking_behavior_analytics(
 @router.get("/analytics/hospital/{hospital_id}/clinical-volume")
 def hospital_clinical_volume_analytics(
     hospital_id: int,
-    range: str = "30d",
-    from_date: str = None,
-    to_date: str = None,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    """Phase 2 — Clinical volume for one hospital: OPD trend, IPD trend,
-    live bed occupancy. Average consultation duration is deliberately
-    excluded — same reason as the platform-wide metric (no start/confirm
-    timestamp pair on Consultation). Bed occupancy is a live snapshot, not
-    range-scoped — 'currently admitted / total beds' doesn't have a
-    meaningful range dimension."""
+    """Phase 2 — Clinical volume for one hospital: live bed occupancy only.
+    OPD/IPD trend charts and the module-usage breakdown were removed per
+    request. Average consultation duration will be added once start/confirm
+    timestamps exist (needed for usage-based hospital billing). Bed
+    occupancy is a live snapshot, not range-scoped — 'currently admitted /
+    total beds' doesn't have a meaningful range dimension."""
     if current_doctor.role.value != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    from app.models.admission import Admission
     from app.models.admission_ward_type import AdmissionWardType
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
 
-    now = now_ist_naive()
-    start, end = _resolve_date_range(range, from_date, to_date, now)
-
-    # ── OPD consultations trend (scoped via Patient join — Consultation has no hospital_id) ──
-    opd_rows = (
-        db.query(func.date_trunc("day", Consultation.created_at).label("day"), func.count(Consultation.id))
-        .join(Patient, Patient.id == Consultation.patient_id)
-        .filter(Patient.hospital_id == hospital_id, Consultation.created_at >= start, Consultation.created_at < end)
-        .group_by("day")
-        .all()
-    )
-    opd_counts = {r[0].strftime("%Y-%m-%d"): r[1] for r in opd_rows if r[0] is not None}
-
-    # ── IPD admissions trend ──
-    ipd_rows = (
-        db.query(func.date_trunc("day", Admission.admission_date).label("day"), func.count(Admission.id))
-        .filter(Admission.hospital_id == hospital_id, Admission.admission_date >= start, Admission.admission_date < end)
-        .group_by("day")
-        .all()
-    )
-    ipd_counts = {r[0].strftime("%Y-%m-%d"): r[1] for r in ipd_rows if r[0] is not None}
-
-    opd_trend, ipd_trend = [], []
-    cursor = start
-    while cursor < end:
-        label = cursor.strftime("%Y-%m-%d")
-        opd_trend.append({"date": label, "count": opd_counts.get(label, 0)})
-        ipd_trend.append({"date": label, "count": ipd_counts.get(label, 0)})
-        cursor += timedelta(days=1)
-
-    total_opd_in_range = sum(p["count"] for p in opd_trend)
-    total_ipd_in_range = sum(p["count"] for p in ipd_trend)
-
-    # ── Live bed occupancy ──
     total_beds = db.query(func.sum(AdmissionWardType.total_beds)).filter(
         AdmissionWardType.hospital_id == hospital_id
     ).scalar() or 0
@@ -2460,82 +2369,9 @@ def hospital_clinical_volume_analytics(
 
     return {
         "hospital_id": hospital_id,
-        "range": range,
-        "range_start": start.strftime("%Y-%m-%d"),
-        "range_end": (end - timedelta(days=1)).strftime("%Y-%m-%d"),
-        "total_opd_in_range": total_opd_in_range,
-        "opd_trend": opd_trend,
-        "total_ipd_in_range": total_ipd_in_range,
-        "ipd_trend": ipd_trend,
         "total_beds": total_beds,
         "occupied_beds": occupied_beds,
         "occupancy_rate": occupancy_rate,
-        "average_consultation_duration": None,
-    }
-
-
-@router.get("/analytics/hospital/{hospital_id}/module-usage")
-def hospital_module_usage_analytics(
-    hospital_id: int,
-    range: str = "30d",
-    from_date: str = None,
-    to_date: str = None,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """Phase 2 — Module usage for one hospital: lab, pharmacy dispense,
-    radiology, cross-hospital referrals sent/received. No tier gate is
-    enforced here — showing real counts (0 if unused) rather than guessing
-    at a gating rule that isn't actually in the backend."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    from app.models.test_order import TestOrder
-    from app.models.medicine_order import MedicineOrder
-    from app.models.radiology_order import RadiologyOrder
-    from app.models.cross_hospital_referral import CrossHospitalReferral
-
-    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
-    if not hospital:
-        raise HTTPException(status_code=404, detail="Hospital not found")
-
-    now = now_ist_naive()
-    start, end = _resolve_date_range(range, from_date, to_date, now)
-
-    lab_orders = db.query(func.count(TestOrder.id)).filter(
-        TestOrder.hospital_id == hospital_id, TestOrder.created_at >= start, TestOrder.created_at < end
-    ).scalar() or 0
-
-    pharmacy_dispensed = db.query(func.count(MedicineOrder.id)).filter(
-        MedicineOrder.hospital_id == hospital_id,
-        MedicineOrder.dispensed_at.isnot(None),
-        MedicineOrder.dispensed_at >= start, MedicineOrder.dispensed_at < end
-    ).scalar() or 0
-
-    radiology_orders = db.query(func.count(RadiologyOrder.id)).filter(
-        RadiologyOrder.hospital_id == hospital_id, RadiologyOrder.created_at >= start, RadiologyOrder.created_at < end
-    ).scalar() or 0
-
-    referrals_sent = db.query(func.count(CrossHospitalReferral.id)).filter(
-        CrossHospitalReferral.from_hospital_id == hospital_id,
-        CrossHospitalReferral.created_at >= start, CrossHospitalReferral.created_at < end
-    ).scalar() or 0
-
-    referrals_received = db.query(func.count(CrossHospitalReferral.id)).filter(
-        CrossHospitalReferral.to_hospital_id == hospital_id,
-        CrossHospitalReferral.created_at >= start, CrossHospitalReferral.created_at < end
-    ).scalar() or 0
-
-    return {
-        "hospital_id": hospital_id,
-        "range": range,
-        "range_start": start.strftime("%Y-%m-%d"),
-        "range_end": (end - timedelta(days=1)).strftime("%Y-%m-%d"),
-        "lab_test_orders": lab_orders,
-        "pharmacy_dispensed": pharmacy_dispensed,
-        "radiology_orders": radiology_orders,
-        "referrals_sent": referrals_sent,
-        "referrals_received": referrals_received,
     }
 
 

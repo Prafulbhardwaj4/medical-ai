@@ -105,12 +105,23 @@
     document.getElementById("suggestion-back-btn").addEventListener("click", closeCompose);
     document.getElementById("suggestion-send-btn").addEventListener("click", send);
 
-    window.__suggestionWidget = { open, close, edit, followUp, toggleThread, sendThreadReply, filter };
+    window.__suggestionWidget = { open, close, edit, followUp, toggleThread, sendThreadReply, filter, openToThread };
   }
 
   function open() {
     document.getElementById("suggestion-list-modal").classList.add("open");
     loadMine();
+  }
+
+  async function openToThread(id) {
+    // Item 1 — jumps straight to a suggestion's conversation from a
+    // suggestion_reply notification click, reusing the existing modal/
+    // load/render/expand functions rather than duplicating their logic.
+    document.getElementById("suggestion-list-modal").classList.add("open");
+    await loadMine();
+    await toggleThread(id);
+    const row = document.getElementById(`sugg-row-${id}`);
+    if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   function close() {

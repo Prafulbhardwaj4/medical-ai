@@ -133,6 +133,7 @@ class CheckinCreate(BaseModel):
 class CheckinOut(BaseModel):
     checkin_id: int
     token_number: str
+    display_token: Optional[int] = None
     visit_group_id: Optional[int] = None
     additional_tokens: Optional[List[dict]] = None
     patient_name: str

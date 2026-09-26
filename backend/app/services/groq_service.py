@@ -1,5 +1,4 @@
 import json
-import json
 import asyncio
 import httpx
 from app.config import settings
@@ -78,6 +77,7 @@ Rules for "repeat" shorthand:
 
 async def structure_transcript(transcript: str, patient_history: str = "") -> dict:
     """Send transcript to Groq and return structured prescription as dict."""
+    import re
 
     user_message = f"Consultation transcript:\n{transcript}"
     if patient_history:
@@ -100,7 +100,16 @@ async def structure_transcript(transcript: str, patient_history: str = "") -> di
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(GROQ_API_URL, headers=headers, json=payload)
+        response = None
+        for attempt in range(3):
+            response = await client.post(GROQ_API_URL, headers=headers, json=payload)
+            if response.status_code != 429:
+                break
+            # Groq tells us exactly how long to wait — use that instead of guessing
+            wait_match = re.search(r"try again in ([\d.]+)s", response.text)
+            wait_seconds = float(wait_match.group(1)) + 1 if wait_match else 15
+            if attempt < 2:
+                await asyncio.sleep(wait_seconds)
 
     if response.status_code != 200:
         raise Exception(f"Groq API error {response.status_code}: {response.text}")

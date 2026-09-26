@@ -814,6 +814,20 @@
     </div>
   </div>
 
+  <!-- Mark Administered modal -->
+  <div class="modal-overlay" id="modal-administer-med">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <h2>Mark Dose Administered</h2><button class="modal-close" onclick="closeModal('modal-administer-med')">&times;</button>
+      </div>
+      <p style="font-size:13px;color:var(--slate);margin-bottom:10px" id="administer-med-name"></p>
+      <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-control"
+          id="administer-med-note" placeholder="e.g. given late due to IV insertion" /></div>
+      <div class="err-msg" id="administer-med-err"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="submitAdministerMed()">Record Dose</button>
+    </div>
+  </div>
+
   <!-- Collect Payment modal -->
   <div class="modal-overlay" id="modal-request-topup">
     <div class="modal" style="max-width:380px">
@@ -1407,6 +1421,15 @@
     }
 
     async function onNotifClick(id, linkType, linkId) {
+      if (linkType === 'suggestion' && linkId) {
+        try {
+          await api("PATCH", `/notifications/${id}/read`, {});
+          loadNotifUnreadCount();
+          closeNotifPanel();
+          window.__suggestionWidget.openToThread(linkId);
+        } catch (e) { toast(e.message, "error"); }
+        return;
+      }
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
@@ -1624,7 +1647,9 @@
       }
       const latest = vitalsData[0];
       const when = new Date(latest.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-      line.innerHTML = `${when} <span style="color:var(--slate-light)">by</span> ${sanitize(latest.recorded_by_name)}`;
+      const hasUnacked = vitalsData.some(v => v.is_critical && !v.critical_ack_at);
+      line.innerHTML = `${when} <span style="color:var(--slate-light)">by</span> ${sanitize(latest.recorded_by_name)}` +
+        (hasUnacked ? ` <span class="badge" style="background:var(--danger,#c0392b);color:#fff;margin-left:6px">🚨 Critical — unacknowledged</span>` : '');
     }
 
     function openVitalsHistoryModal() {
@@ -1639,12 +1664,22 @@
               <td style="padding:5px 8px 5px 0">${sanitize(k)}</td>
               <td style="padding:5px 0 5px 8px;font-weight:600">${sanitize(String(val))}</td>
             </tr>`).join('');
+          const criticalBadge = v.is_critical
+            ? `<span class="badge" style="background:var(--danger,#c0392b);color:#fff;margin-left:8px">${v.critical_ack_at ? 'Critical (acknowledged)' : '🚨 Critical'}</span>`
+            : '';
+          const criticalBlock = v.is_critical ? `
+            <div style="margin-top:8px;padding:8px 10px;background:var(--smoke,#f5f5f5);border-radius:6px;font-size:12.5px">
+              <div style="color:var(--danger,#c0392b);font-weight:600">${sanitize(v.critical_note || '')}</div>
+              ${v.critical_ack_at
+                ? `<div style="color:var(--slate-light);margin-top:4px">Acknowledged ${new Date(v.critical_ack_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>`
+                : `<button class="btn btn-primary btn-sm" style="margin-top:6px" onclick="acknowledgeCriticalVitals(${v.id})">Acknowledge</button>`}
+            </div>` : '';
           return `
           <div style="border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:10px">
             <button type="button" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'"
               style="width:100%;text-align:left;background:none;border:none;padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
               <span><strong>${when}</strong>
-                <span style="color:var(--slate);font-size:13px"> · by ${sanitize(v.recorded_by_name)}</span></span>
+                <span style="color:var(--slate);font-size:13px"> · by ${sanitize(v.recorded_by_name)}</span>${criticalBadge}</span>
               <span style="color:var(--slate)">▾</span>
             </button>
             <div style="display:${i === 0 ? '' : 'none'};padding:0 14px 14px">
@@ -1653,12 +1688,23 @@
                   <tbody>${pairs}</tbody>
                 </table>
               ` : `<p style="font-size:13px;color:var(--slate-light)">No values recorded.</p>`}
+              ${criticalBlock}
             </div>
           </div>`;
         }).join('');
       }
       closeAllOverlays();
       document.getElementById("modal-vitals-history").classList.add("open");
+    }
+
+    async function acknowledgeCriticalVitals(vitalsId) {
+      try {
+        await api("POST", `/admissions/${admissionId}/vitals/${vitalsId}/acknowledge-critical`);
+        toast("Critical vitals acknowledged", "success");
+        vitalsData = await api("GET", `/admissions/${admissionId}/vitals`);
+        renderVitalsSummary();
+        openVitalsHistoryModal();
+      } catch (e) { toast(e.message, "error"); }
     }
     function closeVitalsHistoryModal() {
       document.getElementById("modal-vitals-history").classList.remove("open");
@@ -2235,6 +2281,7 @@
               <div style="font-weight:600">${sanitize(m.medicine_name)} ${m.sourced_outside ? '<span class="badge badge-slate" style="font-weight:400">Family-sourced</span>' : ''}</div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              ${canManageMedOrders() && admissionData.status === 'admitted' ? `<button class="btn btn-primary btn-sm" onclick="openAdministerMedModal(${m.id})">Mark Administered</button>` : ''}
               ${canManageMedOrders() && admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-outline btn-sm" onclick="stopMed(${m.id})">Stop</button>` : ''}
               ${!m.is_active ? `<span class="badge badge-grey">Stopped</span>` : ''}
               ${canManageMedOrders() && admissionData.status === 'admitted' && !m.is_active ? `<button class="btn btn-primary btn-sm" onclick="resumeMed(${m.id})">Resume</button>` : ''}
@@ -2242,7 +2289,27 @@
             </div>
           </div>
           ${m.returned_quantity ? `<div style="font-size:11.5px;color:var(--slate-light);margin-top:8px">${m.returned_quantity} unit(s) returned</div>` : ''}
+          ${m.doses && m.doses.length ? `
+          <div style="font-size:11.5px;color:var(--slate-light);margin-top:8px;cursor:pointer" onclick="toggleDoseHistory(${m.id})">
+            <span id="dose-toggle-arrow-${m.id}">▸</span> ${m.doses.length} dose${m.doses.length === 1 ? '' : 's'} given
+          </div>
+          <div id="dose-history-${m.id}" style="display:none;margin-top:6px;padding-left:10px;border-left:2px solid var(--border)">
+            ${m.doses.map(d => `
+              <div style="font-size:11px;color:var(--slate-light);padding:3px 0">
+                ${new Date(d.administered_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                — ${sanitize(d.administered_by_name || 'Unknown')}${d.notes ? ` · ${sanitize(d.notes)}` : ''}
+              </div>`).join('')}
+          </div>` : ''}
         </div>`).join('');
+    }
+
+    function toggleDoseHistory(orderId) {
+      const el = document.getElementById(`dose-history-${orderId}`);
+      const arrow = document.getElementById(`dose-toggle-arrow-${orderId}`);
+      if (!el) return;
+      const show = el.style.display === 'none';
+      el.style.display = show ? 'block' : 'none';
+      if (arrow) arrow.textContent = show ? '▾' : '▸';
     }
 
     function renderTests() {
@@ -2877,6 +2944,29 @@
         });
         closeModal("modal-return-med");
         toast("Return recorded", "success");
+        loadAdmission();
+      } catch (e) { err.textContent = e.message; }
+    }
+
+    let administerMedOrderId = null;
+    function openAdministerMedModal(orderId) {
+      const m = admissionData.medications.find(x => x.id === orderId);
+      if (!m) return;
+      administerMedOrderId = orderId;
+      document.getElementById("administer-med-name").textContent = m.medicine_name + (!m.is_active ? ' — order currently stopped, will still be logged' : '');
+      document.getElementById("administer-med-note").value = "";
+      document.getElementById("administer-med-err").textContent = "";
+      openModal("modal-administer-med");
+    }
+    async function submitAdministerMed() {
+      const err = document.getElementById("administer-med-err");
+      err.textContent = "";
+      try {
+        await api("POST", `/admissions/${admissionId}/medications/${administerMedOrderId}/administer`, {
+          notes: document.getElementById("administer-med-note").value.trim() || null,
+        });
+        closeModal("modal-administer-med");
+        toast("Dose recorded", "success");
         loadAdmission();
       } catch (e) { err.textContent = e.message; }
     }

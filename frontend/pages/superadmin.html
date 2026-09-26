@@ -131,6 +131,89 @@
       display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px;
       padding-top: 14px; border-top: 1px solid var(--border);
     }
+
+    /* ── Analytics sub-nav (platform tab) ── */
+    .analytics-subnav {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px;
+      padding-bottom: 4px; border-bottom: 1px solid var(--border);
+    }
+    .analytics-subnav-btn {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      padding: 10px 4px; margin-right: 18px; font-size: 14.5px; font-weight: 600;
+      color: var(--slate); cursor: pointer; transition: color .15s, border-color .15s;
+    }
+    .analytics-subnav-btn:hover { color: var(--navy); }
+    .analytics-subnav-btn.active { color: var(--teal); border-bottom-color: var(--teal); }
+
+    /* ── Hospital detail: top tab navbar ── */
+    .detail-subnav {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px;
+      padding-bottom: 4px; border-bottom: 1px solid var(--border);
+    }
+    .detail-subnav-btn {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      padding: 10px 4px; margin-right: 18px; font-size: 14.5px; font-weight: 600;
+      color: var(--slate); cursor: pointer; transition: color .15s, border-color .15s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .detail-subnav-btn:hover { color: var(--navy); }
+    .detail-subnav-btn.active { color: var(--teal); border-bottom-color: var(--teal); }
+
+    /* ── Plain data rows (used wherever we replaced a chart with numbers) ── */
+    .data-row {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 11px 10px; border-bottom: 1px solid var(--border);
+      border-radius: 8px; transition: background .15s;
+    }
+    .data-row:last-child { border-bottom: none; }
+    .data-row.clickable { cursor: pointer; }
+    .data-row.clickable:hover { background: var(--bg-light, #f8fafc); }
+    .data-row-main { min-width: 0; }
+    .data-row-title { font-weight: 600; color: var(--navy); font-size: 14px; }
+    .data-row-sub { color: var(--slate); font-size: 12.5px; margin-top: 2px; }
+    .data-row-value { font-weight: 700; color: var(--navy); font-size: 14px; text-align: right; white-space: nowrap; }
+
+    .tier-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12.5px; font-weight: 600; color: var(--navy);
+    }
+    .tier-pill svg { flex-shrink: 0; }
+
+    /* ── Redesigned Hospital Info card ── */
+    .hosp-info-hero {
+      display: flex; align-items: center; gap: 14px; margin-bottom: 18px;
+      padding-bottom: 18px; border-bottom: 1px solid var(--border);
+    }
+    .hosp-info-avatar {
+      width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 20px; color: #fff;
+      background: linear-gradient(135deg, var(--teal), var(--navy));
+    }
+    .hosp-info-hero-name { font-weight: 700; font-size: 1.15rem; color: var(--navy); }
+    .hosp-info-hero-meta { color: var(--slate); font-size: 13px; margin-top: 2px; }
+
+    .admin-card-row {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 12px 0; border-bottom: 1px solid var(--border);
+    }
+    .admin-card-row:last-child { border-bottom: none; }
+    .admin-avatar {
+      width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 13px; color: var(--navy);
+      background: var(--teal-subtle, #e6fffa);
+    }
+
+    /* ── Tier-trail modal ── */
+    .tier-trail-item {
+      display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .tier-trail-item:last-child { border-bottom: none; }
+    .tier-trail-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--teal);
+      margin-top: 5px; flex-shrink: 0;
+    }
   </style>
 </head>
 
@@ -346,69 +429,91 @@
           <p>Business-wide metrics across every hospital</p>
         </div>
 
-        <div class="hospital-detail-grid">
-          <div class="card">
-            <div class="card-header"><h2>This Month vs Last Month</h2></div>
-            <div id="pc-comparison-list" style="display:flex;flex-direction:column;gap:10px">
-              <p style="color:var(--slate)">Loading...</p>
+        <div class="analytics-subnav">
+          <button class="analytics-subnav-btn active" id="asn-overview" onclick="setAnalyticsPane('overview')">Overview</button>
+          <button class="analytics-subnav-btn" id="asn-growth" onclick="setAnalyticsPane('growth')">Growth</button>
+          <button class="analytics-subnav-btn" id="asn-patients" onclick="setAnalyticsPane('patients')">Patients &amp; Usage</button>
+          <button class="analytics-subnav-btn" id="asn-aiscribe" onclick="setAnalyticsPane('aiscribe')">AI Scribe</button>
+          <button class="analytics-subnav-btn" id="asn-business" onclick="setAnalyticsPane('business')">Business</button>
+        </div>
+
+        <!-- OVERVIEW PANE -->
+        <div class="analytics-pane" id="analytics-pane-overview">
+          <div class="hospital-detail-grid">
+            <div class="card">
+              <div class="card-header"><h2>This Month vs Last Month</h2></div>
+              <div id="pc-comparison-list" style="display:flex;flex-direction:column;gap:10px">
+                <p style="color:var(--slate)">Loading...</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <h2>Needs Attention</h2>
+                <span class="badge badge-red" id="pc-alerts-count" style="display:none"></span>
+              </div>
+              <div id="pc-alerts-list" style="max-height:320px;overflow-y:auto">
+                <p style="color:var(--slate)">Loading...</p>
+              </div>
             </div>
           </div>
-          <div class="card">
+        </div>
+
+        <!-- GROWTH PANE -->
+        <div class="analytics-pane" id="analytics-pane-growth" style="display:none">
+          <div style="display:flex;gap:8px;margin-bottom:18px">
+            <button class="chat-filter-tab active" id="analytics-trend-monthly" onclick="setAnalyticsTrendInterval('monthly')">Monthly</button>
+            <button class="chat-filter-tab" id="analytics-trend-weekly" onclick="setAnalyticsTrendInterval('weekly')">Weekly</button>
+          </div>
+
+          <div class="stats-row stats-row-4">
+            <div class="stat-card">
+              <div class="stat-label">Total Hospitals</div>
+              <div class="stat-value" id="ga-total-hospitals">—</div>
+              <div class="stat-sub" id="ga-active-count">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Tier Breakdown</div>
+              <div id="ga-tier-breakdown" style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
+                <span style="color:var(--slate)">—</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">In Grace Period</div>
+              <div class="stat-value" id="ga-grace-count">—</div>
+              <div class="stat-sub">billing lapsed, not yet deactivated</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Deactivated</div>
+              <div class="stat-value" id="ga-deactivated-count">—</div>
+              <div class="stat-sub">grace expired or manually disabled</div>
+            </div>
+          </div>
+
+          <div class="hospital-detail-grid">
+            <div class="card">
+              <div class="card-header"><h2>New Hospitals Onboarded</h2></div>
+              <canvas id="chart-onboarding-trend" height="220"></canvas>
+            </div>
+            <div class="card">
+              <div class="card-header"><h2>Tier Distribution</h2></div>
+              <canvas id="chart-tier-distribution" height="220"></canvas>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:20px">
             <div class="card-header">
-              <h2>Needs Attention</h2>
-              <span class="badge badge-red" id="pc-alerts-count" style="display:none"></span>
+              <h2>Tier Upgrades / Downgrades</h2>
+              <div style="display:flex;gap:8px">
+                <button class="chat-filter-tab active" id="tc-filter-all" onclick="setTierChangeFilter('all')">All</button>
+                <button class="chat-filter-tab" id="tc-filter-upgrades" onclick="setTierChangeFilter('upgrades')">Upgrades</button>
+                <button class="chat-filter-tab" id="tc-filter-downgrades" onclick="setTierChangeFilter('downgrades')">Downgrades</button>
+              </div>
             </div>
-            <div id="pc-alerts-list" style="max-height:320px;overflow-y:auto">
+            <div id="tc-list" style="max-height:380px;overflow-y:auto">
               <p style="color:var(--slate)">Loading...</p>
             </div>
           </div>
-        </div>
 
-        <div style="display:flex;gap:8px;margin-bottom:18px">
-          <button class="chat-filter-tab active" id="analytics-trend-monthly" onclick="setAnalyticsTrendInterval('monthly')">Monthly</button>
-          <button class="chat-filter-tab" id="analytics-trend-weekly" onclick="setAnalyticsTrendInterval('weekly')">Weekly</button>
-        </div>
-
-        <div class="stats-row stats-row-4">
-          <div class="stat-card">
-            <div class="stat-label">Total Hospitals</div>
-            <div class="stat-value" id="ga-total-hospitals">—</div>
-            <div class="stat-sub" id="ga-active-count">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Tier Breakdown</div>
-            <div id="ga-tier-breakdown" style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
-              <span style="color:var(--slate)">—</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">In Grace Period</div>
-            <div class="stat-value" id="ga-grace-count">—</div>
-            <div class="stat-sub">billing lapsed, not yet deactivated</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Deactivated</div>
-            <div class="stat-value" id="ga-deactivated-count">—</div>
-            <div class="stat-sub">grace expired or manually disabled</div>
-          </div>
-        </div>
-
-        <div class="hospital-detail-grid">
-          <div class="card">
-            <div class="card-header"><h2>New Hospitals Onboarded</h2></div>
-            <canvas id="chart-onboarding-trend" height="220"></canvas>
-          </div>
-          <div class="card">
-            <div class="card-header"><h2>Tier Distribution</h2></div>
-            <canvas id="chart-tier-distribution" height="220"></canvas>
-          </div>
-        </div>
-
-        <div class="hospital-detail-grid">
-          <div class="card">
-            <div class="card-header"><h2>Tier Upgrades / Downgrades</h2></div>
-            <canvas id="chart-tier-changes" height="220"></canvas>
-          </div>
           <div class="card">
             <div class="card-header"><h2>Geographic Distribution</h2></div>
             <div id="ga-geo-list" style="max-height:280px;overflow-y:auto">
@@ -417,183 +522,119 @@
           </div>
         </div>
 
-        <div class="page-header" style="margin-top:8px">
-          <h1 style="font-size:1.3rem">Patient &amp; Usage</h1>
-        </div>
+        <!-- PATIENTS & USAGE PANE -->
+        <div class="analytics-pane" id="analytics-pane-patients" style="display:none">
+          <div class="stats-row stats-row-4">
+            <div class="stat-card">
+              <div class="stat-label">Total Patients</div>
+              <div class="stat-value" id="pu-total-patients">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Portal Adoption</div>
+              <div class="stat-value" id="pu-portal-rate">—</div>
+              <div class="stat-sub" id="pu-portal-count">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Total OPD Consultations</div>
+              <div class="stat-value" id="pu-total-consultations">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Total IPD Admissions</div>
+              <div class="stat-value" id="pu-total-admissions">—</div>
+            </div>
+          </div>
 
-        <div class="stats-row stats-row-4">
-          <div class="stat-card">
-            <div class="stat-label">Total Patients</div>
-            <div class="stat-value" id="pu-total-patients">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Portal Adoption</div>
-            <div class="stat-value" id="pu-portal-rate">—</div>
-            <div class="stat-sub" id="pu-portal-count">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Total OPD Consultations</div>
-            <div class="stat-value" id="pu-total-consultations">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Total IPD Admissions</div>
-            <div class="stat-value" id="pu-total-admissions">—</div>
-          </div>
-        </div>
-
-        <div class="hospital-detail-grid">
-          <div class="card">
-            <div class="card-header"><h2>OPD Consultations Trend</h2></div>
-            <canvas id="chart-consultation-trend" height="220"></canvas>
-          </div>
-          <div class="card">
-            <div class="card-header"><h2>IPD Admissions Trend</h2></div>
-            <canvas id="chart-admission-trend" height="220"></canvas>
-          </div>
-        </div>
-
-        <div class="hospital-detail-grid">
-          <div class="card">
-            <div class="card-header"><h2>Online Bookings vs Walk-ins</h2></div>
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-header"><h2>Online Bookings vs Walk-ins (platform-wide)</h2></div>
             <canvas id="chart-booking-ratio" height="220"></canvas>
           </div>
+
           <div class="card">
-            <div class="card-header"><h2>Note</h2></div>
-            <p style="color:var(--slate);font-size:13px;line-height:1.5">
-              Average consultation duration isn't shown — the app doesn't currently record a
-              consultation start/confirm timestamp pair to compute it from.
-            </p>
-          </div>
-        </div>
-
-        <div class="page-header" style="margin-top:8px">
-          <h1 style="font-size:1.3rem">AI Scribe &amp; Topups</h1>
-        </div>
-
-        <div class="stats-row stats-row-4">
-          <div class="stat-card">
-            <div class="stat-label">Current-Cycle Tier Usage</div>
-            <div class="stat-value" id="as-cycle-usage">—</div>
-            <div class="stat-sub">resets on renewal, not all-time</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Avg Usage / Hospital</div>
-            <div class="stat-value" id="as-avg-usage">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">All-Time Topup Usage</div>
-            <div class="stat-value" id="as-topup-usage">—</div>
-            <div class="stat-sub">genuinely cumulative</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Topup Revenue</div>
-            <div class="stat-value" id="as-topup-revenue">—</div>
-            <div class="stat-sub" id="as-topup-count">—</div>
-          </div>
-        </div>
-
-        <div class="hospital-detail-grid">
-          <div class="card">
-            <div class="card-header"><h2>Hospitals Approaching / At Cap</h2></div>
-            <div id="as-cap-list" style="max-height:280px;overflow-y:auto">
+            <div class="card-header">
+              <h2>Consultations by Hospital</h2>
+              <div style="display:flex;gap:8px">
+                <button class="chat-filter-tab active" id="bh-range-30d" onclick="setBookingsByHospitalRange('30d')">30d</button>
+                <button class="chat-filter-tab" id="bh-range-7d" onclick="setBookingsByHospitalRange('7d')">7d</button>
+                <button class="chat-filter-tab" id="bh-range-today" onclick="setBookingsByHospitalRange('today')">Today</button>
+              </div>
+            </div>
+            <div id="bh-list" style="max-height:420px;overflow-y:auto">
               <p style="color:var(--slate)">Loading...</p>
             </div>
           </div>
+
+          <p style="color:var(--slate);font-size:13px;line-height:1.5;margin-top:16px">
+            Average consultation duration isn't shown yet — will be added once the app records a
+            consultation start/confirm timestamp pair (needed for usage-based hospital billing).
+          </p>
+        </div>
+
+        <!-- AI SCRIBE PANE -->
+        <div class="analytics-pane" id="analytics-pane-aiscribe" style="display:none">
+          <div class="stats-row stats-row-4">
+            <div class="stat-card">
+              <div class="stat-label">Current-Cycle Tier Usage</div>
+              <div class="stat-value" id="as-cycle-usage">—</div>
+              <div class="stat-sub">resets on renewal, not all-time</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Avg Usage / Hospital</div>
+              <div class="stat-value" id="as-avg-usage">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">All-Time Topup Usage</div>
+              <div class="stat-value" id="as-topup-usage">—</div>
+              <div class="stat-sub">genuinely cumulative</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Topup Revenue</div>
+              <div class="stat-value" id="as-topup-revenue">—</div>
+              <div class="stat-sub" id="as-topup-count">—</div>
+            </div>
+          </div>
+
           <div class="card">
-            <div class="card-header"><h2>Topup Purchases Trend</h2></div>
-            <canvas id="chart-topup-trend" height="220"></canvas>
+            <div class="card-header"><h2>Hospitals Approaching / At Cap</h2></div>
+            <div id="as-cap-list" style="max-height:340px;overflow-y:auto">
+              <p style="color:var(--slate)">Loading...</p>
+            </div>
           </div>
         </div>
 
-        <div class="page-header" style="margin-top:8px">
-          <h1 style="font-size:1.3rem">Business &amp; Revenue</h1>
-        </div>
+        <!-- BUSINESS PANE -->
+        <div class="analytics-pane" id="analytics-pane-business" style="display:none">
+          <div class="stats-row stats-row-4">
+            <div class="stat-card">
+              <div class="stat-label">Monthly Recurring Revenue</div>
+              <div class="stat-value" id="biz-mrr">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Annual Recurring Revenue</div>
+              <div class="stat-value" id="biz-arr">—</div>
+              <div class="stat-sub">projected</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Hospital Leads</div>
+              <div class="stat-value" id="biz-leads">—</div>
+              <div class="stat-sub" id="biz-leads-contacted">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Upgrade Requests → Converted</div>
+              <div class="stat-value" id="biz-upgrade-rate">—</div>
+              <div class="stat-sub" id="biz-upgrade-count">—</div>
+            </div>
+          </div>
 
-        <div class="stats-row stats-row-4">
-          <div class="stat-card">
-            <div class="stat-label">Monthly Recurring Revenue</div>
-            <div class="stat-value" id="biz-mrr">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Annual Recurring Revenue</div>
-            <div class="stat-value" id="biz-arr">—</div>
-            <div class="stat-sub">projected</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Hospital Leads</div>
-            <div class="stat-value" id="biz-leads">—</div>
-            <div class="stat-sub" id="biz-leads-contacted">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Upgrade Requests → Converted</div>
-            <div class="stat-value" id="biz-upgrade-rate">—</div>
-            <div class="stat-sub" id="biz-upgrade-count">—</div>
-          </div>
-        </div>
-
-        <div class="hospital-detail-grid">
-          <div class="card">
+          <div class="card" style="margin-bottom:20px">
             <div class="card-header"><h2>MRR by Tier</h2></div>
             <canvas id="chart-mrr-tier" height="220"></canvas>
           </div>
-          <div class="card">
-            <div class="card-header"><h2>Note</h2></div>
-            <p style="color:var(--slate);font-size:13px;line-height:1.5">
-              Lead → onboarded-hospital conversion rate isn't shown — <code>HospitalLead</code> has no
-              link to the actual <code>Hospital</code> row it may have become, and matching by name
-              would be a guess, not real data.
-            </p>
-          </div>
-        </div>
 
-        <div class="page-header" style="margin-top:8px">
-          <h1 style="font-size:1.3rem">Module Usage</h1>
-        </div>
-
-        <div class="stats-row stats-row-4">
-          <div class="stat-card">
-            <div class="stat-label">Radiology Orders</div>
-            <div class="stat-value" id="mu-radiology-total">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Cross-Hospital Referrals</div>
-            <div class="stat-value" id="mu-referral-total">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Suggestions Raised</div>
-            <div class="stat-value" id="mu-suggestion-total">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Suggestion Resolution Rate</div>
-            <div class="stat-value" id="mu-suggestion-rate">—</div>
-            <div class="stat-sub" id="mu-suggestion-resolved">—</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Avg Resolution Time</div>
-            <div class="stat-value" id="mu-suggestion-avg-hours">—</div>
-          </div>
-        </div>
-
-        <div class="hospital-detail-grid">
-          <div class="card">
-            <div class="card-header"><h2>Radiology &amp; Referrals Trend</h2></div>
-            <canvas id="chart-module-trend" height="220"></canvas>
-          </div>
-          <div class="card">
-            <div class="card-header"><h2>Radiology by Study Type</h2></div>
-            <canvas id="chart-radiology-type" height="220"></canvas>
-          </div>
-        </div>
-
-        <div class="hospital-detail-grid">
-          <div class="card">
-            <div class="card-header"><h2>Referral Outcomes</h2></div>
-            <canvas id="chart-referral-status" height="220"></canvas>
-          </div>
-          <div class="card">
-            <div class="card-header"><h2>Suggestion Status Breakdown</h2></div>
-            <canvas id="chart-suggestion-status" height="220"></canvas>
-          </div>
+          <p style="color:var(--slate);font-size:13px;line-height:1.5">
+            Lead → onboarded-hospital conversion rate isn't shown — <code>HospitalLead</code> has no
+            link to the actual <code>Hospital</code> row it may have become, and matching by name
+            would be a guess, not real data.
+          </p>
         </div>
       </div>
 
@@ -617,6 +658,12 @@
                 onclick="setHospitalFilter('active', this)" id="filter-btn-active">Active</button>
               <button class="btn btn-outline btn-sm hospital-filter-btn" data-filter="inactive"
                 onclick="setHospitalFilter('inactive', this)" id="filter-btn-inactive">Inactive</button>
+              <select class="form-control" id="hospital-filter-state" style="width:auto" onchange="onHospitalStateFilterChange()">
+                <option value="">All States</option>
+              </select>
+              <select class="form-control" id="hospital-filter-city" style="width:auto" onchange="renderHospitalsList()">
+                <option value="">All Cities</option>
+              </select>
             </div>
           </div>
 
@@ -633,41 +680,56 @@
             <span class="badge" id="detail-status-badge"></span>
           </div>
 
-          <div class="hospital-detail-grid">
-            <div class="card">
-              <div class="card-header">
-                <h2>Hospital Info</h2>
-                <button class="btn btn-outline btn-sm" onclick="openEditHospital()">Edit Details</button>
+          <div class="detail-subnav">
+            <button class="detail-subnav-btn active" id="dsn-info" onclick="setDetailPane('info')">Hospital Info</button>
+            <button class="detail-subnav-btn" id="dsn-aiscribe" onclick="setDetailPane('aiscribe')">AI Scribing</button>
+            <button class="detail-subnav-btn" id="dsn-analytics" onclick="setDetailPane('analytics')">Analytics</button>
+          </div>
+
+          <!-- INFO PANE -->
+          <div class="detail-pane" id="detail-pane-info">
+            <div class="hospital-detail-grid">
+              <div class="card">
+                <div class="card-header">
+                  <h2>Hospital Info</h2>
+                  <button class="btn btn-outline btn-sm" onclick="openEditHospital()">Edit Details</button>
+                </div>
+                <div id="detail-info"></div>
               </div>
-              <div id="detail-info"></div>
-            </div>
-            <div class="card">
-              <div class="card-header">
-                <h2>Admins</h2>
-                <button class="btn btn-primary btn-sm" onclick="openAdminModal()">+ Add Admin</button>
+              <div class="card">
+                <div class="card-header">
+                  <h2>Admins</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openAdminModal()">+ Add Admin</button>
+                </div>
+                <div id="detail-admins"></div>
               </div>
-              <div id="detail-admins"></div>
             </div>
           </div>
 
-          <div class="card" id="detail-ai-scribe-card" style="display:none;margin-bottom:20px">
-            <div class="card-header">
-              <h2>AI Scribe &amp; Billing Cycle</h2>
+          <!-- AI SCRIBING PANE -->
+          <div class="detail-pane" id="detail-pane-aiscribe" style="display:none">
+            <div class="card" id="detail-ai-scribe-card" style="margin-bottom:20px">
+              <div class="card-header">
+                <h2>AI Scribe &amp; Billing Cycle</h2>
+              </div>
+              <div id="detail-ai-scribe"></div>
             </div>
-            <div id="detail-ai-scribe"></div>
           </div>
 
-          <div class="card" id="detail-analytics-card" style="margin-bottom:20px">
-            <div class="card-header">
-              <h2>Analytics</h2>
-              <div style="display:flex;gap:8px">
-                <button class="chat-filter-tab active" id="hosp-range-30d" onclick="setHospitalAnalyticsRange('30d')">30d</button>
-                <button class="chat-filter-tab" id="hosp-range-7d" onclick="setHospitalAnalyticsRange('7d')">7d</button>
-                <button class="chat-filter-tab" id="hosp-range-today" onclick="setHospitalAnalyticsRange('today')">Today</button>
+          <!-- ANALYTICS PANE -->
+          <div class="detail-pane" id="detail-pane-analytics" style="display:none">
+            <div class="card" id="detail-analytics-card" style="margin-bottom:20px">
+              <div class="card-header">
+                <h2>Analytics</h2>
+                <div style="display:flex;gap:8px">
+                  <button class="chat-filter-tab active" id="hosp-range-30d" onclick="setHospitalAnalyticsRange('30d')">30d</button>
+                  <button class="chat-filter-tab" id="hosp-range-7d" onclick="setHospitalAnalyticsRange('7d')">7d</button>
+                  <button class="chat-filter-tab" id="hosp-range-today" onclick="setHospitalAnalyticsRange('today')">Today</button>
+                </div>
               </div>
-            </div>
-            <div id="detail-analytics-body">
-              <p style="color:var(--slate)">Loading...</p>
+              <div id="detail-analytics-body">
+                <p style="color:var(--slate)">Loading...</p>
+              </div>
             </div>
           </div>
 
@@ -771,6 +833,25 @@
         <div style="display:flex;gap:8px">
           <input class="form-control" id="sugg-modal-reply-text" placeholder="Ask the staff member something…" />
           <button class="btn btn-primary btn-sm" onclick="sendSuggModalReply()">Ask</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tier Trail Modal -->
+  <div class="modal-overlay" id="tier-trail-modal">
+    <div class="modal" style="max-width:560px;max-height:85vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
+      <div style="background:var(--navy);color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <div style="font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal-light);font-weight:600;margin-bottom:4px">Hospital</div>
+          <div id="tt-modal-name" style="font-size:17px;font-weight:700"></div>
+          <div id="tt-modal-address" style="font-size:13px;color:rgba(255,255,255,0.75);margin-top:2px"></div>
+        </div>
+        <button onclick="closeTierTrailModal()" style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:18px;line-height:1;cursor:pointer;flex-shrink:0">×</button>
+      </div>
+      <div style="padding:20px 24px;flex:1;overflow-y:auto">
+        <div id="tt-modal-body">
+          <p style="color:var(--slate)">Loading...</p>
         </div>
       </div>
     </div>
@@ -917,17 +998,12 @@
     let typeChart = null;
     let onboardingTrendChart = null;
     let tierDistributionChart = null;
-    let tierChangesChart = null;
-    let consultationTrendChart = null;
-    let admissionTrendChart = null;
     let bookingRatioChart = null;
-    let topupTrendChart = null;
     let mrrTierChart = null;
-    let moduleTrendChart = null;
-    let radiologyTypeChart = null;
-    let referralStatusChart = null;
-    let suggestionStatusChart = null;
     let analyticsTrendInterval = 'monthly';
+    let analyticsPane = 'overview';
+    let tierChangeFilter = 'all';
+    let bookingsByHospitalRange = '30d';
 
     // Section switching
     function showSection(name) {
@@ -948,7 +1024,7 @@
       if (name === 'suggestions') loadSuggestions();
       if (name === 'hospital-leads') loadHospitalLeads();
       if (name === 'plan-inquiries') loadPlanInquiries();
-      if (name === 'analytics') { loadPlatformComparison(); loadPlatformAlerts(); loadPlatformGrowthAnalytics(); loadPlatformPatientsUsageAnalytics(); loadPlatformAiScribeAnalytics(); loadPlatformBusinessAnalytics(); loadPlatformModuleUsageAnalytics(); }
+      if (name === 'analytics') loadAnalyticsPane(analyticsPane);
     }
 
     // ── UPGRADE REQUESTS ──
@@ -1368,87 +1444,26 @@
       document.getElementById('analytics-trend-monthly').classList.toggle('active', interval === 'monthly');
       document.getElementById('analytics-trend-weekly').classList.toggle('active', interval === 'weekly');
       loadPlatformGrowthAnalytics();
-      loadPlatformPatientsUsageAnalytics();
-      loadPlatformAiScribeAnalytics();
-      loadPlatformBusinessAnalytics();
-      loadPlatformModuleUsageAnalytics();
     }
 
-    async function loadPlatformModuleUsageAnalytics() {
-      try {
-        const data = await api('GET', `/admin/analytics/platform/module-usage?trend_interval=${analyticsTrendInterval}`);
+    function setAnalyticsPane(pane) {
+      analyticsPane = pane;
+      document.querySelectorAll('.analytics-subnav-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(`asn-${pane}`).classList.add('active');
+      document.querySelectorAll('.analytics-pane').forEach(el => el.style.display = 'none');
+      document.getElementById(`analytics-pane-${pane}`).style.display = 'block';
+      loadAnalyticsPane(pane);
+    }
 
-        document.getElementById('mu-radiology-total').textContent = data.radiology.total_orders.toLocaleString('en-IN');
-        document.getElementById('mu-referral-total').textContent = data.referrals.total.toLocaleString('en-IN');
-        document.getElementById('mu-suggestion-total').textContent = data.suggestions.total.toLocaleString('en-IN');
-        document.getElementById('mu-suggestion-rate').textContent = `${data.suggestions.resolution_rate}%`;
-        document.getElementById('mu-suggestion-resolved').textContent = `${data.suggestions.resolved} of ${data.suggestions.total} resolved`;
-        document.getElementById('mu-suggestion-avg-hours').textContent = data.suggestions.avg_resolution_hours === null
-          ? 'n/a' : `${data.suggestions.avg_resolution_hours}h`;
-
-        const trendCtx = document.getElementById('chart-module-trend');
-        if (trendCtx && typeof Chart !== 'undefined') {
-          if (moduleTrendChart) moduleTrendChart.destroy();
-          moduleTrendChart = new Chart(trendCtx, {
-            type: 'line',
-            data: {
-              labels: data.radiology.trend.map(p => p.period),
-              datasets: [
-                { label: 'Radiology Orders', data: data.radiology.trend.map(p => p.count), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.08)', tension: 0.3, fill: true },
-                { label: 'Referrals', data: data.referrals.trend.map(p => p.count), borderColor: '#1e3a5f', backgroundColor: 'rgba(30,58,95,0.08)', tension: 0.3, fill: true }
-              ]
-            },
-            options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
-
-        const typeLabels = { xray: 'X-Ray', ct: 'CT', mri: 'MRI', ultrasound: 'Ultrasound' };
-        const radTypeCtx = document.getElementById('chart-radiology-type');
-        if (radTypeCtx && typeof Chart !== 'undefined') {
-          if (radiologyTypeChart) radiologyTypeChart.destroy();
-          const entries = Object.entries(data.radiology.by_study_type);
-          radiologyTypeChart = new Chart(radTypeCtx, {
-            type: 'doughnut',
-            data: {
-              labels: entries.map(([t]) => typeLabels[t] || t),
-              datasets: [{ data: entries.map(([, c]) => c), backgroundColor: ['#0d9488', '#1e3a5f', '#c9a227', '#94a3b8'] }]
-            },
-            options: { responsive: true }
-          });
-        }
-
-        const referralLabels = { pending: 'Pending', rejected: 'Rejected', departed: 'Departed', admitted: 'Admitted', expired: 'Expired' };
-        const refCtx = document.getElementById('chart-referral-status');
-        if (refCtx && typeof Chart !== 'undefined') {
-          if (referralStatusChart) referralStatusChart.destroy();
-          const entries = Object.entries(data.referrals.by_status);
-          referralStatusChart = new Chart(refCtx, {
-            type: 'bar',
-            data: {
-              labels: entries.map(([s]) => referralLabels[s] || s),
-              datasets: [{ label: 'Referrals', data: entries.map(([, c]) => c), backgroundColor: '#1e3a5f' }]
-            },
-            options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
-
-        const suggLabels = { sent: 'Received', seen: 'Seen', in_progress: 'In Progress', rejected: 'Rejected', completed: 'Completed' };
-        const suggCtx = document.getElementById('chart-suggestion-status');
-        if (suggCtx && typeof Chart !== 'undefined') {
-          if (suggestionStatusChart) suggestionStatusChart.destroy();
-          const entries = Object.entries(data.suggestions.by_status);
-          suggestionStatusChart = new Chart(suggCtx, {
-            type: 'bar',
-            data: {
-              labels: entries.map(([s]) => suggLabels[s] || s),
-              datasets: [{ label: 'Suggestions', data: entries.map(([, c]) => c), backgroundColor: '#c9a227' }]
-            },
-            options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
-      } catch (e) {
-        console.error('Failed to load platform module usage analytics', e);
-      }
+    const analyticsPaneLoaded = {};
+    function loadAnalyticsPane(pane) {
+      if (analyticsPaneLoaded[pane]) return;
+      analyticsPaneLoaded[pane] = true;
+      if (pane === 'overview') { loadPlatformComparison(); loadPlatformAlerts(); }
+      if (pane === 'growth') { loadPlatformGrowthAnalytics(); loadTierChanges(); }
+      if (pane === 'patients') { loadPlatformPatientsUsageAnalytics(); loadBookingsByHospital(); }
+      if (pane === 'aiscribe') { loadPlatformAiScribeAnalytics(); }
+      if (pane === 'business') { loadPlatformBusinessAnalytics(); }
     }
 
     async function loadPlatformBusinessAnalytics() {
@@ -1482,7 +1497,7 @@
 
     async function loadPlatformAiScribeAnalytics() {
       try {
-        const data = await api('GET', `/admin/analytics/platform/ai-scribe?trend_interval=${analyticsTrendInterval}`);
+        const data = await api('GET', '/admin/analytics/platform/ai-scribe');
 
         document.getElementById('as-cycle-usage').textContent = data.current_cycle_tier_usage.toLocaleString('en-IN');
         document.getElementById('as-avg-usage').textContent = data.average_usage_per_hospital.toLocaleString('en-IN');
@@ -1514,19 +1529,6 @@
             `;
           }).join('');
         }
-
-        const topupCtx = document.getElementById('chart-topup-trend');
-        if (topupCtx && typeof Chart !== 'undefined') {
-          if (topupTrendChart) topupTrendChart.destroy();
-          topupTrendChart = new Chart(topupCtx, {
-            type: 'bar',
-            data: {
-              labels: data.topup_trend.map(p => p.period),
-              datasets: [{ label: 'Topups Purchased', data: data.topup_trend.map(p => p.count), backgroundColor: '#0d9488' }]
-            },
-            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
       } catch (e) {
         console.error('Failed to load platform AI Scribe analytics', e);
       }
@@ -1534,39 +1536,13 @@
 
     async function loadPlatformPatientsUsageAnalytics() {
       try {
-        const data = await api('GET', `/admin/analytics/platform/patients-usage?trend_interval=${analyticsTrendInterval}`);
+        const data = await api('GET', '/admin/analytics/platform/patients-usage');
 
         document.getElementById('pu-total-patients').textContent = data.total_patients.toLocaleString('en-IN');
         document.getElementById('pu-portal-rate').textContent = `${data.portal_adoption_rate}%`;
         document.getElementById('pu-portal-count').textContent = `${data.portal_activated_patients.toLocaleString('en-IN')} activated`;
         document.getElementById('pu-total-consultations').textContent = data.total_opd_consultations.toLocaleString('en-IN');
         document.getElementById('pu-total-admissions').textContent = data.total_ipd_admissions.toLocaleString('en-IN');
-
-        const consultCtx = document.getElementById('chart-consultation-trend');
-        if (consultCtx && typeof Chart !== 'undefined') {
-          if (consultationTrendChart) consultationTrendChart.destroy();
-          consultationTrendChart = new Chart(consultCtx, {
-            type: 'line',
-            data: {
-              labels: data.opd_consultation_trend.map(p => p.period),
-              datasets: [{ label: 'OPD Consultations', data: data.opd_consultation_trend.map(p => p.count), borderColor: '#1e3a5f', backgroundColor: 'rgba(30,58,95,0.1)', tension: 0.3, fill: true }]
-            },
-            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
-          });
-        }
-
-        const admitCtx = document.getElementById('chart-admission-trend');
-        if (admitCtx && typeof Chart !== 'undefined') {
-          if (admissionTrendChart) admissionTrendChart.destroy();
-          admissionTrendChart = new Chart(admitCtx, {
-            type: 'line',
-            data: {
-              labels: data.ipd_admission_trend.map(p => p.period),
-              datasets: [{ label: 'IPD Admissions', data: data.ipd_admission_trend.map(p => p.count), borderColor: '#c9a227', backgroundColor: 'rgba(201,162,39,0.1)', tension: 0.3, fill: true }]
-            },
-            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
-          });
-        }
 
         const ratioCtx = document.getElementById('chart-booking-ratio');
         if (ratioCtx && typeof Chart !== 'undefined') {
@@ -1582,6 +1558,35 @@
         }
       } catch (e) {
         console.error('Failed to load platform patient/usage analytics', e);
+      }
+    }
+
+    function setBookingsByHospitalRange(range) {
+      bookingsByHospitalRange = range;
+      ['30d', '7d', 'today'].forEach(r => document.getElementById(`bh-range-${r}`)?.classList.toggle('active', r === range));
+      loadBookingsByHospital();
+    }
+
+    async function loadBookingsByHospital() {
+      const el = document.getElementById('bh-list');
+      try {
+        const data = await api('GET', `/admin/analytics/platform/bookings-by-hospital?range=${bookingsByHospitalRange}`);
+        if (!data.hospitals.length) {
+          el.innerHTML = '<p style="color:var(--slate)">No check-ins recorded in this range.</p>';
+          return;
+        }
+        el.innerHTML = data.hospitals.map(h => `
+          <div class="data-row clickable" onclick="showSection('hospitals'); openDetail(${h.hospital_id})">
+            <div class="data-row-main">
+              <div class="data-row-title">${sanitize(h.hospital_name)}</div>
+              <div class="data-row-sub">${h.online} online · ${h.walk_in} walk-in</div>
+            </div>
+            <div class="data-row-value">${h.total}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = '<p style="color:var(--slate)">Failed to load.</p>';
+        console.error('Failed to load bookings by hospital', e);
       }
     }
 
@@ -1604,9 +1609,12 @@
           geoEl.innerHTML = '<p style="color:var(--slate)">No hospitals yet.</p>';
         } else {
           geoEl.innerHTML = data.geographic_distribution.map(g => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-              <div><div style="font-weight:600">${sanitize(g.city)}</div><div style="color:var(--slate);font-size:12px">${sanitize(g.state)}</div></div>
-              <div style="font-weight:600;color:var(--teal)">${g.count}</div>
+            <div class="data-row">
+              <div class="data-row-main">
+                <div class="data-row-title">${sanitize(g.city)}</div>
+                <div class="data-row-sub">${sanitize(g.state)}</div>
+              </div>
+              <div class="data-row-value" style="color:var(--teal)">${g.count}</div>
             </div>
           `).join('');
         }
@@ -1636,25 +1644,119 @@
             options: { responsive: true }
           });
         }
-
-        const changesCtx = document.getElementById('chart-tier-changes');
-        if (changesCtx && typeof Chart !== 'undefined') {
-          if (tierChangesChart) tierChangesChart.destroy();
-          tierChangesChart = new Chart(changesCtx, {
-            type: 'bar',
-            data: {
-              labels: data.tier_change_trend.map(p => p.period),
-              datasets: [
-                { label: 'Upgrades', data: data.tier_change_trend.map(p => p.upgrades), backgroundColor: '#0d9488' },
-                { label: 'Downgrades', data: data.tier_change_trend.map(p => p.downgrades), backgroundColor: '#dc2626' }
-              ]
-            },
-            options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
       } catch (e) {
         console.error('Failed to load platform growth analytics', e);
       }
+    }
+
+    const TIER_ICON = {
+      foundation: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>',
+      growth: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/></svg>',
+      scale: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>',
+      enterprise: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 4.5v9L12 20l-9-4.5v-9z"/></svg>',
+    };
+    const TIER_LABEL = { foundation: 'Foundation', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise' };
+
+    function setTierChangeFilter(filter) {
+      tierChangeFilter = filter;
+      ['all', 'upgrades', 'downgrades'].forEach(f => document.getElementById(`tc-filter-${f}`)?.classList.toggle('active', f === filter));
+      loadTierChanges();
+    }
+
+    async function loadTierChanges() {
+      const el = document.getElementById('tc-list');
+      try {
+        const data = await api('GET', `/admin/analytics/platform/tier-changes?filter=${tierChangeFilter}`);
+        if (!data.changes.length) {
+          el.innerHTML = '<p style="color:var(--slate)">No tier changes recorded yet.</p>';
+          return;
+        }
+        el.innerHTML = data.changes.map(c => {
+          const dirColor = c.direction === 'upgrade' ? '#0d9488' : '#dc2626';
+          const arrow = c.direction === 'upgrade' ? '▲' : '▼';
+          const addr = [c.city, c.state].filter(Boolean).join(', ') || (c.address || '—');
+          return `
+            <div class="data-row clickable" onclick="openTierTrailModal(${c.hospital_id})">
+              <div class="data-row-main">
+                <div class="data-row-title">${sanitize(c.hospital_name)}</div>
+                <div class="data-row-sub">${sanitize(addr)}</div>
+                <div class="tier-pill" style="margin-top:4px">
+                  ${TIER_ICON[c.from_tier] || ''} ${TIER_LABEL[c.from_tier] || c.from_tier}
+                  <span style="color:${dirColor}">→</span>
+                  ${TIER_ICON[c.to_tier] || ''} ${TIER_LABEL[c.to_tier] || c.to_tier}
+                </div>
+              </div>
+              <div style="text-align:right">
+                <div class="data-row-value" style="color:${dirColor}">${arrow}</div>
+                <div class="data-row-sub">${c.changed_at}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        el.innerHTML = '<p style="color:var(--slate)">Failed to load tier changes.</p>';
+        console.error('Failed to load tier changes', e);
+      }
+    }
+
+    async function openTierTrailModal(hospitalId) {
+      const modal = document.getElementById('tier-trail-modal');
+      modal.classList.add('open');
+      document.getElementById('tt-modal-name').textContent = 'Loading...';
+      document.getElementById('tt-modal-address').textContent = '';
+      document.getElementById('tt-modal-body').innerHTML = '<p style="color:var(--slate)">Loading...</p>';
+      try {
+        const data = await api('GET', `/admin/analytics/hospital/${hospitalId}/tier-trail`);
+
+        document.getElementById('tt-modal-name').textContent = data.hospital_name;
+        document.getElementById('tt-modal-address').textContent = [data.address, data.city, data.state].filter(Boolean).join(', ');
+
+        const adminsHtml = data.admins.length
+          ? data.admins.map(a => `
+              <div class="admin-card-row">
+                <div class="admin-avatar">${sanitize((a.name || '?').trim().charAt(0).toUpperCase())}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:600">${sanitize(a.name)}</div>
+                  <div style="color:var(--slate);font-size:12.5px">${sanitize(a.email || '')}${a.phone ? ' · ' + sanitize(a.phone) : ''}</div>
+                </div>
+              </div>
+            `).join('')
+          : '<p style="color:var(--slate);font-size:13px">No admin on record.</p>';
+
+        const trailHtml = data.tier_trail.map(t => `
+          <div class="tier-trail-item">
+            <div class="tier-trail-dot"></div>
+            <div>
+              <div class="tier-pill">${TIER_ICON[t.tier] || ''} ${TIER_LABEL[t.tier] || t.tier}</div>
+              <div class="data-row-sub">${t.from_date} → ${t.to_date}</div>
+            </div>
+          </div>
+        `).join('');
+
+        document.getElementById('tt-modal-body').innerHTML = `
+          <div class="stats-row" style="grid-template-columns:1fr 1fr;margin-bottom:20px">
+            <div class="stat-card">
+              <div class="stat-label">Total Patients</div>
+              <div class="stat-value">${data.total_patients.toLocaleString('en-IN')}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Avg Daily Patients</div>
+              <div class="stat-value">${data.avg_daily_patients}</div>
+            </div>
+          </div>
+          <div style="font-weight:700;color:var(--navy);margin-bottom:8px">Admins</div>
+          <div style="margin-bottom:20px">${adminsHtml}</div>
+          <div style="font-weight:700;color:var(--navy);margin-bottom:8px">Tier Trail — joined ${data.joined_at}</div>
+          <div>${trailHtml}</div>
+        `;
+      } catch (e) {
+        document.getElementById('tt-modal-body').innerHTML = '<p style="color:var(--slate)">Failed to load hospital details.</p>';
+        console.error('Failed to load tier trail', e);
+      }
+    }
+
+    function closeTierTrailModal() {
+      document.getElementById('tier-trail-modal').classList.remove('open');
     }
 
     // ── HOSPITALS ──
@@ -1682,6 +1784,11 @@
       let data = allHospitalsCache;
       if (hospitalFilter === 'active') data = data.filter(h => h.is_active);
       if (hospitalFilter === 'inactive') data = data.filter(h => !h.is_active);
+
+      const stateFilter = document.getElementById('hospital-filter-state')?.value || '';
+      const cityFilter = document.getElementById('hospital-filter-city')?.value || '';
+      if (stateFilter) data = data.filter(h => (h.state || '') === stateFilter);
+      if (cityFilter) data = data.filter(h => (h.city || '') === cityFilter);
 
       const q = (document.getElementById('hospital-search')?.value || '').trim().toLowerCase();
       if (q) {
@@ -1861,38 +1968,51 @@
       try {
         const data = await api('GET', '/admin/hospitals-list');
         allHospitalsCache = data || [];
+        populateHospitalStateFilter();
         renderHospitalsList();
       } catch (e) {
         container.innerHTML = '<p style="color:var(--slate)">Failed to load.</p>';
       }
     }
 
+    function populateHospitalStateFilter() {
+      const stateSel = document.getElementById('hospital-filter-state');
+      const keepState = stateSel.value;
+      const states = [...new Set(allHospitalsCache.map(h => h.state).filter(Boolean))].sort();
+      stateSel.innerHTML = '<option value="">All States</option>' + states.map(s => `<option value="${sanitize(s)}">${sanitize(s)}</option>`).join('');
+      stateSel.value = states.includes(keepState) ? keepState : '';
+      populateHospitalCityFilter();
+    }
+
+    function populateHospitalCityFilter() {
+      const stateFilter = document.getElementById('hospital-filter-state')?.value || '';
+      const citySel = document.getElementById('hospital-filter-city');
+      const keepCity = citySel.value;
+      const pool = stateFilter ? allHospitalsCache.filter(h => h.state === stateFilter) : allHospitalsCache;
+      const cities = [...new Set(pool.map(h => h.city).filter(Boolean))].sort();
+      citySel.innerHTML = '<option value="">All Cities</option>' + cities.map(c => `<option value="${sanitize(c)}">${sanitize(c)}</option>`).join('');
+      citySel.value = cities.includes(keepCity) ? keepCity : '';
+    }
+
+    function onHospitalStateFilterChange() {
+      populateHospitalCityFilter();
+      renderHospitalsList();
+    }
+
     let currentDetailHospitalId = null;
     let hospitalAnalyticsRange = '30d';
-    let hospPatientsPerDayChart = null;
-    let hospWeeklyPatternChart = null;
 
-    function renderAiScribeReferenceLine() {
-      const h = currentHospitalData;
-      if (!h || !h.has_ai_scribe) {
-        return `<p style="color:var(--slate);font-size:13px;margin-bottom:16px">AI Scribe isn't included on this hospital's tier.</p>`;
-      }
-      const capText = h.ai_scribe_cap === null ? 'Unlimited' : `${h.ai_scribe_used} / ${h.ai_scribe_cap}`;
-      const topupText = h.ai_scribe_topup_remaining ? ` (+${h.ai_scribe_topup_remaining} topup)` : '';
-      return `
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;margin-bottom:16px">
-          <span style="font-size:13px"><strong>AI Scribe this cycle:</strong> ${capText}${topupText}</span>
-          <a href="#detail-ai-scribe-card" style="font-size:13px;color:var(--teal);font-weight:600;cursor:pointer" onclick="document.getElementById('detail-ai-scribe-card').scrollIntoView({behavior:'smooth'})">View billing cycle details ↓</a>
-        </div>
-      `;
+    function setDetailPane(pane) {
+      document.querySelectorAll('.detail-subnav-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(`dsn-${pane}`).classList.add('active');
+      document.querySelectorAll('.detail-pane').forEach(el => el.style.display = 'none');
+      document.getElementById(`detail-pane-${pane}`).style.display = 'block';
     }
 
     function setHospitalAnalyticsRange(range) {
       hospitalAnalyticsRange = range;
       ['30d', '7d', 'today'].forEach(r => document.getElementById(`hosp-range-${r}`)?.classList.toggle('active', r === range));
       if (currentDetailHospitalId) loadHospitalAnalytics(currentDetailHospitalId);
-      // loadHospitalBookingBehavior is chained off loadHospitalAnalytics's own
-      // render (see loadHospitalAnalytics), so no separate call needed here.
     }
 
     async function loadHospitalAnalytics(hospitalId) {
@@ -1904,6 +2024,8 @@
         const staffChips = Object.entries(data.staff_by_role)
           .map(([role, count]) => `<span class="badge badge-grey" style="margin-right:6px">${roleLabels[role] || role}: ${count}</span>`)
           .join('');
+
+        const busiestCount = Math.max(...data.weekly_pattern.map(p => p.count));
 
         body.innerHTML = `
           <div class="stats-row stats-row-4" style="margin-bottom:16px">
@@ -1925,15 +2047,25 @@
               <div style="margin-top:6px">${staffChips || '<span style="color:var(--slate)">No staff yet</span>'}</div>
             </div>
           </div>
-          ${renderAiScribeReferenceLine()}
           <div class="hospital-detail-grid">
             <div class="card">
               <div class="card-header"><h2>Patients Per Day (${data.range_start} → ${data.range_end})</h2></div>
-              <canvas id="chart-hosp-patients-day" height="200"></canvas>
+              <div style="max-height:280px;overflow-y:auto">
+                ${data.patients_per_day.map(p => `
+                  <div class="data-row"><div class="data-row-title">${p.date}</div><div class="data-row-value">${p.count}</div></div>
+                `).join('')}
+              </div>
             </div>
             <div class="card">
               <div class="card-header"><h2>Weekly Pattern (all-time)</h2></div>
-              <canvas id="chart-hosp-weekly-pattern" height="200"></canvas>
+              <div>
+                ${data.weekly_pattern.map(p => `
+                  <div class="data-row">
+                    <div class="data-row-title">${p.day}${p.count === busiestCount && busiestCount > 0 ? ' <span class="badge badge-teal" style="font-size:10px;margin-left:6px">Busiest</span>' : ''}</div>
+                    <div class="data-row-value">${p.count}</div>
+                  </div>
+                `).join('')}
+              </div>
             </div>
           </div>
           <div id="detail-booking-body" style="margin-top:20px">
@@ -1942,46 +2074,14 @@
           <div id="detail-clinical-body" style="margin-top:20px">
             <p style="color:var(--slate)">Loading clinical volume...</p>
           </div>
-          <div id="detail-module-body" style="margin-top:20px">
-            <p style="color:var(--slate)">Loading module usage...</p>
-          </div>
         `;
         loadHospitalBookingBehavior(hospitalId);
         loadHospitalClinicalVolume(hospitalId);
-        loadHospitalModuleUsage(hospitalId);
-
-        const dayCtx = document.getElementById('chart-hosp-patients-day');
-        if (dayCtx && typeof Chart !== 'undefined') {
-          if (hospPatientsPerDayChart) hospPatientsPerDayChart.destroy();
-          hospPatientsPerDayChart = new Chart(dayCtx, {
-            type: 'line',
-            data: {
-              labels: data.patients_per_day.map(p => p.date),
-              datasets: [{ label: 'Patients', data: data.patients_per_day.map(p => p.count), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.1)', tension: 0.3, fill: true }]
-            },
-            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
-
-        const weeklyCtx = document.getElementById('chart-hosp-weekly-pattern');
-        if (weeklyCtx && typeof Chart !== 'undefined') {
-          if (hospWeeklyPatternChart) hospWeeklyPatternChart.destroy();
-          hospWeeklyPatternChart = new Chart(weeklyCtx, {
-            type: 'bar',
-            data: {
-              labels: data.weekly_pattern.map(p => p.day),
-              datasets: [{ label: 'Patients', data: data.weekly_pattern.map(p => p.count), backgroundColor: '#1e3a5f' }]
-            },
-            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
       } catch (e) {
         body.innerHTML = '<p style="color:var(--slate)">Failed to load analytics.</p>';
         console.error('Failed to load hospital analytics', e);
       }
     }
-
-    let hospBookingTrendChart = null;
 
     async function loadHospitalBookingBehavior(hospitalId) {
       const el = document.getElementById('detail-booking-body');
@@ -1990,7 +2090,7 @@
         const data = await api('GET', `/admin/analytics/hospital/${hospitalId}/booking-behavior?range=${hospitalAnalyticsRange}`);
 
         el.innerHTML = `
-          <div class="stats-row stats-row-4" style="margin-bottom:16px">
+          <div class="stats-row stats-row-4">
             <div class="stat-card">
               <div class="stat-label">Online Bookings</div>
               <div class="stat-value">${data.online_checkins.toLocaleString('en-IN')}</div>
@@ -2010,146 +2110,40 @@
               <div class="stat-value">${data.total_checkins.toLocaleString('en-IN')}</div>
             </div>
           </div>
-          <div class="card">
-            <div class="card-header"><h2>Booking Source, Daily</h2></div>
-            <canvas id="chart-hosp-booking-trend" height="200"></canvas>
-          </div>
         `;
-
-        const trendCtx = document.getElementById('chart-hosp-booking-trend');
-        if (trendCtx && typeof Chart !== 'undefined') {
-          if (hospBookingTrendChart) hospBookingTrendChart.destroy();
-          hospBookingTrendChart = new Chart(trendCtx, {
-            type: 'bar',
-            data: {
-              labels: data.booking_trend.map(p => p.date),
-              datasets: [
-                { label: 'Online', data: data.booking_trend.map(p => p.online), backgroundColor: '#0d9488' },
-                { label: 'Walk-in', data: data.booking_trend.map(p => p.walk_in), backgroundColor: '#94a3b8' }
-              ]
-            },
-            options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
       } catch (e) {
         el.innerHTML = '<p style="color:var(--slate)">Failed to load booking behavior.</p>';
         console.error('Failed to load hospital booking behavior', e);
       }
     }
 
-    let hospOpdIpdTrendChart = null;
-
     async function loadHospitalClinicalVolume(hospitalId) {
       const el = document.getElementById('detail-clinical-body');
       if (!el) return;
       try {
-        const data = await api('GET', `/admin/analytics/hospital/${hospitalId}/clinical-volume?range=${hospitalAnalyticsRange}`);
-
+        const data = await api('GET', `/admin/analytics/hospital/${hospitalId}/clinical-volume`);
         const occColor = data.occupancy_rate >= 90 ? '#dc2626' : data.occupancy_rate >= 70 ? '#c9a227' : '#0d9488';
 
         el.innerHTML = `
-          <div class="stats-row stats-row-4" style="margin-bottom:16px">
-            <div class="stat-card">
-              <div class="stat-label">OPD Consultations</div>
-              <div class="stat-value">${data.total_opd_in_range.toLocaleString('en-IN')}</div>
-              <div class="stat-sub">in range</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">IPD Admissions</div>
-              <div class="stat-value">${data.total_ipd_in_range.toLocaleString('en-IN')}</div>
-              <div class="stat-sub">in range</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Bed Occupancy</div>
-              <div class="stat-value">${data.occupancy_rate}%</div>
-              <div class="stat-sub">${data.occupied_beds} / ${data.total_beds} beds</div>
-              <div class="mini-progress-track"><div class="mini-progress-fill" style="width:${Math.min(data.occupancy_rate, 100)}%;background:${occColor}"></div></div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Avg Consultation Duration</div>
-              <div class="stat-value" style="font-size:1rem;color:var(--slate)">Not tracked</div>
-              <div class="stat-sub">no start/confirm timestamps recorded</div>
-            </div>
-          </div>
           <div class="card">
-            <div class="card-header"><h2>OPD &amp; IPD Trend</h2></div>
-            <canvas id="chart-hosp-opd-ipd" height="200"></canvas>
+            <div class="card-header"><h2>Bed Occupancy</h2></div>
+            <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+              <div>
+                <div class="stat-value" style="font-size:2rem;line-height:1">${data.occupancy_rate}%</div>
+                <div class="stat-sub">${data.occupied_beds} / ${data.total_beds} beds occupied</div>
+              </div>
+              <div style="flex:1;min-width:180px">
+                <div class="mini-progress-track"><div class="mini-progress-fill" style="width:${Math.min(data.occupancy_rate, 100)}%;background:${occColor}"></div></div>
+              </div>
+            </div>
+            <p style="color:var(--slate);font-size:12.5px;margin-top:16px">
+              Average consultation duration — not tracked yet, will be added once the app records it (needed for usage-based billing).
+            </p>
           </div>
         `;
-
-        const ctx = document.getElementById('chart-hosp-opd-ipd');
-        if (ctx && typeof Chart !== 'undefined') {
-          if (hospOpdIpdTrendChart) hospOpdIpdTrendChart.destroy();
-          hospOpdIpdTrendChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: data.opd_trend.map(p => p.date),
-              datasets: [
-                { label: 'OPD Consultations', data: data.opd_trend.map(p => p.count), borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.08)', tension: 0.3, fill: true },
-                { label: 'IPD Admissions', data: data.ipd_trend.map(p => p.count), borderColor: '#c9a227', backgroundColor: 'rgba(201,162,39,0.08)', tension: 0.3, fill: true }
-              ]
-            },
-            options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
       } catch (e) {
         el.innerHTML = '<p style="color:var(--slate)">Failed to load clinical volume.</p>';
         console.error('Failed to load hospital clinical volume', e);
-      }
-    }
-
-    let hospModuleUsageChart = null;
-
-    async function loadHospitalModuleUsage(hospitalId) {
-      const el = document.getElementById('detail-module-body');
-      if (!el) return;
-      try {
-        const data = await api('GET', `/admin/analytics/hospital/${hospitalId}/module-usage?range=${hospitalAnalyticsRange}`);
-
-        el.innerHTML = `
-          <div class="stats-row stats-row-4" style="margin-bottom:16px">
-            <div class="stat-card">
-              <div class="stat-label">Lab Test Orders</div>
-              <div class="stat-value">${data.lab_test_orders.toLocaleString('en-IN')}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Pharmacy Dispensed</div>
-              <div class="stat-value">${data.pharmacy_dispensed.toLocaleString('en-IN')}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Radiology Orders</div>
-              <div class="stat-value">${data.radiology_orders.toLocaleString('en-IN')}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Referrals Sent / Received</div>
-              <div class="stat-value" style="font-size:1.4rem">${data.referrals_sent} / ${data.referrals_received}</div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-header"><h2>Module Usage, This Range</h2></div>
-            <canvas id="chart-hosp-module-usage" height="200"></canvas>
-          </div>
-        `;
-
-        const ctx = document.getElementById('chart-hosp-module-usage');
-        if (ctx && typeof Chart !== 'undefined') {
-          if (hospModuleUsageChart) hospModuleUsageChart.destroy();
-          hospModuleUsageChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-              labels: ['Lab Orders', 'Pharmacy Dispensed', 'Radiology Orders', 'Referrals Sent', 'Referrals Received'],
-              datasets: [{
-                label: 'Count',
-                data: [data.lab_test_orders, data.pharmacy_dispensed, data.radiology_orders, data.referrals_sent, data.referrals_received],
-                backgroundColor: ['#0d9488', '#1e3a5f', '#c9a227', '#94a3b8', '#64748b']
-              }]
-            },
-            options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-          });
-        }
-      } catch (e) {
-        el.innerHTML = '<p style="color:var(--slate)">Failed to load module usage.</p>';
-        console.error('Failed to load hospital module usage', e);
       }
     }
 
@@ -2157,6 +2151,7 @@
       currentHospitalId = hospitalId;
       document.getElementById('hospitals-list-view').style.display = 'none';
       document.getElementById('hospital-detail').style.display = 'block';
+      setDetailPane('info');
 
       try {
         const h = await api('GET', `/admin/hospital/${hospitalId}`);
@@ -2166,31 +2161,40 @@
         document.getElementById('detail-status-badge').textContent = h.is_active ? 'Active' : 'Inactive';
 
         document.getElementById('detail-info').innerHTML = `
+          <div class="hosp-info-hero">
+            <div class="hosp-info-avatar">${sanitize((h.name || '?').trim().charAt(0).toUpperCase())}</div>
+            <div>
+              <div class="hosp-info-hero-name">${sanitize(h.name)}</div>
+              <div class="hosp-info-hero-meta">${sanitize(h.city)}, ${sanitize(h.state)} · ${h.hospital_type === 'government' ? 'Government' : 'Private'}</div>
+            </div>
+          </div>
           <div class="info-row"><span class="info-label">Plan</span><span class="info-value">
             <select class="form-control" style="width:auto;padding:5px 10px;font-weight:600" onchange="updateHospitalTier(${h.id}, this.value)">
               ${(typeof TIER_CATALOG !== 'undefined' ? TIER_CATALOG : []).map(t => `<option value="${t.key}" ${h.tier === t.key ? 'selected' : ''}>${t.label}</option>`).join('')}
             </select>
           </span></div>
-          <div class="info-row"><span class="info-label">City</span><span class="info-value">${sanitize(h.city)}</span></div>
-          <div class="info-row"><span class="info-label">State</span><span class="info-value">${sanitize(h.state)}</span></div>
           <div class="info-row"><span class="info-label">Address</span><span class="info-value">${sanitize(h.address || '—')}</span></div>
           <div class="info-row"><span class="info-label">Hospital Code</span><span class="info-value" style="font-family:monospace">${sanitize(h.hospital_code)}</span></div>
-          <div class="info-row"><span class="info-label">Type</span><span class="info-value">${h.hospital_type === 'government' ? 'Government' : 'Private'}</span></div>
         `;
 
         document.getElementById('detail-admins').innerHTML = h.admins.length === 0
           ? '<p style="color:var(--slate)">No admins yet.</p>'
           : h.admins.map(a => `
-            <div style="padding:12px 0;border-bottom:1px solid var(--border)">
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:600">
-                ${sanitize(a.name)} <span class="badge badge-navy" style="font-size:11px">${a.role}</span> ${!a.is_active ? '<span class="badge badge-grey" style="font-size:11px">Inactive</span>' : ''}
-              </div>
-              <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(a.email)}</div>
-              <div style="color:var(--slate);font-size:13px">${sanitize(a.phone)}</div>
-              <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-                <button class="btn btn-outline btn-sm" onclick='openEditAccount(${JSON.stringify({id:a.id,name:a.name,email:a.email,phone:a.phone})})'>Edit</button>
-                <button class="btn btn-outline btn-sm" onclick="resetAccountPassword(${a.id})">Reset Password</button>
-                <button class="btn ${a.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="toggleAccountActive(${a.id})">${a.is_active ? 'Deactivate' : 'Activate'}</button>
+            <div class="admin-card-row" style="flex-wrap:wrap">
+              <div style="display:flex;gap:12px;align-items:flex-start;flex:1;min-width:0">
+                <div class="admin-avatar">${sanitize((a.name || '?').trim().charAt(0).toUpperCase())}</div>
+                <div style="min-width:0">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-weight:600">
+                    ${sanitize(a.name)} <span class="badge badge-navy" style="font-size:11px">${a.role}</span> ${!a.is_active ? '<span class="badge badge-grey" style="font-size:11px">Inactive</span>' : ''}
+                  </div>
+                  <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(a.email)}</div>
+                  <div style="color:var(--slate);font-size:13px">${sanitize(a.phone)}</div>
+                  <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+                    <button class="btn btn-outline btn-sm" onclick='openEditAccount(${JSON.stringify({id:a.id,name:a.name,email:a.email,phone:a.phone})})'>Edit</button>
+                    <button class="btn btn-outline btn-sm" onclick="resetAccountPassword(${a.id})">Reset Password</button>
+                    <button class="btn ${a.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="toggleAccountActive(${a.id})">${a.is_active ? 'Deactivate' : 'Activate'}</button>
+                  </div>
+                </div>
               </div>
             </div>
           `).join('');

@@ -6,6 +6,44 @@ from app.models.medicine_batch import MedicineBatch
 from app.utils.timezone import now_ist_naive
 
 
+def resolve_notification(db: Session, hospital_id: int, source_key: str):
+    """Items 4a/4b — marks a specific notification row read once whatever
+    it was pointing at has actually been resolved by the exact action that
+    resolves it, so a stale one in the bell doesn't try to reopen something
+    already handled."""
+    n = db.query(Notification).filter(
+        Notification.hospital_id == hospital_id,
+        Notification.source_key == source_key,
+        Notification.is_read == False,  # noqa: E712
+    ).first()
+    if n:
+        n.is_read = True
+
+
+def resolve_notifications_for_link(db: Session, hospital_id: int, type_: str, link_id: int):
+    """Item 5 — for types whose source_key bakes in a per-event timestamp
+    (critical_result, critical_result_escalation), there's no way to
+    reconstruct the exact key to resolve later, and critical_result_
+    escalation in particular can have several rows stacked up (one per
+    escalation stage) for the same order. Matches on type + link_id
+    instead and clears all of them at once.
+    Decision: acknowledging a critical result (critical_ack_at) also
+    clears the bell for it. The comment on acknowledge_critical_result
+    called this "distinct from the generic notification is_read toggle,
+    so this is explicit and auditable" — but auditability lives in
+    critical_ack_at and the audit log entry, both untouched by is_read;
+    leaving these permanently unread once a doctor has already acted on
+    them would just make the unread badge meaningless over time."""
+    rows = db.query(Notification).filter(
+        Notification.hospital_id == hospital_id,
+        Notification.type == type_,
+        Notification.link_id == link_id,
+        Notification.is_read == False,  # noqa: E712
+    ).all()
+    for n in rows:
+        n.is_read = True
+
+
 def _upsert(db: Session, hospital_id: int, source_key: str, type_: str, severity: str, title: str, message: str, link_type: str, link_id: int):
     existing = db.query(Notification).filter(
         Notification.hospital_id == hospital_id,
@@ -146,7 +184,7 @@ def sync_admission_action_notifications(db: Session, hospital_id: int):
     unread = db.query(Notification).filter(
         Notification.hospital_id == hospital_id,
         Notification.is_read == False,  # noqa: E712
-        Notification.type.in_(["admission_referral", "ward_change_request", "admission_medicine_order", "emergency_admission"]),
+        Notification.type.in_(["admission_referral", "ward_change_request", "admission_medicine_order", "emergency_admission", "admission_test_sample", "admission_sample_overdue"]),
     ).all()
     if not unread:
         return
@@ -194,6 +232,19 @@ def sync_admission_action_notifications(db: Session, hospital_id: int):
                 ).first() if admission.ward_type_id else None
                 if not ward_type or not ward_type.is_emergency_ward:
                     n.is_read = True
+        elif n.type in ("admission_test_sample", "admission_sample_overdue"):
+            # Item 4c — link_id is a TestOrder id in both cases (see
+            # notify_admission_tests_ordered/notify_admission_sample_overdue).
+            # KNOWN LIMITATION: admission_test_sample can represent a whole
+            # order_batch_id, but the Notification row only stores the last
+            # order_id in that batch, not the batch key — so this resolves
+            # once *that specific* order is collected, which may read as
+            # resolved slightly before every item in a multi-test batch has
+            # actually been collected. Flagging, not solving here.
+            from app.models.test_order import TestOrder
+            order = db.query(TestOrder).filter(TestOrder.id == n.link_id).first()
+            if not order or order.collected_at is not None:
+                n.is_read = True
 
     db.commit()
 
@@ -292,6 +343,50 @@ def notify_critical_result_escalation(db: Session, hospital_id: int, order_id: i
     ))
 
 
+def notify_critical_vitals(db: Session, hospital_id: int, vitals_id: int, patient_name: str,
+                            doctor_id: int, critical_note: str, ward: str = None, bed_number: str = None):
+    """Vitals-side equivalent of notify_critical_result — same dual-target
+    primitive (targeted doctor ping + hospital-wide admin visibility). Keyed
+    by the specific vitals reading (vitals_id), not the admission, so
+    acknowledging one abnormal reading doesn't silently clear the bell for a
+    different, still-unacknowledged reading on the same patient."""
+    key = f"critical_vitals:{vitals_id}:{now_ist_naive().isoformat()}"
+    location = f" — {ward}, Bed {bed_number}" if ward else ""
+    base_message = f"Critical vitals for {patient_name}{location}: {critical_note}"
+
+    if doctor_id:
+        db.add(Notification(
+            hospital_id=hospital_id, source_key=key + ":doctor", type="critical_vitals", severity="critical",
+            title=f"🚨 Critical vitals — {patient_name}", message=base_message,
+            link_type="admission_vitals", link_id=vitals_id, is_read=False, target_doctor_id=doctor_id,
+        ))
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key + ":admin", type="critical_vitals", severity="critical",
+        title=f"🚨 Critical vitals — {patient_name}", message=base_message,
+        link_type="admission_vitals", link_id=vitals_id, is_read=False,
+    ))
+
+
+def notify_critical_vitals_escalation(db: Session, hospital_id: int, vitals_id: int, patient_name: str,
+                                       critical_note: str, stage: str, ward: str = None, bed_number: str = None):
+    """Escalation step when the admitting doctor hasn't acknowledged an
+    abnormal vitals reading in time — same nurse_ward -> admin staging as
+    notify_critical_result_escalation."""
+    key = f"critical_vitals_escalation:{vitals_id}:{stage}:{now_ist_naive().isoformat()}"
+    location = f" — {ward}, Bed {bed_number}" if ward else ""
+    if stage == "nurse_ward":
+        title = f"🚨 Unacknowledged critical vitals — {patient_name}"
+        message = f"No doctor acknowledgment yet for {patient_name}{location}: {critical_note}. Escalating to ward coverage."
+    else:
+        title = f"🚨 Critical vitals still unacknowledged — {patient_name}"
+        message = f"Still unacknowledged after escalation for {patient_name}{location}: {critical_note}. Needs immediate admin attention."
+
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="critical_vitals_escalation", severity="critical",
+        title=title, message=message, link_type="admission_vitals", link_id=vitals_id, is_read=False,
+    ))
+
+
 def notify_admission_referral(db: Session, hospital_id: int, patient_id: int, patient_name: str,
                                referred_by_name: str, reason: str = None):
     """Reception-facing broadcast — any receptionist logged in at this
@@ -324,6 +419,23 @@ def notify_ward_change_request(db: Session, hospital_id: int, admission_id: int,
         hospital_id=hospital_id, source_key=key, type="ward_change_request", severity="warning",
         title=f"Ward change requested — {patient_name}", message=message,
         link_type="ward_change_request", link_id=admission_id, is_read=False
+    ))
+
+
+def notify_discharge_order_placed(db: Session, hospital_id: int, admission_id: int, patient_name: str,
+                                   ordered_by_name: str):
+    """Fires the moment a doctor clinically records a discharge order, so
+    reception/billing can start preparing the final bill and paperwork
+    instead of only finding out once someone walks over and says so.
+    Fresh timestamped row each time — place_discharge_order is re-callable
+    (e.g. a re-confirmed order), and each call is its own event worth
+    surfacing, not something to silently overwrite."""
+    key = f"discharge_order_placed:{admission_id}:{now_ist_naive().isoformat()}"
+    message = f"{ordered_by_name} placed a discharge order for {patient_name}."
+    db.add(Notification(
+        hospital_id=hospital_id, source_key=key, type="discharge_order_placed", severity="info",
+        title=f"Discharge order placed — {patient_name}", message=message,
+        link_type="discharge_order_placed", link_id=admission_id, is_read=False
     ))
 
 

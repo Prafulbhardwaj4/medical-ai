@@ -795,6 +795,63 @@ async function openReportsModal(patientId) {
   }
 }
 
+async function handleAdminNotifClick(linkType, linkId) {
+  // Item 3 — single shared handler for admin's notification click-through,
+  // called from both dashboard.html and analytics.html instead of each
+  // maintaining its own drifting branch list. Returns true if it handled
+  // the click, false if the caller should fall through to its own logic
+  // (kept minimal — 'suggestion' is handled per-page like every other
+  // role, not routed through here, since it isn't admin-specific).
+  if ((linkType === 'admission' || linkType === 'ward_change_request' || linkType === 'referral_rejected' || linkType === 'referral_admitted' || linkType === 'admission_topup') && linkId) {
+    const { token } = await api("GET", `/admissions/token-for/${linkId}`);
+    location.href = `admission-detail.html?id=${token}`;
+    return true;
+  }
+  if (linkType === 'admission_referral' && linkId) {
+    location.href = `admissions.html?admit_patient_id=${linkId}`;
+    return true;
+  }
+  if (linkType === 'admission_medicine_order' && linkId) {
+    location.href = `pharmacy.html?admission_id=${linkId}`;
+    return true;
+  }
+  if (linkType === 'medicine') {
+    location.href = 'medicines.html';
+    return true;
+  }
+  if (linkType === 'checkin' && linkId) {
+    const { patient_id, token } = await api("GET", `/checkins/${linkId}/token-for`);
+    location.href = `dashboard.html?goto_patient=${patient_id}&goto_token=${token}`;
+    return true;
+  }
+  if (linkType === 'test_order' && linkId) {
+    // Item 2 — critical_result / critical_result_escalation land here.
+    const ctx = await api("GET", `/lab/test-orders/${linkId}/context`);
+    if (ctx.context === 'admission') {
+      location.href = `admission-detail.html?id=${ctx.token}`;
+    } else {
+      // analytics.html has no goToPatient() of its own — hand off to
+      // dashboard.html via query params, same pattern already used for
+      // 'checkin' above; dashboard.html reads these on load.
+      location.href = `dashboard.html?goto_patient=${ctx.patient_id}&goto_token=${ctx.token}`;
+    }
+    return true;
+  }
+  if (linkType === 'staff') {
+    location.href = 'attendance.html';
+    return true;
+  }
+  if (linkType === 'room') {
+    location.href = 'rooms.html';
+    return true;
+  }
+  if (linkType === 'upgrade') {
+    if (typeof openUpgradeModal === 'function') openUpgradeModal();
+    return true;
+  }
+  return false;
+}
+
 function openReportsModalWithData(title, visits) {
   // Same visual component as openReportsModal, fed pre-fetched/snapshot data
   // instead of a live per-hospital API call — used by the cross-hospital

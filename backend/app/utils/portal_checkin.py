@@ -47,7 +47,7 @@ def convert_appointment_to_checkin(db: Session, appt, patient):
     hospital_code = hospital.hospital_code if hospital else "GEN"
 
     from app.routers.patients import generate_token_number, pick_random_nurse
-    token = generate_token_number(db, appt.hospital_id, hospital_code)
+    token, display_num = generate_token_number(db, appt.hospital_id, hospital_code)
 
     # Assistant-away fallback gate: an online booking only ever goes
     # straight to the doctor if no nurse/assistant is present at all —
@@ -65,6 +65,7 @@ def convert_appointment_to_checkin(db: Session, appt, patient):
             hospital_id=appt.hospital_id,
             patient_id=patient.id,
             token_number=token,
+            display_token=display_num,
             issue_category=appt.notes or "Online booking",
             doctor_id=appt.doctor_id,
             created_by=None,  # system handoff, no staff actor
@@ -88,7 +89,7 @@ def convert_appointment_to_checkin(db: Session, appt, patient):
             db.rollback()
             if attempt == max_token_attempts - 1:
                 raise
-            token = generate_token_number(db, appt.hospital_id, hospital_code)
+            token, display_num = generate_token_number(db, appt.hospital_id, hospital_code)
 
     if appt.reschedule_balance_due:
         # Extra owed from an earlier reschedule-to-a-costlier-doctor — no

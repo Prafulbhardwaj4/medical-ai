@@ -150,6 +150,10 @@ class ReturnMedicationIn(BaseModel):
     note: Optional[str] = None
 
 
+class AdministerMedicationIn(BaseModel):
+    notes: Optional[str] = None
+
+
 class EmergencyAlertIn(BaseModel):
     message: Optional[str] = None
 

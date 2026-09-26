@@ -337,13 +337,33 @@
     }
 
     async function onNotifClick(id, linkType, linkId, wasAlreadyRead) {
+      if (linkType === 'suggestion' && linkId) {
+        try {
+          await api("PATCH", `/notifications/${id}/read`, {});
+          loadNotifUnreadCount();
+          closeNotifPanel();
+          window.__suggestionWidget.openToThread(linkId);
+        } catch (e) { toast(e.message, "error"); }
+        return;
+      }
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
         closeNotifPanel();
-        if ((linkType === 'admission' || linkType === 'referral_rejected') && linkId) {
+        if ((linkType === 'admission' || linkType === 'referral_rejected' || linkType === 'referral_admitted') && linkId) {
           const { token } = await api("GET", `/admissions/token-for/${linkId}`);
           location.href = `admission-detail.html?id=${token}`;
+        } else if (linkType === 'admission_vitals' && linkId) {
+          const { token } = await api("GET", `/admissions/vitals-token-for/${linkId}`);
+          location.href = `admission-detail.html?id=${token}`;
+        } else if (linkType === 'test_order' && linkId) {
+          // Item 2 — critical_result_escalation / sample_rejected land here.
+          const ctx = await api("GET", `/lab/test-orders/${linkId}/context`);
+          if (ctx.context === 'admission') {
+            location.href = `admission-detail.html?id=${ctx.token}`;
+          } else {
+            toast("This is about an OPD patient — check with the lab directly.", "info");
+          }
         }
       } catch (e) { toast(e.message, "error"); }
     }

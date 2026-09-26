@@ -673,6 +673,15 @@
     }
 
     async function onNotifClick(id, linkType, linkId, wasAlreadyRead) {
+      if (linkType === 'suggestion' && linkId) {
+        try {
+          await api("PATCH", `/notifications/${id}/read`, {});
+          loadNotifUnreadCount();
+          closeNotifPanel();
+          window.__suggestionWidget.openToThread(linkId);
+        } catch (e) { toast(e.message, "error"); }
+        return;
+      }
       try {
         await api("PATCH", `/notifications/${id}/read`, {});
         loadNotifUnreadCount();
@@ -681,15 +690,35 @@
           toast("This has already been taken care of.", "info");
           return;
         }
-        if ((linkType === 'admission' || linkType === 'ward_change_request' || linkType === 'referral_rejected') && linkId) {
+        if ((linkType === 'admission' || linkType === 'ward_change_request' || linkType === 'referral_rejected' || linkType === 'referral_admitted' || linkType === 'discharge_order_placed') && linkId) {
           const { token } = await api("GET", `/admissions/token-for/${linkId}`);
+          location.href = `admission-detail.html?id=${token}`;
+        } else if (linkType === 'admission_vitals' && linkId) {
+          const { token } = await api("GET", `/admissions/vitals-token-for/${linkId}`);
           location.href = `admission-detail.html?id=${token}`;
         } else if (linkType === 'admission_referral' && linkId) {
           location.href = `admissions.html?admit_patient_id=${linkId}`;
         } else if (linkType === 'admission_medicine_order' && linkId) {
           location.href = `pharmacy.html?admission_id=${linkId}`;
+        } else if (linkType === 'checkin' && linkId) {
+          const { patient_id, token } = await api("GET", `/checkins/${linkId}/token-for`);
+          goToPatient(patient_id, token, true);
+        } else if (linkType === 'test_order' && linkId) {
+          // Item 2 — critical_result / critical_result_escalation land here.
+          const ctx = await api("GET", `/lab/test-orders/${linkId}/context`);
+          if (ctx.context === 'admission') {
+            location.href = `admission-detail.html?id=${ctx.token}`;
+          } else {
+            goToPatient(ctx.patient_id, ctx.token, true);
+          }
         } else if (linkType === 'upgrade') {
           if (typeof openUpgradeModal === 'function') openUpgradeModal();
+        } else if (typeof handleAdminNotifClick === 'function') {
+          // Item 3 — fallback to the shared admin handler (api.js) for
+          // whatever isn't already handled above: staff, room,
+          // admission_topup. Previously built but never actually called
+          // from any page.
+          await handleAdminNotifClick(linkType, linkId);
         }
       } catch (e) { toast(e.message, "error"); }
     }
@@ -1403,7 +1432,7 @@
       const isReturnVisit = q.status === 'returned';
       return `
       <tr>
-        <td data-label="Token" style="text-align:center"><strong>${q.token_number || '—'}</strong></td>
+        <td data-label="Token" style="text-align:center"><strong>${(q.display_token != null ? q.display_token : q.token_number) || '—'}</strong></td>
         <td data-label="Patient" style="text-align:center">${q.patient_name}${q.is_referral ? ` <span class="badge badge-navy" title="${(q.referral_note || '').replace(/"/g, '&quot;')}">Referred by ${q.referred_by_name || 'another doctor'}</span>` : ''}${isReturnVisit ? ' <span class="badge badge-purple" title="Same-day recheck — no new token">Recheck</span>' : ''}</td>
         <td data-label="Phone" style="text-align:center;color:var(--slate)">${q.patient_phone || '—'}</td>
         <td data-label="${q.source === 'online' ? 'Est. Time' : 'Checked In'}" style="color:var(--slate);text-align:center">${timeLabel}</td>
@@ -1439,6 +1468,19 @@
     loadQueue();
     setInterval(() => loadQueue(true), 15000);
     loadEmergencyAlerts();
+
+    // Item 3 — admin arriving here via handleAdminNotifClick's redirect
+    // (analytics.html has no goToPatient() of its own, so 'checkin' and
+    // 'test_order' notification clicks land here with these params instead).
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const gotoPatient = params.get('goto_patient');
+      const gotoToken = params.get('goto_token');
+      if (gotoPatient && gotoToken) {
+        history.replaceState(null, '', window.location.pathname);
+        goToPatient(Number(gotoPatient), gotoToken, true);
+      }
+    })();
     setInterval(loadEmergencyAlerts, 15000);
     loadPatients();
     loadStats();

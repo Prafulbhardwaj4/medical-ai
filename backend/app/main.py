@@ -14,6 +14,7 @@ from slowapi.errors import RateLimitExceeded
 from app.database import Base, engine
 from app.routers import auth as auth_router
 from app.routers import patients as patients_router
+from app.routers import checkins as checkins_router
 from app.routers import consultations as consultations_router
 from app.routers import admin as admin_router
 from app.routers import audit as audit_router
@@ -271,6 +272,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 app.include_router(auth_router.router)
 app.include_router(patients_router.router)
+app.include_router(checkins_router.router)
 app.include_router(consultations_router.router)
 app.include_router(admin_router.router)
 app.include_router(audit_router.router)

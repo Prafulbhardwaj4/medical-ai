@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     LAB_CRITICAL_ACK_MINUTES: int = 15               # ordering doctor unacknowledged this long -> escalate to nurse/ward
     LAB_CRITICAL_ESCALATION_GRACE_MINUTES: int = 15  # escalated but still unacknowledged this much longer -> notify admin directly
 
+    # Critical IPD-vitals notification escalation — same shape as lab, tighter clock
+    # since an abnormal vital is often faster-moving than a lab result.
+    VITALS_CRITICAL_ACK_MINUTES: int = 10               # admitting doctor unacknowledged this long -> escalate to nurse/ward
+    VITALS_CRITICAL_ESCALATION_GRACE_MINUTES: int = 10  # escalated but still unacknowledged this much longer -> notify admin directly
+
     # Admitted-patient sample collection (Lab Flow).
     ADMISSION_SAMPLE_OVERDUE_MINUTES: int = 120  # sample still not collected this long after a ward test was ordered -> notify lab staff
 
