@@ -2091,25 +2091,49 @@
       }).catch(() => { });
     }
 
-    function renderExtraTokens(elId, tokens, issueCategory) {
+    // Renders the "Doctors visited" block when this visit has more than one
+    // doctor — folds the primary doctor in as entry #1 so the count and the
+    // list are both complete. No fee is shown for any doctor here (that
+    // stayed confusing when this was labelled "Also queued today", which
+    // was actually always this same patient's other doctors, never someone
+    // else's queue position). Single-doctor visits are untouched — this
+    // just hides itself and leaves the existing Doctor/Room rows showing.
+    function renderExtraTokens(prefix, elId, data) {
       const wrap = document.getElementById(elId);
       if (!wrap) return; // past-slip modal has no extra-doctors slot — skip rather than throw
-      if (tokens && tokens.length) {
-        wrap.style.display = '';
-        wrap.innerHTML = '<p style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Also queued today</p>' +
-          tokens.map(t => `
-            <div class="r-row"><span>${t.doctor_name} (${issueCategory}) — Token ${t.display_token != null ? t.display_token : t.token_number}</span><span>₹${t.consultation_fee || 0}</span></div>`).join('');
-      } else {
+      const doctorRow = document.getElementById(`${prefix}-doctor`)?.closest('.r-row');
+      const roomRow = document.getElementById(`${prefix}-room`)?.closest('.r-row');
+      const extras = data.additional_tokens || [];
+
+      if (!extras.length) {
         wrap.style.display = 'none';
         wrap.innerHTML = '';
+        if (doctorRow) doctorRow.style.display = '';
+        if (roomRow) roomRow.style.display = '';
+        return;
       }
+
+      if (doctorRow) doctorRow.style.display = 'none';
+      if (roomRow) roomRow.style.display = 'none';
+
+      const allDoctors = [
+        { doctor_name: data.doctor_name, specialization: data.doctor_specialization, room_number: data.doctor_room_number },
+        ...extras.map(t => ({ doctor_name: t.doctor_name, specialization: t.specialization, room_number: t.room_number })),
+      ];
+
+      wrap.style.display = '';
+      wrap.innerHTML = `<p style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Doctors visited: ${allDoctors.length}</p>` +
+        allDoctors.map(d => `
+          <div class="r-row"><span>${d.doctor_name}${d.specialization ? ', ' + d.specialization : ''}</span><span></span></div>
+          <div class="r-row"><span style="color:#666">Room</span><span>${d.room_number || '—'}</span></div>
+        `).join('');
     }
 
     // Single source of truth for both the live check-in slip (#slip-*) and
     // the past-slip modal (#pslip-*) — same data shape from all three
     // backend call sites (checkin_today, checkin_patient, checkins/{id}/slip),
     // so one function fills whichever prefix is asked for. extraElId is
-    // omitted for the past-slip modal, which has no "also queued" section.
+    // omitted for the past-slip modal, which has no "doctors visited" section.
     function renderTokenSlip(prefix, data, extraElId) {
       const set = (suffix, val) => {
         const el = document.getElementById(`${prefix}-${suffix}`);
@@ -2123,7 +2147,7 @@
       set('date', formatDate(data.visit_date));
       set('checkin-time', formatCheckinTime(data.checked_in_at));
       if (extraElId) {
-        renderExtraTokens(extraElId, data.additional_tokens, data.issue_category);
+        renderExtraTokens(prefix, extraElId, data);
       }
     }
 

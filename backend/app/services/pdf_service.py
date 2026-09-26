@@ -174,13 +174,21 @@ def build_letterhead(hospital, subtitle=None):
 
     return elements
 
-def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None) -> str:
+def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None, additional_doctors=None) -> str:
     """The WhatsApp-bound token slip — a real A4 PDF, deliberately NOT the
     80mm receipt format used by receptionist.html's print flow (.receipt-slip).
     This is read on a phone screen, not torn off a thermal printer, so it
     gets the same letterhead treatment as the invoice/prescription PDFs.
-    display_token is still THE big number; token_number appears once, small,
-    as the internal reference (consistent with the print slip's philosophy).
+    display_token is still THE big number, and it's the only token number
+    shown now — the separate 'Ref:' line was dropped since it just showed
+    the same visit's internal token_number a second time, which read as a
+    different, more confusing number than the one already answered above.
+
+    additional_doctors: optional list of {doctor_name, specialization,
+    room_number} for the other doctors in the same visit_group (multi-doctor
+    same-day visit). When present, the single 'Doctor' row is replaced with
+    a 'Doctors Visited: N' block listing every doctor (this one included)
+    with their specialization and room — never a fee, on any of them.
 
     TEMP: currently only wired to a manual preview endpoint
     (/patients/checkins/{id}/token-slip-pdf) so it can be checked before
@@ -202,12 +210,10 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None)
 
     label_style = ParagraphStyle("tok_label", fontSize=10, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey, spaceAfter=2)
     big_style = ParagraphStyle("tok_big", fontSize=48, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"), leading=54)
-    ref_style = ParagraphStyle("tok_ref", fontSize=8, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey, spaceBefore=2)
 
     display_value = checkin.display_token if checkin.display_token is not None else checkin.token_number
     elements.append(Paragraph("YOUR TOKEN NUMBER", label_style))
     elements.append(Paragraph(str(display_value), big_style))
-    elements.append(Paragraph(f"Ref: {checkin.token_number}", ref_style))
     elements.append(Spacer(1, 10*mm))
     elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
     elements.append(Spacer(1, 6*mm))
@@ -215,9 +221,30 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None)
     row_label_style = ParagraphStyle("row_label", fontSize=9, fontName="Helvetica-Bold", textColor=colors.HexColor("#334155"))
     row_value_style = ParagraphStyle("row_value", fontSize=10, fontName="Helvetica", textColor=colors.HexColor("#111827"))
 
-    rows = [
-        ("Patient", patient.name),
-        ("Doctor", f"{doctor.title} {doctor.name}" if doctor else "—"),
+    all_doctors = [{
+        "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
+        "specialization": doctor.specialization if doctor else None,
+        "room_number": doctor.room_number if doctor else None,
+    }]
+    if additional_doctors:
+        all_doctors.extend(additional_doctors)
+
+    if len(all_doctors) > 1:
+        doctors_label_style = ParagraphStyle("doctors_label", fontSize=9, fontName="Helvetica-Bold", textColor=colors.HexColor("#334155"), spaceAfter=3)
+        doctor_line_style = ParagraphStyle("doctor_line", fontSize=10, fontName="Helvetica", textColor=colors.HexColor("#111827"), leftIndent=4, spaceAfter=1)
+        room_line_style = ParagraphStyle("room_line", fontSize=9, fontName="Helvetica", textColor=colors.HexColor("#334155"), leftIndent=4, spaceAfter=6)
+
+        elements.append(Paragraph(f"Doctors Visited: {len(all_doctors)}", doctors_label_style))
+        for d in all_doctors:
+            name_line = d["doctor_name"] + (f", {d['specialization']}" if d.get("specialization") else "")
+            elements.append(Paragraph(name_line, doctor_line_style))
+            elements.append(Paragraph(f"Room {d['room_number']}" if d.get("room_number") else "Room —", room_line_style))
+        elements.append(Spacer(1, 3*mm))
+
+    rows = [("Patient", patient.name)]
+    if len(all_doctors) == 1:
+        rows.append(("Doctor", all_doctors[0]["doctor_name"]))
+    rows += [
         ("Category", checkin.issue_category or "—"),
         ("Date", checkin.visit_date.strftime("%d %b %Y")),
         ("Checked in", checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—"),

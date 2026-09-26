@@ -658,6 +658,8 @@ def checkin_today(
             "token_number": ac.token_number,
             "display_token": ac.display_token,
             "doctor_name": f"{ac_doctor.title} {ac_doctor.name}" if ac_doctor else "—",
+            "specialization": ac_doctor.specialization if ac_doctor else None,
+            "room_number": ac_doctor.room_number if ac_doctor else None,
             "consultation_fee": ac.consultation_fee,
         })
 
@@ -667,6 +669,8 @@ def checkin_today(
         "display_token": checkin.display_token,
         "patient_name": patient.name,
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
+        "doctor_specialization": doctor.specialization if doctor else None,
+        "doctor_room_number": doctor.room_number if doctor else None,
         "issue_category": checkin.issue_category,
         "additional_tokens": additional_tokens_out or None,
         "visit_date": checkin.visit_date.isoformat(),
@@ -787,10 +791,26 @@ def preview_token_slip_pdf(
     else:
         attending_nurse = db.query(Doctor).filter(Doctor.id == checkin.nurse_id).first() if checkin.nurse_id else None
 
+    additional_doctors = []
+    if checkin.visit_group_id:
+        sibling_checkins = db.query(Checkin).filter(
+            Checkin.visit_group_id == checkin.visit_group_id,
+            Checkin.id != checkin.id,
+        ).all()
+        for sc in sibling_checkins:
+            sc_doctor = db.query(Doctor).filter(Doctor.id == sc.doctor_id).first()
+            if sc_doctor:
+                additional_doctors.append({
+                    "doctor_name": f"{sc_doctor.title} {sc_doctor.name}",
+                    "specialization": sc_doctor.specialization,
+                    "room_number": sc_doctor.room_number,
+                })
+
     from app.services.pdf_service import generate_token_slip_pdf
     pdf_path = generate_token_slip_pdf(
         checkin, patient, doctor, hospital,
-        nurse_name=f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None
+        nurse_name=f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
+        additional_doctors=additional_doctors or None,
     )
 
     from fastapi.responses import FileResponse
@@ -1335,6 +1355,8 @@ def checkin_patient(
                 "token_number": extra_token,
                 "display_token": display_num,
                 "doctor_name": f"{extra_doctor.title} {extra_doctor.name}",
+                "specialization": extra_doctor.specialization,
+                "room_number": extra_doctor.room_number,
                 "consultation_fee": extra_fee,
             })
         db.commit()
@@ -1347,6 +1369,8 @@ def checkin_patient(
         display_token=display_num,
         patient_name=patient.name,
         doctor_name=f"{doctor.title} {doctor.name}",
+        doctor_specialization=doctor.specialization,
+        doctor_room_number=doctor.room_number,
         issue_category=payload.issue_category,
         visit_date=ist_today(),
         checked_in_at=checkin.created_at,

@@ -138,6 +138,8 @@ class CheckinOut(BaseModel):
     additional_tokens: Optional[List[dict]] = None
     patient_name: str
     doctor_name: str
+    doctor_specialization: Optional[str] = None
+    doctor_room_number: Optional[str] = None
     issue_category: str
     visit_date: date
     checked_in_at: Optional[datetime] = None
