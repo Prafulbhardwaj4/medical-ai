@@ -728,6 +728,6 @@ def download_invoice_pdf(
     )
     return FileResponse(
         pdf_path, media_type="application/pdf",
-        filename=f"invoice_{invoice_id}.pdf",
+        filename=os.path.basename(pdf_path),
         headers={"Cache-Control": "no-store"}
-    )   
+    )

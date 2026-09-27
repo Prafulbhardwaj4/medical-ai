@@ -441,8 +441,7 @@ def download_invoice_pdf(
         invoice.pdf_path = pdf_path
         db.commit()
 
-    return FileResponse(pdf_path, media_type="application/pdf", filename=f"invoice_{invoice_id}.pdf", headers={"Cache-Control": "no-store"})
-
+    return FileResponse(pdf_path, media_type="application/pdf", filename=os.path.basename(pdf_path), headers={"Cache-Control": "no-store"})
 
 @router.get("/invoices")
 def list_invoices(

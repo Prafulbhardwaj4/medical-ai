@@ -1131,9 +1131,10 @@ def generate_invoice_pdf(
     os.makedirs(invoices_dir, exist_ok=True)
 
     invoice_hash = hashlib.sha256(f"invoice-{invoice_id}-{settings.SECRET_KEY}".encode()).hexdigest()[:6].upper()
-    invoice_ref = f"{(hospital.id if hospital else 0):05d}-{invoice_hash}-{now_ist().strftime('%m%d')}"
+    hospital_uid = re.sub(r'[^A-Za-z0-9]', '', (getattr(hospital, "hospital_code", "") or ""))[:5].upper().ljust(5, "0")
+    invoice_ref = f"{hospital_uid}-{invoice_hash}-{now_ist().strftime('%m%d')}"
     safe_invoice_ref = re.sub(r'[^A-Za-z0-9_-]', '_', invoice_ref)
-    filepath = os.path.join(invoices_dir, f"{safe_invoice_ref}.pdf")
+    filepath = os.path.join(invoices_dir, f"Invoice_{safe_invoice_ref}.pdf")
 
     doc = SimpleDocTemplate(
         filepath, pagesize=A4,
@@ -1144,21 +1145,30 @@ def generate_invoice_pdf(
 
     gst_registered = bool(hospital and hospital.gstin)
 
-    # ── Header band: "INVOICE" left, hospital name right, on the neutral
-    # brand band (same #f1f5f9 used for the table header) ──
+    # ── Header band: "INVOICE" left (elegant letter-spaced serif, aligned
+    # with "BILL FROM" below), hospital name/logo right, on a warm neutral
+    # band spanning the full page width — colWidths match bill_table's so
+    # both columns line up exactly ──
     header_title = "TAX INVOICE" if gst_registered else "INVOICE"
-    header_title_style = ParagraphStyle("hdr_title", fontSize=32, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), leading=36)
-    header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=15, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=18)
+    header_title_spaced = "\u2009".join(list(header_title))
+    header_title_style = ParagraphStyle("hdr_title", fontSize=30, fontName="Times-Roman", textColor=colors.HexColor("#545454"), leading=34)
+    header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=13, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#4b4b4b"), leading=16)
 
-    header_left = [Paragraph(header_title, header_title_style)]
-    header_right = [Paragraph(hospital.name, header_hosp_style)]
+    header_left = [Paragraph(header_title_spaced, header_title_style)]
+    header_logo_img = _decode_logo_image(getattr(hospital, "logo_base64", None))
+    header_right = []
+    if header_logo_img:
+        header_logo_img.hAlign = "RIGHT"
+        header_right.append(header_logo_img)
+        header_right.append(Spacer(1, 1.5*mm))
+    header_right.append(Paragraph(hospital.name.upper(), header_hosp_style))
 
     header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
     header_band.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F1EBEB")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
@@ -1194,11 +1204,11 @@ def generate_invoice_pdf(
     if token_number:
         to_lines.append(Paragraph(f"Token Number: {token_number}", biz_bold_style))
 
-    bill_table = Table([[from_lines, to_lines]], colWidths=[85*mm, 85*mm])
+    bill_table = Table([[from_lines, to_lines]], colWidths=[95*mm, 75*mm])
     bill_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
-        ("LEFTPADDING", (1, 0), (1, 0), 25),
+        ("LEFTPADDING", (1, 0), (1, 0), 10),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
     elements.append(bill_table)

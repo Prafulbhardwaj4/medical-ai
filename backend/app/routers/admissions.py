@@ -2484,7 +2484,7 @@ def download_discharge_invoice(admission_id: str, current_doctor: Doctor = Depen
         invoice.pdf_path = pdf_path
         db.commit()
 
-    return FileResponse(invoice.pdf_path, media_type="application/pdf", filename=f"discharge_invoice_{admission_id}.pdf")
+    return FileResponse(invoice.pdf_path, media_type="application/pdf", filename=os.path.basename(invoice.pdf_path))
 
 
 # Ward-level critical thresholds for the standard IPD vitals fields — deliberately
