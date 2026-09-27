@@ -214,16 +214,16 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     # in letter-spaced serif, hospital name right in Times-Bold, both on
     # the brand band ──
     header_title_spaced = _letter_space("TOKEN RECEIPT")
-    header_title_style = ParagraphStyle("hdr_title", fontSize=30, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=34)
+    header_title_style = ParagraphStyle("hdr_title", fontSize=16, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=20)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=16, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=19)
     header_left = [Paragraph(header_title_spaced, header_title_style)]
     header_right = [Paragraph(hospital.name, header_hosp_style)]
-    header_band = Table([[header_left, header_right]], colWidths=[90*mm, 75*mm])
+    header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
     header_band.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 10),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
@@ -269,29 +269,34 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         all_doctors.extend(additional_doctors)
 
     if len(all_doctors) > 1:
-        # Vertical stack instead of the 4-column horizontal grid — Doctor
-        # Visits line, then each doctor on its own line (blank line between
-        # each), then Patient Name / Date / Time each as label-then-value,
-        # all stacked top to bottom.
-        visits_style = ParagraphStyle("visits_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), spaceAfter=6)
-        doctor_line_style = ParagraphStyle("doctor_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), spaceAfter=6)
-        stack_label_style = ParagraphStyle("stack_label", fontSize=8, fontName="Helvetica-Bold", textColor=colors.HexColor("#64748b"), leading=11, spaceBefore=4)
-        stack_value_style = ParagraphStyle("stack_value", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), leading=13, spaceAfter=4)
-
+        # "Doctor Visits: N" line, then a name-left/room-right table (one
+        # row per doctor) — Patient Name / Date / Time no longer live here,
+        # they flow through the same label-left, value-right rows section
+        # used by the single-doctor case, just below.
+        visits_style = ParagraphStyle("visits_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), spaceAfter=4)
         elements.append(Paragraph(f"Doctor Visits: {len(all_doctors)}", visits_style))
-        for d in all_doctors:
-            line = d["doctor_name"] + (f", {d['specialization']}" if d.get("specialization") else "")
-            if d.get("room_number"):
-                line += f" — Room {d['room_number']}"
-            elements.append(Paragraph(line, doctor_line_style))
-        elements.append(Spacer(1, 3*mm))
+        elements.append(Spacer(1, 2*mm))
 
-        elements.append(Paragraph(_letter_space("PATIENT NAME"), stack_label_style))
-        elements.append(Paragraph(patient.name, stack_value_style))
-        elements.append(Paragraph(_letter_space("DATE"), stack_label_style))
-        elements.append(Paragraph(checkin.visit_date.strftime("%d %b %Y"), stack_value_style))
-        elements.append(Paragraph(_letter_space("TIME"), stack_label_style))
-        elements.append(Paragraph(checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—", stack_value_style))
+        doctor_line_style = ParagraphStyle("doctor_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"))
+        doctor_room_style = ParagraphStyle("doctor_room", fontSize=10.5, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"))
+        doctor_rows = [[
+            Paragraph(d["doctor_name"] + (f", {d['specialization']}" if d.get("specialization") else ""), doctor_line_style),
+            Paragraph(d.get("room_number") or "—", doctor_room_style),
+        ] for d in all_doctors]
+        doctor_table = Table(doctor_rows, colWidths=[110*mm, 40*mm])
+        doctor_style_cmds = [
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4*mm),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4*mm),
+            ("TOPPADDING", (0, 0), (-1, -1), 3.2*mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3.2*mm),
+            ("LINEBELOW", (0, 0), (-1, -2), 0.5, colors.HexColor("#e2e8f0")),
+        ]
+        for i in range(len(doctor_rows)):
+            if i % 2 == 1:
+                doctor_style_cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#f8fafc")))
+        doctor_table.setStyle(TableStyle(doctor_style_cmds))
+        elements.append(doctor_table)
         elements.append(Spacer(1, 3*mm))
 
     if len(all_doctors) == 1:
@@ -305,9 +310,14 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
             ("TIME", checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—"),
         ]
     else:
-        # Multi-doctor visit: patient/date/time already shown in the
-        # combo line above, right next to the doctor list — not repeated here
-        rows = []
+        # Multi-doctor visit: doctor list already shown above (name/room);
+        # Patient Name / Date / Time follow the same label-left, value-right
+        # row style as the single-doctor case.
+        rows = [
+            ("PATIENT NAME", patient.name),
+            ("DATE", checkin.visit_date.strftime("%d %b %Y")),
+            ("TIME", checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—"),
+        ]
         if nurse_name:
             rows.append(("NURSE/ASSISTANT", nurse_name))
 
