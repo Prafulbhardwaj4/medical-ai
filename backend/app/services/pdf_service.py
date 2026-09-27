@@ -9,6 +9,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import qrcode
@@ -105,6 +106,20 @@ def _letter_space(text: str, char_gap="\u2009", word_gap="\u00A0\u00A0\u00A0\u00
     character is needed to keep multi-word titles like 'TOKEN RECEIPT'
     readable as two separate words instead of running together."""
     return word_gap.join(char_gap.join(word) for word in text.split(" "))
+
+def _labeled_paragraph(label: str, value: str, base_style: ParagraphStyle) -> Paragraph:
+    """'Label : value' on one line, styled so any wrapped continuation
+    lines indent to sit under where the value starts — not back under the
+    label — regardless of how long the label text is. Computed from the
+    actual rendered width of the bold label prefix, so it lines up exactly
+    instead of relying on a guessed fixed indent."""
+    prefix = f"{label} : "
+    indent = pdfmetrics.stringWidth(prefix, "Helvetica-Bold", base_style.fontSize)
+    hanging_style = ParagraphStyle(
+        f"{base_style.name}_hang", parent=base_style,
+        leftIndent=indent, firstLineIndent=-indent,
+    )
+    return Paragraph(f"<b>{prefix}</b>{value}", hanging_style)
 
 def _make_numbered_canvas(header_text: str):
     """Returns a reportlab Canvas subclass bound to `header_text` — a
@@ -379,7 +394,7 @@ def generate_prescription_pdf(
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=15, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=18)
 
     hospital_name = doctor.hospital.name if doctor.hospital else doctor.clinic_name
-    header_left = [Paragraph("Prescription", header_title_style)]
+    header_left = [Paragraph("PRESCRIPTION", header_title_style)]
     header_right = [Paragraph(hospital_name, header_hosp_style)]
 
     header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
@@ -408,9 +423,12 @@ def generate_prescription_pdf(
         patient_lines.append(Paragraph(f"Contact Number: {patient.phone}", biz_style))
     patient_lines.append(Paragraph(f"Token: {token_number}", biz_bold_style))
 
+    doctor_name_line = f"{doctor.title} {doctor.name}"
+    if doctor.specialization:
+        doctor_name_line += f" | {doctor.specialization}"
     doctor_lines = [
         Paragraph("CONSULTING DOCTOR", label_style),
-        Paragraph(f"{doctor.title} {doctor.name} | {doctor.specialization}", biz_bold_style),
+        Paragraph(doctor_name_line, biz_bold_style),
     ]
     # Hospital contact number — not wired into this function today
     # (doctor.hospital isn't guaranteed to expose a reliable phone field
@@ -423,6 +441,7 @@ def generate_prescription_pdf(
     details_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
+        ("LEFTPADDING", (1, 0), (1, 0), 30),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
     elements.append(details_table)
@@ -436,8 +455,7 @@ def generate_prescription_pdf(
 
     # ── Chief Complaint ──
     if consultation.chief_complaint:
-        elements.append(Paragraph("Chief Complaint / Symptoms", section_style))
-        elements.append(Paragraph(cap_sentence(consultation.chief_complaint), body_style))
+        elements.append(_labeled_paragraph("Chief Complaint / Symptoms", cap_sentence(consultation.chief_complaint), body_style))
         elements.append(Spacer(1, 3*mm))
 
     # ── Vitals ──
@@ -474,8 +492,7 @@ def generate_prescription_pdf(
 
     # ── Diagnosis ──
     if consultation.diagnosis:
-        elements.append(Paragraph("Diagnosis", section_style))
-        elements.append(Paragraph(cap_sentence(consultation.diagnosis), body_style))
+        elements.append(_labeled_paragraph("Diagnosis", cap_sentence(consultation.diagnosis), body_style))
         elements.append(Spacer(1, 3*mm))
 
     # ── Medicines ──
@@ -625,14 +642,12 @@ def generate_prescription_pdf(
 
     # ── Advice ──
     if consultation.advice:
-        elements.append(Paragraph("Doctor's Advice", section_style))
-        elements.append(Paragraph(cap_sentence(consultation.advice), body_style))
+        elements.append(_labeled_paragraph("Doctor's Advice", cap_sentence(consultation.advice), body_style))
         elements.append(Spacer(1, 3*mm))
 
     # ── Follow-up ──
     if consultation.followup:
-        elements.append(Paragraph("Follow-up", section_style))
-        elements.append(Paragraph(cap_sentence(consultation.followup), body_style))
+        elements.append(_labeled_paragraph("Follow-up", cap_sentence(consultation.followup), body_style))
         elements.append(Spacer(1, 3*mm))
 
     # ── QR Code + Verification ──
