@@ -1208,7 +1208,7 @@ def generate_invoice_pdf(
     bill_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
-        ("LEFTPADDING", (1, 0), (1, 0), 10),
+        ("LEFTPADDING", (1, 0), (1, 0), 20),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
     elements.append(bill_table)
