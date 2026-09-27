@@ -98,6 +98,14 @@ def _decode_logo_image(logo_base64):
     except Exception:
         return None
 
+def _letter_space(text: str, char_gap="\u2009", word_gap="\u00A0\u00A0\u00A0\u00A0") -> str:
+    """Adds visual letter-spacing to a short header/label string — thin
+    spaces between letters, non-breaking spaces between words. Plain spaces
+    get collapsed by reportlab's paragraph parser, so a wider, non-collapsing
+    character is needed to keep multi-word titles like 'TOKEN RECEIPT'
+    readable as two separate words instead of running together."""
+    return word_gap.join(char_gap.join(word) for word in text.split(" "))
+
 def _make_numbered_canvas(header_text: str):
     """Returns a reportlab Canvas subclass bound to `header_text` — a
     compact repeating identity line (hospital + patient/ID + document
@@ -202,22 +210,53 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     )
     elements = []
 
-    elements.extend(build_letterhead(hospital, subtitle="OPD Token Confirmation"))
-    elements.append(Spacer(1, 6*mm))
-    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#1a237e")))
-    elements.append(Spacer(1, 10*mm))
+    # ── Header band: same treatment as the invoice — "TOKEN RECEIPT" left
+    # in letter-spaced serif, hospital name right in Times-Bold, both on
+    # the brand band ──
+    header_title_spaced = _letter_space("TOKEN RECEIPT")
+    header_title_style = ParagraphStyle("hdr_title", fontSize=19, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=23)
+    header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=16, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=19)
+    header_left = [Paragraph(header_title_spaced, header_title_style)]
+    header_right = [Paragraph(hospital.name, header_hosp_style)]
+    header_band = Table([[header_left, header_right]], colWidths=[85*mm, 75*mm])
+    header_band.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("LEFTPADDING", (0, 0), (0, 0), 10),
+        ("RIGHTPADDING", (1, 0), (1, 0), 10),
+    ]))
+    elements.append(header_band)
+    elements.append(Spacer(1, 8*mm))
 
-    label_style = ParagraphStyle("tok_label", fontSize=10, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey, spaceAfter=2)
-    big_style = ParagraphStyle("tok_big", fontSize=48, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"), leading=54)
+    # ── Token number — a bordered, tinted badge instead of a bare huge
+    # number; size brought down from 48pt so a full alphanumeric token
+    # (not just a 1-2 digit one) still looks deliberate, not oversized ──
+    tok_label_style = ParagraphStyle("tok_label", fontSize=9, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0d9488"), leading=12)
+    tok_big_style = ParagraphStyle("tok_big", fontSize=26, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"), leading=30)
+    badge_content = [
+        Paragraph(_letter_space("YOUR TOKEN NUMBER"), tok_label_style),
+        Spacer(1, 2*mm),
+        Paragraph("\u2009".join(str(checkin.token_number)), tok_big_style),
+    ]
+    badge = Table([[badge_content]], colWidths=[110*mm])
+    badge.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
+        ("BOX", (0, 0), (-1, -1), 1.1, colors.HexColor("#0f1f3d")),
+        ("TOPPADDING", (0, 0), (-1, -1), 8*mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8*mm),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6*mm),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6*mm),
+    ]))
+    badge.hAlign = "CENTER"
+    elements.append(badge)
+    elements.append(Spacer(1, 8*mm))
 
-    elements.append(Paragraph("YOUR TOKEN NUMBER", label_style))
-    elements.append(Paragraph(str(checkin.token_number), big_style))
-    elements.append(Spacer(1, 10*mm))
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
-    elements.append(Spacer(1, 6*mm))
-
-    row_label_style = ParagraphStyle("row_label", fontSize=9, fontName="Helvetica-Bold", textColor=colors.HexColor("#334155"))
-    row_value_style = ParagraphStyle("row_value", fontSize=10, fontName="Helvetica", textColor=colors.HexColor("#111827"))
+    # ── Details card — zebra-striped rows with small-caps labels, instead
+    # of a bare borderless two-column table ──
+    row_label_style = ParagraphStyle("row_label", fontSize=8, fontName="Helvetica-Bold", textColor=colors.HexColor("#64748b"), leading=11)
+    row_value_style = ParagraphStyle("row_value", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), leading=13)
 
     all_doctors = [{
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
@@ -228,9 +267,9 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         all_doctors.extend(additional_doctors)
 
     if len(all_doctors) > 1:
-        doctors_label_style = ParagraphStyle("doctors_label", fontSize=9, fontName="Helvetica-Bold", textColor=colors.HexColor("#334155"), spaceAfter=3)
-        doctor_line_style = ParagraphStyle("doctor_line", fontSize=10, fontName="Helvetica", textColor=colors.HexColor("#111827"))
-        doctor_room_style = ParagraphStyle("doctor_room", fontSize=10, fontName="Helvetica", textColor=colors.HexColor("#111827"))
+        doctors_label_style = ParagraphStyle("doctors_label", fontSize=9, fontName="Helvetica-Bold", textColor=colors.HexColor("#64748b"), spaceAfter=3)
+        doctor_line_style = ParagraphStyle("doctor_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"))
+        doctor_room_style = ParagraphStyle("doctor_room", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"))
 
         elements.append(Paragraph(f"Doctor Visits: {len(all_doctors)}", doctors_label_style))
         doctor_rows = [[
@@ -238,38 +277,48 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
             Paragraph(d.get("room_number") or "—", doctor_room_style),
         ] for d in all_doctors]
         doctor_table = Table(doctor_rows, colWidths=[110*mm, 40*mm])
-        doctor_table.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3*mm),
-        ]))
+        doctor_style_cmds = [
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4*mm),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4*mm),
+            ("TOPPADDING", (0, 0), (-1, -1), 3.2*mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3.2*mm),
+            ("LINEBELOW", (0, 0), (-1, -2), 0.5, colors.HexColor("#e2e8f0")),
+        ]
+        for i in range(len(doctor_rows)):
+            if i % 2 == 1:
+                doctor_style_cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#f8fafc")))
+        doctor_table.setStyle(TableStyle(doctor_style_cmds))
         elements.append(doctor_table)
         elements.append(Spacer(1, 3*mm))
 
-    rows = [("Patient Name", patient.name)]
+    rows = [("PATIENT NAME", patient.name)]
     if len(all_doctors) == 1:
-        rows.append(("Doctor", all_doctors[0]["doctor_name"]))
-        rows.append(("Room", all_doctors[0].get("room_number") or "—"))
+        rows.append(("DOCTOR", all_doctors[0]["doctor_name"]))
+        rows.append(("ROOM", all_doctors[0].get("room_number") or "—"))
     rows += [
-        ("Date", checkin.visit_date.strftime("%d %b %Y")),
-        ("Time", checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—"),
+        ("DATE", checkin.visit_date.strftime("%d %b %Y")),
+        ("TIME", checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—"),
     ]
     if nurse_name:
-        rows.append(("Nurse/Assistant", nurse_name))
+        rows.append(("NURSE/ASSISTANT", nurse_name))
 
     table_data = [[Paragraph(f"{lbl}", row_label_style), Paragraph(f"{val}", row_value_style)] for lbl, val in rows]
-    info_table = Table(table_data, colWidths=[40*mm, 110*mm])
-    info_table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3*mm),
-    ]))
+    info_table = Table(table_data, colWidths=[55*mm, 95*mm])
+    info_style_cmds = [
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4*mm),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4*mm),
+        ("TOPPADDING", (0, 0), (-1, -1), 3.2*mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.2*mm),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.5, colors.HexColor("#e2e8f0")),
+    ]
+    for i in range(len(rows)):
+        if i % 2 == 1:
+            info_style_cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#f8fafc")))
+    info_table.setStyle(TableStyle(info_style_cmds))
     elements.append(info_table)
     elements.append(Spacer(1, 10*mm))
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
-    elements.append(Spacer(1, 3*mm))
 
     footer_style = ParagraphStyle("footer", fontSize=8, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
     elements.append(Paragraph("Please keep this for your visit.", footer_style))
@@ -1150,7 +1199,7 @@ def generate_invoice_pdf(
     # neutral brand band (#f1f5f9) — colWidths match bill_table's so both
     # columns line up exactly ──
     header_title = "TAX INVOICE" if gst_registered else "INVOICE"
-    header_title_spaced = "\u2009".join(list(header_title))
+    header_title_spaced = _letter_space(header_title)
     header_title_style = ParagraphStyle("hdr_title", fontSize=30, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=34)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=17, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=20)
 
