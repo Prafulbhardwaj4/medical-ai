@@ -1208,7 +1208,7 @@ def generate_invoice_pdf(
     bill_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
-        ("LEFTPADDING", (1, 0), (1, 0), 20),
+        ("LEFTPADDING", (1, 0), (1, 0), 40),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
     elements.append(bill_table)
@@ -1367,7 +1367,7 @@ def generate_invoice_pdf(
         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("LEFTPADDING", (2, 0), (2, 0), 20),
+        ("LEFTPADDING", (2, 0), (2, 0), 36),
     ]))
     elements.append(footer_band)
     elements.append(Spacer(1, 6*mm))
