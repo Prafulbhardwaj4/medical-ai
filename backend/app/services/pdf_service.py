@@ -256,7 +256,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     # ── Details card — zebra-striped rows with small-caps labels, instead
     # of a bare borderless two-column table ──
     row_label_style = ParagraphStyle("row_label", fontSize=8, fontName="Helvetica-Bold", textColor=colors.HexColor("#64748b"), leading=11)
-    row_value_style = ParagraphStyle("row_value", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), leading=13)
+    row_value_style = ParagraphStyle("row_value", fontSize=10.5, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=13)
 
     all_doctors = [{
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
@@ -269,7 +269,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     if len(all_doctors) > 1:
         doctors_label_style = ParagraphStyle("doctors_label", fontSize=9, fontName="Helvetica-Bold", textColor=colors.HexColor("#64748b"), spaceAfter=3)
         doctor_line_style = ParagraphStyle("doctor_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"))
-        doctor_room_style = ParagraphStyle("doctor_room", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"))
+        doctor_room_style = ParagraphStyle("doctor_room", fontSize=10.5, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"))
 
         elements.append(Paragraph(f"Doctor Visits: {len(all_doctors)}", doctors_label_style))
         doctor_rows = [[
