@@ -1130,7 +1130,9 @@ def generate_invoice_pdf(
     invoices_dir = os.path.join(os.path.dirname(__file__), "..", "..", "invoices")
     os.makedirs(invoices_dir, exist_ok=True)
 
-    filepath = os.path.join(invoices_dir, f"invoice_{invoice_id}.pdf")
+    invoice_ref = receipt_number or f"INV-{hashlib.sha256(f'invoice-{invoice_id}-{settings.SECRET_KEY}'.encode()).hexdigest()[:8].upper()}"
+    safe_invoice_ref = re.sub(r'[^A-Za-z0-9_-]', '_', invoice_ref)
+    filepath = os.path.join(invoices_dir, f"{safe_invoice_ref}.pdf")
 
     doc = SimpleDocTemplate(
         filepath, pagesize=A4,
@@ -1141,44 +1143,57 @@ def generate_invoice_pdf(
 
     gst_registered = bool(hospital and hospital.gstin)
 
-    elements.extend(build_letterhead(hospital))
-    elements.append(Spacer(1, 3*mm))
-    elements.append(Paragraph("TAX INVOICE" if gst_registered else "INVOICE",
-                               ParagraphStyle("inv", fontSize=13, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"))))
-    elements.append(Paragraph("DUPLICATE COPY" if is_duplicate else "ORIGINAL FOR RECIPIENT",
-                               ParagraphStyle("copy", fontSize=8, fontName="Helvetica-Oblique", alignment=TA_CENTER, textColor=colors.grey)))
-    elements.append(Spacer(1, 4*mm))
-    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#0f1f3d")))
-    elements.append(Spacer(1, 4*mm))
+    # ── Header band: "INVOICE" left, hospital name right, on the neutral
+    # brand band (same #f1f5f9 used for the table header) ──
+    header_title = "TAX INVOICE" if gst_registered else "INVOICE"
+    header_title_style = ParagraphStyle("hdr_title", fontSize=20, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), leading=24)
+    header_copy_style = ParagraphStyle("hdr_copy", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.HexColor("#64748b"), leading=10)
+    header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=15, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=18)
 
-    # ── Bill From / Bill To — two-column header block (replaces the old
-    # stacked Bill To + Invoice#/Date line; invoice ref now lives near the
-    # QR/verification block further down, and date moves to the footer band) ──
+    header_left = [Paragraph(header_title, header_title_style),
+                   Paragraph("DUPLICATE COPY" if is_duplicate else "ORIGINAL FOR RECIPIENT", header_copy_style)]
+    header_right = [Paragraph(hospital.name, header_hosp_style)]
+
+    header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
+    header_band.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("LEFTPADDING", (0, 0), (0, 0), 10),
+        ("RIGHTPADDING", (1, 0), (1, 0), 10),
+    ]))
+    elements.append(header_band)
+    elements.append(Spacer(1, 6*mm))
+
+    # ── Bill From / Bill To — plain (uncolored) area ──
     biz_style = ParagraphStyle("bizblock", fontSize=9.5, fontName="Helvetica", leading=13, textColor=colors.HexColor("#0f1f3d"))
+    biz_bold_style = ParagraphStyle("bizbold", fontSize=9.5, fontName="Helvetica-Bold", leading=13, textColor=colors.HexColor("#0f1f3d"))
     label_style = ParagraphStyle("bizlabel", fontSize=8.5, fontName="Helvetica-Bold", leading=12, textColor=colors.HexColor("#0d9488"), spaceAfter=2)
 
     from_lines = [Paragraph("BILL FROM", label_style), Paragraph(hospital.name, biz_style)]
-    from_addr_bits = []
+    if getattr(hospital, "email", None):
+        from_lines.append(Paragraph(hospital.email, biz_style))
+    if getattr(hospital, "phone", None):
+        from_lines.append(Paragraph(f"Contact No: {hospital.phone}", biz_style))
+    if getattr(hospital, "phone2", None):
+        from_lines.append(Paragraph(hospital.phone2, biz_style))
     if hospital.address:
-        from_addr_bits.append(hospital.address)
+        from_lines.append(Paragraph(hospital.address, biz_style))
     from_city_state = ", ".join([p for p in [hospital.city, hospital.state] if p])
     if from_city_state:
-        from_addr_bits.append(from_city_state)
-    for bit in from_addr_bits:
-        from_lines.append(Paragraph(bit, biz_style))
-    if getattr(hospital, "phone", None):
-        from_lines.append(Paragraph(f"Ph: {hospital.phone}", biz_style))
+        from_lines.append(Paragraph(from_city_state, biz_style))
     if hospital.gstin:
         from_lines.append(Paragraph(f"GSTIN: {hospital.gstin}", biz_style))
 
-    to_lines = [Paragraph("BILL TO", label_style), Paragraph(patient.name.title(), biz_style)]
-    to_lines.append(Paragraph(f"{patient.age}yr | {patient.gender.capitalize()} | Patient ID: {patient.patient_uid}", biz_style))
-    if token_number:
-        to_lines.append(Paragraph(f"Token No: {token_number}", biz_style))
-    if getattr(patient, "address", None):
-        to_lines.append(Paragraph(patient.address, biz_style))
+    to_lines = [
+        Paragraph("BILL TO", label_style),
+        Paragraph(f"{patient.name.title()} | {patient.age}yr | Patient ID: {patient.patient_uid}", biz_bold_style),
+    ]
     if getattr(patient, "phone", None):
-        to_lines.append(Paragraph(f"Ph: {patient.phone}", biz_style))
+        to_lines.append(Paragraph(f"Contact Number: {patient.phone}", biz_style))
+    if token_number:
+        to_lines.append(Paragraph(f"Token Number: {token_number}", biz_bold_style))
 
     bill_table = Table([[from_lines, to_lines]], colWidths=[85*mm, 85*mm])
     bill_table.setStyle(TableStyle([
@@ -1189,7 +1204,7 @@ def generate_invoice_pdf(
     elements.append(bill_table)
     elements.append(Spacer(1, 4*mm))
 
-    # ── Consultation metadata — doctor / admission / place of supply ──
+    # ── Consultation metadata — doctor / admission dates (Place of Supply dropped) ──
     meta_style = ParagraphStyle("meta", fontSize=8.5, fontName="Helvetica", textColor=colors.HexColor("#64748b"), leading=11)
     if doctor:
         elements.append(Paragraph(f"<b>Consulting Doctor:</b> {doctor.title} {doctor.name}", meta_style))
@@ -1197,8 +1212,6 @@ def generate_invoice_pdf(
         elements.append(Paragraph(f"<b>Admission Date:</b> {admission_date.strftime('%d %b %Y, %I:%M %p')}", meta_style))
     if discharge_date:
         elements.append(Paragraph(f"<b>Discharge Date:</b> {discharge_date.strftime('%d %b %Y, %I:%M %p')}", meta_style))
-    if place_of_supply:
-        elements.append(Paragraph(f"<b>Place of Supply:</b> {place_of_supply}", meta_style))
     elements.append(Spacer(1, 5*mm))
 
     payable_items = [i for i in items if i.get("payable_here", True) is not False]
@@ -1325,13 +1338,14 @@ def generate_invoice_pdf(
         decl_style
     ))
     elements.append(Spacer(1, 8*mm))
-    footer_label_style = ParagraphStyle("footlabel", fontSize=8.5, fontName="Helvetica", textColor=colors.HexColor("#334155"))
-    footer_center_style = ParagraphStyle("footcenter", fontSize=10.5, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"))
-    footer_right_style = ParagraphStyle("footright", fontSize=8.5, fontName="Helvetica", alignment=TA_RIGHT, textColor=colors.HexColor("#334155"))
+    now_dt = now_ist()
+    footer_label_style = ParagraphStyle("footlabel", fontSize=8.5, fontName="Helvetica", textColor=colors.HexColor("#334155"), leading=12)
+    footer_center_style = ParagraphStyle("footcenter", fontSize=13, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"), leading=16)
+    footer_right_style = ParagraphStyle("footright", fontSize=8.5, fontName="Helvetica", alignment=TA_RIGHT, textColor=colors.HexColor("#334155"), leading=12)
     footer_band = Table(
         [[
-            Paragraph(f"Date: {now_ist().strftime('%d %b %Y')}", footer_label_style),
-            Paragraph("Thank you!", footer_center_style),
+            Paragraph(f"Date: {now_dt.strftime('%d %b %Y')}<br/>Time: {now_dt.strftime('%I:%M %p')}", footer_label_style),
+            Paragraph("Thank<br/>You!", footer_center_style),
             Paragraph("_______________________<br/>Authorized Signatory", footer_right_style),
         ]],
         colWidths=[56*mm, 58*mm, 56*mm]
@@ -1339,23 +1353,20 @@ def generate_invoice_pdf(
     footer_band.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
     ]))
     elements.append(footer_band)
     elements.append(Spacer(1, 6*mm))
 
-    # ── QR Code + Verification + MedScribe branding (item 9). Also carries
-    # the invoice reference hash that used to sit at the top of the page,
-    # now that the top header is Bill From / Bill To only. ──
-    invoice_ref = receipt_number or f"INV-{hashlib.sha256(f'invoice-{invoice_id}-{settings.SECRET_KEY}'.encode()).hexdigest()[:8].upper()}"
+    # ── QR Code + MedScribe branding (item 9). invoice_ref is already
+    # computed at the top of the function — reused here, not recomputed. ──
     if verify_hash:
         elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e2e8f0")))
         elements.append(Spacer(1, 3*mm))
         verify_url = f"{settings.PUBLIC_FRONTEND_URL}/pages/verify.html?type=invoice&id={invoice_id}&hash={verify_hash}"
-        verify_url_display = verify_url.replace("&", "&amp;")
         qr = qrcode.QRCode(version=1, box_size=4, border=1)
         qr.add_data(verify_url)
         qr.make(fit=True)
@@ -1368,10 +1379,8 @@ def generate_invoice_pdf(
         verify_block = [[
             qr_image,
             Paragraph(
-                f"<b>Invoice Ref:</b> {invoice_ref}<br/>"
-                f"Scan QR code to verify authenticity.<br/>"
-                f"Verification Code: <b>{verify_hash}</b><br/>"
-                f"Link: {verify_url_display}",
+                f"<b>Invoice Number:</b> {invoice_ref}<br/>"
+                f"Scan QR code to authenticate.",
                 verify_text_style
             )
         ]]
@@ -1380,7 +1389,7 @@ def generate_invoice_pdf(
         elements.append(verify_table)
         elements.append(Spacer(1, 4*mm))
     else:
-        elements.append(Paragraph(f"<b>Invoice Ref:</b> {invoice_ref}",
+        elements.append(Paragraph(f"<b>Invoice Number:</b> {invoice_ref}",
                                    ParagraphStyle("ref_only", fontSize=8, alignment=TA_CENTER, textColor=colors.HexColor("#334155"))))
         elements.append(Spacer(1, 3*mm))
 
