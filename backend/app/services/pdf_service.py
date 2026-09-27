@@ -218,7 +218,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=16, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=19)
     header_left = [Paragraph(header_title_spaced, header_title_style)]
     header_right = [Paragraph(hospital.name, header_hosp_style)]
-    header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
+    header_band = Table([[header_left, header_right]], colWidths=[90*mm, 75*mm])
     header_band.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -235,21 +235,21 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     # (not just a 1-2 digit one) still looks deliberate, not oversized.
     # Box trimmed down from the first pass — it was reading oversized next
     # to the rest of the slip ──
-    tok_label_style = ParagraphStyle("tok_label", fontSize=9, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0d9488"), leading=12)
-    tok_big_style = ParagraphStyle("tok_big", fontSize=26, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"), leading=30)
+    tok_label_style = ParagraphStyle("tok_label", fontSize=8, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0d9488"), leading=11)
+    tok_big_style = ParagraphStyle("tok_big", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"), leading=21)
     badge_content = [
         Paragraph(_letter_space("YOUR TOKEN NUMBER"), tok_label_style),
-        Spacer(1, 2*mm),
+        Spacer(1, 1.5*mm),
         Paragraph("\u2009".join(str(checkin.token_number)), tok_big_style),
     ]
-    badge = Table([[badge_content]], colWidths=[95*mm])
+    badge = Table([[badge_content]], colWidths=[70*mm])
     badge.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("BOX", (0, 0), (-1, -1), 1.1, colors.HexColor("#0f1f3d")),
-        ("TOPPADDING", (0, 0), (-1, -1), 5*mm),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5*mm),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5*mm),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5*mm),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5*mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5*mm),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2.5*mm),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2.5*mm),
     ]))
     badge.hAlign = "CENTER"
     elements.append(badge)
@@ -269,49 +269,29 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         all_doctors.extend(additional_doctors)
 
     if len(all_doctors) > 1:
-        doctors_label_style = ParagraphStyle("doctors_label", fontSize=9, fontName="Helvetica-Bold", textColor=colors.HexColor("#64748b"), spaceAfter=3)
-        doctor_line_style = ParagraphStyle("doctor_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"))
-        doctor_room_style = ParagraphStyle("doctor_room", fontSize=10.5, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"))
+        # Vertical stack instead of the 4-column horizontal grid — Doctor
+        # Visits line, then each doctor on its own line (blank line between
+        # each), then Patient Name / Date / Time each as label-then-value,
+        # all stacked top to bottom.
+        visits_style = ParagraphStyle("visits_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), spaceAfter=6)
+        doctor_line_style = ParagraphStyle("doctor_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), spaceAfter=6)
+        stack_label_style = ParagraphStyle("stack_label", fontSize=8, fontName="Helvetica-Bold", textColor=colors.HexColor("#64748b"), leading=11, spaceBefore=4)
+        stack_value_style = ParagraphStyle("stack_value", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), leading=13, spaceAfter=4)
 
-        # Doctor Visits + Patient/Date/Time folded into one line instead of
-        # repeating patient/date/time again further down in the info table
-        # Doctor Visits / Patient / Date / Time as one properly-aligned row —
-        # a 4-column table (label above, value below in each column), not a
-        # single run-on text line
-        combo_label_style = ParagraphStyle("combo_label", fontSize=7.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#64748b"), leading=9)
-        combo_value_style = ParagraphStyle("combo_value", fontSize=10, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), leading=12, spaceBefore=1)
-        combo_table = Table([[
-            [Paragraph("DOCTOR VISITS", combo_label_style), Paragraph(str(len(all_doctors)), combo_value_style)],
-            [Paragraph("PATIENT NAME", combo_label_style), Paragraph(patient.name, combo_value_style)],
-            [Paragraph("DATE", combo_label_style), Paragraph(checkin.visit_date.strftime("%d %b %Y"), combo_value_style)],
-            [Paragraph("TIME", combo_label_style), Paragraph(checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—", combo_value_style)],
-        ]], colWidths=[37.5*mm, 37.5*mm, 37.5*mm, 37.5*mm])
-        combo_table.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 2*mm),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 2*mm),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4*mm),
-        ]))
-        elements.append(combo_table)
-        doctor_rows = [[
-            Paragraph(d["doctor_name"] + (f", {d['specialization']}" if d.get("specialization") else ""), doctor_line_style),
-            Paragraph(d.get("room_number") or "—", doctor_room_style),
-        ] for d in all_doctors]
-        doctor_table = Table(doctor_rows, colWidths=[110*mm, 40*mm])
-        doctor_style_cmds = [
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4*mm),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4*mm),
-            ("TOPPADDING", (0, 0), (-1, -1), 3.2*mm),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3.2*mm),
-            ("LINEBELOW", (0, 0), (-1, -2), 0.5, colors.HexColor("#e2e8f0")),
-        ]
-        for i in range(len(doctor_rows)):
-            if i % 2 == 1:
-                doctor_style_cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#f8fafc")))
-        doctor_table.setStyle(TableStyle(doctor_style_cmds))
-        elements.append(doctor_table)
+        elements.append(Paragraph(f"Doctor Visits: {len(all_doctors)}", visits_style))
+        for d in all_doctors:
+            line = d["doctor_name"] + (f", {d['specialization']}" if d.get("specialization") else "")
+            if d.get("room_number"):
+                line += f" — Room {d['room_number']}"
+            elements.append(Paragraph(line, doctor_line_style))
+        elements.append(Spacer(1, 3*mm))
+
+        elements.append(Paragraph(_letter_space("PATIENT NAME"), stack_label_style))
+        elements.append(Paragraph(patient.name, stack_value_style))
+        elements.append(Paragraph(_letter_space("DATE"), stack_label_style))
+        elements.append(Paragraph(checkin.visit_date.strftime("%d %b %Y"), stack_value_style))
+        elements.append(Paragraph(_letter_space("TIME"), stack_label_style))
+        elements.append(Paragraph(checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—", stack_value_style))
         elements.append(Spacer(1, 3*mm))
 
     if len(all_doctors) == 1:
