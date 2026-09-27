@@ -214,7 +214,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     # in letter-spaced serif, hospital name right in Times-Bold, both on
     # the brand band ──
     header_title_spaced = _letter_space("TOKEN RECEIPT")
-    header_title_style = ParagraphStyle("hdr_title", fontSize=23, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=26)
+    header_title_style = ParagraphStyle("hdr_title", fontSize=25, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=27)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=17, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=20)
     header_left = [Paragraph(header_title_spaced, header_title_style)]
     header_right = [Paragraph(hospital.name, header_hosp_style)]
@@ -273,7 +273,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         # row per doctor) — Patient Name / Date / Time no longer live here,
         # they flow through the same label-left, value-right rows section
         # used by the single-doctor case, just below.
-        visits_style = ParagraphStyle("visits_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), spaceAfter=4, leftIndent=4*mm)
+        visits_style = ParagraphStyle("visits_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), spaceAfter=4, leftIndent=3.2*mm)
         elements.append(Paragraph(f"Doctor Visits: {len(all_doctors)}", visits_style))
         elements.append(Spacer(1, 2*mm))
 
@@ -373,44 +373,61 @@ def generate_prescription_pdf(
     styles = getSampleStyleSheet()
     elements = []
 
-    # ── Header ──
-    header_style = ParagraphStyle("header", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1a237e"))
-    sub_style = ParagraphStyle("sub", fontSize=10, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
-    token_style = ParagraphStyle("token", fontSize=11, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#1a237e"))
+    # ── Header band: same treatment as the invoice — title left, hospital
+    # name right, on the brand band ──
+    header_title_style = ParagraphStyle("hdr_title", fontSize=32, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=36)
+    header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=15, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=18)
 
-    if doctor.hospital:
-        elements.extend(build_letterhead(doctor.hospital))
-    else:
-        elements.append(Paragraph(doctor.clinic_name, header_style))
-    elements.append(Spacer(1, 2*mm))
-    elements.append(Paragraph(f"{doctor.title} {doctor.name} | {doctor.specialization}", sub_style))
-    reg_text = f" | Reg. No: {doctor.registration_number}" if doctor.registration_number else ""
-    elements.append(Paragraph(f"Contact: {doctor.phone}{reg_text}", sub_style))
-    elements.append(Spacer(1, 3*mm))
-    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a237e")))
-    elements.append(Spacer(1, 3*mm))
+    hospital_name = doctor.hospital.name if doctor.hospital else doctor.clinic_name
+    header_left = [Paragraph("Prescription", header_title_style)]
+    header_right = [Paragraph(hospital_name, header_hosp_style)]
 
-    bg = f" | Blood Group: {patient.blood_group}" if patient.blood_group else ""
-
-    # ── Token + Date ──
-    meta_data = [
-        [
-            Paragraph(f"<b>Patient:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}{bg}", styles["Normal"]),
-            Paragraph(f"<b>Token:</b> {token_number}<br/><b>Date:</b> {now_ist().strftime('%d %b %Y')}", token_style)
-        ]
-    ]
-    meta_table = Table(meta_data, colWidths=[95*mm, 75*mm])
-    meta_table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
+    header_band.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING", (0, 0), (0, 0), 10),
+        ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
-    elements.append(meta_table)
-    elements.append(Spacer(1, 2*mm))
-    pid_style = ParagraphStyle("pid", fontSize=9, fontName="Helvetica", textColor=colors.HexColor("#334155"))
-    elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", pid_style))
+    elements.append(header_band)
+    elements.append(Spacer(1, 6*mm))
+
+    # ── Patient details (left) / Consulting Doctor details (right) ──
+    biz_style = ParagraphStyle("bizblock", fontSize=9.5, fontName="Helvetica", leading=13, textColor=colors.HexColor("#0f1f3d"))
+    biz_bold_style = ParagraphStyle("bizbold", fontSize=9.5, fontName="Helvetica-Bold", leading=13, textColor=colors.HexColor("#0f1f3d"))
+    label_style = ParagraphStyle("bizlabel", fontSize=8.5, fontName="Helvetica-Bold", leading=12, textColor=colors.HexColor("#0d9488"), spaceAfter=2)
+
+    patient_lines = [
+        Paragraph("PATIENT DETAILS", label_style),
+        Paragraph(f"{patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}", biz_bold_style),
+        Paragraph(f"Patient ID: {patient.patient_uid}", biz_style),
+    ]
+    if getattr(patient, "phone", None):
+        patient_lines.append(Paragraph(f"Contact Number: {patient.phone}", biz_style))
+    patient_lines.append(Paragraph(f"Token: {token_number}", biz_bold_style))
+
+    doctor_lines = [
+        Paragraph("CONSULTING DOCTOR", label_style),
+        Paragraph(f"{doctor.title} {doctor.name} | {doctor.specialization}", biz_bold_style),
+    ]
+    # Hospital contact number — not wired into this function today
+    # (doctor.hospital isn't guaranteed to expose a reliable phone field
+    # here). Add once available:
+    # if getattr(doctor.hospital, "phone", None):
+    #     doctor_lines.append(Paragraph(f"Contact No: {doctor.hospital.phone}", biz_style))
+    doctor_lines.append(Paragraph(f"Date: {now_ist().strftime('%d %b %Y')}", biz_style))
+
+    details_table = Table([[patient_lines, doctor_lines]], colWidths=[95*mm, 75*mm])
+    details_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (0, 0), 10),
+        ("RIGHTPADDING", (1, 0), (1, 0), 10),
+    ]))
+    elements.append(details_table)
     elements.append(Spacer(1, 4*mm))
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e2e8f0")))
     elements.append(Spacer(1, 4*mm))
 
     # ── Section styles ──
@@ -494,7 +511,7 @@ def generate_prescription_pdf(
 
         type_col = 5 if has_brand else 4
         med_table_style = [
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a237e")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f1f3d")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
@@ -542,7 +559,7 @@ def generate_prescription_pdf(
             test_data.append([str(i), cap_sentence(t.get("test_name", ""))])
         test_table = Table(test_data, colWidths=[15*mm, 155*mm])
         test_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a237e")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f1f3d")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
@@ -564,7 +581,7 @@ def generate_prescription_pdf(
                 test_data.append([str(i), cap_sentence(t)])
             test_table = Table(test_data, colWidths=[15*mm, 155*mm])
             test_table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a237e")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f1f3d")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
@@ -592,7 +609,7 @@ def generate_prescription_pdf(
             rad_data.append([str(i), cap_sentence(r.get("study_name", ""))])
         rad_table = Table(rad_data, colWidths=[15*mm, 155*mm])
         rad_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a237e")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f1f3d")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
@@ -625,7 +642,6 @@ def generate_prescription_pdf(
         elements.append(Spacer(1, 3*mm))
 
         verify_url = f"{settings.PUBLIC_FRONTEND_URL}/pages/verify.html?token={token_number}&hash={verify_hash}"
-        verify_url_display = verify_url.replace("&", "&amp;")
 
         qr = qrcode.QRCode(version=1, box_size=4, border=1)
         qr.add_data(verify_url)
@@ -642,11 +658,8 @@ def generate_prescription_pdf(
             [
                 qr_image,
                 Paragraph(
-                    f"<b>Verify this prescription</b><br/>"
-                    f"Scan QR code to verify.<br/>"
-                    f"Token: <b>{token_number}</b><br/>"
-                    f"Verification Code: <b>{verify_hash}</b><br/>"
-                    f"Link: {verify_url_display}",
+                    f"<b>Token:</b> {token_number}<br/>"
+                    f"Scan QR code to authenticate.",
                     verify_text_style
                 )
             ]
@@ -664,11 +677,11 @@ def generate_prescription_pdf(
     elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
     elements.append(Spacer(1, 2*mm))
     footer_style = ParagraphStyle("footer", fontSize=8, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
-    elements.append(Paragraph(f"Token No: {token_number} | Generated by MedScribe | {now_ist().strftime('%d %b %Y %H:%M')}", footer_style))
     elements.append(Paragraph("This prescription is digitally generated and valid without a physical signature.", footer_style))
+    elements.append(Paragraph("This prescription is generated and digitally verified by MedScribe.",
+                               ParagraphStyle("brand", fontSize=8, fontName="Helvetica-Oblique", alignment=TA_CENTER, textColor=colors.HexColor("#64748b"))))
 
-    header_text = f"{doctor.hospital.name if doctor.hospital else doctor.clinic_name}  |  {patient.name.title()} ({patient.patient_uid})  |  Rx {token_number}"
-    doc.build(elements, canvasmaker=_make_numbered_canvas(header_text))
+    doc.build(elements, canvasmaker=_make_numbered_canvas(""))
     return filepath
 
 def generate_test_report_pdf(
