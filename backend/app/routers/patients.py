@@ -1974,6 +1974,7 @@ def reception_pending_payments(
             "patient_uid": patient.patient_uid,
             "patient_phone": patient.phone,
             "token_number": c.token_number,
+            "display_token": c.display_token,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else None,
             "buckets": buckets,
             "is_finalized": c.is_finalized,
@@ -2000,6 +2001,7 @@ def reception_pending_payments(
                 "patient_uid": row["patient_uid"],
                 "patient_phone": row["patient_phone"],
                 "token_number": row["token_number"],
+                "display_token": row["display_token"],
                 "is_finalized": row["is_finalized"],
                 "doctors": [],
             }

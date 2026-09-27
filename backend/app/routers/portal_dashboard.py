@@ -694,9 +694,11 @@ def download_invoice_pdf(
     admission_date = discharge_date = None
     consulting_doctor = None
     deposit_paid = refund_due = None
+    token_number = None
     if invoice.checkin_id:
         checkin = db.query(Checkin).filter(Checkin.id == invoice.checkin_id).first()
         consulting_doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first() if checkin else None
+        token_number = checkin.token_number if checkin else None
     elif invoice.admission_id:
         from app.models.admission import Admission
         from app.routers.admissions import _settlement_summary
@@ -722,6 +724,7 @@ def download_invoice_pdf(
         admission_date=admission_date, discharge_date=discharge_date,
         subtotal=invoice.subtotal, gst_total=invoice.gst_total, verify_hash=invoice.verify_hash, is_duplicate=True,
         deposit_paid=deposit_paid, amount_collected_now=invoice.amount_collected, refund_due=refund_due,
+        token_number=token_number,
     )
     return FileResponse(
         pdf_path, media_type="application/pdf",

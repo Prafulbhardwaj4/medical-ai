@@ -289,6 +289,7 @@ def finalize_invoice(
             invoice.id, hospital, items, grand_total, patient, consulting_doctor,
             receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply,
             subtotal=subtotal, gst_total=gst_total, verify_hash=invoice.verify_hash, is_duplicate=False,
+            token_number=checkin.token_number,
         )
         invoice.pdf_path = pdf_path
         db.commit()
@@ -325,6 +326,7 @@ def finalize_invoice(
         invoice.id, hospital, items, grand_total, patient, consulting_doctor,
         receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply,
         subtotal=subtotal, gst_total=gst_total, verify_hash=invoice.verify_hash, is_duplicate=False,
+        token_number=checkin.token_number,
     )
     invoice.pdf_path = pdf_path
 
@@ -433,6 +435,7 @@ def download_invoice_pdf(
         invoice.id, hospital, items, invoice.grand_total, patient, consulting_doctor,
         receipt_number=invoice.receipt_number, place_of_supply=invoice.place_of_supply,
         subtotal=invoice.subtotal, gst_total=invoice.gst_total, verify_hash=invoice.verify_hash, is_duplicate=True,
+        token_number=checkin_for_doctor.token_number if checkin_for_doctor else None,
     )
     if invoice.pdf_path != pdf_path:
         invoice.pdf_path = pdf_path

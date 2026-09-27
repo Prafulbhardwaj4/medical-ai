@@ -2982,8 +2982,9 @@
     function openPaymentToggleModal(idx) {
       paymentToggleRow = pendingPaymentRows[idx];
       document.getElementById('pt-toggle-patient-name').textContent = paymentToggleRow.patient_name;
-      document.getElementById('pt-toggle-patient-meta').textContent =
-        `${paymentToggleRow.patient_uid || ''}${paymentToggleRow.patient_uid && paymentToggleRow.token_number ? '  ·  ' : ''}${paymentToggleRow.token_number ? 'Token: ' + paymentToggleRow.token_number : ''}`;
+      document.getElementById('pt-toggle-patient-meta').innerHTML =
+        `${sanitize(paymentToggleRow.patient_uid || '')}${paymentToggleRow.patient_uid ? '<br>' : ''}` +
+        `${(paymentToggleRow.display_token != null || paymentToggleRow.token_number) ? 'Token: ' + sanitize(String(paymentToggleRow.display_token != null ? paymentToggleRow.display_token : paymentToggleRow.token_number)) : ''}`;
       renderPaymentToggleBody();
       document.getElementById('modal-payment-toggle').classList.add('open');
     }
