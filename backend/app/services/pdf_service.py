@@ -214,11 +214,11 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     # in letter-spaced serif, hospital name right in Times-Bold, both on
     # the brand band ──
     header_title_spaced = _letter_space("TOKEN RECEIPT")
-    header_title_style = ParagraphStyle("hdr_title", fontSize=19, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=23)
+    header_title_style = ParagraphStyle("hdr_title", fontSize=30, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=34)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=16, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=19)
     header_left = [Paragraph(header_title_spaced, header_title_style)]
     header_right = [Paragraph(hospital.name, header_hosp_style)]
-    header_band = Table([[header_left, header_right]], colWidths=[85*mm, 75*mm])
+    header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
     header_band.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -275,13 +275,25 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
 
         # Doctor Visits + Patient/Date/Time folded into one line instead of
         # repeating patient/date/time again further down in the info table
-        combo_line = (
-            f"<b>Doctor Visits:</b> {len(all_doctors)}  |  "
-            f"<b>Patient:</b> {patient.name}  |  "
-            f"<b>Date:</b> {checkin.visit_date.strftime('%d %b %Y')}  |  "
-            f"<b>Time:</b> {checkin.created_at.strftime('%I:%M %p') if checkin.created_at else '—'}"
-        )
-        elements.append(Paragraph(combo_line, doctors_label_style))
+        # Doctor Visits / Patient / Date / Time as one properly-aligned row —
+        # a 4-column table (label above, value below in each column), not a
+        # single run-on text line
+        combo_label_style = ParagraphStyle("combo_label", fontSize=7.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#64748b"), leading=9)
+        combo_value_style = ParagraphStyle("combo_value", fontSize=10, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), leading=12, spaceBefore=1)
+        combo_table = Table([[
+            [Paragraph("DOCTOR VISITS", combo_label_style), Paragraph(str(len(all_doctors)), combo_value_style)],
+            [Paragraph("PATIENT NAME", combo_label_style), Paragraph(patient.name, combo_value_style)],
+            [Paragraph("DATE", combo_label_style), Paragraph(checkin.visit_date.strftime("%d %b %Y"), combo_value_style)],
+            [Paragraph("TIME", combo_label_style), Paragraph(checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—", combo_value_style)],
+        ]], colWidths=[37.5*mm, 37.5*mm, 37.5*mm, 37.5*mm])
+        combo_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2*mm),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2*mm),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4*mm),
+        ]))
+        elements.append(combo_table)
         doctor_rows = [[
             Paragraph(d["doctor_name"] + (f", {d['specialization']}" if d.get("specialization") else ""), doctor_line_style),
             Paragraph(d.get("room_number") or "—", doctor_room_style),
