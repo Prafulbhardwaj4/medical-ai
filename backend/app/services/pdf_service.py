@@ -1146,13 +1146,13 @@ def generate_invoice_pdf(
     gst_registered = bool(hospital and hospital.gstin)
 
     # ── Header band: "INVOICE" left (elegant letter-spaced serif, aligned
-    # with "BILL FROM" below), hospital name/logo right, on a warm neutral
-    # band spanning the full page width — colWidths match bill_table's so
-    # both columns line up exactly ──
+    # with "BILL FROM" below), hospital name/logo right, on the original
+    # neutral brand band (#f1f5f9) — colWidths match bill_table's so both
+    # columns line up exactly ──
     header_title = "TAX INVOICE" if gst_registered else "INVOICE"
     header_title_spaced = "\u2009".join(list(header_title))
-    header_title_style = ParagraphStyle("hdr_title", fontSize=30, fontName="Times-Roman", textColor=colors.HexColor("#545454"), leading=34)
-    header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=13, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#4b4b4b"), leading=16)
+    header_title_style = ParagraphStyle("hdr_title", fontSize=30, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=34)
+    header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=17, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=20)
 
     header_left = [Paragraph(header_title_spaced, header_title_style)]
     header_logo_img = _decode_logo_image(getattr(hospital, "logo_base64", None))
@@ -1161,11 +1161,11 @@ def generate_invoice_pdf(
         header_logo_img.hAlign = "RIGHT"
         header_right.append(header_logo_img)
         header_right.append(Spacer(1, 1.5*mm))
-    header_right.append(Paragraph(hospital.name.upper(), header_hosp_style))
+    header_right.append(Paragraph(hospital.name, header_hosp_style))
 
     header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
     header_band.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F1EBEB")),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 10),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
@@ -1367,6 +1367,7 @@ def generate_invoice_pdf(
         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING", (2, 0), (2, 0), 20),
     ]))
     elements.append(footer_band)
     elements.append(Spacer(1, 6*mm))
