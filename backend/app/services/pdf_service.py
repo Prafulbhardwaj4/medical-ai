@@ -174,7 +174,7 @@ def build_letterhead(hospital, subtitle=None):
 
     return elements
 
-def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None, additional_doctors=None) -> str:
+def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None, additional_doctors=None, doctor_room=None) -> str:
     """The WhatsApp-bound token slip — a real A4 PDF, deliberately NOT the
     80mm receipt format used by receptionist.html's print flow (.receipt-slip).
     This is read on a phone screen, not torn off a thermal printer, so it
@@ -222,7 +222,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     all_doctors = [{
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "specialization": doctor.specialization if doctor else None,
-        "room_number": doctor.room_number if doctor else None,
+        "room_number": doctor_room,
     }]
     if additional_doctors:
         all_doctors.extend(additional_doctors)

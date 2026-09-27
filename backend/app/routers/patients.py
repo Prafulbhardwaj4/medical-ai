@@ -658,7 +658,7 @@ def checkin_today(
             "token_number": ac.token_number,
             "doctor_name": f"{ac_doctor.title} {ac_doctor.name}" if ac_doctor else "—",
             "specialization": ac_doctor.specialization if ac_doctor else None,
-            "room_number": ac_doctor.room_number if ac_doctor else None,
+            "room_number": get_doctor_current_room(db, ac_doctor.id, current_doctor.hospital_id) if ac_doctor else None,
             "consultation_fee": ac.consultation_fee,
         })
 
@@ -668,7 +668,7 @@ def checkin_today(
         "patient_name": patient.name,
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "doctor_specialization": doctor.specialization if doctor else None,
-        "doctor_room_number": doctor.room_number if doctor else None,
+        "doctor_room_number": get_doctor_current_room(db, doctor.id, current_doctor.hospital_id) if doctor else None,
         "issue_category": checkin.issue_category,
         "additional_tokens": additional_tokens_out or None,
         "visit_date": checkin.visit_date.isoformat(),
@@ -762,7 +762,7 @@ def get_checkin_slip(
             "token_number": ac.token_number,
             "doctor_name": f"{ac_doctor.title} {ac_doctor.name}" if ac_doctor else "—",
             "specialization": ac_doctor.specialization if ac_doctor else None,
-            "room_number": ac_doctor.room_number if ac_doctor else None,
+            "room_number": get_doctor_current_room(db, ac_doctor.id, current_doctor.hospital_id) if ac_doctor else None,
         })
 
     return {
@@ -770,7 +770,7 @@ def get_checkin_slip(
         "patient_name": patient.name if patient else "—",
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "doctor_specialization": doctor.specialization if doctor else None,
-        "doctor_room_number": doctor.room_number if doctor else None,
+        "doctor_room_number": get_doctor_current_room(db, doctor.id, current_doctor.hospital_id) if doctor else None,
         "issue_category": checkin.issue_category,
         "additional_tokens": additional_tokens_out or None,
         "visit_date": checkin.visit_date.isoformat(),
@@ -820,14 +820,17 @@ def preview_token_slip_pdf(
                 additional_doctors.append({
                     "doctor_name": f"{sc_doctor.title} {sc_doctor.name}",
                     "specialization": sc_doctor.specialization,
-                    "room_number": sc_doctor.room_number,
+                    "room_number": get_doctor_current_room(db, sc_doctor.id, current_doctor.hospital_id),
                 })
+
+    primary_room = get_doctor_current_room(db, doctor.id, current_doctor.hospital_id) if doctor else None
 
     from app.services.pdf_service import generate_token_slip_pdf
     pdf_path = generate_token_slip_pdf(
         checkin, patient, doctor, hospital,
         nurse_name=f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
         additional_doctors=additional_doctors or None,
+        doctor_room=primary_room,
     )
 
     from fastapi.responses import FileResponse
@@ -1152,6 +1155,27 @@ def update_patient(
 
     return patient
 
+def get_doctor_current_room(db: Session, doctor_id: int, hospital_id: int) -> Optional[str]:
+    """The room a doctor is CURRENTLY sitting in, per today's attendance
+    record (AttendanceRecord.room_id, set when they mark Present in a
+    room) — NOT Doctor.room_number, which is a static field almost no
+    doctor has set and doesn't reflect where they actually are today."""
+    from app.models.attendance import AttendanceRecord
+    from app.models.room import Room
+    record = db.query(AttendanceRecord).filter(
+        AttendanceRecord.doctor_id == doctor_id,
+        AttendanceRecord.hospital_id == hospital_id,
+        AttendanceRecord.date == ist_today()
+    ).first()
+    if not record or not record.room_id:
+        return None
+    room = db.query(Room).filter(Room.id == record.room_id).first()
+    if not room:
+        return None
+    display = f"{room.name or ''}{' (' + room.room_number + ')' if room.room_number else ''}".strip()
+    return display or None
+
+
 def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> str:
     import secrets, string
     prefix = hospital_code.replace("-", "")[:4].upper()
@@ -1364,7 +1388,7 @@ def checkin_patient(
                 "token_number": extra_token,
                 "doctor_name": f"{extra_doctor.title} {extra_doctor.name}",
                 "specialization": extra_doctor.specialization,
-                "room_number": extra_doctor.room_number,
+                "room_number": get_doctor_current_room(db, extra_doctor.id, current_doctor.hospital_id),
                 "consultation_fee": extra_fee,
             })
         db.commit()
@@ -1377,7 +1401,7 @@ def checkin_patient(
         patient_name=patient.name,
         doctor_name=f"{doctor.title} {doctor.name}",
         doctor_specialization=doctor.specialization,
-        doctor_room_number=doctor.room_number,
+        doctor_room_number=get_doctor_current_room(db, doctor.id, current_doctor.hospital_id),
         issue_category=payload.issue_category,
         visit_date=ist_today(),
         checked_in_at=checkin.created_at,

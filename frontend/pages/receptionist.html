@@ -806,7 +806,7 @@
               </div>
             </div>
             <p style="color:var(--slate);margin-bottom:16px">Room: <strong id="doc-step-room-name"></strong></p>
-            <div class="form-group">
+            <div class="form-group" id="doctor-select-group">
               <label class="form-label">Doctor</label>
               <select class="form-control" id="doc-select" onchange="updateFeeForSelectedDoctor()"></select>
             </div>
@@ -2427,30 +2427,97 @@
       renderAdditionalDoctorsList();
     }
 
+    // Recomputes just the total line without touching row markup — called on
+    // every keystroke in a fee input, so it must NOT rebuild innerHTML (that
+    // would destroy the input's focus mid-type).
+    function updateVisitTotal() {
+      const ids = Object.keys(selectedAdditionalDoctors).map(Number);
+      const primaryFee = parseFloat(document.getElementById('consultation-fee').value) || 0;
+      const extraTotal = ids.reduce((sum, id) => sum + (selectedAdditionalDoctors[id] || 0), 0);
+      const totalEl = document.getElementById('visit-total-amount');
+      if (totalEl) totalEl.textContent = `₹${primaryFee + extraTotal}`;
+    }
+
+    // Once a second doctor is added, the dropdown/fee-changer above stop
+    // making sense (they only ever edit ONE doctor) — everything, including
+    // the primary, is edited right here instead. doc-select and
+    // consultation-fee stay the source of truth for the primary underneath
+    // (generateToken() still reads them directly) even while hidden — removing
+    // the primary promotes the first extra doctor into that slot, adding a
+    // <option> for them if the room-scoped dropdown never had one.
+    function removePrimaryDoctor() {
+      const ids = Object.keys(selectedAdditionalDoctors).map(Number);
+      if (!ids.length) return; // primary is the only doctor left — nothing to promote, so this is never shown in that state anyway
+      const promoteId = ids[0];
+      const promoteFee = selectedAdditionalDoctors[promoteId];
+      delete selectedAdditionalDoctors[promoteId];
+
+      const sel = document.getElementById('doc-select');
+      const promoteDoctor = (allDoctorsForAdd || []).find(d => d.id === promoteId);
+      if (promoteDoctor && !sel.querySelector(`option[value="${promoteId}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = promoteId;
+        opt.textContent = `${promoteDoctor.title} ${promoteDoctor.name}${promoteDoctor.specialization ? ` — ${promoteDoctor.specialization}` : ''}`;
+        sel.appendChild(opt);
+      }
+      sel.value = promoteId;
+      document.getElementById('consultation-fee').value = promoteFee || '';
+      renderAdditionalDoctorsList();
+    }
+
     function renderAdditionalDoctorsList() {
       const ids = Object.keys(selectedAdditionalDoctors).map(Number);
       const el = document.getElementById('additional-doctors-list');
       const totalRow = document.getElementById('visit-total-row');
-      if (!ids.length) { el.innerHTML = ''; totalRow.style.display = 'none'; return; }
+      const doctorGroup = document.getElementById('doctor-select-group');
+      const feeGroup = document.getElementById('fee-group');
+
+      if (!ids.length) {
+        el.innerHTML = '';
+        totalRow.style.display = 'none';
+        if (doctorGroup) doctorGroup.style.display = '';
+        if (feeGroup) feeGroup.style.display = getDoctor()?.billing_enabled ? '' : 'none';
+        return;
+      }
+
+      if (doctorGroup) doctorGroup.style.display = 'none';
+      if (feeGroup) feeGroup.style.display = 'none';
+
       const primaryId = parseInt(document.getElementById('doc-select').value);
       const primaryDoctor = (allDoctorsForAdd || []).find(x => x.id === primaryId);
       const primaryFee = parseFloat(document.getElementById('consultation-fee').value) || 0;
       const extraTotal = ids.reduce((sum, id) => sum + (selectedAdditionalDoctors[id] || 0), 0);
+      const billingOn = getDoctor()?.billing_enabled;
 
-      const rowHtml = (name, spec, fee) => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border)">
-          <div>
+      const rowHtml = (name, spec, fee, onFeeInput, onRemove) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)">
+          <div style="min-width:0">
             <div style="font-size:13.5px;font-weight:600;color:var(--navy)">${name}</div>
             ${spec ? `<div style="font-size:12px;color:var(--slate-light)">${spec}</div>` : ''}
           </div>
-          <span style="font-size:13.5px;color:var(--slate)">₹${fee || 0}</span>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+            ${billingOn
+              ? `<input type="number" min="0" step="1" class="form-control" style="width:80px;padding:6px 8px;font-size:13px" value="${fee || 0}" oninput="${onFeeInput}" />`
+              : `<span style="font-size:13.5px;color:var(--slate)">₹${fee || 0}</span>`}
+            <button type="button" class="btn btn-outline btn-sm" style="padding:4px 9px;color:#c0392b;border-color:#c0392b" onclick="${onRemove}">×</button>
+          </div>
         </div>`;
 
       let html = `<div style="border:1px solid var(--border);border-radius:var(--radius);margin:10px 0;overflow:hidden">`;
-      if (primaryDoctor) html += rowHtml(`${primaryDoctor.title} ${primaryDoctor.name}`, primaryDoctor.specialization, primaryFee);
+      if (primaryDoctor) {
+        html += rowHtml(
+          `${primaryDoctor.title} ${primaryDoctor.name}`, primaryDoctor.specialization, primaryFee,
+          `document.getElementById('consultation-fee').value=this.value; updateVisitTotal();`,
+          `removePrimaryDoctor()`
+        );
+      }
       html += ids.map(id => {
         const d = (allDoctorsForAdd || []).find(x => x.id === id);
-        return rowHtml(d ? `${d.title} ${d.name}` : 'Doctor', d ? d.specialization : '', selectedAdditionalDoctors[id]);
+        return rowHtml(
+          d ? `${d.title} ${d.name}` : 'Doctor', d ? d.specialization : '', selectedAdditionalDoctors[id],
+          `selectedAdditionalDoctors[${id}]=parseFloat(this.value)||0; updateVisitTotal();`,
+          `toggleAdditionalDoctor(${id})`
+        );
       }).join('');
       html += `</div>`;
       el.innerHTML = html;
