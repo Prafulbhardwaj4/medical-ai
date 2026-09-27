@@ -107,19 +107,21 @@ def _letter_space(text: str, char_gap="\u2009", word_gap="\u00A0\u00A0\u00A0\u00
     readable as two separate words instead of running together."""
     return word_gap.join(char_gap.join(word) for word in text.split(" "))
 
-def _labeled_paragraph(label: str, value: str, base_style: ParagraphStyle) -> Paragraph:
+def _labeled_paragraph(label: str, value: str, base_style: ParagraphStyle, label_color: str = "#1a237e") -> Paragraph:
     """'Label : value' on one line, styled so any wrapped continuation
     lines indent to sit under where the value starts — not back under the
     label — regardless of how long the label text is. Computed from the
     actual rendered width of the bold label prefix, so it lines up exactly
-    instead of relying on a guessed fixed indent."""
+    instead of relying on a guessed fixed indent. Label keeps the same blue
+    (#1a237e) used by the other section headings; only the value uses the
+    base style's color."""
     prefix = f"{label} : "
     indent = pdfmetrics.stringWidth(prefix, "Helvetica-Bold", base_style.fontSize)
     hanging_style = ParagraphStyle(
         f"{base_style.name}_hang", parent=base_style,
         leftIndent=indent, firstLineIndent=-indent,
     )
-    return Paragraph(f"<b>{prefix}</b>{value}", hanging_style)
+    return Paragraph(f'<font color="{label_color}"><b>{prefix}</b></font>{value}', hanging_style)
 
 def _make_numbered_canvas(header_text: str):
     """Returns a reportlab Canvas subclass bound to `header_text` — a
@@ -441,7 +443,7 @@ def generate_prescription_pdf(
     details_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
-        ("LEFTPADDING", (1, 0), (1, 0), 30),
+        ("LEFTPADDING", (1, 0), (1, 0), 40),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
     elements.append(details_table)
