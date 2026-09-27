@@ -1130,7 +1130,8 @@ def generate_invoice_pdf(
     invoices_dir = os.path.join(os.path.dirname(__file__), "..", "..", "invoices")
     os.makedirs(invoices_dir, exist_ok=True)
 
-    invoice_ref = receipt_number or f"INV-{hashlib.sha256(f'invoice-{invoice_id}-{settings.SECRET_KEY}'.encode()).hexdigest()[:8].upper()}"
+    invoice_hash = hashlib.sha256(f"invoice-{invoice_id}-{settings.SECRET_KEY}".encode()).hexdigest()[:6].upper()
+    invoice_ref = f"{(hospital.id if hospital else 0):05d}-{invoice_hash}-{now_ist().strftime('%m%d')}"
     safe_invoice_ref = re.sub(r'[^A-Za-z0-9_-]', '_', invoice_ref)
     filepath = os.path.join(invoices_dir, f"{safe_invoice_ref}.pdf")
 
@@ -1146,20 +1147,18 @@ def generate_invoice_pdf(
     # ── Header band: "INVOICE" left, hospital name right, on the neutral
     # brand band (same #f1f5f9 used for the table header) ──
     header_title = "TAX INVOICE" if gst_registered else "INVOICE"
-    header_title_style = ParagraphStyle("hdr_title", fontSize=20, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), leading=24)
-    header_copy_style = ParagraphStyle("hdr_copy", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.HexColor("#64748b"), leading=10)
+    header_title_style = ParagraphStyle("hdr_title", fontSize=32, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), leading=36)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=15, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=18)
 
-    header_left = [Paragraph(header_title, header_title_style),
-                   Paragraph("DUPLICATE COPY" if is_duplicate else "ORIGINAL FOR RECIPIENT", header_copy_style)]
+    header_left = [Paragraph(header_title, header_title_style)]
     header_right = [Paragraph(hospital.name, header_hosp_style)]
 
     header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
     header_band.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 10),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
@@ -1188,7 +1187,7 @@ def generate_invoice_pdf(
 
     to_lines = [
         Paragraph("BILL TO", label_style),
-        Paragraph(f"{patient.name.title()} | {patient.age}yr | Patient ID: {patient.patient_uid}", biz_bold_style),
+        Paragraph(f"{patient.name.title()} | {patient.age}yr | {patient.patient_uid}", biz_bold_style),
     ]
     if getattr(patient, "phone", None):
         to_lines.append(Paragraph(f"Contact Number: {patient.phone}", biz_style))
@@ -1198,8 +1197,9 @@ def generate_invoice_pdf(
     bill_table = Table([[from_lines, to_lines]], colWidths=[85*mm, 85*mm])
     bill_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (0, 0), 0),
-        ("RIGHTPADDING", (1, 0), (1, 0), 0),
+        ("LEFTPADDING", (0, 0), (0, 0), 10),
+        ("LEFTPADDING", (1, 0), (1, 0), 25),
+        ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
     elements.append(bill_table)
     elements.append(Spacer(1, 4*mm))
@@ -1340,12 +1340,12 @@ def generate_invoice_pdf(
     elements.append(Spacer(1, 8*mm))
     now_dt = now_ist()
     footer_label_style = ParagraphStyle("footlabel", fontSize=8.5, fontName="Helvetica", textColor=colors.HexColor("#334155"), leading=12)
-    footer_center_style = ParagraphStyle("footcenter", fontSize=13, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"), leading=16)
-    footer_right_style = ParagraphStyle("footright", fontSize=8.5, fontName="Helvetica", alignment=TA_RIGHT, textColor=colors.HexColor("#334155"), leading=12)
+    footer_center_style = ParagraphStyle("footcenter", fontSize=20, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"), leading=24)
+    footer_right_style = ParagraphStyle("footright", fontSize=8.5, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.HexColor("#334155"), leading=12)
     footer_band = Table(
         [[
             Paragraph(f"Date: {now_dt.strftime('%d %b %Y')}<br/>Time: {now_dt.strftime('%I:%M %p')}", footer_label_style),
-            Paragraph("Thank<br/>You!", footer_center_style),
+            Paragraph("Thank You!", footer_center_style),
             Paragraph("_______________________<br/>Authorized Signatory", footer_right_style),
         ]],
         colWidths=[56*mm, 58*mm, 56*mm]
@@ -1396,9 +1396,7 @@ def generate_invoice_pdf(
     elements.append(Paragraph("This invoice is generated and digitally verified by MedScribe.",
                                ParagraphStyle("brand", fontSize=8, fontName="Helvetica-Oblique", alignment=TA_CENTER, textColor=colors.HexColor("#64748b"))))
 
-    ref = receipt_number or f"INV-{invoice_id}"
-    header_text = f"{hospital.name if hospital else ''}  |  {patient.name.title()} ({patient.patient_uid})  |  {ref}"
-    doc.build(elements, canvasmaker=_make_numbered_canvas(header_text))
+    doc.build(elements, canvasmaker=_make_numbered_canvas(""))
     return filepath
 
 def generate_credit_debit_note_pdf(note, invoice, hospital, patient) -> str:
