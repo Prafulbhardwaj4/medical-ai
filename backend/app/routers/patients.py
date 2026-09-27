@@ -1959,7 +1959,7 @@ def reception_pending_payments(
             invoice = db.query(Invoice).filter(Invoice.id == c.invoice_id).first()
             billed_count = len(json.loads(invoice.items_json)) if invoice and invoice.items_json else 0
             needs_regenerate = len(current_items) > billed_count
-            invoice_generated_at = invoice.created_at.isoformat() if invoice and invoice.created_at else None
+            invoice_generated_at = invoice.generated_at.isoformat() if invoice and invoice.generated_at else None
 
         # Walk-ins: check-in time. Online-booked: their consultation slot
         # time is more useful to reception than when the checkin row itself
