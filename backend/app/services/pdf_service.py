@@ -232,7 +232,9 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
 
     # ── Token number — a bordered, tinted badge instead of a bare huge
     # number; size brought down from 48pt so a full alphanumeric token
-    # (not just a 1-2 digit one) still looks deliberate, not oversized ──
+    # (not just a 1-2 digit one) still looks deliberate, not oversized.
+    # Box trimmed down from the first pass — it was reading oversized next
+    # to the rest of the slip ──
     tok_label_style = ParagraphStyle("tok_label", fontSize=9, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0d9488"), leading=12)
     tok_big_style = ParagraphStyle("tok_big", fontSize=26, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"), leading=30)
     badge_content = [
@@ -240,14 +242,14 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         Spacer(1, 2*mm),
         Paragraph("\u2009".join(str(checkin.token_number)), tok_big_style),
     ]
-    badge = Table([[badge_content]], colWidths=[110*mm])
+    badge = Table([[badge_content]], colWidths=[95*mm])
     badge.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("BOX", (0, 0), (-1, -1), 1.1, colors.HexColor("#0f1f3d")),
-        ("TOPPADDING", (0, 0), (-1, -1), 8*mm),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8*mm),
-        ("LEFTPADDING", (0, 0), (-1, -1), 6*mm),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6*mm),
+        ("TOPPADDING", (0, 0), (-1, -1), 5*mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5*mm),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5*mm),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5*mm),
     ]))
     badge.hAlign = "CENTER"
     elements.append(badge)
@@ -271,7 +273,15 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         doctor_line_style = ParagraphStyle("doctor_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"))
         doctor_room_style = ParagraphStyle("doctor_room", fontSize=10.5, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"))
 
-        elements.append(Paragraph(f"Doctor Visits: {len(all_doctors)}", doctors_label_style))
+        # Doctor Visits + Patient/Date/Time folded into one line instead of
+        # repeating patient/date/time again further down in the info table
+        combo_line = (
+            f"<b>Doctor Visits:</b> {len(all_doctors)}  |  "
+            f"<b>Patient:</b> {patient.name}  |  "
+            f"<b>Date:</b> {checkin.visit_date.strftime('%d %b %Y')}  |  "
+            f"<b>Time:</b> {checkin.created_at.strftime('%I:%M %p') if checkin.created_at else '—'}"
+        )
+        elements.append(Paragraph(combo_line, doctors_label_style))
         doctor_rows = [[
             Paragraph(d["doctor_name"] + (f", {d['specialization']}" if d.get("specialization") else ""), doctor_line_style),
             Paragraph(d.get("room_number") or "—", doctor_room_style),
@@ -292,33 +302,40 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         elements.append(doctor_table)
         elements.append(Spacer(1, 3*mm))
 
-    rows = [("PATIENT NAME", patient.name)]
     if len(all_doctors) == 1:
-        rows.append(("DOCTOR", all_doctors[0]["doctor_name"]))
-        rows.append(("ROOM", all_doctors[0].get("room_number") or "—"))
-    rows += [
-        ("DATE", checkin.visit_date.strftime("%d %b %Y")),
-        ("TIME", checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—"),
-    ]
-    if nurse_name:
-        rows.append(("NURSE/ASSISTANT", nurse_name))
+        # Single-doctor visit: patient/doctor/room/date/time as before —
+        # nurse/assistant row dropped per request, only for this case
+        rows = [
+            ("PATIENT NAME", patient.name),
+            ("DOCTOR", all_doctors[0]["doctor_name"]),
+            ("ROOM", all_doctors[0].get("room_number") or "—"),
+            ("DATE", checkin.visit_date.strftime("%d %b %Y")),
+            ("TIME", checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—"),
+        ]
+    else:
+        # Multi-doctor visit: patient/date/time already shown in the
+        # combo line above, right next to the doctor list — not repeated here
+        rows = []
+        if nurse_name:
+            rows.append(("NURSE/ASSISTANT", nurse_name))
 
-    table_data = [[Paragraph(f"{lbl}", row_label_style), Paragraph(f"{val}", row_value_style)] for lbl, val in rows]
-    info_table = Table(table_data, colWidths=[55*mm, 95*mm])
-    info_style_cmds = [
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4*mm),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4*mm),
-        ("TOPPADDING", (0, 0), (-1, -1), 3.2*mm),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3.2*mm),
-        ("LINEBELOW", (0, 0), (-1, -2), 0.5, colors.HexColor("#e2e8f0")),
-    ]
-    for i in range(len(rows)):
-        if i % 2 == 1:
-            info_style_cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#f8fafc")))
-    info_table.setStyle(TableStyle(info_style_cmds))
-    elements.append(info_table)
-    elements.append(Spacer(1, 10*mm))
+    if rows:
+        table_data = [[Paragraph(f"{lbl}", row_label_style), Paragraph(f"{val}", row_value_style)] for lbl, val in rows]
+        info_table = Table(table_data, colWidths=[55*mm, 95*mm])
+        info_style_cmds = [
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4*mm),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4*mm),
+            ("TOPPADDING", (0, 0), (-1, -1), 3.2*mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3.2*mm),
+            ("LINEBELOW", (0, 0), (-1, -2), 0.5, colors.HexColor("#e2e8f0")),
+        ]
+        for i in range(len(rows)):
+            if i % 2 == 1:
+                info_style_cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#f8fafc")))
+        info_table.setStyle(TableStyle(info_style_cmds))
+        elements.append(info_table)
+        elements.append(Spacer(1, 10*mm))
 
     footer_style = ParagraphStyle("footer", fontSize=8, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
     elements.append(Paragraph("Please keep this for your visit.", footer_style))
