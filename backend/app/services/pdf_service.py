@@ -214,8 +214,8 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     # in letter-spaced serif, hospital name right in Times-Bold, both on
     # the brand band ──
     header_title_spaced = _letter_space("TOKEN RECEIPT")
-    header_title_style = ParagraphStyle("hdr_title", fontSize=16, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=20)
-    header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=16, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=19)
+    header_title_style = ParagraphStyle("hdr_title", fontSize=28, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=30)
+    header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=17, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=20)
     header_left = [Paragraph(header_title_spaced, header_title_style)]
     header_right = [Paragraph(hospital.name, header_hosp_style)]
     header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
@@ -324,9 +324,12 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     if rows:
         table_data = [[Paragraph(f"{lbl}", row_label_style), Paragraph(f"{val}", row_value_style)] for lbl, val in rows]
         info_table = Table(table_data, colWidths=[55*mm, 95*mm])
+        # Multi-doctor case: flush left, aligned with "Doctor Visits:" above
+        # (which has no left padding). Single-doctor case is untouched.
+        info_left_pad = 0 if len(all_doctors) > 1 else 4*mm
         info_style_cmds = [
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4*mm),
+            ("LEFTPADDING", (0, 0), (-1, -1), info_left_pad),
             ("RIGHTPADDING", (0, 0), (-1, -1), 4*mm),
             ("TOPPADDING", (0, 0), (-1, -1), 3.2*mm),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 3.2*mm),
