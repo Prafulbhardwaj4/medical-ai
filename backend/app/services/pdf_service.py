@@ -214,7 +214,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     # in letter-spaced serif, hospital name right in Times-Bold, both on
     # the brand band ──
     header_title_spaced = _letter_space("TOKEN RECEIPT")
-    header_title_style = ParagraphStyle("hdr_title", fontSize=28, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=30)
+    header_title_style = ParagraphStyle("hdr_title", fontSize=23, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=26)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=17, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=20)
     header_left = [Paragraph(header_title_spaced, header_title_style)]
     header_right = [Paragraph(hospital.name, header_hosp_style)]
@@ -236,13 +236,13 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     # Box trimmed down from the first pass — it was reading oversized next
     # to the rest of the slip ──
     tok_label_style = ParagraphStyle("tok_label", fontSize=8, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0d9488"), leading=11)
-    tok_big_style = ParagraphStyle("tok_big", fontSize=18, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"), leading=21)
+    tok_big_style = ParagraphStyle("tok_big", fontSize=15, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"), leading=21)
     badge_content = [
         Paragraph(_letter_space("YOUR TOKEN NUMBER"), tok_label_style),
         Spacer(1, 1.5*mm),
         Paragraph("\u2009".join(str(checkin.token_number)), tok_big_style),
     ]
-    badge = Table([[badge_content]], colWidths=[70*mm])
+    badge = Table([[badge_content]], colWidths=[77*mm])
     badge.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("BOX", (0, 0), (-1, -1), 1.1, colors.HexColor("#0f1f3d")),
@@ -273,7 +273,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         # row per doctor) — Patient Name / Date / Time no longer live here,
         # they flow through the same label-left, value-right rows section
         # used by the single-doctor case, just below.
-        visits_style = ParagraphStyle("visits_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), spaceAfter=4)
+        visits_style = ParagraphStyle("visits_line", fontSize=10.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#0f1f3d"), spaceAfter=4, leftIndent=4*mm)
         elements.append(Paragraph(f"Doctor Visits: {len(all_doctors)}", visits_style))
         elements.append(Spacer(1, 2*mm))
 
