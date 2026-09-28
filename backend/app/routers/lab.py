@@ -1298,6 +1298,8 @@ def get_test_report(
         from app.models.mlc_custody import MlcChainOfCustody
         mlc_custody_count = db.query(MlcChainOfCustody).filter(MlcChainOfCustody.test_order_id == order.id).count()
 
+    token_consultation = db.query(Consultation).filter(Consultation.id == order.consultation_id).first() if order.consultation_id else None
+    report_creator = db.query(Doctor).filter(Doctor.id == order.completed_by).first() if order.completed_by else None
     filepath = generate_test_report_pdf(
         order=order,
         patient=patient,
@@ -1307,6 +1309,8 @@ def get_test_report(
         hospital=current_doctor.hospital,
         verify_hash=order.verify_hash,
         mlc_custody_count=mlc_custody_count,
+        token_number=token_consultation.token_number if token_consultation else None,
+        report_created_by=report_creator,
     )
 
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
@@ -1583,6 +1587,9 @@ def get_combined_test_report(
     sorted_ids = "-".join(str(i) for i in sorted(ids))
     combined_verify_hash = generate_verify_hash(sorted_ids, current_doctor.hospital_id, kind="combined_lab_report")
 
+    token_consultation = db.query(Consultation).filter(Consultation.id == orders[0].consultation_id).first() if orders[0].consultation_id else None
+    creator_id = next((o.completed_by for o in orders if o.completed_by), None)
+    report_creator = db.query(Doctor).filter(Doctor.id == creator_id).first() if creator_id else None
     filepath = generate_combined_test_report_pdf(
         order_id_key=f"{orders[0].patient_id}_{sorted_ids}",
         tests_payload=tests_payload,
@@ -1591,6 +1598,8 @@ def get_combined_test_report(
         lab_staff=lab_staff,
         hospital=current_doctor.hospital,
         verify_hash=combined_verify_hash,
+        token_number=token_consultation.token_number if token_consultation else None,
+        report_created_by=report_creator,
     )
 
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))

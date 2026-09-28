@@ -123,6 +123,15 @@ def _labeled_paragraph(label: str, value: str, base_style: ParagraphStyle, label
     )
     return Paragraph(f'<font color="{label_color}"><b>{prefix}</b></font>{value}', hanging_style)
 
+def _patient_summary_line(patient) -> str:
+    """'Name | Age | Gender | Blood Group', with blood group left out
+    entirely when it isn't recorded (no dangling separator)."""
+    parts = [patient.name.title(), f"{patient.age}yr", patient.gender.capitalize()]
+    if getattr(patient, "blood_group", None):
+        parts.append(patient.blood_group)
+    return " | ".join(parts)
+
+
 def _make_numbered_canvas(header_text: str):
     """Returns a reportlab Canvas subclass bound to `header_text` — a
     compact repeating identity line (hospital + patient/ID + document
@@ -159,6 +168,104 @@ def _make_numbered_canvas(header_text: str):
             self.restoreState()
 
     return _NumberedCanvas
+
+
+def _build_report_header_block(hospital, patient, ordering_doctor, report_dt, token_number=None,
+                               report_created_by=None):
+    """Header band + patient / ordering-doctor / hospital details shared by
+    both lab report PDFs. Same look as the prescription header."""
+    elements = []
+
+    header_title_style = ParagraphStyle("hdr_title", fontSize=32, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=36)
+    header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=15, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=18)
+
+    header_right = []
+    logo_img = _decode_logo_image(getattr(hospital, "logo_base64", None))
+    if logo_img:
+        logo_img.hAlign = "RIGHT"
+        header_right.append(logo_img)
+        header_right.append(Spacer(1, 1.5*mm))
+    header_right.append(Paragraph(hospital.name, header_hosp_style))
+
+    header_band = Table([[[Paragraph("TEST REPORT", header_title_style)], header_right]], colWidths=[95*mm, 75*mm])
+    header_band.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING", (0, 0), (0, 0), 10),
+        ("RIGHTPADDING", (1, 0), (1, 0), 10),
+    ]))
+    elements.append(header_band)
+    elements.append(Spacer(1, 6*mm))
+
+    biz_style = ParagraphStyle("bizblock", fontSize=9.5, fontName="Helvetica", leading=13, textColor=colors.HexColor("#0f1f3d"))
+    biz_bold_style = ParagraphStyle("bizbold", fontSize=9.5, fontName="Helvetica-Bold", leading=13, textColor=colors.HexColor("#0f1f3d"))
+    label_style = ParagraphStyle("bizlabel", fontSize=8.5, fontName="Helvetica-Bold", leading=12, textColor=colors.HexColor("#0d9488"), spaceAfter=2)
+
+    # ── Patient details (left) ──
+    patient_lines = [
+        Paragraph("PATIENT DETAILS", label_style),
+        Paragraph(_patient_summary_line(patient), biz_bold_style),
+        Paragraph(f"Patient ID: {patient.patient_uid}", biz_style),
+    ]
+    if getattr(patient, "phone", None):
+        patient_lines.append(Paragraph(f"Contact Number: {patient.phone}", biz_style))
+    if token_number:
+        patient_lines.append(Paragraph(f"Token: {token_number}", biz_bold_style))
+
+    # ── Ordering doctor + sample/report people (right) ──
+    if ordering_doctor:
+        doctor_name_line = f"{ordering_doctor.title} {ordering_doctor.name}"
+        if getattr(ordering_doctor, "specialization", None):
+            doctor_name_line += f" | {ordering_doctor.specialization}"
+    else:
+        doctor_name_line = "—"
+    doctor_lines = [
+        Paragraph("ORDERING DOCTOR", label_style),
+        Paragraph(doctor_name_line, biz_bold_style),
+        Paragraph(f"Report Date: {report_dt.strftime('%d %b %Y, %I:%M %p')}", biz_style),
+    ]
+    if report_created_by:
+        creator_title = getattr(report_created_by, "title", None)
+        creator_name = f"{creator_title} {report_created_by.name}" if creator_title else report_created_by.name
+        doctor_lines.append(Paragraph(f"Report Created By: {creator_name}", biz_style))
+
+    details_table = Table([[patient_lines, doctor_lines]], colWidths=[95*mm, 75*mm])
+    details_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (0, 0), 10),
+        ("LEFTPADDING", (1, 0), (1, 0), 20),
+        ("RIGHTPADDING", (1, 0), (1, 0), 10),
+    ]))
+    elements.append(details_table)
+    elements.append(Spacer(1, 4*mm))
+
+    # ── Hospital details ──
+    hosp_lines = [Paragraph("HOSPITAL DETAILS", label_style), Paragraph(hospital.name, biz_style)]
+    if hospital.address:
+        hosp_lines.append(Paragraph(hospital.address, biz_style))
+    city_state = ", ".join([p for p in [hospital.city, hospital.state] if p])
+    if city_state:
+        hosp_lines.append(Paragraph(city_state, biz_style))
+    if getattr(hospital, "email", None):
+        hosp_lines.append(Paragraph(hospital.email, biz_style))
+    if getattr(hospital, "phone", None):
+        hosp_lines.append(Paragraph(f"Contact No: {hospital.phone}", biz_style))
+    if getattr(hospital, "phone2", None):
+        hosp_lines.append(Paragraph(hospital.phone2, biz_style))
+    hosp_table = Table([[hosp_lines]], colWidths=[170*mm])
+    hosp_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (0, 0), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    elements.append(hosp_table)
+    elements.append(Spacer(1, 4*mm))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e2e8f0")))
+    elements.append(Spacer(1, 4*mm))
+    return elements
 
 
 def build_letterhead(hospital, subtitle=None):
@@ -316,11 +423,20 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         elements.append(doctor_table)
         elements.append(Spacer(1, 3*mm))
 
+    # Patient line (Name | Age | Gender | Blood Group) + Patient ID + phone,
+    # shared by both the single- and multi-doctor layouts below.
+    patient_rows = [
+        ("PATIENT", _patient_summary_line(patient)),
+        ("PATIENT ID", patient.patient_uid),
+    ]
+    if getattr(patient, "phone", None):
+        patient_rows.append(("CONTACT NUMBER", patient.phone))
+
     if len(all_doctors) == 1:
         # Single-doctor visit: patient/doctor/room/date/time as before —
         # nurse/assistant row dropped per request, only for this case
         rows = [
-            ("PATIENT NAME", patient.name),
+            *patient_rows,
             ("DOCTOR", all_doctors[0]["doctor_name"]),
             ("ROOM", all_doctors[0].get("room_number") or "—"),
             ("DATE", checkin.visit_date.strftime("%d %b %Y")),
@@ -328,10 +444,10 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         ]
     else:
         # Multi-doctor visit: doctor list already shown above (name/room);
-        # Patient Name / Date / Time follow the same label-left, value-right
+        # patient rows / Date / Time follow the same label-left, value-right
         # row style as the single-doctor case.
         rows = [
-            ("PATIENT NAME", patient.name),
+            *patient_rows,
             ("DATE", checkin.visit_date.strftime("%d %b %Y")),
             ("TIME", checkin.created_at.strftime("%I:%M %p") if checkin.created_at else "—"),
         ]
@@ -418,7 +534,7 @@ def generate_prescription_pdf(
 
     patient_lines = [
         Paragraph("PATIENT DETAILS", label_style),
-        Paragraph(f"{patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}", biz_bold_style),
+        Paragraph(_patient_summary_line(patient), biz_bold_style),
         Paragraph(f"Patient ID: {patient.patient_uid}", biz_style),
     ]
     if getattr(patient, "phone", None):
@@ -710,6 +826,8 @@ def generate_test_report_pdf(
     hospital: object,
     verify_hash: str = None,
     mlc_custody_count: int = 0,
+    token_number: str = None,
+    report_created_by: object = None,
 ) -> str:
     ensure_reports_dir()
 
@@ -733,19 +851,12 @@ def generate_test_report_pdf(
     section_style = ParagraphStyle("section", fontSize=11, fontName="Helvetica-Bold", textColor=colors.HexColor("#1a237e"), spaceAfter=2*mm)
     body_style = ParagraphStyle("body", fontSize=10, fontName="Helvetica", leading=14)
 
-    elements.extend(build_letterhead(hospital, subtitle="Laboratory Test Report"))
-    elements.append(Spacer(1, 3*mm))
-    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a237e")))
-    elements.append(Spacer(1, 4*mm))
-
-    bg = f" | Blood Group: {patient.blood_group}" if patient.blood_group else ""
-    elements.append(Paragraph(
-        f"<b>Patient:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}{bg}",
-        styles["Normal"]
+    report_dt = order.verified_at if getattr(order, "verified_at", None) else now_ist()
+    elements.extend(_build_report_header_block(
+        hospital, patient, ordering_doctor, report_dt,
+        token_number=token_number, report_created_by=report_created_by,
     ))
-    elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", styles["Normal"]))
-    if getattr(patient, "address", None):
-        elements.append(Paragraph(f"<b>Address:</b> {patient.address}", styles["Normal"]))
+
     if getattr(order, "collected_at", None):
         elements.append(Paragraph(f"<b>Specimen Collected:</b> {order.collected_at.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     if getattr(order, "accession_number", None):
@@ -753,8 +864,6 @@ def generate_test_report_pdf(
         elements.append(Paragraph(f"<b>Accession No:</b> {order.accession_number}{acc_time}", styles["Normal"]))
     if getattr(order, "report_reference", None):
         elements.append(Paragraph(f"<b>Report Ref:</b> {order.report_reference}", styles["Normal"]))
-    report_dt = order.verified_at if getattr(order, "verified_at", None) else now_ist()
-    elements.append(Paragraph(f"<b>Report Date:</b> {report_dt.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     elements.append(Spacer(1, 4*mm))
 
     # ── MLC banner (item 2) — proposed wording/placement, for review ──
@@ -854,9 +963,9 @@ def generate_test_report_pdf(
         qr_buffer.seek(0)
         qr_image = Image(qr_buffer, width=22*mm, height=22*mm)
         verify_text_style = ParagraphStyle("verifytext", fontSize=8, fontName="Helvetica", leading=12, textColor=colors.HexColor("#334155"))
+        token_line = f"<b>Token:</b> {token_number}<br/>" if token_number else ""
         verify_table = Table([[qr_image, Paragraph(
-            f"<b>Verify this report</b><br/>Scan QR code to verify authenticity.<br/>"
-            f"Verification Code: <b>{verify_hash}</b><br/>Link: {verify_url_display}",
+            f"{token_line}Scan QR code to authenticate.",
             verify_text_style
         )]], colWidths=[28*mm, 142*mm])
         verify_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
@@ -868,10 +977,6 @@ def generate_test_report_pdf(
     elements.append(Spacer(1, 4*mm))
 
     footer_style = ParagraphStyle("footer", fontSize=9, fontName="Helvetica", textColor=colors.HexColor("#334155"))
-    doctor_line = f"<b>Ordering Doctor:</b> {ordering_doctor.title} {ordering_doctor.name}" if ordering_doctor else "<b>Ordering Doctor:</b> —"
-    if ordering_doctor and getattr(ordering_doctor, "registration_number", None):
-        doctor_line += f" (Reg. No: {ordering_doctor.registration_number})"
-    elements.append(Paragraph(doctor_line, footer_style))
     if lab_staff:
         verified_line = f"<b>Verified By:</b> {lab_staff.title} {lab_staff.name}" if getattr(lab_staff, "title", None) else f"<b>Verified By:</b> {lab_staff.name}"
         if getattr(order, "verified_at", None):
@@ -879,16 +984,13 @@ def generate_test_report_pdf(
         elements.append(Paragraph(verified_line, footer_style))
     else:
         elements.append(Paragraph("<b>Verified By:</b> —", footer_style))
-    # Item 4 — proposed wording, for review
-    disclaimer_name = f"{lab_staff.title} {lab_staff.name}" if lab_staff and getattr(lab_staff, "title", None) else (lab_staff.name if lab_staff else "the verifying lab officer")
-    elements.append(Paragraph(
-        f"This report is generated by MedScribe's laboratory information system and electronically verified by {disclaimer_name} — no physical signature is required.",
-        ParagraphStyle("disclaimer", fontSize=7.5, fontName="Helvetica-Oblique", textColor=colors.grey)
-    ))
+    elements.append(Spacer(1, 3*mm))
+    end_style = ParagraphStyle("report_end", fontSize=8, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
+    elements.append(Paragraph("This report is digitally generated and valid without a physical signature.", end_style))
+    elements.append(Paragraph("This report is generated and digitally verified by MedScribe.",
+                               ParagraphStyle("brand", fontSize=8, fontName="Helvetica-Oblique", alignment=TA_CENTER, textColor=colors.HexColor("#64748b"))))
 
-    ref = getattr(order, "report_reference", None) or f"ORD-{order.id}"
-    header_text = f"{hospital.name}  |  {patient.name.title()} ({patient.patient_uid})  |  {ref}"
-    doc.build(elements, canvasmaker=_make_numbered_canvas(header_text))
+    doc.build(elements, canvasmaker=_make_numbered_canvas(""))
     return filepath
 
 def _parse_range_bounds(range_str):
@@ -935,7 +1037,7 @@ def _is_out_of_range(value_str, range_str):
         return True
     return False
 
-def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, ordering_doctor, lab_staff, hospital, verify_hash: str = None) -> str:
+def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, ordering_doctor, lab_staff, hospital, verify_hash: str = None, token_number: str = None, report_created_by: object = None) -> str:
     ensure_reports_dir()
 
     filename = f"combined_report_{order_id_key}.pdf"
@@ -958,24 +1060,12 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     section_style = ParagraphStyle("section", fontSize=12, fontName="Helvetica-Bold", textColor=colors.HexColor("#1a237e"), spaceAfter=2*mm, spaceBefore=4*mm)
     body_style = ParagraphStyle("body", fontSize=10, fontName="Helvetica", leading=14)
 
-    elements.extend(build_letterhead(hospital, subtitle="Laboratory Test Report"))
-    elements.append(Spacer(1, 4*mm))
-    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a237e")))
-    elements.append(Spacer(1, 5*mm))
-
-    bg = f" | Blood Group: {patient.blood_group}" if patient.blood_group else ""
-    elements.append(Paragraph(
-        f"<b>Patient:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}{bg}",
-        styles["Normal"]
-    ))
-    elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", styles["Normal"]))
-    if getattr(patient, "address", None):
-        elements.append(Paragraph(f"<b>Address:</b> {patient.address}", styles["Normal"]))
     latest_verified = max((t["verified_at"] for t in tests_payload if t.get("verified_at")), default=None)
     report_dt = latest_verified if latest_verified else now_ist()
-    elements.append(Paragraph(f"<b>Report Date:</b> {report_dt.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
-    elements.append(Spacer(1, 4*mm))
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
+    elements.extend(_build_report_header_block(
+        hospital, patient, ordering_doctor, report_dt,
+        token_number=token_number, report_created_by=report_created_by,
+    ))
 
     caveat_style = ParagraphStyle("caveat", fontSize=9.5, fontName="Helvetica-Bold", textColor=colors.HexColor("#b45309"), spaceAfter=2*mm)
     ref_style = ParagraphStyle("ref", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.grey, spaceAfter=2*mm)
@@ -1055,9 +1145,9 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
         qr_buffer.seek(0)
         qr_image = Image(qr_buffer, width=22*mm, height=22*mm)
         verify_text_style = ParagraphStyle("verifytext", fontSize=8, fontName="Helvetica", leading=12, textColor=colors.HexColor("#334155"))
+        token_line = f"<b>Token:</b> {token_number}<br/>" if token_number else ""
         verify_table = Table([[qr_image, Paragraph(
-            f"<b>Verify this report</b><br/>Scan QR code to verify authenticity.<br/>"
-            f"Verification Code: <b>{verify_hash}</b><br/>Link: {verify_url_display}",
+            f"{token_line}Scan QR code to authenticate.",
             verify_text_style
         )]], colWidths=[28*mm, 142*mm])
         verify_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
@@ -1068,10 +1158,6 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     elements.append(Spacer(1, 4*mm))
 
     footer_style = ParagraphStyle("footer", fontSize=9, fontName="Helvetica", textColor=colors.HexColor("#334155"))
-    doctor_line = f"<b>Ordering Doctor:</b> {ordering_doctor.title} {ordering_doctor.name}" if ordering_doctor else "<b>Ordering Doctor:</b> —"
-    if ordering_doctor and ordering_doctor.registration_number:
-        doctor_line += f" (Reg. No: {ordering_doctor.registration_number})"
-    elements.append(Paragraph(doctor_line, footer_style))
     if lab_staff:
         verified_line = f"<b>Verified By:</b> {lab_staff.title} {lab_staff.name}" if getattr(lab_staff, "title", None) else f"<b>Verified By:</b> {lab_staff.name}"
         if latest_verified:
@@ -1079,14 +1165,13 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
         elements.append(Paragraph(verified_line, footer_style))
     else:
         elements.append(Paragraph("<b>Verified By:</b> —", footer_style))
-    disclaimer_name = f"{lab_staff.title} {lab_staff.name}" if lab_staff and getattr(lab_staff, "title", None) else (lab_staff.name if lab_staff else "the verifying lab officer")
-    elements.append(Paragraph(
-        f"This report is generated by MedScribe's laboratory information system and electronically verified by {disclaimer_name} — no physical signature is required.",
-        ParagraphStyle("disclaimer", fontSize=7.5, fontName="Helvetica-Oblique", textColor=colors.grey)
-    ))
+    elements.append(Spacer(1, 3*mm))
+    end_style = ParagraphStyle("report_end", fontSize=8, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
+    elements.append(Paragraph("This report is digitally generated and valid without a physical signature.", end_style))
+    elements.append(Paragraph("This report is generated and digitally verified by MedScribe.",
+                               ParagraphStyle("brand", fontSize=8, fontName="Helvetica-Oblique", alignment=TA_CENTER, textColor=colors.HexColor("#64748b"))))
 
-    header_text = f"{hospital.name}  |  {patient.name.title()} ({patient.patient_uid})  |  Combined Lab Report"
-    doc.build(elements, canvasmaker=_make_numbered_canvas(header_text))
+    doc.build(elements, canvasmaker=_make_numbered_canvas(""))
     return filepath
 
 def generate_radiology_report_pdf(order: object, patient: object, ordering_doctor: object, radiology_staff: object, hospital: object, verify_hash: str = None, reporting_staff: object = None) -> str:

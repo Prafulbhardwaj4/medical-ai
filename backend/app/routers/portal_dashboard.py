@@ -640,7 +640,7 @@ def download_consultation_test_report(
     filepath = generate_combined_test_report_pdf(
         order_id_key=f"portal_{consultation_id}", tests_payload=tests_payload,
         patient=patient, ordering_doctor=ordering_doctor, lab_staff=lab_staff, hospital=hospital,
-        verify_hash=combined_verify_hash,
+        verify_hash=combined_verify_hash, token_number=consultation.token_number,
     )
     return FileResponse(filepath, media_type="application/pdf", filename=f"test_report_{consultation.token_number}.pdf")
 
