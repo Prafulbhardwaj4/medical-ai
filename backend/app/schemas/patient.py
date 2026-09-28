@@ -136,6 +136,7 @@ class CheckinOut(BaseModel):
     visit_group_id: Optional[int] = None
     additional_tokens: Optional[List[dict]] = None
     patient_name: str
+    patient_uid: Optional[str] = None
     doctor_name: str
     doctor_specialization: Optional[str] = None
     doctor_room_number: Optional[str] = None

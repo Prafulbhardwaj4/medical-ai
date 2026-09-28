@@ -2141,7 +2141,7 @@
       };
       set('hospital', getDoctor()?.clinic_name || '');
       set('token', data.token_number);
-      set('name', data.patient_name);
+      set('name', data.patient_uid ? `${data.patient_name} (${data.patient_uid})` : data.patient_name);
       set('doctor', data.doctor_name);
       set('room', data.doctor_room_number || '—');
       set('date', formatDate(data.visit_date));

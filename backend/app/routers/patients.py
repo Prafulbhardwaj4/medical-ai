@@ -658,7 +658,7 @@ def checkin_today(
             "token_number": ac.token_number,
             "doctor_name": f"{ac_doctor.title} {ac_doctor.name}" if ac_doctor else "—",
             "specialization": ac_doctor.specialization if ac_doctor else None,
-            "room_number": get_doctor_current_room(db, ac_doctor.id, current_doctor.hospital_id) if ac_doctor else None,
+            "room_number": get_checkin_room(db, ac, current_doctor.hospital_id) if ac_doctor else None,
             "consultation_fee": ac.consultation_fee,
         })
 
@@ -666,9 +666,10 @@ def checkin_today(
         "exists": True,
         "token_number": checkin.token_number,
         "patient_name": patient.name,
+        "patient_uid": patient.patient_uid,
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "doctor_specialization": doctor.specialization if doctor else None,
-        "doctor_room_number": get_doctor_current_room(db, doctor.id, current_doctor.hospital_id) if doctor else None,
+        "doctor_room_number": get_checkin_room(db, checkin, current_doctor.hospital_id) if doctor else None,
         "issue_category": checkin.issue_category,
         "additional_tokens": additional_tokens_out or None,
         "visit_date": checkin.visit_date.isoformat(),
@@ -762,15 +763,16 @@ def get_checkin_slip(
             "token_number": ac.token_number,
             "doctor_name": f"{ac_doctor.title} {ac_doctor.name}" if ac_doctor else "—",
             "specialization": ac_doctor.specialization if ac_doctor else None,
-            "room_number": get_doctor_current_room(db, ac_doctor.id, current_doctor.hospital_id) if ac_doctor else None,
+            "room_number": get_checkin_room(db, ac, current_doctor.hospital_id) if ac_doctor else None,
         })
 
     return {
         "token_number": checkin.token_number,
         "patient_name": patient.name if patient else "—",
+        "patient_uid": patient.patient_uid if patient else None,
         "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
         "doctor_specialization": doctor.specialization if doctor else None,
-        "doctor_room_number": get_doctor_current_room(db, doctor.id, current_doctor.hospital_id) if doctor else None,
+        "doctor_room_number": get_checkin_room(db, checkin, current_doctor.hospital_id) if doctor else None,
         "issue_category": checkin.issue_category,
         "additional_tokens": additional_tokens_out or None,
         "visit_date": checkin.visit_date.isoformat(),
@@ -820,10 +822,10 @@ def preview_token_slip_pdf(
                 additional_doctors.append({
                     "doctor_name": f"{sc_doctor.title} {sc_doctor.name}",
                     "specialization": sc_doctor.specialization,
-                    "room_number": get_doctor_current_room(db, sc_doctor.id, current_doctor.hospital_id),
+                    "room_number": get_checkin_room(db, sc, current_doctor.hospital_id),
                 })
 
-    primary_room = get_doctor_current_room(db, doctor.id, current_doctor.hospital_id) if doctor else None
+    primary_room = get_checkin_room(db, checkin, current_doctor.hospital_id) if doctor else None
 
     from app.services.pdf_service import generate_token_slip_pdf
     pdf_path = generate_token_slip_pdf(
@@ -1176,6 +1178,15 @@ def get_doctor_current_room(db: Session, doctor_id: int, hospital_id: int) -> Op
     return display or None
 
 
+def get_checkin_room(db: Session, checkin, hospital_id: int) -> Optional[str]:
+    """The room fixed on this check-in when its token was issued. Only older
+    tokens (doctor_room is NULL, from before the column existed) fall back to
+    today's live attendance lookup."""
+    if checkin.doctor_room is not None:
+        return checkin.doctor_room or None
+    return get_doctor_current_room(db, checkin.doctor_id, hospital_id)
+
+
 def generate_token_number(db: Session, hospital_id: int, hospital_code: str) -> str:
     import secrets, string
     prefix = hospital_code.replace("-", "")[:4].upper()
@@ -1278,6 +1289,7 @@ def checkin_patient(
     # hard backstop. Retry on the IntegrityError it raises rather than
     # letting a genuine race surface as a raw 500.
     max_token_attempts = 5
+    issued_room = get_doctor_current_room(db, doctor.id, current_doctor.hospital_id) or ""
     for attempt in range(max_token_attempts):
         checkin = Checkin(
             hospital_id=current_doctor.hospital_id,
@@ -1290,7 +1302,8 @@ def checkin_patient(
             nurse_id=nurse.id if nurse else None,
             vitals_status="pending" if nurse else "none",
             consultation_fee=consultation_fee,
-            test_fee=payload.test_fee
+            test_fee=payload.test_fee,
+            doctor_room=issued_room,
         )
         db.add(checkin)
         try:
@@ -1362,6 +1375,7 @@ def checkin_patient(
                     vitals_status="pending" if extra_nurse else "none",
                     consultation_fee=extra_fee,
                     visit_group_id=checkin.id,
+                    doctor_room=get_doctor_current_room(db, extra_doctor.id, current_doctor.hospital_id) or "",
                 )
                 db.add(extra_checkin)
                 try:
@@ -1399,6 +1413,7 @@ def checkin_patient(
         checkin_id=checkin.id,
         token_number=token,
         patient_name=patient.name,
+        patient_uid=patient.patient_uid,
         doctor_name=f"{doctor.title} {doctor.name}",
         doctor_specialization=doctor.specialization,
         doctor_room_number=get_doctor_current_room(db, doctor.id, current_doctor.hospital_id),
@@ -2574,15 +2589,21 @@ def get_patient_documents(
     ).order_by(Checkin.created_at.desc()).all()
 
     for c in checkins:
-        documents.append({
-            "type": "token_slip",
-            "label": f"Token Slip — {c.token_number}",
-            "ref_id": c.id,
-            "extra": c.token_number,
-            "date": c.created_at.isoformat() if c.created_at else None,
-            "checkin_id": c.id,
-            "has_invoice": bool(c.invoice_id)
-        })
+        # One visit, one token slip: in a multi-doctor visit only the primary
+        # check-in (visit_group_id == its own id) is listed. Its slip already
+        # covers every doctor in the visit; the extra doctors' sibling
+        # check-ins (THB1-XXXX-2, ...) exist only for queue/billing purposes.
+        is_group_sibling = c.visit_group_id is not None and c.visit_group_id != c.id
+        if not is_group_sibling:
+            documents.append({
+                "type": "token_slip",
+                "label": f"Token Slip — {c.token_number}",
+                "ref_id": c.id,
+                "extra": c.token_number,
+                "date": c.created_at.isoformat() if c.created_at else None,
+                "checkin_id": c.id,
+                "has_invoice": bool(c.invoice_id)
+            })
         if c.invoice_id:
             invoice = db.query(Invoice).filter(Invoice.id == c.invoice_id).first()
             documents.append({

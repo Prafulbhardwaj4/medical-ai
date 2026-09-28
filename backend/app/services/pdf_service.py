@@ -341,7 +341,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     # in letter-spaced serif, hospital name right in Times-Bold, both on
     # the brand band ──
     header_title_spaced = _letter_space("TOKEN RECEIPT")
-    header_title_style = ParagraphStyle("hdr_title", fontSize=25, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=27)
+    header_title_style = ParagraphStyle("hdr_title", fontSize=23, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=25)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=17, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=20)
     header_left = [Paragraph(header_title_spaced, header_title_style)]
     header_right = [Paragraph(hospital.name, header_hosp_style)]
