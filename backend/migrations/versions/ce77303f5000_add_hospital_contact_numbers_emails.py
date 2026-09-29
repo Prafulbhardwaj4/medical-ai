@@ -5,7 +5,7 @@ is kept as-is for backward compatibility but is no longer edited from the UI."""
 from alembic import op
 import sqlalchemy as sa
 
-revision = 'a1b2c3d4e5f6'
+revision = 'ce77303f5000'
 down_revision = 'z9a1b2c3d4e5'  # add_checkin_doctor_room — adjust to your real current head (`alembic heads`) before running
 branch_labels = None
 depends_on = None
