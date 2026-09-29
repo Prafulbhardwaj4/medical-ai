@@ -535,17 +535,28 @@
                         <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Address</label>
                         <input class="form-control" id="hd-address" placeholder="Street, area, pincode…" />
                     </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:600px;margin-bottom:14px">
-                        <div>
-                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GSTIN <span
-                                    style="color:var(--slate-light);font-weight:400">(optional)</span></label>
-                            <input class="form-control" id="hd-gstin" placeholder="e.g. 07AAAAA0000A1Z5" />
-                        </div>
-                        <div>
-                            <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Phone <span
-                                    style="color:var(--slate-light);font-weight:400">(optional)</span></label>
-                            <input class="form-control" id="hd-phone" placeholder="e.g. +911234567890" />
-                        </div>
+                    <div style="max-width:600px;margin-bottom:14px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GSTIN <span
+                                style="color:var(--slate-light);font-weight:400">(optional — printed on invoices only)</span></label>
+                        <input class="form-control" id="hd-gstin" placeholder="e.g. 07AAAAA0000A1Z5" />
+                    </div>
+                    <div style="max-width:600px;margin-bottom:14px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Contact
+                            Numbers <span style="color:var(--slate-light);font-weight:400">(shown on invoices, test
+                                reports & prescriptions)</span></label>
+                        <div id="hd-contact-list"></div>
+                        <button type="button" class="btn btn-outline btn-sm" style="margin-top:2px"
+                            onclick="addContactNumberRow()">+ Add number</button>
+                        <div class="err-msg" id="hd-contact-err" style="margin-top:6px"></div>
+                    </div>
+                    <div style="max-width:600px;margin-bottom:14px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Email
+                            Addresses <span style="color:var(--slate-light);font-weight:400">(shown on invoices, test
+                                reports & prescriptions)</span></label>
+                        <div id="hd-email-list"></div>
+                        <button type="button" class="btn btn-outline btn-sm" style="margin-top:2px"
+                            onclick="addEmailRow()">+ Add email</button>
+                        <div class="err-msg" id="hd-email-err" style="margin-top:6px"></div>
                     </div>
                     <div style="max-width:600px;margin-bottom:14px">
                         <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Logo <span
@@ -1164,6 +1175,92 @@
         }
 
         let currentLogoBase64 = null; // null = unchanged, '' = removed, data URI = new upload
+        let hdContactNumbers = []; // [{type:'mobile'|'landline', number:'...'}]
+        let hdEmails = []; // ['a@b.com', ...]
+
+        function renderContactNumberRows() {
+            const wrap = document.getElementById('hd-contact-list');
+            wrap.innerHTML = '';
+            hdContactNumbers.forEach((entry, idx) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
+
+                const typeSel = document.createElement('select');
+                typeSel.className = 'form-control';
+                typeSel.style.maxWidth = '130px';
+                typeSel.innerHTML = '<option value="mobile">Mobile</option><option value="landline">Landline</option>';
+                typeSel.value = entry.type;
+                typeSel.onchange = () => {
+                    entry.type = typeSel.value;
+                    if (entry.type === 'mobile') entry.number = (entry.number || '').replace(/\D/g, '').slice(0, 10);
+                    renderContactNumberRows();
+                };
+                row.appendChild(typeSel);
+
+                if (entry.type === 'mobile') {
+                    const prefix = document.createElement('span');
+                    prefix.textContent = '+91';
+                    prefix.style.cssText = 'font-size:13px;color:var(--slate);white-space:nowrap';
+                    row.appendChild(prefix);
+                }
+
+                const numberInput = document.createElement('input');
+                numberInput.className = 'form-control';
+                numberInput.placeholder = entry.type === 'mobile' ? '10-digit mobile number' : 'Landline number, any format';
+                if (entry.type === 'mobile') numberInput.maxLength = 10;
+                numberInput.value = entry.number || '';
+                numberInput.oninput = () => {
+                    if (entry.type === 'mobile') numberInput.value = numberInput.value.replace(/\D/g, '').slice(0, 10);
+                    entry.number = numberInput.value;
+                };
+                row.appendChild(numberInput);
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-outline btn-sm';
+                removeBtn.textContent = 'Remove';
+                removeBtn.onclick = () => { hdContactNumbers.splice(idx, 1); renderContactNumberRows(); };
+                row.appendChild(removeBtn);
+
+                wrap.appendChild(row);
+            });
+        }
+
+        function addContactNumberRow() {
+            hdContactNumbers.push({ type: 'mobile', number: '' });
+            renderContactNumberRows();
+        }
+
+        function renderEmailRows() {
+            const wrap = document.getElementById('hd-email-list');
+            wrap.innerHTML = '';
+            hdEmails.forEach((email, idx) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
+
+                const input = document.createElement('input');
+                input.className = 'form-control';
+                input.type = 'email';
+                input.placeholder = 'name@hospital.com';
+                input.value = email;
+                input.oninput = () => { hdEmails[idx] = input.value; };
+                row.appendChild(input);
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-outline btn-sm';
+                removeBtn.textContent = 'Remove';
+                removeBtn.onclick = () => { hdEmails.splice(idx, 1); renderEmailRows(); };
+                row.appendChild(removeBtn);
+
+                wrap.appendChild(row);
+            });
+        }
+
+        function addEmailRow() {
+            hdEmails.push('');
+            renderEmailRows();
+        }
 
         async function loadHospitalDetails() {
             try {
@@ -1174,7 +1271,10 @@
                 document.getElementById('hd-state').value = h.state || '';
                 document.getElementById('hd-address').value = h.address || '';
                 document.getElementById('hd-gstin').value = h.gstin || '';
-                document.getElementById('hd-phone').value = h.phone || '';
+                hdContactNumbers = Array.isArray(h.contact_numbers) ? h.contact_numbers.map(c => ({ type: c.type, number: c.number })) : [];
+                renderContactNumberRows();
+                hdEmails = Array.isArray(h.emails) ? [...h.emails] : [];
+                renderEmailRows();
                 document.getElementById('hd-gst-consultation').value = h.consultation_gst_percent != null ? h.consultation_gst_percent : '';
                 document.getElementById('hd-gst-test').value = h.test_gst_percent != null ? h.test_gst_percent : '';
                 document.getElementById('hd-gst-room').value = h.room_gst_percent != null ? h.room_gst_percent : '';
@@ -1233,6 +1333,27 @@
 
         async function saveHospitalDetails() {
             try {
+                document.getElementById('hd-contact-err').textContent = '';
+                document.getElementById('hd-email-err').textContent = '';
+
+                for (const entry of hdContactNumbers) {
+                    if (entry.type === 'mobile' && entry.number.length !== 10) {
+                        document.getElementById('hd-contact-err').textContent = 'Each mobile number must be exactly 10 digits.';
+                        return;
+                    }
+                    if (entry.type === 'landline' && !entry.number.trim()) {
+                        document.getElementById('hd-contact-err').textContent = 'Landline number can\'t be empty.';
+                        return;
+                    }
+                }
+                const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                for (const email of hdEmails) {
+                    if (!emailPattern.test(email.trim())) {
+                        document.getElementById('hd-email-err').textContent = `"${email}" doesn't look like a valid email address.`;
+                        return;
+                    }
+                }
+
                 const gstRateField = (id) => {
                     const v = document.getElementById(id).value.trim();
                     return v === '' ? 0 : parseFloat(v);  // 0 clears the rate server-side (blank = exempt)
@@ -1244,7 +1365,8 @@
                 const payload = {
                     address: document.getElementById('hd-address').value.trim(),
                     gstin: document.getElementById('hd-gstin').value.trim(),
-                    phone: document.getElementById('hd-phone').value.trim(),
+                    contact_numbers: hdContactNumbers.map(c => ({ type: c.type, number: c.type === 'mobile' ? c.number : c.number.trim() })),
+                    emails: hdEmails.map(e => e.trim()),
                     consultation_gst_percent: gstRateField('hd-gst-consultation'),
                     test_gst_percent: gstRateField('hd-gst-test'),
                     room_gst_percent: gstRateField('hd-gst-room'),

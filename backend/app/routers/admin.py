@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Header
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, EmailStr, validator
+from typing import Optional, List, Literal
 from sqlalchemy.orm import Session
+import json
 from app.database import get_db
 from app.models.hospital import Hospital
 from app.models.doctor import Doctor, UserRole
@@ -550,6 +551,8 @@ def get_hospital_details(
         "address": hospital.address,
         "gstin": hospital.gstin,
         "phone": hospital.phone,
+        "contact_numbers": json.loads(hospital.contact_numbers) if hospital.contact_numbers else [],
+        "emails": json.loads(hospital.emails) if hospital.emails else [],
         "logo_base64": hospital.logo_base64,
         "default_consultation_fee": hospital.default_consultation_fee,
         "consultation_gst_percent": hospital.consultation_gst_percent,
@@ -566,10 +569,32 @@ def get_hospital_details(
     }
 
 
+class ContactNumberIn(BaseModel):
+    type: Literal["mobile", "landline"]
+    number: str
+
+    @validator("number")
+    def validate_number(cls, v, values):
+        v = (v or "").strip()
+        ctype = values.get("type")
+        if ctype == "mobile":
+            digits = re.sub(r"\D", "", v)
+            if len(digits) != 10:
+                raise ValueError("Mobile number must be exactly 10 digits")
+            return f"+91{digits}"
+        # landline — deliberately no fixed pattern (extensions, STD codes,
+        # dashes all vary), just make sure something was actually entered
+        if not v:
+            raise ValueError("Landline number can't be empty")
+        return v
+
+
 class HospitalDetailsUpdate(BaseModel):
     address: Optional[str] = None
     gstin: Optional[str] = None
     phone: Optional[str] = None
+    contact_numbers: Optional[List[ContactNumberIn]] = None
+    emails: Optional[List[EmailStr]] = None
     logo_base64: Optional[str] = None
     consultation_gst_percent: Optional[float] = None
     test_gst_percent: Optional[float] = None
@@ -606,6 +631,10 @@ def update_hospital_details(
         hospital.gstin = payload.gstin.strip() or None
     if payload.phone is not None:
         hospital.phone = payload.phone.strip() or None
+    if payload.contact_numbers is not None:
+        hospital.contact_numbers = json.dumps([{"type": c.type, "number": c.number} for c in payload.contact_numbers]) if payload.contact_numbers else None
+    if payload.emails is not None:
+        hospital.emails = json.dumps([str(e) for e in payload.emails]) if payload.emails else None
     if payload.logo_base64 is not None:
         logo = payload.logo_base64.strip()
         if not logo:
@@ -644,6 +673,8 @@ def update_hospital_details(
         "address": hospital.address,
         "gstin": hospital.gstin,
         "phone": hospital.phone,
+        "contact_numbers": json.loads(hospital.contact_numbers) if hospital.contact_numbers else [],
+        "emails": json.loads(hospital.emails) if hospital.emails else [],
         "logo_base64": hospital.logo_base64,
         "consultation_gst_percent": hospital.consultation_gst_percent,
         "test_gst_percent": hospital.test_gst_percent,

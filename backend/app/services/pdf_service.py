@@ -170,21 +170,57 @@ def _make_numbered_canvas(header_text: str):
     return _NumberedCanvas
 
 
+def _parse_contact_numbers(hospital):
+    raw = getattr(hospital, "contact_numbers", None)
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
+def _parse_emails(hospital):
+    raw = getattr(hospital, "emails", None)
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        return [e for e in data if e] if isinstance(data, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
+def _contact_and_email_paragraphs(hospital, style):
+    """Every configured email + every configured phone number, one Paragraph
+    each — falls back to the legacy single `hospital.phone` column only when
+    no structured contact_numbers have been entered yet."""
+    lines = []
+    for email in _parse_emails(hospital):
+        lines.append(Paragraph(email, style))
+    numbers = _parse_contact_numbers(hospital)
+    if numbers:
+        for entry in numbers:
+            num = (entry or {}).get("number")
+            if num:
+                lines.append(Paragraph(f"Contact No: {num}", style))
+    elif getattr(hospital, "phone", None):
+        lines.append(Paragraph(f"Contact No: {hospital.phone}", style))
+    return lines
+
+
 def _hospital_detail_paragraphs(hospital, label_style, biz_style):
-    """HOSPITAL DETAILS block (name, address, city/state, email, contacts) —
-    each line only when it's actually set, no empty gaps."""
+    """HOSPITAL DETAILS block (name, address, city/state, emails, contact
+    numbers) — each line only when it's actually set, no empty gaps. Used by
+    the Test Report and Prescription PDFs. No GSTIN here — that's invoice-only."""
     lines = [Paragraph("HOSPITAL DETAILS", label_style), Paragraph(hospital.name, biz_style)]
     if hospital.address:
         lines.append(Paragraph(hospital.address, biz_style))
     city_state = ", ".join([p for p in [hospital.city, hospital.state] if p])
     if city_state:
         lines.append(Paragraph(city_state, biz_style))
-    if getattr(hospital, "email", None):
-        lines.append(Paragraph(hospital.email, biz_style))
-    if getattr(hospital, "phone", None):
-        lines.append(Paragraph(f"Contact No: {hospital.phone}", biz_style))
-    if getattr(hospital, "phone2", None):
-        lines.append(Paragraph(hospital.phone2, biz_style))
+    lines.extend(_contact_and_email_paragraphs(hospital, biz_style))
     return lines
 
 
@@ -296,10 +332,14 @@ def build_letterhead(hospital, subtitle=None):
         elements.append(Paragraph(" | ".join(location_bits), sub_style))
 
     contact_bits = []
-    if getattr(hospital, "phone", None):
+    numbers = _parse_contact_numbers(hospital)
+    if numbers:
+        for entry in numbers:
+            num = (entry or {}).get("number")
+            if num:
+                contact_bits.append(f"Ph: {num}")
+    elif getattr(hospital, "phone", None):
         contact_bits.append(f"Ph: {hospital.phone}")
-    if hospital.gstin:
-        contact_bits.append(f"GSTIN: {hospital.gstin}")
     if contact_bits:
         elements.append(Paragraph(" | ".join(contact_bits), sub_style))
 
@@ -1362,12 +1402,7 @@ def generate_invoice_pdf(
     label_style = ParagraphStyle("bizlabel", fontSize=8.5, fontName="Helvetica-Bold", leading=12, textColor=colors.HexColor("#0d9488"), spaceAfter=2)
 
     from_lines = [Paragraph("BILL FROM", label_style), Paragraph(hospital.name, biz_style)]
-    if getattr(hospital, "email", None):
-        from_lines.append(Paragraph(hospital.email, biz_style))
-    if getattr(hospital, "phone", None):
-        from_lines.append(Paragraph(f"Contact No: {hospital.phone}", biz_style))
-    if getattr(hospital, "phone2", None):
-        from_lines.append(Paragraph(hospital.phone2, biz_style))
+    from_lines.extend(_contact_and_email_paragraphs(hospital, biz_style))
     if hospital.address:
         from_lines.append(Paragraph(hospital.address, biz_style))
     from_city_state = ", ".join([p for p in [hospital.city, hospital.state] if p])
