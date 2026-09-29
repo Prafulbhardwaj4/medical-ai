@@ -1271,7 +1271,10 @@
                 document.getElementById('hd-state').value = h.state || '';
                 document.getElementById('hd-address').value = h.address || '';
                 document.getElementById('hd-gstin').value = h.gstin || '';
-                hdContactNumbers = Array.isArray(h.contact_numbers) ? h.contact_numbers.map(c => ({ type: c.type, number: c.number })) : [];
+                hdContactNumbers = Array.isArray(h.contact_numbers) ? h.contact_numbers.map(c => ({
+                    type: c.type,
+                    number: c.type === 'mobile' ? (c.number || '').replace(/\D/g, '').slice(-10) : c.number
+                })) : [];
                 renderContactNumberRows();
                 hdEmails = Array.isArray(h.emails) ? [...h.emails] : [];
                 renderEmailRows();

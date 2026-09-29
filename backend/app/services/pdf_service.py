@@ -82,7 +82,7 @@ def amount_to_words_inr(amount: float) -> str:
     return "Rupees " + " ".join(parts) + " Only"
 
 def _decode_logo_image(logo_base64):
-    """Decode a data URI (data:image/...;base64,...) into a small ReportLab Image flowable.
+    """Decode a data URI (data:image/...;base64,...) into a ReportLab Image flowable.
     Returns None if missing or unreadable — logo is optional everywhere it's used."""
     if not logo_base64:
         return None
@@ -90,7 +90,7 @@ def _decode_logo_image(logo_base64):
         raw = logo_base64.split(",", 1)[1] if "," in logo_base64 else logo_base64
         img_bytes = base64.b64decode(raw)
         img = Image(io.BytesIO(img_bytes))
-        max_h = 16 * mm
+        max_h = 24 * mm
         ratio = (img.imageWidth / img.imageHeight) if img.imageHeight else 1
         img.drawHeight = max_h
         img.drawWidth = max_h * ratio
@@ -99,6 +99,17 @@ def _decode_logo_image(logo_base64):
     except Exception:
         return None
 
+
+def _logo_or_name(hospital, name_style, align="CENTER"):
+    """The header's hospital-identity slot — the logo if one's uploaded,
+    the hospital name as text otherwise. Never both: an uploaded logo
+    replaces the printed name rather than sitting above/beside it."""
+    logo_img = _decode_logo_image(getattr(hospital, "logo_base64", None))
+    if logo_img:
+        logo_img.hAlign = align
+        return [logo_img]
+    return [Paragraph(hospital.name, name_style)]
+
 def _letter_space(text: str, char_gap="\u2009", word_gap="\u00A0\u00A0\u00A0\u00A0") -> str:
     """Adds visual letter-spacing to a short header/label string — thin
     spaces between letters, non-breaking spaces between words. Plain spaces
@@ -106,6 +117,53 @@ def _letter_space(text: str, char_gap="\u2009", word_gap="\u00A0\u00A0\u00A0\u00
     character is needed to keep multi-word titles like 'TOKEN RECEIPT'
     readable as two separate words instead of running together."""
     return word_gap.join(char_gap.join(word) for word in text.split(" "))
+
+def _format_mobile_display(stored_number: str) -> str:
+    """Stored as '+91XXXXXXXXXX' — displayed on PDFs as '+91 XXXXX XXXXX'."""
+    digits = re.sub(r"\D", "", stored_number or "")[-10:]
+    if len(digits) == 10:
+        return f"+91 {digits[:5]} {digits[5:]}"
+    return stored_number  # malformed/legacy value — show as stored rather than crash
+
+
+def _hospital_detail_lines(hospital, style, include_gstin=False):
+    """'Hospital Name : value' / 'Address : value' / (indented) city, state /
+    'Email : value' (one per email) / 'Contact Number : value' (one per
+    number, mobile formatted as +91 XXXXX XXXXX) / optionally 'GSTIN : value'.
+    Label stays normal weight, value is bold. Shared by the invoice, test
+    report, and prescription PDFs so all three look identical."""
+    def line(label, value):
+        return Paragraph(f"{label} : <b>{value}</b>", style)
+
+    lines = [line("Hospital Name", hospital.name)]
+
+    if hospital.address:
+        lines.append(line("Address", hospital.address))
+        city_state = ", ".join([p for p in [hospital.city, hospital.state] if p])
+        if city_state:
+            indent = pdfmetrics.stringWidth("Address : ", style.fontName, style.fontSize)
+            indent_style = ParagraphStyle(f"{style.name}_cityindent", parent=style, leftIndent=indent)
+            lines.append(Paragraph(f"<b>{city_state}</b>", indent_style))
+
+    for email in _parse_emails(hospital):
+        lines.append(line("Email", email))
+
+    numbers = _parse_contact_numbers(hospital)
+    if numbers:
+        for entry in numbers:
+            num = (entry or {}).get("number")
+            if not num:
+                continue
+            display = _format_mobile_display(num) if entry.get("type") == "mobile" else num
+            lines.append(line("Contact Number", display))
+    elif getattr(hospital, "phone", None):
+        lines.append(line("Contact Number", hospital.phone))
+
+    if include_gstin and hospital.gstin:
+        lines.append(line("GSTIN", hospital.gstin))
+
+    return lines
+
 
 def _labeled_paragraph(label: str, value: str, base_style: ParagraphStyle, label_color: str = "#1a237e") -> Paragraph:
     """'Label : value' on one line, styled so any wrapped continuation
@@ -192,37 +250,10 @@ def _parse_emails(hospital):
         return []
 
 
-def _contact_and_email_paragraphs(hospital, style):
-    """Every configured email + every configured phone number, one Paragraph
-    each — falls back to the legacy single `hospital.phone` column only when
-    no structured contact_numbers have been entered yet."""
-    lines = []
-    for email in _parse_emails(hospital):
-        lines.append(Paragraph(email, style))
-    numbers = _parse_contact_numbers(hospital)
-    if numbers:
-        for entry in numbers:
-            num = (entry or {}).get("number")
-            if num:
-                lines.append(Paragraph(f"Contact No: {num}", style))
-    elif getattr(hospital, "phone", None):
-        lines.append(Paragraph(f"Contact No: {hospital.phone}", style))
-    return lines
-
-
 def _hospital_detail_paragraphs(hospital, label_style, biz_style):
-    """HOSPITAL DETAILS block (name, address, city/state, emails, contact
-    numbers) — each line only when it's actually set, no empty gaps. Used by
-    the Test Report and Prescription PDFs. No GSTIN here — that's invoice-only."""
-    lines = [Paragraph("HOSPITAL DETAILS", label_style), Paragraph(hospital.name, biz_style)]
-    if hospital.address:
-        lines.append(Paragraph(hospital.address, biz_style))
-    city_state = ", ".join([p for p in [hospital.city, hospital.state] if p])
-    if city_state:
-        lines.append(Paragraph(city_state, biz_style))
-    lines.extend(_contact_and_email_paragraphs(hospital, biz_style))
-    return lines
-
+    """HOSPITAL DETAILS block — used by the Test Report and Prescription
+    PDFs. No GSTIN here — that's invoice-only."""
+    return [Paragraph("HOSPITAL DETAILS", label_style)] + _hospital_detail_lines(hospital, biz_style, include_gstin=False)
 
 def _build_report_header_block(hospital, patient, ordering_doctor, report_dt, token_number=None,
                                report_created_by=None):
@@ -233,13 +264,7 @@ def _build_report_header_block(hospital, patient, ordering_doctor, report_dt, to
     header_title_style = ParagraphStyle("hdr_title", fontSize=32, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=36)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=15, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=18)
 
-    header_right = []
-    logo_img = _decode_logo_image(getattr(hospital, "logo_base64", None))
-    if logo_img:
-        logo_img.hAlign = "RIGHT"
-        header_right.append(logo_img)
-        header_right.append(Spacer(1, 1.5*mm))
-    header_right.append(Paragraph(hospital.name, header_hosp_style))
+    header_right = _logo_or_name(hospital, header_hosp_style, align="RIGHT")
 
     header_band = Table([[[Paragraph("TEST REPORT", header_title_style)], header_right]], colWidths=[95*mm, 75*mm])
     header_band.setStyle(TableStyle([
@@ -261,10 +286,10 @@ def _build_report_header_block(hospital, patient, ordering_doctor, report_dt, to
     patient_lines = [
         Paragraph("PATIENT DETAILS", label_style),
         Paragraph(_patient_summary_line(patient), biz_bold_style),
-        Paragraph(f"Patient ID: {patient.patient_uid}", biz_style),
+        Paragraph(f"Patient ID: <b>{patient.patient_uid}</b>", biz_style),
     ]
     if getattr(patient, "phone", None):
-        patient_lines.append(Paragraph(f"Contact Number: {patient.phone}", biz_style))
+        patient_lines.append(Paragraph(f"Contact Number: <b>{patient.phone}</b>", biz_style))
     if token_number:
         patient_lines.append(Paragraph(f"Token: {token_number}", biz_bold_style))
 
@@ -315,12 +340,7 @@ def build_letterhead(hospital, subtitle=None):
 
     elements = []
 
-    logo_img = _decode_logo_image(getattr(hospital, "logo_base64", None))
-    if logo_img:
-        elements.append(logo_img)
-        elements.append(Spacer(1, 1.5*mm))
-
-    elements.append(Paragraph(hospital.name, header_style))
+    elements.extend(_logo_or_name(hospital, header_style, align="CENTER"))
 
     location_bits = []
     if hospital.address:
@@ -336,8 +356,9 @@ def build_letterhead(hospital, subtitle=None):
     if numbers:
         for entry in numbers:
             num = (entry or {}).get("number")
-            if num:
-                contact_bits.append(f"Ph: {num}")
+            if not num:
+                continue
+            contact_bits.append(f"Ph: {_format_mobile_display(num) if entry.get('type') == 'mobile' else num}")
     elif getattr(hospital, "phone", None):
         contact_bits.append(f"Ph: {hospital.phone}")
     if contact_bits:
@@ -384,7 +405,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     header_title_style = ParagraphStyle("hdr_title", fontSize=23, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=25)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=17, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=20)
     header_left = [Paragraph(header_title_spaced, header_title_style)]
-    header_right = [Paragraph(hospital.name, header_hosp_style)]
+    header_right = _logo_or_name(hospital, header_hosp_style, align="RIGHT")
     header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
     header_band.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
@@ -554,9 +575,11 @@ def generate_prescription_pdf(
     header_title_style = ParagraphStyle("hdr_title", fontSize=32, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=36)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=15, fontName="Helvetica-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=18)
 
-    hospital_name = doctor.hospital.name if doctor.hospital else doctor.clinic_name
     header_left = [Paragraph("PRESCRIPTION", header_title_style)]
-    header_right = [Paragraph(hospital_name, header_hosp_style)]
+    if doctor.hospital:
+        header_right = _logo_or_name(doctor.hospital, header_hosp_style, align="RIGHT")
+    else:
+        header_right = [Paragraph(doctor.clinic_name, header_hosp_style)]
 
     header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
     header_band.setStyle(TableStyle([
@@ -578,10 +601,10 @@ def generate_prescription_pdf(
     patient_lines = [
         Paragraph("PATIENT DETAILS", label_style),
         Paragraph(_patient_summary_line(patient), biz_bold_style),
-        Paragraph(f"Patient ID: {patient.patient_uid}", biz_style),
+        Paragraph(f"Patient ID: <b>{patient.patient_uid}</b>", biz_style),
     ]
     if getattr(patient, "phone", None):
-        patient_lines.append(Paragraph(f"Contact Number: {patient.phone}", biz_style))
+        patient_lines.append(Paragraph(f"Contact Number: <b>{patient.phone}</b>", biz_style))
     patient_lines.append(Paragraph(f"Token: {token_number}", biz_bold_style))
 
     doctor_name_line = f"{doctor.title} {doctor.name}"
@@ -1376,13 +1399,7 @@ def generate_invoice_pdf(
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=17, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=20)
 
     header_left = [Paragraph(header_title_spaced, header_title_style)]
-    header_logo_img = _decode_logo_image(getattr(hospital, "logo_base64", None))
-    header_right = []
-    if header_logo_img:
-        header_logo_img.hAlign = "RIGHT"
-        header_right.append(header_logo_img)
-        header_right.append(Spacer(1, 1.5*mm))
-    header_right.append(Paragraph(hospital.name, header_hosp_style))
+    header_right = _logo_or_name(hospital, header_hosp_style, align="RIGHT")
 
     header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
     header_band.setStyle(TableStyle([
@@ -1401,30 +1418,22 @@ def generate_invoice_pdf(
     biz_bold_style = ParagraphStyle("bizbold", fontSize=9.5, fontName="Helvetica-Bold", leading=13, textColor=colors.HexColor("#0f1f3d"))
     label_style = ParagraphStyle("bizlabel", fontSize=8.5, fontName="Helvetica-Bold", leading=12, textColor=colors.HexColor("#0d9488"), spaceAfter=2)
 
-    from_lines = [Paragraph("BILL FROM", label_style), Paragraph(hospital.name, biz_style)]
-    from_lines.extend(_contact_and_email_paragraphs(hospital, biz_style))
-    if hospital.address:
-        from_lines.append(Paragraph(hospital.address, biz_style))
-    from_city_state = ", ".join([p for p in [hospital.city, hospital.state] if p])
-    if from_city_state:
-        from_lines.append(Paragraph(from_city_state, biz_style))
-    if hospital.gstin:
-        from_lines.append(Paragraph(f"GSTIN: {hospital.gstin}", biz_style))
+    from_lines = [Paragraph("BILL FROM", label_style)] + _hospital_detail_lines(hospital, biz_style, include_gstin=True)
 
     to_lines = [
         Paragraph("BILL TO", label_style),
         Paragraph(f"{patient.name.title()} | {patient.age}yr | {patient.patient_uid}", biz_bold_style),
     ]
     if getattr(patient, "phone", None):
-        to_lines.append(Paragraph(f"Contact Number: {patient.phone}", biz_style))
+        to_lines.append(Paragraph(f"Contact Number: <b>{patient.phone}</b>", biz_style))
     if token_number:
         to_lines.append(Paragraph(f"Token Number: {token_number}", biz_bold_style))
 
-    bill_table = Table([[from_lines, to_lines]], colWidths=[95*mm, 75*mm])
+    bill_table = Table([[to_lines, from_lines]], colWidths=[95*mm, 75*mm])
     bill_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
-        ("LEFTPADDING", (1, 0), (1, 0), 40),
+        ("LEFTPADDING", (1, 0), (1, 0), 10),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
     elements.append(bill_table)
