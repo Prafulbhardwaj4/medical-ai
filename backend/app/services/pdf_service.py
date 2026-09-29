@@ -90,7 +90,7 @@ def _decode_logo_image(logo_base64):
         raw = logo_base64.split(",", 1)[1] if "," in logo_base64 else logo_base64
         img_bytes = base64.b64decode(raw)
         img = Image(io.BytesIO(img_bytes))
-        max_h, max_w = 24 * mm, 60 * mm
+        max_h, max_w = 18 * mm, 45 * mm
         ratio = (img.imageWidth / img.imageHeight) if img.imageHeight else 1
         h, w = max_h, max_h * ratio
         if w > max_w:
@@ -273,6 +273,7 @@ def _build_report_header_block(hospital, patient, ordering_doctor, report_dt, to
     header_band.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
         ("TOPPADDING", (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
@@ -413,6 +414,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
     header_band.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
         ("TOPPADDING", (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
@@ -588,6 +590,7 @@ def generate_prescription_pdf(
     header_band.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
         ("TOPPADDING", (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
@@ -1407,6 +1410,7 @@ def generate_invoice_pdf(
     header_band.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f5f9")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
         ("TOPPADDING", (0, 0), (-1, -1), 10),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
@@ -1442,7 +1446,7 @@ def generate_invoice_pdf(
     bill_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
-        ("LEFTPADDING", (1, 0), (1, 0), 20),
+        ("LEFTPADDING", (1, 0), (1, 0), 25),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
     elements.append(bill_table)
