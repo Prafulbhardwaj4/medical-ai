@@ -90,10 +90,13 @@ def _decode_logo_image(logo_base64):
         raw = logo_base64.split(",", 1)[1] if "," in logo_base64 else logo_base64
         img_bytes = base64.b64decode(raw)
         img = Image(io.BytesIO(img_bytes))
-        max_h = 24 * mm
+        max_h, max_w = 24 * mm, 60 * mm
         ratio = (img.imageWidth / img.imageHeight) if img.imageHeight else 1
-        img.drawHeight = max_h
-        img.drawWidth = max_h * ratio
+        h, w = max_h, max_h * ratio
+        if w > max_w:
+            w, h = max_w, max_w / ratio
+        img.drawHeight = h
+        img.drawWidth = w
         img.hAlign = "CENTER"
         return img
     except Exception:
@@ -289,9 +292,9 @@ def _build_report_header_block(hospital, patient, ordering_doctor, report_dt, to
         Paragraph(f"Patient ID: <b>{patient.patient_uid}</b>", biz_style),
     ]
     if getattr(patient, "phone", None):
-        patient_lines.append(Paragraph(f"Contact Number: <b>{patient.phone}</b>", biz_style))
+        patient_lines.append(Paragraph(f"Contact Number: <b>{_format_mobile_display(patient.phone)}</b>", biz_style))
     if token_number:
-        patient_lines.append(Paragraph(f"Token: {token_number}", biz_bold_style))
+        patient_lines.append(Paragraph(f"Token: <b>{token_number}</b>", biz_style))
 
     # ── Ordering doctor (right, below hospital details) ──
     if ordering_doctor:
@@ -494,7 +497,7 @@ def generate_token_slip_pdf(checkin, patient, doctor, hospital, nurse_name=None,
         ("PATIENT ID", patient.patient_uid),
     ]
     if getattr(patient, "phone", None):
-        patient_rows.append(("CONTACT NUMBER", patient.phone))
+        patient_rows.append(("CONTACT NUMBER", _format_mobile_display(patient.phone)))
 
     if len(all_doctors) == 1:
         # Single-doctor visit: patient/doctor/room/date/time as before —
@@ -604,8 +607,8 @@ def generate_prescription_pdf(
         Paragraph(f"Patient ID: <b>{patient.patient_uid}</b>", biz_style),
     ]
     if getattr(patient, "phone", None):
-        patient_lines.append(Paragraph(f"Contact Number: <b>{patient.phone}</b>", biz_style))
-    patient_lines.append(Paragraph(f"Token: {token_number}", biz_bold_style))
+        patient_lines.append(Paragraph(f"Contact Number: <b>{_format_mobile_display(patient.phone)}</b>", biz_style))
+    patient_lines.append(Paragraph(f"Token: <b>{token_number}</b>", biz_style))
 
     doctor_name_line = f"{doctor.title} {doctor.name}"
     if doctor.specialization:
@@ -1393,8 +1396,7 @@ def generate_invoice_pdf(
     # with "BILL FROM" below), hospital name/logo right, on the original
     # neutral brand band (#f1f5f9) — colWidths match bill_table's so both
     # columns line up exactly ──
-    header_title = "TAX INVOICE" if gst_registered else "INVOICE"
-    header_title_spaced = _letter_space(header_title)
+    header_title_spaced = _letter_space("INVOICE")
     header_title_style = ParagraphStyle("hdr_title", fontSize=30, fontName="Times-Roman", textColor=colors.HexColor("#0f1f3d"), leading=34)
     header_hosp_style = ParagraphStyle("hdr_hosp", fontSize=17, fontName="Times-Bold", alignment=TA_RIGHT, textColor=colors.HexColor("#0f1f3d"), leading=20)
 
@@ -1419,30 +1421,36 @@ def generate_invoice_pdf(
     label_style = ParagraphStyle("bizlabel", fontSize=8.5, fontName="Helvetica-Bold", leading=12, textColor=colors.HexColor("#0d9488"), spaceAfter=2)
 
     from_lines = [Paragraph("BILL FROM", label_style)] + _hospital_detail_lines(hospital, biz_style, include_gstin=True)
+    if doctor:
+        doc_line = f"{doctor.title} {doctor.name}"
+        if getattr(doctor, "specialization", None):
+            doc_line += f" | {doctor.specialization}"
+        from_lines.append(Spacer(1, 3*mm))
+        from_lines.append(Paragraph("CONSULTING DOCTOR", label_style))
+        from_lines.append(Paragraph(doc_line, biz_bold_style))
 
     to_lines = [
         Paragraph("BILL TO", label_style),
         Paragraph(f"{patient.name.title()} | {patient.age}yr | {patient.patient_uid}", biz_bold_style),
     ]
     if getattr(patient, "phone", None):
-        to_lines.append(Paragraph(f"Contact Number: <b>{patient.phone}</b>", biz_style))
+        to_lines.append(Paragraph(f"Contact Number: <b>{_format_mobile_display(patient.phone)}</b>", biz_style))
     if token_number:
-        to_lines.append(Paragraph(f"Token Number: {token_number}", biz_bold_style))
+        to_lines.append(Paragraph(f"Token Number: <b>{token_number}</b>", biz_style))
 
     bill_table = Table([[to_lines, from_lines]], colWidths=[95*mm, 75*mm])
     bill_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (0, 0), 10),
-        ("LEFTPADDING", (1, 0), (1, 0), 10),
+        ("LEFTPADDING", (1, 0), (1, 0), 20),
         ("RIGHTPADDING", (1, 0), (1, 0), 10),
     ]))
     elements.append(bill_table)
     elements.append(Spacer(1, 4*mm))
 
-    # ── Consultation metadata — doctor / admission dates (Place of Supply dropped) ──
+    # ── Consultation metadata — admission dates only (Consulting Doctor now
+    # lives in Bill From above; Place of Supply dropped) ──
     meta_style = ParagraphStyle("meta", fontSize=8.5, fontName="Helvetica", textColor=colors.HexColor("#64748b"), leading=11)
-    if doctor:
-        elements.append(Paragraph(f"<b>Consulting Doctor:</b> {doctor.title} {doctor.name}", meta_style))
     if admission_date:
         elements.append(Paragraph(f"<b>Admission Date:</b> {admission_date.strftime('%d %b %Y, %I:%M %p')}", meta_style))
     if discharge_date:
@@ -1575,15 +1583,13 @@ def generate_invoice_pdf(
     elements.append(Spacer(1, 8*mm))
     now_dt = now_ist()
     footer_label_style = ParagraphStyle("footlabel", fontSize=8.5, fontName="Helvetica", textColor=colors.HexColor("#334155"), leading=12)
-    footer_center_style = ParagraphStyle("footcenter", fontSize=20, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#0f1f3d"), leading=24)
     footer_right_style = ParagraphStyle("footright", fontSize=8.5, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.HexColor("#334155"), leading=12)
     footer_band = Table(
         [[
             Paragraph(f"Date: {now_dt.strftime('%d %b %Y')}<br/>Time: {now_dt.strftime('%I:%M %p')}", footer_label_style),
-            Paragraph("Thank You!", footer_center_style),
             Paragraph("_______________________<br/>Authorized Signatory", footer_right_style),
         ]],
-        colWidths=[56*mm, 58*mm, 56*mm]
+        colWidths=[85*mm, 85*mm]
     )
     footer_band.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -1592,7 +1598,6 @@ def generate_invoice_pdf(
         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("LEFTPADDING", (2, 0), (2, 0), 36),
     ]))
     elements.append(footer_band)
     elements.append(Spacer(1, 6*mm))

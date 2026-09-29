@@ -595,6 +595,17 @@ class HospitalDetailsUpdate(BaseModel):
     phone: Optional[str] = None
     contact_numbers: Optional[List[ContactNumberIn]] = None
     emails: Optional[List[EmailStr]] = None
+
+    @validator("gstin")
+    def validate_gstin(cls, v):
+        if v is None:
+            return v
+        v = v.strip().upper()
+        if not v:
+            return None
+        if len(v) != 15:
+            raise ValueError("GSTIN must be exactly 15 characters")
+        return v
     logo_base64: Optional[str] = None
     consultation_gst_percent: Optional[float] = None
     test_gst_percent: Optional[float] = None

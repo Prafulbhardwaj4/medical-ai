@@ -537,8 +537,9 @@
                     </div>
                     <div style="max-width:600px;margin-bottom:14px">
                         <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">GSTIN <span
-                                style="color:var(--slate-light);font-weight:400">(optional — printed on invoices only)</span></label>
-                        <input class="form-control" id="hd-gstin" placeholder="e.g. 07AAAAA0000A1Z5" />
+                                style="color:var(--slate-light);font-weight:400">(optional — printed on invoices
+                                only)</span></label>
+                        <input class="form-control" id="hd-gstin" maxlength="15" placeholder="e.g. 07AAAAA0000A1Z5" />
                     </div>
                     <div style="max-width:600px;margin-bottom:14px">
                         <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Contact
@@ -673,9 +674,9 @@
     <script src="../js/api.js?v=4"></script>
     <script src="../js/nav-admin.js?v=1"></script>
     <script src="../js/tier-catalog.js"></script>
-  <script src="../js/upgrade-gate.js"></script>
-  <script src="../js/chat-widget.js?v=1"></script>
-  <script src="../js/suggestion-widget.js?v=1"></script>
+    <script src="../js/upgrade-gate.js"></script>
+    <script src="../js/chat-widget.js?v=1"></script>
+    <script src="../js/suggestion-widget.js?v=1"></script>
     <script>
         const doc = getDoctor();
         renderAdminNav('overview', { inPage: true });
@@ -752,15 +753,15 @@
         }
 
         async function onNotifClick(id, linkType, linkId) {
-          if (linkType === 'suggestion' && linkId) {
-            try {
-              await api("PATCH", `/notifications/${id}/read`, {});
-              loadNotifUnreadCount();
-              closeNotifPanel();
-              window.__suggestionWidget.openToThread(linkId);
-            } catch (e) { toast(e.message, "error"); }
-            return;
-          }
+            if (linkType === 'suggestion' && linkId) {
+                try {
+                    await api("PATCH", `/notifications/${id}/read`, {});
+                    loadNotifUnreadCount();
+                    closeNotifPanel();
+                    window.__suggestionWidget.openToThread(linkId);
+                } catch (e) { toast(e.message, "error"); }
+                return;
+            }
             try {
                 await api("PATCH", `/notifications/${id}/read`, {});
                 loadNotifUnreadCount();
@@ -1690,7 +1691,7 @@
         }
 
         loadDashboard();
-        api("GET", "/billing/day-end-summary", null, false, true).catch(() => {}); // silently sweeps up any past day nobody closed — no click required
+        api("GET", "/billing/day-end-summary", null, false, true).catch(() => { }); // silently sweeps up any past day nobody closed — no click required
 
         // ── Revenue History (admin) ─────────────────────────────
         let revenueHistoryMode = 'daily';
@@ -1980,15 +1981,21 @@
                 <button class="modal-close" onclick="closeModal('modal-credit-debit-notes')">×</button>
             </div>
             <div id="cdn-list" style="margin-bottom:16px;max-height:240px;overflow-y:auto"></div>
-            <div class="section-title" style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:8px">Add a manual note</div>
+            <div class="section-title"
+                style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:8px">
+                Add a manual note</div>
             <div class="form-group"><label class="form-label">Amount (₹)</label>
-                <input class="form-control" type="number" min="0" step="0.01" id="cdn-amount"></div>
+                <input class="form-control" type="number" min="0" step="0.01" id="cdn-amount">
+            </div>
             <div class="form-group"><label class="form-label">Reason</label>
-                <input class="form-control" id="cdn-reason" placeholder="e.g. Overcharged test fee"></div>
+                <input class="form-control" id="cdn-reason" placeholder="e.g. Overcharged test fee">
+            </div>
             <div class="err-msg" id="cdn-err"></div>
             <div style="display:flex;gap:8px">
-                <button class="btn btn-outline" style="flex:1" onclick="submitCreditDebitNote('debit')">Add Debit Note</button>
-                <button class="btn btn-primary" style="flex:1" onclick="submitCreditDebitNote('credit')">Add Credit Note</button>
+                <button class="btn btn-outline" style="flex:1" onclick="submitCreditDebitNote('debit')">Add Debit
+                    Note</button>
+                <button class="btn btn-primary" style="flex:1" onclick="submitCreditDebitNote('credit')">Add Credit
+                    Note</button>
             </div>
         </div>
     </div>
