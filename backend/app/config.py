@@ -7,6 +7,10 @@ class Settings(BaseSettings):
 
     SUPER_ADMIN_KEY: str = ""
 
+    # LOCAL DEV ONLY. When set, this fixed text is accepted as the captcha answer on
+    # login. It is ignored (and the app refuses to start) in production.
+    DEV_CAPTCHA_ANSWER: str = ""
+
     DATABASE_URL: str = "sqlite:///./medscribe.db"
 
     SARVAM_API_KEY: str = ""
@@ -15,7 +19,6 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
 
-    FAST2SMS_API_KEY: str = ""
     BASE_URL: str = "http://localhost:8000"
 
     # Main staff-frontend deployment — used to build the verify.html QR
@@ -31,26 +34,19 @@ class Settings(BaseSettings):
     PORTAL_LINK_CONFIRM_EXPIRE_HOURS: int = 24
     PORTAL_FRONTEND_URL: str = "http://localhost:5501"
 
-    # Temporary, pre-launch only: every hospital-registered phone number can
-    # log in to the patient portal for the first time using this password.
-    # Remove this entirely once real OTP delivery (WhatsApp/SMS) is wired up.
-    PORTAL_DEFAULT_TEMP_PASSWORD: str = "Test1234"
+    # CORS. Bearer tokens live in localStorage (no cookies), so credentials are
+    # never sent cross-origin. Allowed origins = PUBLIC_FRONTEND_URL + the two
+    # below. Add more with CORS_EXTRA_ORIGINS (comma-separated exact origins).
+    # To allow Vercel preview deploys, set CORS_ORIGIN_REGEX on Render, e.g.
+    #   https://medical-s-ai-[a-z0-9-]+-<your-team>\.vercel\.app
+    CORS_EXTRA_ORIGINS: str = ""
+    CORS_ORIGIN_REGEX: str = ""
 
-    # Temporary, pre-launch only: every newly-created staff account starts
-    # with this password and must change it on first login (must_change_password
-    # flag). Kept as a separate setting from the portal one so staff and patient
-    # temp-password policy can diverge later (e.g. once WhatsApp OTP delivery
-    # replaces this for staff but not patients, or vice versa).
-    STAFF_DEFAULT_TEMP_PASSWORD: str = "Test1234"
-
-    # Temporary, pre-launch only: staff "forgot password" OTP is a fixed
-    # code instead of a real WhatsApp-delivered one-time code. Swap this
-    # for real OTP generation + delivery once WhatsApp is wired up.
-    STAFF_FORGOT_PASSWORD_OTP: str = "1234"
-
-    # Same idea, for patients. Kept as its own setting so staff/patient OTP
-    # policy can diverge later once real WhatsApp delivery replaces this.
-    PORTAL_FORGOT_PASSWORD_OTP: str = "1234"
+    # How many reverse-proxy hops sit in front of the app (Render's edge = 1).
+    # Rate limiting reads the client IP from that many entries from the RIGHT
+    # of X-Forwarded-For, so a client can't spoof its own IP. Set to 0 to use
+    # the raw socket address (local dev).
+    TRUSTED_PROXY_HOPS: int = 1
 
     # How long an unpaid scheduled-slot booking holds its place before it's
     # treated as abandoned and the slot is released back for others to book.
@@ -97,3 +93,44 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 settings = Settings()
+
+
+# ---------------------------------------------------------------------------
+# Startup secret validation
+# ---------------------------------------------------------------------------
+import os
+import warnings
+
+_WEAK_SECRETS = {
+    "", "changeme", "changeme-invite-secret", "your_secret_key_here",
+    "secret", "password",
+}
+_MIN_SECRET_LEN = 32
+
+
+def _is_production(s) -> bool:
+    # Render sets RENDER=true automatically. Any non-SQLite DB also counts.
+    return (
+        bool(os.getenv("RENDER"))
+        or os.getenv("ENVIRONMENT", "").lower() == "production"
+        or not s.DATABASE_URL.startswith("sqlite")
+    )
+
+
+def validate_startup_secrets(s) -> None:
+    problems = []
+    if s.DEV_CAPTCHA_ANSWER and _is_production(s):
+        raise RuntimeError("Refusing to start: DEV_CAPTCHA_ANSWER must never be set in production")
+    for name in ("SECRET_KEY", "PORTAL_INVITE_SECRET"):
+        value = getattr(s, name)
+        if value in _WEAK_SECRETS or len(value) < _MIN_SECRET_LEN:
+            problems.append(f"{name} is unset, default, or shorter than {_MIN_SECRET_LEN} chars")
+    if not s.SUPER_ADMIN_KEY:
+        # Not fatal: the key-protected endpoints reject every request while
+        # this is empty (see verify_super_admin_key in admin.py).
+        warnings.warn("SUPER_ADMIN_KEY is not set; create-superadmin is disabled.")
+    if problems:
+        msg = "Refusing to start: " + "; ".join(problems)
+        if _is_production(s):
+            raise RuntimeError(msg)
+        warnings.warn("WARNING (dev only, would block production): " + msg)

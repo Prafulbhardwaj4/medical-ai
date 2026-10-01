@@ -777,6 +777,7 @@
   <script src="../js/tutorial.js?v=2"></script>
   <script>
     if (!requireAuth()) { }
+    if (blockPageIfFoundation("IPD / Admissions")) throw new Error("tier-locked");
     fillTopbar();
 
     async function toggleNotifPanel() {

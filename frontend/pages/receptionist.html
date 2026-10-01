@@ -3490,7 +3490,7 @@
       const body = document.getElementById('day-end-body');
       const modes = ['cash', 'card', 'upi'];
       const modeLabel = { cash: 'Cash', card: 'Card', upi: 'UPI' };
-      const catLabel = { consultation: 'Consultation', tests: 'Tests', opd_charges: 'Ad-hoc Charges', ipd_deposits: 'IPD Deposits', ipd_topups: 'IPD Top-ups', ipd_settlements: 'IPD Settlements' };
+      const catLabel = { consultation: 'Consultation', tests: 'Tests', pharmacy: 'Pharmacy', opd_charges: 'Ad-hoc Charges', ipd_deposits: 'IPD Deposits', ipd_topups: 'IPD Top-ups', ipd_settlements: 'IPD Settlements' };
 
       const breakdownHtml = modes.map(m => {
         const cats = summary.by_mode[m] || {};
@@ -3513,7 +3513,7 @@
 
       body.innerHTML = `
         <p style="font-size:12.5px;color:var(--slate);margin-bottom:8px">Today's collections so far — closes automatically at midnight.</p>
-        ${summary.cash_refunds > 0 ? `<p style="font-size:12.5px;color:var(--slate)">Cash refunds today: −₹${summary.cash_refunds.toFixed(2)} (already netted out below)</p>` : ''}
+        ${Object.keys(summary.refunds_by_channel || {}).filter(ch => summary.refunds_by_channel[ch] > 0).map(ch => `<p style="font-size:12.5px;color:var(--slate)">${ch.toUpperCase()} refunds today: −₹${summary.refunds_by_channel[ch].toFixed(2)} (already netted out below)</p>`).join('')}
         ${breakdownHtml}`;
     }
 
@@ -3569,6 +3569,11 @@
 
     async function checkEmergencyWardAvailable() {
       const btn = document.getElementById('btn-emergency-intake');
+      if (typeof isFoundationTier === 'function' && isFoundationTier()) {
+        emergencyWardAvailable = false;  // IPD is Growth+; don't call the locked endpoint
+        btn.style.opacity = '0.5';
+        return;
+      }
       try {
         const status = await api("GET", "/admissions/emergency-ward-status", null, false, true);
         emergencyWardAvailable = !!status.available;
@@ -3580,6 +3585,10 @@
     }
 
     function onEmergencyIntakeBtnClick() {
+      if (typeof isFoundationTier === 'function' && isFoundationTier()) {
+        openUpgradeModal();
+        return;
+      }
       if (!emergencyWardAvailable) {
         toast("There is no emergency ward in your hospital, create it first.", "info");
         return;

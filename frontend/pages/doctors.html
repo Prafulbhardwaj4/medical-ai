@@ -246,7 +246,7 @@
       </div>
 
       <div style="margin-bottom:14px;font-size:12.5px;color:var(--slate-light);background:var(--smoke-mid);padding:10px 12px;border-radius:var(--radius)">
-        New accounts start with a temporary password. The staff member sets their own password the first time they sign in.
+        A one-time temporary password is generated and shown to you once after creation. Share it with the staff member - they set their own password the first time they sign in.
       </div>
 
       <div class="err-msg" id="modal-err" style="margin-bottom:12px"></div>
@@ -533,6 +533,7 @@
               ${d.id !== getDoctor()?.id && (getDoctor()?.role === 'admin' || getDoctor()?.role === 'super_admin') && (d.role === 'nurse' || d.role === 'assistant') ? `<button class="btn btn-outline btn-sm" id="na-role-btn-${d.id}" onclick="toggleNurseAssistantRole(${d.id})">
                 ${d.role === 'nurse' ? 'Convert to Assistant' : 'Convert to Nurse'}
               </button>` : ''}
+              ${getDoctor()?.role === 'admin' && d.id !== getDoctor()?.id && d.role !== 'admin' && d.role !== 'super_admin' ? `<button class="btn btn-outline btn-sm" onclick="resetStaffPassword(${d.id})">Reset Password</button>` : ''}
               <button class="btn btn-outline btn-sm" onclick="openEditModal(${d.id})">Edit</button>
               <button class="btn ${d.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" id="active-btn-${d.id}" onclick="toggleActive(${d.id})">
                 ${d.is_active ? 'Deactivate' : 'Activate'}
@@ -635,10 +636,11 @@
       const roleLabels = { doctor: 'Doctor', sub_admin: 'Sub Admin', receptionist: 'Receptionist', nurse: 'Nurse', lab: 'Lab Staff', pharmacy: 'Pharmacist' };
 
       try {
-        await api('POST', `/admin/doctors?${params.toString()}`);
+        const created = await api('POST', `/admin/doctors?${params.toString()}`);
         toast(`${roleLabels[role] || 'Staff'} account created successfully.`, 'success');
         closeModal();
         loadDoctors();
+        await alertModal(`Temporary password for ${created.email}:\n\n${created.temporary_password}\n\nShare it with them now - it will not be shown again.`, { title: "Temporary Password" });
       } catch (e) {
         err.textContent = e.message;
       } finally {
@@ -659,6 +661,18 @@
       } catch (e) {
         btn.disabled = false;
         btn.textContent = original;
+        toast(e.message, 'error');
+      }
+    }
+
+    async function resetStaffPassword(doctorId) {
+      const d = staffMap[doctorId];
+      const ok = await confirmModal(`Reset the password for ${d ? d.name : 'this staff member'}? They will be signed out everywhere and must set a new password on their next sign-in.`, { title: "Reset Password", okLabel: "Reset" });
+      if (!ok) return;
+      try {
+        const data = await api('POST', `/admin/doctors/${doctorId}/reset-password`);
+        await alertModal(`New temporary password:\n\n${data.new_password}\n\nShare it with them now - it will not be shown again.`, { title: "New Password" });
+      } catch (e) {
         toast(e.message, 'error');
       }
     }

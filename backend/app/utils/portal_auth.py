@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.portal import PatientAccount
+from app.utils.auth import is_token_blacklisted, token_predates_password_change
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 portal_security = HTTPBearer()
@@ -23,10 +24,12 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_portal_access_token(account_id: int) -> str:
+    now = datetime.utcnow()
     payload = {
         "sub": str(account_id),
         "type": "portal",
-        "exp": datetime.utcnow() + timedelta(minutes=settings.PORTAL_ACCESS_TOKEN_EXPIRE_MINUTES),
+        "iat": now,
+        "exp": now + timedelta(minutes=settings.PORTAL_ACCESS_TOKEN_EXPIRE_MINUTES),
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
@@ -104,7 +107,12 @@ def get_current_patient_account(
     except (JWTError, TypeError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
+    if is_token_blacklisted(credentials.credentials, db):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
     account = db.query(PatientAccount).filter(PatientAccount.id == account_id).first()
     if not account or not account.is_active:
         raise HTTPException(status_code=401, detail="Account not found")
+    if token_predates_password_change(payload, account.password_changed_at):
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
     return account

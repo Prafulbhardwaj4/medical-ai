@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
+from sqlalchemy.exc import IntegrityError
 from typing import Optional
 from pydantic import BaseModel
 from datetime import date, datetime, timedelta
@@ -14,6 +15,7 @@ from app.utils.auth import get_current_doctor, ist_today
 from app.utils.audit import log_action
 from app.services.groq_service import extract_medicines
 from app.utils.notify import sync_stock_notifications
+from app.utils.inventory import expired_units_by_medicine
 
 router = APIRouter(prefix="/admin/medicines", tags=["medicines"])
 
@@ -51,11 +53,45 @@ class MedicineIn(BaseModel):
 
 VALID_BILLING_MODES = {"per_unit", "per_pack"}
 
+MAX_PRICE = 1_000_000      # Rs per pack / NPPA ceiling
+MAX_GST_PERCENT = 28       # highest Indian GST slab
+MAX_PACK_SIZE = 10_000
+MAX_THRESHOLD = 1_000_000
+
+
+def _number_problem(price_per_pack=None, gst_percent=None, nppa_ceiling_price=None, low_stock_threshold=None, pack_size=None):
+    """Returns a human-readable problem string, or None when every number is sane."""
+    if price_per_pack is not None and not (0 <= price_per_pack <= MAX_PRICE):
+        return f"Price per pack must be between 0 and {MAX_PRICE:,}"
+    if gst_percent is not None and not (0 <= gst_percent <= MAX_GST_PERCENT):
+        return f"GST % must be between 0 and {MAX_GST_PERCENT}"
+    if nppa_ceiling_price is not None and not (0 <= nppa_ceiling_price <= MAX_PRICE):
+        return f"NPPA ceiling price must be between 0 and {MAX_PRICE:,}"
+    if low_stock_threshold is not None and not (0 <= low_stock_threshold <= MAX_THRESHOLD):
+        return f"Low-stock threshold must be between 0 and {MAX_THRESHOLD:,}"
+    if pack_size is not None and not (1 <= pack_size <= MAX_PACK_SIZE):
+        return f"Pack size must be between 1 and {MAX_PACK_SIZE:,}"
+    return None
+
+
+def _find_duplicate_medicine(db, hospital_id, generic_name, strength, dosage_forms):
+    """Active generic (non-brand) row with the same generic name + strength + form."""
+    return db.query(HospitalMedicine).filter(
+        HospitalMedicine.hospital_id == hospital_id,
+        HospitalMedicine.parent_medicine_id == None,  # noqa: E711
+        HospitalMedicine.is_active == True,
+        func.lower(func.trim(HospitalMedicine.generic_name)) == (generic_name or "").strip().lower(),
+        func.lower(func.trim(func.coalesce(HospitalMedicine.strength, ""))) == (strength or "").strip().lower(),
+        func.lower(func.trim(func.coalesce(HospitalMedicine.dosage_forms, ""))) == (dosage_forms or "").strip().lower(),
+    ).first()
+
 
 def compute_unit_price(price_per_pack, pack_size):
     if price_per_pack is None or not pack_size or pack_size < 1:
         return None
-    return round(price_per_pack / pack_size, 2)
+    # Deliberately NOT rounded: rounding here made a Rs100 strip of 15 bill Rs100.05.
+    # Line totals are rounded once, in utils.inventory.line_total.
+    return price_per_pack / pack_size
 
 
 class MedicineBulkConfirm(BaseModel):
@@ -69,7 +105,7 @@ class BrandIn(BaseModel):
     strength: Optional[str] = None  # overrides the parent's strength for this brand only; falls back to parent's if not given
 
 
-def serialize(m: HospitalMedicine):
+def serialize(m: HospitalMedicine, expired_units: int = 0):
     return {
         "id": m.id,
         "generic_name": m.generic_name,
@@ -86,9 +122,11 @@ def serialize(m: HospitalMedicine):
         "billing_mode": m.billing_mode,
         "gst_percent": m.gst_percent,
         "hsn_code": m.hsn_code,
-        "price": m.price,  # computed unit price
+        "price": round(m.price, 2) if m.price is not None else None,  # display only - billing uses the unrounded value
         "nppa_ceiling_price": m.nppa_ceiling_price,
         "stock_quantity": m.stock_quantity,
+        "expired_quantity": expired_units,  # units sitting in expired batches - not sellable
+        "sellable_quantity": max(0, (m.stock_quantity or 0) - expired_units) if m.stock_quantity is not None else None,
         "is_active": m.is_active
     }
 
@@ -140,7 +178,8 @@ def list_medicines(
         ))
 
     items = query.order_by(HospitalMedicine.generic_name).all()
-    return [serialize(m) for m in items]
+    expired_map = expired_units_by_medicine(db, hospital_id=current_doctor.hospital_id)
+    return [serialize(m, expired_map.get(m.id, 0)) for m in items]
 
 
 @router.post("", status_code=201)
@@ -160,8 +199,13 @@ def create_medicine(
         raise HTTPException(status_code=400, detail="Invalid billing mode")
 
     pack_size = payload.pack_size or 1
-    if pack_size < 1:
-        raise HTTPException(status_code=400, detail="Pack size must be at least 1")
+    problem = _number_problem(payload.price_per_pack, payload.gst_percent, payload.nppa_ceiling_price, payload.low_stock_threshold, pack_size)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    if not (payload.generic_name or "").strip():
+        raise HTTPException(status_code=400, detail="Generic name is required")
+    if _find_duplicate_medicine(db, current_doctor.hospital_id, payload.generic_name, payload.strength, payload.dosage_forms):
+        raise HTTPException(status_code=400, detail="This medicine (same name, strength and form) is already in your catalog. Edit the existing one or add a brand to it.")
 
     medicine = HospitalMedicine(
         hospital_id=current_doctor.hospital_id,
@@ -171,7 +215,7 @@ def create_medicine(
         dosage_forms=(payload.dosage_forms or "").strip(),
         strength=(payload.strength or "").strip(),
         schedule=schedule,
-        low_stock_threshold=payload.low_stock_threshold or 25,
+        low_stock_threshold=payload.low_stock_threshold if payload.low_stock_threshold is not None else 25,
         pack_size=pack_size,
         price_per_pack=payload.price_per_pack,
         nppa_ceiling_price=payload.nppa_ceiling_price,
@@ -220,6 +264,9 @@ def add_medicine_brand(
     brand_name = (payload.brand_name or "").strip()
     if not brand_name:
         raise HTTPException(status_code=400, detail="Brand name is required")
+    problem = _number_problem(price_per_pack=payload.price_per_pack, low_stock_threshold=payload.low_stock_threshold)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
 
     root_id = parent.parent_medicine_id or parent.id
     existing = db.query(HospitalMedicine).filter(
@@ -241,7 +288,8 @@ def add_medicine_brand(
         schedule=root.schedule,
         brand_name=brand_name,
         parent_medicine_id=root.id,
-        low_stock_threshold=payload.low_stock_threshold or root.low_stock_threshold or 25,
+        low_stock_threshold=(payload.low_stock_threshold if payload.low_stock_threshold is not None
+                             else (root.low_stock_threshold if root.low_stock_threshold is not None else 25)),
         pack_size=root.pack_size,
         price_per_pack=payload.price_per_pack,
         billing_mode=root.billing_mode,
@@ -290,8 +338,16 @@ def update_medicine(
         raise HTTPException(status_code=400, detail="Invalid billing mode")
 
     pack_size = payload.pack_size or 1
-    if pack_size < 1:
-        raise HTTPException(status_code=400, detail="Pack size must be at least 1")
+    problem = _number_problem(payload.price_per_pack, payload.gst_percent, payload.nppa_ceiling_price, payload.low_stock_threshold, pack_size)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    if not (payload.generic_name or "").strip():
+        raise HTTPException(status_code=400, detail="Generic name is required")
+
+    _audited_fields = ["generic_name", "brand_names", "category", "dosage_forms", "strength", "schedule",
+                       "low_stock_threshold", "pack_size", "price_per_pack", "billing_mode", "gst_percent",
+                       "hsn_code", "nppa_ceiling_price"]
+    _before = {f: getattr(medicine, f) for f in _audited_fields}
 
     medicine.generic_name = payload.generic_name.strip()
     medicine.brand_names = (payload.brand_names or "").strip()
@@ -299,7 +355,7 @@ def update_medicine(
     medicine.dosage_forms = (payload.dosage_forms or "").strip()
     medicine.strength = (payload.strength or "").strip()
     medicine.schedule = schedule
-    medicine.low_stock_threshold = payload.low_stock_threshold or 25
+    medicine.low_stock_threshold = payload.low_stock_threshold if payload.low_stock_threshold is not None else 25
     medicine.pack_size = pack_size
     medicine.price_per_pack = payload.price_per_pack
     medicine.billing_mode = billing_mode
@@ -312,12 +368,14 @@ def update_medicine(
     # must never affect live stock.
     db.commit()
 
+    _changes = [f"{f}: {_before[f]!r} -> {getattr(medicine, f)!r}" for f in _audited_fields if _before[f] != getattr(medicine, f)]
     log_action(
         db, current_doctor,
         action="medicine_updated",
         target_type="hospital_medicine",
         target_id=medicine.id,
         target_label=medicine.generic_name,
+        details="; ".join(_changes) if _changes else "no field changed",
         hospital_id=current_doctor.hospital_id
     )
     result = serialize(medicine)
@@ -379,6 +437,9 @@ def _extract_text_from_excel(content: bytes) -> str:
     return "\n".join(lines)
 
 
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
 @router.post("/upload")
 async def upload_medicines(
     file: UploadFile = File(...),
@@ -387,14 +448,22 @@ async def upload_medicines(
     require_admin_or_pharmacy(current_doctor)
 
     filename = (file.filename or "").lower()
-    content = await file.read()
+    if filename.endswith(".xls"):
+        raise HTTPException(status_code=400, detail="Old .xls files are not supported. Open it in Excel, choose Save As .xlsx, and upload that.")
+    if not (filename.endswith(".pdf") or filename.endswith(".xlsx")):
+        raise HTTPException(status_code=400, detail="Only PDF or .xlsx Excel files are supported")
 
-    if filename.endswith(".pdf"):
-        raw_text = _extract_text_from_pdf(content)
-    elif filename.endswith(".xlsx") or filename.endswith(".xls"):
-        raw_text = _extract_text_from_excel(content)
-    else:
-        raise HTTPException(status_code=400, detail="Only PDF or Excel files are supported")
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File is too large (maximum 10 MB). Split it into smaller files.")
+
+    try:
+        if filename.endswith(".pdf"):
+            raw_text = _extract_text_from_pdf(content)
+        else:
+            raw_text = _extract_text_from_excel(content)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read this file. Make sure it is a valid, unprotected PDF or .xlsx.")
 
     if not raw_text.strip():
         raise HTTPException(status_code=400, detail="Could not extract any text from file")
@@ -416,7 +485,23 @@ def bulk_confirm_medicines(
     require_admin_or_pharmacy(current_doctor)
 
     created = []
+    skipped = []
+    seen_keys = set()
     for item in payload.medicines:
+        name = (item.generic_name or "").strip()
+        if not name or len(name) > 200:
+            skipped.append({"name": name[:60] or "(blank)", "reason": "Missing or invalid name"})
+            continue
+        problem = _number_problem(item.price_per_pack, item.gst_percent, item.nppa_ceiling_price, item.low_stock_threshold, item.pack_size or 1)
+        if problem:
+            skipped.append({"name": name, "reason": problem})
+            continue
+        key = (name.lower(), (item.strength or "").strip().lower(), (item.dosage_forms or "").strip().lower())
+        if key in seen_keys or _find_duplicate_medicine(db, current_doctor.hospital_id, name, item.strength, item.dosage_forms):
+            skipped.append({"name": name, "reason": "Already in your catalog"})
+            continue
+        seen_keys.add(key)
+
         schedule = (item.schedule or "otc").lower()
         if schedule not in VALID_SCHEDULES:
             schedule = "h"
@@ -431,7 +516,7 @@ def bulk_confirm_medicines(
 
         medicine = HospitalMedicine(
             hospital_id=current_doctor.hospital_id,
-            generic_name=item.generic_name.strip(),
+            generic_name=name,
             brand_names=(item.brand_names or "").strip(),
             category=(item.category or "").strip(),
             dosage_forms=(item.dosage_forms or "").strip(),
@@ -439,6 +524,8 @@ def bulk_confirm_medicines(
             schedule=schedule,
             pack_size=pack_size,
             price_per_pack=item.price_per_pack,
+            nppa_ceiling_price=item.nppa_ceiling_price,
+            low_stock_threshold=item.low_stock_threshold if item.low_stock_threshold is not None else 25,
             billing_mode=billing_mode,
             gst_percent=item.gst_percent,
             hsn_code=(item.hsn_code or "").strip() or None,
@@ -461,12 +548,36 @@ def bulk_confirm_medicines(
         target_label=f"{len(created)} medicines",
         hospital_id=current_doctor.hospital_id
     )
-    return [serialize(m) for m in created]
+    return {"created": [serialize(m) for m in created], "skipped": skipped}
 
 class BatchIn(BaseModel):
     quantity: int
     expiry_date: Optional[date] = None
     batch_number: Optional[str] = ""
+    reason: Optional[str] = None   # required by edit_batch when the quantity goes DOWN (see WRITE_OFF_REASONS)
+    note: Optional[str] = None
+
+
+WRITE_OFF_REASONS = {"expired", "damaged", "theft_loss", "correction", "returned_to_supplier", "other"}
+
+
+class WriteOffIn(BaseModel):
+    reason: str
+    note: Optional[str] = None
+
+
+def _batch_snapshot(b: MedicineBatch) -> str:
+    return f"lot={b.batch_number or '-'}, qty={b.quantity}, expiry={b.expiry_date.isoformat() if b.expiry_date else '-'}"
+
+
+def _clean_reason(reason, note):
+    reason = (reason or "").strip().lower()
+    if reason not in WRITE_OFF_REASONS:
+        raise HTTPException(status_code=400, detail="Choose a reason: " + ", ".join(sorted(WRITE_OFF_REASONS)))
+    note = (note or "").strip()[:200]
+    if reason == "other" and not note:
+        raise HTTPException(status_code=400, detail="Please add a short note for reason 'other'")
+    return reason, note
 
 
 def serialize_batch(b: MedicineBatch):
@@ -500,27 +611,42 @@ def add_batch(
         raise HTTPException(status_code=404, detail="Medicine not found")
 
     batch_number = (payload.batch_number or "").strip()
+    batch = None
     if batch_number:
-        duplicate = db.query(MedicineBatch).filter(
+        # The DB enforces one row per (medicine, lot number) - including sold-out
+        # rows - so the app check must look at ALL rows too (it used to ignore
+        # quantity-0 rows, which crashed with a 500 on re-adding a sold-out lot).
+        existing = db.query(MedicineBatch).filter(
             MedicineBatch.medicine_id == medicine_id,
             MedicineBatch.batch_number == batch_number,
-            MedicineBatch.quantity > 0
         ).first()
-        if duplicate:
+        if existing and existing.quantity > 0:
             raise HTTPException(status_code=400, detail=f"Batch/Lot '{batch_number}' already exists for this medicine. Edit the existing batch instead, or use a different lot number.")
+        if existing:
+            # Sold-out lot received again: revive the same row (keeps the lot's
+            # history and traceability in one place) instead of creating a twin.
+            existing.quantity = payload.quantity
+            existing.expiry_date = payload.expiry_date
+            existing.received_date = ist_today()
+            batch = existing
 
-    batch = MedicineBatch(
-        medicine_id=medicine_id,
-        hospital_id=current_doctor.hospital_id,
-        batch_number=batch_number or None,
-        quantity=payload.quantity,
-        expiry_date=payload.expiry_date,
-        received_date=ist_today()
-    )
-    db.add(batch)
+    if batch is None:
+        batch = MedicineBatch(
+            medicine_id=medicine_id,
+            hospital_id=current_doctor.hospital_id,
+            batch_number=batch_number or None,
+            quantity=payload.quantity,
+            expiry_date=payload.expiry_date,
+            received_date=ist_today()
+        )
+        db.add(batch)
 
     medicine.stock_quantity = (medicine.stock_quantity or 0) + payload.quantity
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Batch/Lot '{batch_number}' already exists for this medicine. Please refresh and edit the existing batch.")
     db.refresh(batch)
     sync_stock_notifications(db, current_doctor.hospital_id)
 
@@ -560,12 +686,17 @@ def edit_batch(
             MedicineBatch.medicine_id == batch.medicine_id,
             MedicineBatch.batch_number == batch_number,
             MedicineBatch.id != batch_id,
-            MedicineBatch.quantity > 0
         ).first()
         if duplicate:
-            raise HTTPException(status_code=400, detail=f"Batch/Lot '{batch_number}' already exists for this medicine.")
+            raise HTTPException(status_code=400, detail=f"Batch/Lot '{batch_number}' already exists for this medicine" + (" (sold out - add stock to that lot instead)." if duplicate.quantity <= 0 else "."))
+
+    # Reducing stock by hand is a stock loss/correction - it must say why.
+    reason = note = ""
+    if payload.quantity < batch.quantity:
+        reason, note = _clean_reason(payload.reason, payload.note)
 
     medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == batch.medicine_id).first()
+    before = _batch_snapshot(batch)
     if medicine:
         # keep the aggregate stock in sync with the quantity change on this batch
         medicine.stock_quantity = max(0, (medicine.stock_quantity or 0) - batch.quantity + payload.quantity)
@@ -573,11 +704,67 @@ def edit_batch(
     batch.quantity = payload.quantity
     batch.expiry_date = payload.expiry_date
     batch.batch_number = batch_number or None
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Batch/Lot '{batch_number}' already exists for this medicine.")
     db.refresh(batch)
     sync_stock_notifications(db, current_doctor.hospital_id)
 
+    log_action(
+        db, current_doctor,
+        action="medicine_batch_edited",
+        target_type="medicine_batch",
+        target_id=batch.id,
+        target_label=medicine.generic_name if medicine else None,
+        details=f"before: {before} | after: {_batch_snapshot(batch)}" + (f" | reason={reason}" + (f" ({note})" if note else "") if reason else ""),
+        hospital_id=current_doctor.hospital_id
+    )
     return serialize_batch(batch)
+
+
+@router.post("/batches/{batch_id}/write-off")
+def write_off_batch(
+    batch_id: int,
+    payload: WriteOffIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Write the remaining units of a batch off to zero (expired, damaged, theft/loss,
+    correction, returned to supplier). The batch row is KEPT with quantity 0, so its
+    lot/expiry history stays; the audit log records who, how many units, and why."""
+    require_admin_or_pharmacy(current_doctor)
+    reason, note = _clean_reason(payload.reason, payload.note)
+
+    batch = db.query(MedicineBatch).filter(
+        MedicineBatch.id == batch_id,
+        MedicineBatch.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if batch.quantity <= 0:
+        raise HTTPException(status_code=400, detail="This batch is already at zero")
+
+    medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == batch.medicine_id).first()
+    written_off = batch.quantity
+    before = _batch_snapshot(batch)
+    if medicine:
+        medicine.stock_quantity = max(0, (medicine.stock_quantity or 0) - written_off)
+    batch.quantity = 0
+    db.commit()
+    sync_stock_notifications(db, current_doctor.hospital_id)
+
+    log_action(
+        db, current_doctor,
+        action="medicine_batch_written_off",
+        target_type="medicine_batch",
+        target_id=batch.id,
+        target_label=f"{medicine.generic_name if medicine else 'medicine'} -{written_off}",
+        details=f"before: {before} | after: qty=0 | written_off={written_off} | reason={reason}" + (f" ({note})" if note else ""),
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"written_off": written_off, "batch": serialize_batch(batch)}
 
 
 @router.get("/{medicine_id}/batches")
@@ -611,14 +798,27 @@ def delete_batch(
     if not batch:
         raise HTTPException(status_code=404, detail="Batch not found")
 
-    medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == batch.medicine_id).first()
-    if medicine:
-        medicine.stock_quantity = max(0, (medicine.stock_quantity or 0) - batch.quantity)
+    # A batch that still holds stock can't just vanish - that erased the only record of
+    # the loss. Write it off first (with a reason); only empty rows can be removed.
+    if batch.quantity > 0:
+        raise HTTPException(status_code=400, detail=f"This batch still has {batch.quantity} units. Write it off first (choose a reason) - it can be removed once it is at zero.")
 
+    medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == batch.medicine_id).first()
+    snapshot = _batch_snapshot(batch)
+    batch_pk = batch.id
     db.delete(batch)
     db.commit()
     sync_stock_notifications(db, current_doctor.hospital_id)
 
+    log_action(
+        db, current_doctor,
+        action="medicine_batch_removed",
+        target_type="medicine_batch",
+        target_id=batch_pk,
+        target_label=medicine.generic_name if medicine else None,
+        details=f"removed empty batch: {snapshot}",
+        hospital_id=current_doctor.hospital_id
+    )
     return {"deleted": True}
 
 
@@ -671,8 +871,9 @@ def get_low_stock_medicines(
     ).all()
 
     result = []
+    expired_map = expired_units_by_medicine(db, hospital_id=current_doctor.hospital_id)
     for m in medicines:
-        stock = m.stock_quantity or 0
+        stock = max(0, (m.stock_quantity or 0) - expired_map.get(m.id, 0))  # expired units don't count
         if stock <= m.low_stock_threshold:
             result.append({
                 "medicine_id": m.id,

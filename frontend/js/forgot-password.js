@@ -86,9 +86,27 @@
     document.body.appendChild(div.firstElementChild);
   }
 
+  // Self-service reset is switched off on the server until WhatsApp OTP exists
+  // (the old fixed OTP let anyone take over any account). Flip to false and
+  // restore the server endpoints when WhatsApp delivery goes live.
+  const FP_DISABLED = true;
+
   window.openForgotPasswordModal = function () {
     injectModal();
     document.getElementById("fp-modal-overlay").classList.add("open");
+    if (FP_DISABLED) {
+      document.getElementById("fp-step-identifier").innerHTML = `
+        <p style="color:var(--slate);font-size:13.5px;line-height:1.55;margin-bottom:16px">
+          Password reset by WhatsApp is coming soon.<br><br>
+          <strong>Staff:</strong> ask your hospital admin to reset your password.<br>
+          <strong>Patients:</strong> please contact the hospital front desk.
+        </p>
+        <button class="btn btn-outline btn-lg" style="width:100%" onclick="closeForgotPasswordModal()">OK</button>`;
+      document.getElementById("fp-step-identifier").style.display = "block";
+      document.getElementById("fp-step-otp").style.display = "none";
+      document.getElementById("fp-step-newpw").style.display = "none";
+      return;
+    }
     document.getElementById("fp-step-identifier").style.display = "block";
     document.getElementById("fp-step-otp").style.display = "none";
     document.getElementById("fp-step-newpw").style.display = "none";

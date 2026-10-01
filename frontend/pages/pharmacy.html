@@ -407,6 +407,20 @@
     </main>
   </div>
 
+  <div class="modal-overlay" id="modal-payment-method">
+    <div class="modal" style="max-width:320px">
+      <div class="modal-header">
+        <h2>How was this paid?</h2>
+        <button class="modal-close" onclick="resolvePaymentMethod(null)">×</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button class="btn btn-outline" onclick="resolvePaymentMethod('cash')">💵 Cash</button>
+        <button class="btn btn-outline" onclick="resolvePaymentMethod('card')">💳 Card</button>
+        <button class="btn btn-outline" onclick="resolvePaymentMethod('upi')">📱 UPI</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="modal-pharm-stock-issues">
     <div class="modal" style="max-width:480px;max-height:80vh;overflow-y:auto">
       <div class="modal-header">
@@ -1800,9 +1814,21 @@
       }
     }
 
+    let _paymentMethodResolve = null;
+    function askPaymentMethod() {
+      document.getElementById('modal-payment-method').classList.add('open');
+      return new Promise((resolve) => { _paymentMethodResolve = resolve; });
+    }
+    function resolvePaymentMethod(method) {
+      document.getElementById('modal-payment-method').classList.remove('open');
+      if (_paymentMethodResolve) { _paymentMethodResolve(method); _paymentMethodResolve = null; }
+    }
+
     async function collectMedicinePayment() {
+      const method = await askPaymentMethod();
+      if (!method) return;
       try {
-        const result = await api("POST", `/pharmacy/prescription/${currentRxToken}/collect-payment`, {});
+        const result = await api("POST", `/pharmacy/prescription/${currentRxToken}/collect-payment`, { payment_method: method });
         if (result.skipped && result.skipped.length) {
           toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} medicine(s). Out of stock, not charged: ${result.skipped.join(', ')}`, 'info');
         } else {
@@ -2086,7 +2112,7 @@
             <strong>${sanitize(m.generic_name)}${m.strength ? ' ' + sanitize(m.strength) : ''}</strong>
             <div style="font-size:12px;color:var(--slate)">${sanitize(m.category || '—')} · ${sanitize(m.dosage_forms || '—')}</div>
           </div>
-          <div style="font-size:13px;min-width:80px">Stock: <strong>${m.stock_quantity != null ? m.stock_quantity : '—'}</strong></div>
+          <div style="font-size:13px;min-width:80px">Stock: <strong>${m.sellable_quantity != null ? m.sellable_quantity : (m.stock_quantity != null ? m.stock_quantity : '—')}</strong>${m.expired_quantity > 0 ? `<div style="color:#991b1b;font-size:11px;font-weight:600">${m.expired_quantity} expired</div>` : ''}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-outline btn-sm" onclick="openEditModal(${JSON.stringify(m).replace(/\"/g, '&quot;')})">Edit</button>
             ${!m.brand_name && !m.parent_medicine_id ? `<button class="btn btn-outline btn-sm" onclick="openAddBrandModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Brand</button>` : ''}
@@ -2467,7 +2493,12 @@
       } catch (e) { errEl.textContent = e.message; }
     }
 
+    let editingBatchId = null;
+    let editingBatchOriginalQty = null;
+
     function openAddStockModal(medicineId, medicineName) {
+      editingBatchId = null;
+      editingBatchOriginalQty = null;
       currentStockMedicineId = medicineId;
       document.getElementById('stock-medicine-name').textContent = medicineName;
       document.getElementById('stock-qty').value = '';
@@ -2487,13 +2518,26 @@
       const qty = parseInt(document.getElementById('stock-qty').value);
       if (!qty || qty <= 0) { errEl.textContent = 'Enter a valid quantity.'; return; }
 
+      const payload = {
+        quantity: qty,
+        expiry_date: document.getElementById('stock-expiry').value || null,
+        batch_number: document.getElementById('stock-batch-number').value.trim()
+      };
       try {
-        await api("POST", `/admin/medicines/${currentStockMedicineId}/batches`, {
-          quantity: qty,
-          expiry_date: document.getElementById('stock-expiry').value || null,
-          batch_number: document.getElementById('stock-batch-number').value.trim()
-        });
-        toast('Stock added.', 'success');
+        if (editingBatchId) {
+          // Editing an existing batch (this page used to POST a NEW batch here instead).
+          if (editingBatchOriginalQty != null && qty < editingBatchOriginalQty) {
+            const why = await askWriteOffReason("Reducing stock - why?");
+            if (!why) return;
+            payload.reason = why.reason;
+            payload.note = why.note;
+          }
+          await api("PATCH", `/admin/medicines/batches/${editingBatchId}`, payload);
+          toast('Batch updated.', 'success');
+        } else {
+          await api("POST", `/admin/medicines/${currentStockMedicineId}/batches`, payload);
+          toast('Stock added.', 'success');
+        }
         closeAddStockModal();
         loadStockMedicines();
       } catch (e) { errEl.textContent = e.message; }
@@ -2535,7 +2579,9 @@
             <div style="display:flex;align-items:center;gap:8px">
               ${badge}
               <button class="btn btn-outline btn-sm" onclick='editBatch(${JSON.stringify(b)}, ${medicineId}, "${medicineName.replace(/"/g, "&quot;")}", ${packSize})'>Edit</button>
-              <button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Remove</button>
+              ${b.quantity > 0
+                ? `<button class="btn btn-outline btn-sm" onclick="writeOffBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Write off</button>`
+                : `<button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Remove</button>`}
             </div>
           </div>
         `;
@@ -2546,13 +2592,25 @@
       currentStockMedicineId = medicineId;
       currentStockPackSize = packSize || 1;
       editingBatchId = batch.id;
+      editingBatchOriginalQty = batch.quantity;
       document.getElementById('stock-medicine-name').textContent = medicineName + ' (edit batch)';
-      document.getElementById('stock-qty').value = Math.round(batch.quantity / currentStockPackSize);
+      document.getElementById('stock-qty').value = batch.quantity;  // this page works in units, not strips
       document.getElementById('stock-expiry').value = batch.expiry_date || '';
       document.getElementById('stock-batch-number').value = batch.batch_number || '';
       document.getElementById('stock-modal-err').textContent = '';
       document.getElementById('modal-batches').classList.remove('open');
       document.getElementById('modal-add-stock').classList.add('open');
+    }
+
+    async function writeOffBatch(batchId, medicineId, medicineName, packSize) {
+      const why = await askWriteOffReason("Write off this batch - why?");
+      if (!why) return;
+      try {
+        await api("POST", `/admin/medicines/batches/${batchId}/write-off`, why);
+        toast('Batch written off.', 'success');
+        openBatchesModal(medicineId, medicineName, packSize);
+        loadStockMedicines();
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     async function deleteBatch(batchId, medicineId, medicineName, packSize) {

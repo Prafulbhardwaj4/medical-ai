@@ -29,7 +29,7 @@ from slowapi.util import get_remote_address
 import os
 
 router = APIRouter(prefix="/lab", tags=["lab"])
-limiter = Limiter(key_func=get_remote_address)
+from app.utils.rate_limit import limiter
 
 VALID_TRANSITIONS = {"sample_collected", "processing", "result_entered"}
 

@@ -1558,7 +1558,7 @@
     // ── Benefits + Contact modals — public page, no api.js loaded here,
     // so this talks to the backend directly at the same base URL api.js
     // itself uses.
-    const LP_API_BASE = window.MEDSCRIBE_API_BASE || "https://medical-ai-mvv1.onrender.com";
+const LP_API_BASE = window.MEDSCRIBE_API_BASE || (["localhost", "127.0.0.1"].includes(window.location.hostname) ? "http://localhost:8000" : "https://medical-ai-mvv1.onrender.com");
     let lpActiveTierKey = null;
 
     function lpTier(key) { return TIER_CATALOG.find(t => t.key === key); }

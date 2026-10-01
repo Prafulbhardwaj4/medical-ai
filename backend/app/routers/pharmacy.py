@@ -15,14 +15,34 @@ from app.models.medicine_order import MedicineOrder
 from app.models.medicine_order_return import MedicineOrderReturn
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.refund import Refund
+from app.schemas.patient import PaymentMethodIn
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
 from app.utils.order_lifecycle import is_order_expired
+from app.utils.inventory import sellable_stock, line_total
 from app.routers.attendance import require_present
 from app.routers.refunds import VALID_CHANNELS
 
 router = APIRouter(prefix="/pharmacy", tags=["pharmacy"])
+
+
+def _consultation_for_token(db: Session, token_number: str, current_doctor: Doctor):
+    """Consultation by token, scoped to the caller's hospital (via its patient).
+    Same 404 whether the token doesn't exist or belongs to another hospital."""
+    consultation = (
+        db.query(Consultation)
+        .join(Patient, Consultation.patient_id == Patient.id)
+        .filter(
+            Consultation.token_number == token_number,
+            Consultation.is_voided == False,
+            Patient.hospital_id == current_doctor.hospital_id,
+        )
+        .first()
+    )
+    if not consultation:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    return consultation
 
 
 def require_pharmacy(current_doctor: Doctor):
@@ -347,6 +367,13 @@ def get_pharmacy_queue(
             Patient.hospital_id == current_doctor.hospital_id,
             Consultation.token_number != None,
             Consultation.is_voided == False,
+            # Tests-only / advice-only visits have nothing to dispense - keep them out of the queue.
+            Consultation.id.in_(
+                db.query(MedicineOrder.consultation_id).filter(
+                    MedicineOrder.hospital_id == current_doctor.hospital_id,
+                    MedicineOrder.status != "cancelled",
+                )
+            ),
             or_(
                 Consultation.created_at.between(today_start, today_end),
                 Consultation.id.in_(requeued_consultation_ids) if requeued_consultation_ids else False
@@ -420,7 +447,7 @@ def serialize_medicine_order(m: MedicineOrder, db: Session = None):
     if db is not None and m.catalog_medicine_id:
         catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == m.catalog_medicine_id).first()
         if catalog_item:
-            stock_quantity = catalog_item.stock_quantity
+            stock_quantity = sellable_stock(db, catalog_item)  # excludes expired batches
             low_stock_threshold = catalog_item.low_stock_threshold
             schedule = catalog_item.schedule
 
@@ -442,7 +469,7 @@ def serialize_medicine_order(m: MedicineOrder, db: Session = None):
         "unit_price": m.unit_price,
         "quantity": m.quantity,
         "billed_quantity": m.billed_quantity,
-        "line_total": (m.unit_price * billed) if (m.unit_price is not None and billed is not None) else None,
+        "line_total": line_total(m.unit_price, billed) if (m.unit_price is not None and billed is not None) else None,
         "included": m.included,
         "status": m.status,
         "substitute_for_id": m.substitute_for_id,
@@ -570,7 +597,7 @@ def search_medicines_for_linking(
 
     items = query.order_by(HospitalMedicine.generic_name).limit(20).all()
     return [
-        {"id": m.id, "generic_name": m.generic_name, "brand_names": m.brand_name or m.brand_names or "", "price": m.price, "strength": m.strength or ""}
+        {"id": m.id, "generic_name": m.generic_name, "brand_names": m.brand_name or m.brand_names or "", "price": round(m.price, 2) if m.price is not None else None, "strength": m.strength or ""}
         for m in items
     ]
 
@@ -578,18 +605,14 @@ def search_medicines_for_linking(
 @router.post("/prescription/{token_number}/collect-payment")
 def collect_medicine_payment(
     token_number: str,
+    body: PaymentMethodIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_pharmacy(current_doctor)
     require_present(db, current_doctor)
 
-    consultation = db.query(Consultation).filter(
-        Consultation.token_number == token_number,
-        Consultation.is_voided == False
-    ).first()
-    if not consultation:
-        raise HTTPException(status_code=404, detail="Prescription not found")
+    consultation = _consultation_for_token(db, token_number, current_doctor)
 
     orders = db.query(MedicineOrder).filter(
         MedicineOrder.consultation_id == consultation.id,
@@ -612,12 +635,14 @@ def collect_medicine_payment(
     for o in orders:
         if o.catalog_medicine_id:
             catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == o.catalog_medicine_id).first()
-            if catalog_item and catalog_item.stock_quantity is not None and catalog_item.stock_quantity <= 0:
-                blocking.append(o.medicine_name)
+            if catalog_item:
+                sellable = sellable_stock(db, catalog_item)
+                if sellable is not None and sellable <= 0:
+                    blocking.append(o.medicine_name)
     if blocking:
         raise HTTPException(
             status_code=400,
-            detail=f"Out of stock — substitute or mark advised-outside before collecting payment: {', '.join(blocking)}"
+            detail=f"Out of stock (or only expired stock left) — substitute or mark advised-outside before collecting payment: {', '.join(blocking)}"
         )
 
     total = 0
@@ -628,8 +653,8 @@ def collect_medicine_payment(
         available = None
         if o.catalog_medicine_id:
             catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == o.catalog_medicine_id).first()
-            if catalog_item and catalog_item.stock_quantity is not None:
-                available = catalog_item.stock_quantity
+            if catalog_item:
+                available = sellable_stock(db, catalog_item)  # None = untracked
 
         billable_qty = min(o.quantity, available) if available is not None else o.quantity
 
@@ -640,8 +665,9 @@ def collect_medicine_payment(
         o.billed_quantity = billable_qty
         o.status = "paid"
         o.paid_at = now
+        o.payment_method = body.payment_method
         o.queued_at = now
-        total += o.unit_price * billable_qty
+        total += line_total(o.unit_price, billable_qty)
         charged_count += 1
 
     db.commit()
@@ -654,7 +680,7 @@ def collect_medicine_payment(
         target_label=f"Rs.{total:.2f} for {charged_count} medicines" + (f" ({len(skipped)} skipped — out of stock)" if skipped else ""),
         hospital_id=current_doctor.hospital_id
     )
-    return {"charged": total, "count": charged_count, "skipped": skipped}
+    return {"charged": round(total, 2), "count": charged_count, "skipped": skipped}
 
 @router.get("/pending-tasks")
 def search_pending_pharmacy_tasks(
@@ -732,6 +758,7 @@ def requeue_all_for_patient(
     medicine order for one patient in a single action, rather than one
     order at a time."""
     require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
 
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
@@ -912,6 +939,22 @@ def dispense_prescription(
         if block_reason:
             raise HTTPException(status_code=400, detail=block_reason)
 
+    # Never hand out expired stock: if a paid line can only be covered by expired
+    # batches (stock expired between payment and dispense, or was expired all along
+    # and slipped through), stop before anything is deducted.
+    expired_only = []
+    for o in paid_orders:
+        if o.catalog_medicine_id and o.billed_quantity:
+            item = db.query(HospitalMedicine).filter(HospitalMedicine.id == o.catalog_medicine_id).first()
+            sellable = sellable_stock(db, item) if item else None
+            if sellable is not None and sellable < o.billed_quantity:
+                expired_only.append(o.medicine_name)
+    if expired_only:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not enough in-date stock to dispense: {', '.join(expired_only)}. Only expired stock is left - add fresh stock, or refund/substitute the item."
+        )
+
     for o in paid_orders:
         if o.catalog_medicine_id and o.billed_quantity:
             deduct_stock_fefo(db, o.catalog_medicine_id, o.billed_quantity)
@@ -994,6 +1037,7 @@ def requeue_medicine_order(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
 
     order = db.query(MedicineOrder).filter(
         MedicineOrder.id == order_id,
@@ -1040,6 +1084,7 @@ def return_medicine_order(
     deliberate restocked_to_shelf choice — never as a default, never for
     returned_to_supplier or sent_to_disposal."""
     require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
 
     order = db.query(MedicineOrder).filter(
         MedicineOrder.id == order_id,
@@ -1068,7 +1113,7 @@ def return_medicine_order(
         if catalog_item:
             catalog_item.stock_quantity = (catalog_item.stock_quantity or 0) + body.quantity
 
-    refund_amount = (order.unit_price or 0) * body.quantity
+    refund_amount = line_total(order.unit_price, body.quantity)
 
     refund = Refund(
         patient_id=order.patient_id,

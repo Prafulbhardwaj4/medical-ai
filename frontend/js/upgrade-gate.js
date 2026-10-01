@@ -14,6 +14,22 @@ function isFoundationTier() {
   return !!doc && (doc.hospital_tier || "growth") === "foundation";
 }
 
+// Full-page lock for pages that belong to a higher tier (typing the URL, an old
+// bookmark). Call at the top of the page script, then stop the script:
+//   if (blockPageIfFoundation("IPD / Admissions")) throw new Error("tier-locked");
+// The server enforces the same rule; this only stops a broken-looking page.
+function blockPageIfFoundation(featureLabel) {
+  if (!isFoundationTier()) return false;
+  document.body.innerHTML = `
+    <div style="max-width:440px;margin:14vh auto;text-align:center;padding:0 20px">
+      <h2 style="margin-bottom:10px">${featureLabel} is not part of your plan</h2>
+      <p style="color:var(--slate);margin-bottom:22px">${featureLabel} is available on the Growth plan and above.</p>
+      <button class="btn btn-primary" onclick="openUpgradeModal()">View plans</button>
+      <button class="btn btn-outline" onclick="history.length > 1 ? history.back() : (window.location.href = 'login.html')">Go back</button>
+    </div>`;
+  return true;
+}
+
 function isBelowScaleTier() {
   const doc = (typeof getDoctor === "function") ? getDoctor() : null;
   if (!doc) return true;

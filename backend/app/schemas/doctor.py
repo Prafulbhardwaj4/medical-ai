@@ -27,13 +27,17 @@ class StaffLoginResultOut(BaseModel):
     access_token: Optional[str] = None
     token_type: Optional[str] = "bearer"
     doctor: Optional["DoctorOut"] = None
+    setup_token: Optional[str] = None  # only with status="needs_password_change"
 
 class SetNewPasswordIn(BaseModel):
     email: EmailStr
     old_password: str
     new_password: str
-    captcha_token: str
-    captcha_answer: str
+    setup_token: str
+
+class ChangePasswordIn(BaseModel):
+    old_password: str
+    new_password: str
 
 class ForgotPasswordRequestIn(BaseModel):
     email: EmailStr

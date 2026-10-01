@@ -925,7 +925,7 @@
       </div>
 
       <div style="margin-bottom:20px;font-size:12.5px;color:var(--slate-light);background:var(--smoke-mid);padding:10px 12px;border-radius:var(--radius)">
-        New accounts start with a temporary password. The admin sets their own password the first time they sign in.
+        A one-time temporary password is generated and shown to you once after creation. Share it with the admin - they set their own password the first time they sign in.
       </div>
 
       <div class="err-msg" id="admin-err" style="margin-bottom:12px"></div>
@@ -2362,10 +2362,11 @@
 
       const params = new URLSearchParams({ hospital_id: currentHospitalId, name, email, phone: "+91" + phone, specialization: specialization || "Hospital Admin" });
       try {
-        await api('POST', `/admin/create-admin-jwt?${params.toString()}`);
+        const created = await api('POST', `/admin/create-admin-jwt?${params.toString()}`);
         toast('Admin created.', 'success');
         closeAdminModal();
         openDetail(currentHospitalId);
+        await alertModal(`Temporary password for ${created.email}:\n\n${created.temporary_password}\n\nShare it with them now - it will not be shown again.`, { title: "Temporary Password" });
       } catch (e) { err.textContent = e.message; }
     }
 

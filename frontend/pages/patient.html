@@ -730,6 +730,7 @@
     }
 
     async function checkExistingAdmitReferral() {
+      if (typeof isFoundationTier === 'function' && isFoundationTier()) return;
       try {
         const referrals = await api("GET", "/admissions/referrals");
         if (referrals.some(r => r.patient_id === patientId)) markAdmitButtonSent();

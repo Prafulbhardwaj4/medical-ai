@@ -1,4 +1,4 @@
-const BASE = window.MEDSCRIBE_API_BASE || "https://medical-ai-mvv1.onrender.com";
+const BASE = window.MEDSCRIBE_API_BASE || (["localhost", "127.0.0.1"].includes(window.location.hostname) ? "http://localhost:8000" : "https://medical-ai-mvv1.onrender.com");
 
 function setRealVhUnit() {
   document.documentElement.style.setProperty('--real-vh', (window.innerHeight * 0.01) + 'px');
@@ -320,14 +320,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 async function logout() {
+  // Read the token BEFORE clearing the session: the server needs it (as an
+  // Authorization header) to blacklist it. Patients use the portal endpoint.
+  const token = getToken();
+  const isPatient = getDoctor()?.role === "patient";
   clearSession();
+  if (token) {
+    try {
+      // Wait for the server (max 3s) so navigating away can't cancel the request.
+      await Promise.race([
+        fetch(`${BASE}${isPatient ? "/portal/auth/logout" : "/auth/logout"}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          keepalive: true
+        }),
+        new Promise((resolve) => setTimeout(resolve, 3000))
+      ]);
+    } catch (e) { }
+  }
   window.location.href = "/pages/login.html";
-  try {
-    await fetch(`${BASE}/auth/logout`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" }
-    });
-  } catch (e) { }
 }
 
 function sanitize(str) {
@@ -433,6 +444,9 @@ function ensureEditDetailsModal() {
         <div style="margin-bottom:16px" id="ed-reg-group">
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Registration / Credential No. <span style="color:var(--slate-light);font-weight:400">(optional)</span></label>
           <input class="form-control" id="ed-reg" />
+        </div>
+        <div style="margin-bottom:12px">
+          <a href="#" onclick="closeEditDetailsModal();openChangePasswordModal();return false" style="font-size:13px;color:var(--teal)">Change password</a>
         </div>
         <div class="err-msg" id="ed-err" style="margin-bottom:10px"></div>
         <div style="display:flex;gap:10px">
@@ -541,6 +555,122 @@ async function submitEditDetails() {
     closeEditDetailsModal();
     toast('Details updated.', 'success');
   } catch (e) { errEl.textContent = e.message; }
+}
+
+// Shared "why is stock being removed?" picker. Resolves to {reason, note} or null (cancelled).
+function askWriteOffReason(title = "Why is this stock being removed?") {
+  return new Promise((resolve) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="modal-overlay open" id="writeoff-modal">
+        <div class="modal" style="max-width:380px">
+          <div class="modal-header"><h2>${title}</h2></div>
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Reason</label>
+          <select class="form-control" id="wo-reason" style="margin-bottom:12px">
+            <option value="expired">Expired</option>
+            <option value="damaged">Damaged</option>
+            <option value="theft_loss">Theft / loss</option>
+            <option value="correction">Counting correction</option>
+            <option value="returned_to_supplier">Returned to supplier</option>
+            <option value="other">Other (add a note)</option>
+          </select>
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Note (optional)</label>
+          <input class="form-control" id="wo-note" maxlength="200" style="margin-bottom:14px" />
+          <div class="err-msg" id="wo-err" style="margin-bottom:10px"></div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-outline" style="flex:1" id="wo-cancel">Cancel</button>
+            <button class="btn btn-primary" style="flex:1" id="wo-ok">Confirm</button>
+          </div>
+        </div>
+      </div>`;
+    const el = wrap.firstElementChild;
+    document.body.appendChild(el);
+    const done = (v) => { el.remove(); resolve(v); };
+    el.querySelector('#wo-cancel').onclick = () => done(null);
+    el.querySelector('#wo-ok').onclick = () => {
+      const reason = el.querySelector('#wo-reason').value;
+      const note = el.querySelector('#wo-note').value.trim();
+      if (reason === 'other' && !note) { el.querySelector('#wo-err').textContent = 'Please add a short note.'; return; }
+      done({ reason, note });
+    };
+  });
+}
+
+// Shared "Change Password" modal — staff (/auth/change-password) and
+// patients (/portal/auth/change-password). The server invalidates every older
+// token on change and returns a fresh one, which we store so this session
+// keeps working.
+function ensureChangePasswordModal() {
+  if (document.getElementById('modal-change-password')) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <div class="modal-overlay" id="modal-change-password">
+      <div class="modal" style="max-width:400px">
+        <div class="modal-header">
+          <h2>Change Password</h2>
+          <button class="modal-close" onclick="closeChangePasswordModal()">&times;</button>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Current password</label>
+          <input class="form-control" id="cp-old" type="password" autocomplete="current-password" />
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">New password</label>
+          <input class="form-control" id="cp-new" type="password" autocomplete="new-password" placeholder="At least 8 characters, 1 number, 1 capital" />
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Confirm new password</label>
+          <input class="form-control" id="cp-confirm" type="password" autocomplete="new-password" />
+        </div>
+        <div class="err-msg" id="cp-err" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-outline" style="flex:1" onclick="closeChangePasswordModal()">Cancel</button>
+          <button class="btn btn-primary" style="flex:1" id="cp-submit-btn" onclick="submitChangePassword()">Change</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap.firstElementChild);
+}
+
+function openChangePasswordModal() {
+  closeProfileMenu();
+  ensureChangePasswordModal();
+  ['cp-old', 'cp-new', 'cp-confirm'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('cp-err').textContent = '';
+  document.getElementById('modal-change-password').classList.add('open');
+}
+
+function closeChangePasswordModal() {
+  document.getElementById('modal-change-password')?.classList.remove('open');
+}
+
+async function submitChangePassword() {
+  const errEl = document.getElementById('cp-err');
+  const oldPw = document.getElementById('cp-old').value;
+  const newPw = document.getElementById('cp-new').value;
+  const confirmPw = document.getElementById('cp-confirm').value;
+  errEl.textContent = '';
+  if (!oldPw) { errEl.textContent = 'Enter your current password.'; return; }
+  if (newPw.length < 8 || !/\d/.test(newPw) || !/[A-Z]/.test(newPw)) {
+    errEl.textContent = 'New password must be at least 8 characters, with 1 number and 1 capital letter.'; return;
+  }
+  if (newPw !== confirmPw) { errEl.textContent = 'Passwords do not match.'; return; }
+  if (newPw === oldPw) { errEl.textContent = 'New password must be different from the current one.'; return; }
+
+  const btn = document.getElementById('cp-submit-btn');
+  btn.disabled = true;
+  try {
+    const isPatient = getDoctor()?.role === 'patient';
+    const res = await api('POST', isPatient ? '/portal/auth/change-password' : '/auth/change-password',
+      { old_password: oldPw, new_password: newPw });
+    saveSession(res.access_token, { ...getDoctor(), ...res.doctor });
+    closeChangePasswordModal();
+    toast('Password changed.', 'success');
+  } catch (e) {
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function confirmDialog(message, confirmLabel = "Confirm") {

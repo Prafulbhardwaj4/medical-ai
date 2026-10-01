@@ -1,11 +1,13 @@
+import calendar
 import random
+import secrets
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from app.config import settings
+from app.config import settings, _is_production
 from app.database import get_db
 from app.models.blacklisted_token import BlacklistedToken
 from app.utils.timezone import now_ist, now_ist_naive, ist_today, ist_day_bounds, ist_date, ist_day_bounds_utc, utc_naive_to_ist_date
@@ -21,15 +23,43 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    now = datetime.utcnow()
+    expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire, "iat": now})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def check_password_strength(new_password: str) -> None:
+    if len(new_password) < 8 or not any(c.isdigit() for c in new_password) or not any(c.isupper() for c in new_password):
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters, with 1 number and 1 capital letter")
+
+
+def generate_temp_password(length: int = 10) -> str:
+    """Random one-time password for new/reset staff accounts. Always satisfies
+    the strength rule (upper + lower + digit); ambiguous characters excluded."""
+    upper, lower, digits = "ABCDEFGHJKMNPQRSTUVWXYZ", "abcdefghjkmnpqrstuvwxyz", "23456789"
+    chars = [secrets.choice(upper), secrets.choice(lower), secrets.choice(digits)]
+    chars += [secrets.choice(upper + lower + digits) for _ in range(length - 3)]
+    secrets.SystemRandom().shuffle(chars)
+    return "".join(chars)
+
+
+def token_predates_password_change(payload: dict, changed_at) -> bool:
+    """True if the token was issued before the account's last password change.
+    changed_at is UTC-naive. Tokens without iat (issued before this check
+    existed) are only accepted while the password has never been changed."""
+    if changed_at is None:
+        return False
+    iat = payload.get("iat")
+    if iat is None:
+        return True
+    return int(iat) < calendar.timegm(changed_at.utctimetuple())
 
 CAPTCHA_EXPIRE_MINUTES = 5
 CAPTCHA_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"  # no O/o/0, I/i/l/L/1 — avoids ambiguous reads. Verification is already case-insensitive (see verify_captcha_token), so mixing case here is purely visual.
 
 def generate_captcha_code(length: int = 5) -> str:
-    return "".join(random.choice(CAPTCHA_ALPHABET) for _ in range(length))
+    return "".join(secrets.choice(CAPTCHA_ALPHABET) for _ in range(length))
 
 def generate_captcha_svg(code: str) -> str:
     """Hand-built distorted-text SVG — no image library needed/available in
@@ -60,26 +90,58 @@ def generate_captcha_svg(code: str) -> str:
     return "".join(parts)
 
 def create_captcha_token(answer: str) -> str:
-    """Signs the expected code into a short-lived token so the server
-    doesn't need to store the captcha anywhere. type=captcha keeps this
-    from ever being accepted as a real access token."""
-    expire = datetime.utcnow() + timedelta(minutes=CAPTCHA_EXPIRE_MINUTES)
-    return jwt.encode(
-        {"type": "captcha", "answer": answer, "exp": expire},
-        settings.SECRET_KEY, algorithm=settings.ALGORITHM
-    )
+    """Stores the expected answer SERVER-SIDE and returns only an opaque id.
+    (The old version put the answer inside a signed JWT, which anyone could
+    decode.) Signature kept so callers don't change."""
+    from app.database import SessionLocal
+    from app.models.captcha_challenge import CaptchaChallenge
+    challenge_id = secrets.token_urlsafe(24)
+    now = datetime.utcnow()
+    db = SessionLocal()
+    try:
+        db.query(CaptchaChallenge).filter(CaptchaChallenge.expires_at < now).delete(synchronize_session=False)
+        db.add(CaptchaChallenge(
+            id=challenge_id,
+            answer=str(answer).strip().lower(),
+            expires_at=now + timedelta(minutes=CAPTCHA_EXPIRE_MINUTES),
+        ))
+        db.commit()
+    finally:
+        db.close()
+    return challenge_id
 
 def verify_captcha_token(token: str, submitted_answer: str) -> bool:
+    """Single-use: the challenge row is deleted on the first attempt, right
+    or wrong, so a solved captcha can never be replayed. Case-insensitive
+    (upper/lower pairs like c/C, s/S, v/V look identical in the image)."""
+    from app.database import SessionLocal
+    from app.models.captcha_challenge import CaptchaChallenge
+    if (
+        settings.DEV_CAPTCHA_ANSWER
+        and not _is_production(settings)
+        and submitted_answer == settings.DEV_CAPTCHA_ANSWER
+    ):
+        return True
+    if not token or not submitted_answer or len(token) > 64:
+        return False
+    db = SessionLocal()
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError:
-        return False
-    if payload.get("type") != "captcha":
-        return False
-    expected = payload.get("answer")
-    if not expected:
-        return False
-    return str(expected).strip() == str(submitted_answer).strip()
+        row = db.query(CaptchaChallenge).filter(CaptchaChallenge.id == token).first()
+        if row is None:
+            return False
+        expected, expires_at = row.answer, row.expires_at  # read before the commit expires the row
+        deleted = db.query(CaptchaChallenge).filter(CaptchaChallenge.id == token).delete(synchronize_session=False)
+        db.commit()
+        if deleted != 1:  # a concurrent request already consumed it
+            return False
+        if expires_at < datetime.utcnow():
+            return False
+        return secrets.compare_digest(
+            expected.encode("utf-8"),
+            str(submitted_answer).strip().lower().encode("utf-8"),
+        )
+    finally:
+        db.close()
 
 PASSWORD_RESET_EXPIRE_MINUTES = 10
 
@@ -106,6 +168,28 @@ def verify_password_reset_token(token: str):
         return None, None
     return int(doctor_id), payload.get("otp")
 
+PASSWORD_SETUP_EXPIRE_MINUTES = 10
+
+def create_password_setup_token(doctor_id: int) -> str:
+    """Issued at login when the temp password was correct (captcha already
+    passed). Lets set-new-password run without a second captcha."""
+    now = datetime.utcnow()
+    return jwt.encode(
+        {"type": "password_setup", "sub": str(doctor_id), "iat": now,
+         "exp": now + timedelta(minutes=PASSWORD_SETUP_EXPIRE_MINUTES)},
+        settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
+
+def verify_password_setup_token(token: str):
+    """Returns doctor_id, or None if invalid/expired."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        return None
+    if payload.get("type") != "password_setup" or not payload.get("sub"):
+        return None
+    return int(payload["sub"])
+
 def decode_access_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -113,8 +197,14 @@ def decode_access_token(token: str) -> dict:
         return None
 
 def blacklist_token(token: str, db: Session):
-    entry = BlacklistedToken(token=token, blacklisted_at=now_ist_naive())
-    db.add(entry)
+    now = now_ist_naive()
+    # Purge: the longest-lived token (portal, 7 days) can't outlive 8 days, so
+    # older blacklist rows are dead weight. Runs on every logout - no cron needed.
+    db.query(BlacklistedToken).filter(
+        BlacklistedToken.blacklisted_at < now - timedelta(days=8)
+    ).delete(synchronize_session=False)
+    if db.query(BlacklistedToken).filter(BlacklistedToken.token == token).first() is None:
+        db.add(BlacklistedToken(token=token, blacklisted_at=now))
     db.commit()
 
 def is_token_blacklisted(token: str, db: Session) -> bool:
@@ -133,6 +223,11 @@ def get_current_doctor(
     payload = decode_access_token(credentials.credentials)
     if payload is None:
         raise credentials_exception
+    # Only real staff session tokens (no "type"/"purpose" claim) may act as a
+    # login. Portal, password-reset, password-setup tokens share this signing
+    # key and were previously accepted here.
+    if payload.get("type") or payload.get("purpose"):
+        raise credentials_exception
     if is_token_blacklisted(credentials.credentials, db):
         raise credentials_exception
     doctor_id: int = payload.get("sub")
@@ -143,6 +238,8 @@ def get_current_doctor(
     if doctor is None:
         raise credentials_exception
     if not doctor.is_active:
+        raise credentials_exception
+    if token_predates_password_change(payload, doctor.password_changed_at):
         raise credentials_exception
     if doctor.role.value != "super_admin":
         hospital = db.query(Hospital).filter(Hospital.id == doctor.hospital_id).first()

@@ -41,11 +41,12 @@ from app.schemas.admission import (
 from app.models.consultation import Consultation
 from app.models.doctor import UserRole
 from app.utils.auth import get_current_doctor, ist_today
+from app.utils.tier_gate import require_tier
 from app.utils.timezone import now_ist_naive, ist_day_bounds
 from app.utils.audit import log_action
 from app.routers.patients import generate_patient_uid, generate_url_token
 from sqlalchemy.exc import IntegrityError
-from app.utils.inventory import deduct_stock_fefo
+from app.utils.inventory import deduct_stock_fefo, sellable_stock
 from app.utils.notify import notify_ward_change_request, notify_emergency_alert, notify_admission_medicines_ordered, notify_admission_tests_ordered, notify_discharge_order_placed, notify_critical_vitals, notify_critical_vitals_escalation, resolve_notification, resolve_notifications_for_link
 from app.config import settings
 from app.utils.receipts import next_receipt_number, next_note_number, generate_verify_hash
@@ -54,7 +55,13 @@ from app.services.pdf_service import generate_invoice_pdf
 import json
 import os
 
-router = APIRouter(prefix="/admissions", tags=["admissions"])
+# Growth+ only. Applies to EVERY endpoint in this router (wards, admit, emergency,
+# meds, vitals, charges, discharge, TPA...). Foundation hospitals get a 403.
+router = APIRouter(
+    prefix="/admissions",
+    tags=["admissions"],
+    dependencies=[Depends(require_tier("growth", "IPD / Admissions"))],
+)
 
 
 def _days_admitted(admission: Admission) -> int:
@@ -1464,7 +1471,7 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
                 # flagged the moment it's placed, not discovered later at
                 # "Mark Sent".
                 required_units = units * (medicine.pack_size or 1)
-                available_units = medicine.stock_quantity or 0
+                available_units = sellable_stock(db, medicine) or 0  # excludes expired batches
                 if available_units < required_units:
                     existing.is_out_of_stock = True
                 deduct_stock_fefo(db, body.medicine_id, required_units, round_to_pack=True)
@@ -1495,7 +1502,7 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
         if body.medicine_id:
             # Same automatic check as the merge branch above, for a brand-new order.
             required_units = units * (medicine.pack_size or 1)
-            available_units = medicine.stock_quantity or 0
+            available_units = sellable_stock(db, medicine) or 0  # excludes expired batches
             if available_units < required_units:
                 order.is_out_of_stock = True
             deduct_stock_fefo(db, body.medicine_id, required_units, round_to_pack=True)

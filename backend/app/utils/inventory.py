@@ -1,7 +1,50 @@
 import math
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.medicine_batch import MedicineBatch
+from app.utils.timezone import ist_today
+from decimal import Decimal, ROUND_HALF_UP
+
+
+def line_total(unit_price, quantity) -> float:
+    """Money for one medicine line: unit_price x quantity, rounded to paise ONCE,
+    at the line. Unit prices are stored unrounded (Rs100 strip of 15 = 6.6666...), so a
+    full strip always bills exactly Rs100.00 - never above MRP. Use this everywhere a
+    medicine line total, payment total or refund is computed so they always agree."""
+    if unit_price is None or quantity is None:
+        return 0.0
+    return float((Decimal(str(unit_price)) * Decimal(int(quantity))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def expired_units_by_medicine(db: Session, medicine_ids=None, hospital_id: int = None) -> dict:
+    """{medicine_id: units still sitting in EXPIRED batches}. "Expired" means the
+    expiry date is before today's IST date (a batch is usable through its expiry day)."""
+    q = db.query(MedicineBatch.medicine_id, func.coalesce(func.sum(MedicineBatch.quantity), 0)).filter(
+        MedicineBatch.quantity > 0,
+        MedicineBatch.expiry_date != None,  # noqa: E711
+        MedicineBatch.expiry_date < ist_today(),
+    )
+    if hospital_id is not None:
+        q = q.filter(MedicineBatch.hospital_id == hospital_id)
+    if medicine_ids is not None:
+        ids = list(medicine_ids)
+        if not ids:
+            return {}
+        q = q.filter(MedicineBatch.medicine_id.in_(ids))
+    return {mid: int(n) for mid, n in q.group_by(MedicineBatch.medicine_id).all()}
+
+
+def sellable_stock(db: Session, medicine: HospitalMedicine, expired_map: dict = None):
+    """Units that can actually be sold: aggregate stock minus units in expired
+    batches. Legacy/untracked stock (no batch rows) still counts as sellable.
+    Returns None when stock isn't tracked at all (stock_quantity is NULL) so
+    callers keep their existing "untracked = unlimited" behaviour."""
+    if medicine.stock_quantity is None:
+        return None
+    if expired_map is None:
+        expired_map = expired_units_by_medicine(db, [medicine.id])
+    return max(0, (medicine.stock_quantity or 0) - expired_map.get(medicine.id, 0))
 
 # Non-countable dosage forms — "3x/day for 3 days" doesn't mean 9 units for these, since a
 # single bottle/tube/vial covers many doses. Everything NOT in this set (including blank/
@@ -78,12 +121,20 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int, round
         pack_size = medicine.pack_size
         quantity_needed = ((quantity_needed + pack_size - 1) // pack_size) * pack_size  # round up to next full strip
 
+    # Expired stock is NEVER dispensed. Batches past their expiry date (IST) are
+    # skipped, and the aggregate is only reduced by what could really be sold, so
+    # expired units stay visible on the shelf record until they are written off.
+    sellable_before = sellable_stock(db, medicine)
+    if sellable_before is None:
+        sellable_before = quantity_needed
+
     remaining = quantity_needed
     deducted_from_batches = 0
 
     batches = db.query(MedicineBatch).filter(
         MedicineBatch.medicine_id == medicine_id,
-        MedicineBatch.quantity > 0
+        MedicineBatch.quantity > 0,
+        or_(MedicineBatch.expiry_date == None, MedicineBatch.expiry_date >= ist_today()),  # noqa: E711
     ).order_by(MedicineBatch.expiry_date.asc().nullslast()).all()
 
     for batch in batches:
@@ -94,7 +145,7 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int, round
         remaining -= take
         deducted_from_batches += take
 
-    medicine.stock_quantity = max(0, (medicine.stock_quantity or 0) - quantity_needed)
+    medicine.stock_quantity = max(0, (medicine.stock_quantity or 0) - min(quantity_needed, sellable_before))
 
     return {
         "medicine_id": medicine_id,

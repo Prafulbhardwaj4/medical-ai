@@ -165,7 +165,7 @@
     let currentCaptchaToken = null;
     let pendingStaffEmail = null;
     let pendingStaffOldPassword = null;
-    let lastCaptchaAnswer = null;
+    let pendingSetupToken = null;
 
     async function loadCaptcha() {
       const box = document.getElementById("captcha-image-box");
@@ -249,13 +249,12 @@
           });
           const json = await res.json();
           if (!res.ok) {
-            if (json.detail && json.detail.toLowerCase().includes("captcha")) loadCaptcha();
             throw new Error(json.detail || "Login failed");
           }
           if (json.status === "needs_password_change") {
             pendingStaffEmail = identifier;
             pendingStaffOldPassword = password;
-            lastCaptchaAnswer = captchaAnswer;
+            pendingSetupToken = json.setup_token;
             document.getElementById("form-login").style.display = "none";
             document.getElementById("form-staff-newpw").style.display = "block";
             return;
@@ -273,7 +272,6 @@
           });
           const json = await res.json();
           if (!res.ok) {
-            if (json.detail && json.detail.toLowerCase().includes("captcha")) loadCaptcha();
             throw new Error(json.detail || "Login failed");
           }
 
@@ -291,6 +289,7 @@
         }
       } catch (e) {
         err.textContent = e.message;
+        loadCaptcha();  // captcha is single-use - every failed attempt needs a fresh one
       } finally {
         btn.disabled = false;
         btn.textContent = "Sign In";
@@ -359,8 +358,7 @@
             email: pendingStaffEmail,
             old_password: pendingStaffOldPassword,
             new_password: pw,
-            captcha_token: currentCaptchaToken,
-            captcha_answer: lastCaptchaAnswer
+            setup_token: pendingSetupToken
           })
         });
         const json = await res.json();

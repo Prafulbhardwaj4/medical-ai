@@ -110,6 +110,7 @@
   }
 
   async function refreshUnreadBadge() {
+    if (typeof isFoundationTier === "function" && isFoundationTier()) return;  // chat is Growth+, server would 403
     try {
       const data = await api("GET", "/chat/unread-count", null, false, true);
       const badge = document.getElementById("chat-header-badge");

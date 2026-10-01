@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from datetime import datetime, timedelta
 import json, os
 
+from app.utils.inventory import line_total
 from app.database import get_db
 from app.models.doctor import Doctor
 from app.models.patient import Patient
@@ -37,7 +38,7 @@ from app.utils.receipts import next_receipt_number, next_note_number, generate_v
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
+from app.utils.rate_limit import limiter
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -171,7 +172,7 @@ def gather_invoice_items(db: Session, checkin: Checkin):
             "name": f"{m.medicine_name}{' (' + m.brand_name + ')' if m.brand_name else ''}",
             "qty": billed or 1,
             "unit_price": m.unit_price or 0,
-            "line_total": (m.unit_price or 0) * (billed or 1),
+            "line_total": line_total(m.unit_price or 0, (billed or 1)),
             "_medicine_gst_percent": medicine_gst_percent,
             "_medicine_hsn_code": medicine_hsn_code
         })
@@ -209,10 +210,10 @@ def gather_invoice_items(db: Session, checkin: Checkin):
 def _derive_payment_method(db: Session, checkin: Checkin):
     """Best-effort single payment_method for the whole OPD invoice, derived
     from the underlying paid rows for this visit (Checkin/TestOrder/
-    RadiologyOrder/OpdCharge each carry their own — MedicineOrder does not,
-    pharmacy items are settled separately). Returns the common mode if every
-    row agrees, else "mixed" — flagged for Praful's review, this exact
-    mixed-method handling was never specified as a business rule."""
+    RadiologyOrder/OpdCharge/MedicineOrder each carry their own). Returns the
+    common mode if every row agrees, else "mixed" — flagged for Praful's
+    review, this exact mixed-method handling was never specified as a
+    business rule."""
     modes = set()
     if checkin.payment_method:
         modes.add(checkin.payment_method)
@@ -233,6 +234,12 @@ def _derive_payment_method(db: Session, checkin: Checkin):
         for r in db.query(RadiologyOrder).filter(RadiologyOrder.consultation_id.in_(consultation_ids)).all():
             if r.payment_method:
                 modes.add(r.payment_method)
+        for mo in db.query(MedicineOrder).filter(
+            MedicineOrder.consultation_id.in_(consultation_ids),
+            MedicineOrder.status.in_(["paid", "dispensed"]),
+        ).all():
+            if mo.payment_method:
+                modes.add(mo.payment_method)
     for oc in db.query(OpdCharge).filter(OpdCharge.checkin_id == checkin.id).all():
         if oc.payment_method:
             modes.add(oc.payment_method)
@@ -1031,6 +1038,18 @@ def _day_end_summary_core(db: Session, hospital_id: int, target_date):
     for ch in charges:
         add(ch.payment_method, "opd_charges", (ch.amount or 0) * (ch.quantity or 1))
 
+    # Pharmacy counter collections. Includes orders paid and LATER cancelled (their
+    # refund is netted below, so the original collection must be counted too).
+    # Rows paid before payment_method existed have no mode and can't be placed.
+    medicine_rows = db.query(MedicineOrder).filter(
+        MedicineOrder.hospital_id == hospital_id,
+        MedicineOrder.status.in_(["paid", "dispensed", "cancelled"]),
+        MedicineOrder.paid_at != None,  # noqa: E711
+        MedicineOrder.paid_at >= day_start, MedicineOrder.paid_at < day_end
+    ).all()
+    for mo in medicine_rows:
+        add(mo.payment_method, "pharmacy", line_total(mo.unit_price or 0, (mo.billed_quantity if mo.billed_quantity is not None else mo.quantity) or 0))
+
     deposits = db.query(AdmissionDeposit).join(Admission, AdmissionDeposit.admission_id == Admission.id).filter(
         Admission.hospital_id == hospital_id,
         AdmissionDeposit.collected_at >= day_start, AdmissionDeposit.collected_at < day_end
@@ -1046,14 +1065,21 @@ def _day_end_summary_core(db: Session, hospital_id: int, target_date):
     for inv in settlements:
         add(inv.payment_method, "ipd_settlements", inv.amount_collected or 0)
 
-    cash_refunds = db.query(Refund).filter(
-        Refund.hospital_id == hospital_id, Refund.channel == "cash",
+    # Refunds leave through the channel they were issued on, so each one is netted
+    # out of that mode's total (previously only cash refunds were netted, so a
+    # pharmacy refund paid back by card/UPI left the card/UPI total overstated).
+    day_refunds = db.query(Refund).filter(
+        Refund.hospital_id == hospital_id,
         Refund.processed_at >= day_start, Refund.processed_at < day_end
     ).all()
-    total_cash_refunds = round(sum(r.amount for r in cash_refunds), 2)
+    refunds_by_channel = {}
+    for r in day_refunds:
+        refunds_by_channel[r.channel] = round(refunds_by_channel.get(r.channel, 0) + (r.amount or 0), 2)
+    total_cash_refunds = refunds_by_channel.get("cash", 0.0)
 
     system_totals = {mode: round(sum(cats.values()), 2) for mode, cats in by_mode.items()}
-    system_totals["cash"] = round(system_totals.get("cash", 0) - total_cash_refunds, 2)
+    for ch in ("cash", "card", "upi"):
+        system_totals[ch] = round(system_totals.get(ch, 0) - refunds_by_channel.get(ch, 0), 2)
 
     existing_close = db.query(DayEndClose).filter(
         DayEndClose.hospital_id == hospital_id, DayEndClose.close_date == target_date
@@ -1063,6 +1089,7 @@ def _day_end_summary_core(db: Session, hospital_id: int, target_date):
         "date": target_date.isoformat(),
         "by_mode": by_mode,
         "cash_refunds": total_cash_refunds,
+        "refunds_by_channel": refunds_by_channel,
         "system_totals": system_totals,
         "already_closed": bool(existing_close),
         "close": ({

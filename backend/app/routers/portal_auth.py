@@ -1,10 +1,10 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+
 
 from app.database import get_db
 from app.config import settings
@@ -13,14 +13,18 @@ from app.models.portal import PatientAccount, PatientProfileLink
 from app.schemas.portal import LoginIn, CompleteRegisterIn, TokenOut, PatientSessionOut, LoginResultOut, ChangePasswordIn, AddressUpdateIn, PatientAddressIn, PatientAddressOut, ConfirmProfileIn, DeactivateAccountIn
 from app.schemas.portal import PortalForgotPasswordRequestIn, PortalForgotPasswordVerifyIn, PortalForgotPasswordVerifyOut, PortalResetPasswordIn
 from app.models.portal import PatientAddress
-from app.utils.portal_auth import create_portal_access_token, hash_password, verify_password, get_current_patient_account
+from app.utils.portal_auth import create_portal_access_token, hash_password, verify_password, get_current_patient_account, portal_security
 from app.utils.portal_auth import create_patient_password_reset_token, verify_patient_password_reset_token
-from app.utils.auth import verify_captcha_token
+from app.utils.auth import verify_captcha_token, blacklist_token
+from app.utils.rate_limit import limiter, FailureThrottle
 from app.utils.timezone import now_ist_naive
 from app.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/portal/auth", tags=["portal-auth"])
-limiter = Limiter(key_func=get_remote_address)
+
+# Portal accounts have no lockout column, so cap wrong-password attempts per
+# phone number: 10 failures in 15 minutes -> blocked until the window clears.
+_login_throttle = FailureThrottle(max_failures=10, window_seconds=15 * 60)
 
 
 def _session_payload(account: PatientAccount) -> PatientSessionOut:
@@ -70,54 +74,41 @@ def _link_all_hospital_records(db: Session, account: PatientAccount, phone: str)
 
 
 @router.post("/login", response_model=LoginResultOut)
-@limiter.limit("5/minute")
+@limiter.limit("20/minute")
 def login(request: Request, body: LoginIn, db: Session = Depends(get_db)):
     if not verify_captcha_token(body.captcha_token, body.captcha_answer):
         raise HTTPException(status_code=400, detail="Incorrect captcha. Please try again.")
+    if _login_throttle.is_blocked(body.phone):
+        raise HTTPException(status_code=429, detail="Too many failed attempts. Please try again in 15 minutes.")
     account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
 
-    if account:
-        if not account.is_active:
-            raise HTTPException(status_code=403, detail="This account has been deactivated")
-        if not verify_password(body.password, account.password_hash):
-            raise HTTPException(status_code=401, detail="Invalid phone number or password")
-        return LoginResultOut(
-            status="success",
-            access_token=create_portal_access_token(account.id),
-            doctor=_session_payload(account),
-        )
-
-    # No account yet — could be a brand-new phone number (no hospital visit
-    # at all) or a returning patient who hasn't completed registration.
-    # Same path either way until real OTP delivery exists: fixed temp
-    # password for the first login.
-    if body.password != settings.PORTAL_DEFAULT_TEMP_PASSWORD:
+    # Same generic 401 whether the number has no account or the password is
+    # wrong. Registration is closed until WhatsApp OTP exists (see
+    # complete_registration), so an unknown number has nowhere to go.
+    if not account or not verify_password(body.password, account.password_hash):
+        _login_throttle.record_failure(body.phone)
         raise HTTPException(status_code=401, detail="Invalid phone number or password")
+    if not account.is_active:
+        raise HTTPException(status_code=403, detail="This account has been deactivated")
 
-    return LoginResultOut(status="needs_registration")
+    _login_throttle.reset(body.phone)
+    return LoginResultOut(
+        status="success",
+        access_token=create_portal_access_token(account.id),
+        doctor=_session_payload(account),
+    )
 
 
 @router.post("/register/complete", response_model=TokenOut)
 def complete_registration(body: CompleteRegisterIn, db: Session = Depends(get_db)):
-    if db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first():
-        raise HTTPException(status_code=400, detail="An account already exists for this number. Please log in.")
-
-    if len(body.new_password) < 8 or not any(c.isdigit() for c in body.new_password) or not any(c.isupper() for c in body.new_password):
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters, with 1 number and 1 capital letter")
-    if body.new_password == settings.PORTAL_DEFAULT_TEMP_PASSWORD:
-        raise HTTPException(status_code=400, detail="Please choose a password different from the temporary one")
-
-    account = PatientAccount(phone=body.phone, password_hash=hash_password(body.new_password))
-    db.add(account)
-    db.commit()
-    db.refresh(account)
-
-    _link_all_hospital_records(db, account, body.phone)
-    db.refresh(account)
-
-    return TokenOut(
-        access_token=create_portal_access_token(account.id),
-        doctor=_session_payload(account),
+    # CLOSED until WhatsApp OTP exists. This endpoint used to create an account
+    # (and link every hospital record under the phone number) for anyone who
+    # supplied a phone number + password, with no proof of ownership.
+    # When WhatsApp OTP goes live: require a verified OTP for body.phone here,
+    # then create the account and call _link_all_hospital_records (kept above).
+    raise HTTPException(
+        status_code=403,
+        detail="Patient portal sign-up is not open yet. It will open once WhatsApp verification is live."
     )
 
 
@@ -173,76 +164,58 @@ def change_password(
     account: PatientAccount = Depends(get_current_patient_account),
     db: Session = Depends(get_db),
 ):
+    # 400, not 401: the frontend signs the user out on any 401.
     if not verify_password(body.old_password, account.password_hash):
-        raise HTTPException(status_code=401, detail="Current password is incorrect")
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
     if len(body.new_password) < 8 or not any(c.isdigit() for c in body.new_password) or not any(c.isupper() for c in body.new_password):
         raise HTTPException(status_code=400, detail="New password must be at least 8 characters, with 1 number and 1 capital letter")
     if body.new_password == body.old_password:
         raise HTTPException(status_code=400, detail="New password must be different from current password")
 
     account.password_hash = hash_password(body.new_password)
+    account.password_changed_at = datetime.utcnow()
     db.commit()
-    return {"message": "Password changed successfully"}
+    # Older tokens (including this session's) are now invalid; return a fresh one.
+    return TokenOut(
+        access_token=create_portal_access_token(account.id),
+        doctor=_session_payload(account),
+    )
+
+
+@router.post("/logout")
+def portal_logout(
+    credentials: HTTPAuthorizationCredentials = Depends(portal_security),
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    blacklist_token(credentials.credentials, db)
+    return {"message": "Logged out successfully"}
 
 
 @router.post("/forgot-password/request")
 @limiter.limit("5/minute")
 def forgot_password_request(request: Request, body: PortalForgotPasswordRequestIn, db: Session = Depends(get_db)):
-    if not verify_captcha_token(body.captcha_token, body.captcha_answer):
-        raise HTTPException(status_code=400, detail="Incorrect captcha. Please try again.")
-
-    account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="No account found for this phone number.")
-    if not account.is_active:
-        raise HTTPException(status_code=403, detail="This account has been deactivated")
-
-    # TODO: send a real WhatsApp OTP here once delivery is wired up. For now
-    # every account accepts settings.PORTAL_FORGOT_PASSWORD_OTP (see config.py).
-    return {"message": "An OTP has been sent to your phone on WhatsApp."}
+    # DISABLED until WhatsApp OTP delivery exists (was a fixed "1234" for every
+    # account). Same response for every phone number, so nothing to enumerate.
+    raise HTTPException(
+        status_code=503,
+        detail="Password reset is not available yet. It will open once WhatsApp verification is live."
+    )
 
 
 @router.post("/forgot-password/verify", response_model=PortalForgotPasswordVerifyOut)
 @limiter.limit("5/minute")
 def forgot_password_verify(request: Request, body: PortalForgotPasswordVerifyIn, db: Session = Depends(get_db)):
-    account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="No account found for this phone number.")
-
-    if body.otp.strip() != settings.PORTAL_FORGOT_PASSWORD_OTP:
-        raise HTTPException(status_code=400, detail="Incorrect OTP. Please try again.")
-
-    return PortalForgotPasswordVerifyOut(reset_token=create_patient_password_reset_token(account.id, body.otp.strip()))
+    # DISABLED with the request step above (no OTP exists to verify).
+    raise HTTPException(status_code=503, detail="Password reset is not available yet.")
 
 
 @router.post("/reset-password", response_model=TokenOut)
 @limiter.limit("5/minute")
 def reset_password(request: Request, body: PortalResetPasswordIn, db: Session = Depends(get_db)):
-    account_id, otp = verify_patient_password_reset_token(body.reset_token)
-    if account_id is None:
-        raise HTTPException(status_code=400, detail="This reset link has expired. Please request a new OTP.")
-
-    account = db.query(PatientAccount).filter(PatientAccount.id == account_id).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
-    if not account.is_active:
-        raise HTTPException(status_code=403, detail="This account has been deactivated")
-
-    new_password = body.new_password
-    if len(new_password) < 8 or not any(c.isdigit() for c in new_password) or not any(c.isupper() for c in new_password):
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters, with 1 number and 1 capital letter")
-    if otp and new_password == otp:
-        raise HTTPException(status_code=400, detail="New password cannot be the same as the OTP.")
-    if verify_password(new_password, account.password_hash):
-        raise HTTPException(status_code=400, detail="New password must be different from your previous password.")
-
-    account.password_hash = hash_password(new_password)
-    db.commit()
-
-    return TokenOut(
-        access_token=create_portal_access_token(account.id),
-        doctor=_session_payload(account),
-    )
+    # DISABLED with the request step above. When WhatsApp OTP goes live,
+    # restore the reset logic here and set account.password_changed_at.
+    raise HTTPException(status_code=503, detail="Password reset is not available yet.")
 
 
 @router.post("/deactivate")

@@ -8,7 +8,8 @@ from app.models.hospital import Hospital
 from app.models.doctor import Doctor, UserRole
 from app.config import settings
 import secrets
-from app.utils.auth import hash_password, get_current_doctor, now_ist_naive, ist_today, ist_day_bounds
+from app.utils.auth import hash_password, get_current_doctor, now_ist_naive, ist_today, ist_day_bounds, generate_temp_password
+from app.utils.inventory import line_total
 from app.utils.audit import log_action
 import re
 from app.models.consultation import Consultation
@@ -268,13 +269,18 @@ def serialize_billing_block(db: Session, hospital: Hospital) -> dict:
     }
 
 def verify_super_admin_key(x_super_admin_key: str = Header(...)):
-    if x_super_admin_key != settings.SUPER_ADMIN_KEY:
+    expected = settings.SUPER_ADMIN_KEY
+    # An unset/empty key must never match anything (previously an empty
+    # header matched an empty setting). Constant-time compare on bytes.
+    if not expected or not secrets.compare_digest(
+        x_super_admin_key.encode("utf-8"), expected.encode("utf-8")
+    ):
         raise HTTPException(status_code=403, detail="Invalid super admin key")
 
 def validate_fields(name, email, phone):
-    # Password is no longer admin-supplied at creation — every new account
-    # starts on settings.STAFF_DEFAULT_TEMP_PASSWORD and must set its own
-    # via /auth/set-new-password on first login. Nothing left to validate here.
+    # Password is never admin-supplied: every new account gets a random
+    # one-time password (generate_temp_password) that is shown to the creating
+    # admin once, and must be replaced via /auth/set-new-password on first login.
     if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
         raise HTTPException(status_code=400, detail="Invalid email format")
     if not re.match(r'^\+?[0-9]{10,13}$', phone):
@@ -284,99 +290,6 @@ def validate_fields(name, email, phone):
 
 VALID_HOSPITAL_TYPES = {"government", "private"}
 VALID_TIERS = {"foundation", "growth", "scale", "enterprise"}
-
-@router.post("/hospitals", status_code=201)
-def create_hospital(
-    name: str,
-    city: str,
-    state: str,
-    address: str = "",
-    hospital_type: str = "private",
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_super_admin_key)
-):
-    hospital_type = hospital_type.strip().lower()
-    if hospital_type not in VALID_HOSPITAL_TYPES:
-        raise HTTPException(status_code=400, detail="hospital_type must be 'government' or 'private'")
-
-    # Auto-generate hospital code from name
-    words = name.strip().upper().split()
-    code_base = "".join([w[0] for w in words])[:4]
-    hospital_code = f"{code_base}-{secrets.token_hex(3).upper()}"
-
-    # Ensure unique
-    while db.query(Hospital).filter(Hospital.hospital_code == hospital_code).first():
-        hospital_code = f"{code_base}-{secrets.token_hex(3).upper()}"
-
-    hospital = Hospital(
-        name=name,
-        address=address,
-        city=city,
-        state=state,
-        hospital_code=hospital_code,
-        hospital_type=hospital_type,
-        billing_enabled=(hospital_type == "private")
-    )
-    db.add(hospital)
-    db.commit()
-    db.refresh(hospital)
-    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type, "billing_enabled": hospital.billing_enabled}
-
-@router.post("/create-admin", status_code=201)
-def create_admin(
-    hospital_id: int,
-    name: str,
-    email: str,
-    phone: str,
-    title: str = "Dr.",
-    specialization: str = "General",
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_super_admin_key)
-):
-    
-    validate_fields(name, email, phone)
-
-    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
-    if not hospital:
-        raise HTTPException(status_code=404, detail="Hospital not found")
-
-    email = email.lower().strip()
-    existing = db.query(Doctor).filter(Doctor.email == email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    admin = Doctor(
-        title=title,
-        name=name,
-        email=email,
-        phone=phone,
-        specialization=specialization,
-        clinic_name=hospital.name,
-        hashed_password=hash_password(settings.STAFF_DEFAULT_TEMP_PASSWORD),
-        must_change_password=True,
-        role=UserRole.admin,
-        hospital_id=hospital_id,
-        is_active=True
-    )
-    db.add(admin)
-    db.commit()
-    db.refresh(admin)
-    return {
-        "id": admin.id,
-        "name": admin.name,
-        "email": admin.email,
-        "role": admin.role.value,
-        "hospital": hospital.name,
-        "hospital_code": hospital.hospital_code
-    }
-
-@router.get("/hospitals")
-def list_hospitals(
-    db: Session = Depends(get_db),
-    _: None = Depends(verify_super_admin_key)
-):
-    hospitals = db.query(Hospital).all()
-    return [{"id": h.id, "name": h.name, "hospital_code": h.hospital_code, "hospital_type": h.hospital_type, "city": h.city, "is_active": h.is_active} for h in hospitals]
 
 def generate_doctor_uid(db: Session, hospital_code: str) -> str:
     import secrets, string
@@ -430,6 +343,7 @@ def create_doctor(
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    temp_password = generate_temp_password()
     doctor = Doctor(
         title=title,
         name=name,
@@ -439,7 +353,7 @@ def create_doctor(
         registration_number=registration_number,
         room_number=room_number or None,
         clinic_name=hospital.name,
-        hashed_password=hash_password(settings.STAFF_DEFAULT_TEMP_PASSWORD),
+        hashed_password=hash_password(temp_password),
         must_change_password=True,
         role=UserRole(role),
         hospital_id=hospital_id,
@@ -467,8 +381,46 @@ def create_doctor(
         "name": doctor.name,
         "email": doctor.email,
         "role": doctor.role.value,
-        "hospital": hospital.name
+        "hospital": hospital.name,
+        "temporary_password": temp_password  # shown to the admin once, never stored in plain text
     }
+
+@router.post("/doctors/{doctor_id}/reset-password")
+def reset_staff_password(
+    doctor_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    # Hospital admins only (Super Admin has /accounts/{id}/reset-password).
+    if current_doctor.role.value != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    target = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    # Same 404 for "doesn't exist" and "another hospital's staff": no probing.
+    if not target or target.hospital_id != current_doctor.hospital_id:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    if target.id == current_doctor.id:
+        raise HTTPException(status_code=400, detail="Use Change Password to change your own password")
+    if target.role.value in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Admin accounts can only be reset by the platform administrator")
+
+    temp_password = generate_temp_password()
+    target.hashed_password = hash_password(temp_password)
+    target.must_change_password = True
+    target.password_changed_at = datetime.utcnow()  # signs out every existing session
+    target.failed_login_attempts = 0
+    target.locked_until = None
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="password_reset",
+        target_type="doctor",
+        target_id=target.id,
+        target_label=f"{target.title} {target.name}",
+        hospital_id=target.hospital_id
+    )
+    return {"id": target.id, "new_password": temp_password}
 
 @router.get("/billing/today")
 def billing_today(
@@ -499,12 +451,17 @@ def billing_today(
         MedicineOrder.paid_at >= today_start,
         MedicineOrder.paid_at < today_end
     ).all()
-    pharmacy_collected = sum((m.unit_price or 0) * ((m.billed_quantity if m.billed_quantity is not None else m.quantity) or 0) for m in medicine_total)
+    pharmacy_collected = round(sum(line_total(m.unit_price or 0, ((m.billed_quantity if m.billed_quantity is not None else m.quantity) or 0)) for m in medicine_total), 2)
+    pharmacy_by_method = {}
+    for m in medicine_total:
+        key = m.payment_method or "unspecified"
+        pharmacy_by_method[key] = round(pharmacy_by_method.get(key, 0) + line_total(m.unit_price or 0, ((m.billed_quantity if m.billed_quantity is not None else m.quantity) or 0)), 2)
 
     return {
         "total_collected": total_collected + pharmacy_collected,
         "consultation_and_test_collected": total_collected,
         "pharmacy_collected": pharmacy_collected,
+        "pharmacy_by_method": pharmacy_by_method,
         "paid_count": len(paid),
         "unpaid_count": len(unpaid),
         "unpaid_amount": total_unpaid
@@ -1060,16 +1017,28 @@ def toggle_nurse_assistant_role(
 
     return {"id": doctor.id, "role": doctor.role.value}
 
+class CreateSuperAdminBody(BaseModel):
+    name: str
+    email: str
+    phone: str
+    password: str
+
+
 @router.post("/create-superadmin", status_code=201)
 def create_superadmin(
-    name: str,
-    email: str,
-    phone: str,
-    password: str,
+    body: CreateSuperAdminBody,
     db: Session = Depends(get_db),
     _: None = Depends(verify_super_admin_key)
 ):
-    email = email.lower().strip()
+    # Password comes in the JSON body, never the URL, so it stays out of
+    # proxy and platform access logs.
+    name = body.name.strip()
+    email = body.email.lower().strip()
+    phone = body.phone.strip()
+    password = body.password
+    validate_fields(name, email, phone)
+    if len(password) < 10:
+        raise HTTPException(status_code=400, detail="Password must be at least 10 characters")
     existing = db.query(Doctor).filter(Doctor.email == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -1124,6 +1093,7 @@ def create_subadmin(
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    temp_password = generate_temp_password()
     subadmin = Doctor(
         title=title,
         name=name,
@@ -1131,7 +1101,7 @@ def create_subadmin(
         phone=phone,
         specialization=specialization,
         clinic_name=hospital.name,
-        hashed_password=hash_password(settings.STAFF_DEFAULT_TEMP_PASSWORD),
+        hashed_password=hash_password(temp_password),
         must_change_password=True,
         role=UserRole.sub_admin,
         hospital_id=hospital_id,
@@ -1146,7 +1116,8 @@ def create_subadmin(
         "name": subadmin.name,
         "email": subadmin.email,
         "role": subadmin.role.value,
-        "hospital": hospital.name
+        "hospital": hospital.name,
+        "temporary_password": temp_password
     }
 
 @router.get("/hospitals-list")
@@ -1500,10 +1471,11 @@ def create_admin_jwt(
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    temp_password = generate_temp_password()
     admin = Doctor(
         title=title, name=name, email=email, phone=phone,
         specialization=specialization, clinic_name=hospital.name,
-        hashed_password=hash_password(settings.STAFF_DEFAULT_TEMP_PASSWORD),
+        hashed_password=hash_password(temp_password),
         must_change_password=True,
         role=UserRole.admin, hospital_id=hospital_id, is_active=True
     )
@@ -1521,7 +1493,7 @@ def create_admin_jwt(
         hospital_id=hospital_id
     )
 
-    return {"id": admin.id, "name": admin.name, "email": admin.email, "role": admin.role.value}
+    return {"id": admin.id, "name": admin.name, "email": admin.email, "role": admin.role.value, "temporary_password": temp_password}
 
 @router.get("/stats")
 def superadmin_stats(
@@ -2117,12 +2089,11 @@ def reset_account_password(
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    import string
-    alphabet = string.ascii_letters + string.digits
-    new_password = "A1" + "".join(secrets.choice(alphabet) for _ in range(8))
+    new_password = generate_temp_password()
 
     account.hashed_password = hash_password(new_password)
     account.must_change_password = True
+    account.password_changed_at = datetime.utcnow()  # signs out every existing session
     account.failed_login_attempts = 0
     account.locked_until = None
     db.commit()

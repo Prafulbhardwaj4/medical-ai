@@ -30,6 +30,7 @@ class PatientAccount(Base):
     phone = Column(String, unique=True, nullable=False, index=True)
     email = Column(String, unique=True, nullable=True, index=True)
     password_hash = Column(String, nullable=False)
+    password_changed_at = Column(DateTime, nullable=True)  # UTC naive; tokens issued before this are rejected
     address = Column(String, nullable=True)  # saved default address, used unless a booking opts for a different one
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=now_ist_naive)

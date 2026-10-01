@@ -20,6 +20,7 @@ class MedicineOrder(Base):
     included = Column(Boolean, default=True, nullable=False)
     status = Column(String, nullable=False, default="advised")  # advised -> paid -> dispensed (or unavailable = advised outside, never billed)
     paid_at = Column(DateTime, nullable=True)
+    payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi" - how the pharmacy counter collected this line
     queued_at = Column(DateTime, nullable=True)  # set whenever this order enters a day's active queue (payment or requeue)
     dispensed_at = Column(DateTime, nullable=True)
     dispensed_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # pharmacist who dispensed — needed for the Schedule H1/X register

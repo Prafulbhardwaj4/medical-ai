@@ -45,6 +45,7 @@ from app.routers import tutorials
 from app.routers import plan_inquiries as plan_inquiries_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
+from app.models.captcha_challenge import CaptchaChallenge
 from app.models.audit_log import AuditLog
 from app.models.checkin import Checkin
 from app.models.attendance import AttendanceRecord
@@ -66,7 +67,7 @@ from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopup
 from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
 from app.models.day_end_close import DayEndClose
-from app.config import settings
+from app.config import settings, validate_startup_secrets, _is_production
 import warnings
 import os
 import logging
@@ -83,8 +84,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("medscribe")
 
-if settings.SECRET_KEY == "changeme":
-    warnings.warn("WARNING: SECRET_KEY is default. Set a strong key in .env before deploying.")
+validate_startup_secrets(settings)
 
 def _run_migrations():
     from alembic.config import Config as AlembicConfig
@@ -96,6 +96,13 @@ def _run_migrations():
     db_url = settings.DATABASE_URL
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+    if db_url.startswith("sqlite"):
+        # Local dev only: the migration chain targets PostgreSQL and cannot run on SQLite
+        # (it uses ALTER CONSTRAINT). Tables are built from the models by create_all() and
+        # _runtime_sync_schema() below, so local dev does not need Alembic.
+        logger.info("SQLite database: skipping Alembic migrations (local dev)")
+        return
 
     alembic_cfg = AlembicConfig(alembic_ini_path)
     alembic_cfg.set_main_option("script_location", os.path.join(backend_dir, "migrations"))
@@ -188,7 +195,7 @@ def _seed_tutorial_content():
 _seed_tutorial_content()
 
 security = HTTPBearer()
-limiter = Limiter(key_func=get_remote_address)
+from app.utils.rate_limit import limiter
 
 app = FastAPI(
     title="MedScribe API",
@@ -205,18 +212,34 @@ async def _start_midnight_scheduler():
     from app.scheduler import midnight_close_loop
     asyncio.create_task(midnight_close_loop())
 
+# Single source of truth for CORS: the middleware AND the 500 handler below both
+# use these, so they can't drift.
+_CORS_ALLOWED_ORIGINS = {
+    settings.PUBLIC_FRONTEND_URL.rstrip("/"),
+    "https://medical-s-ai.vercel.app",
+    "https://medical-ai-mvv1.onrender.com",
+    *[o.strip().rstrip("/") for o in settings.CORS_EXTRA_ORIGINS.split(",") if o.strip()],
+}
+if not _is_production(settings):  # local dev servers only when not in production
+    _CORS_ALLOWED_ORIGINS |= {
+        "http://localhost:5500", "http://127.0.0.1:5500",
+        "http://localhost:5501", "http://127.0.0.1:5501",
+    }
+_CORS_ORIGIN_REGEX = re.compile(settings.CORS_ORIGIN_REGEX) if settings.CORS_ORIGIN_REGEX else None
+
+
+def _cors_origin_ok(origin: str) -> bool:
+    return bool(origin) and (
+        origin in _CORS_ALLOWED_ORIGINS
+        or (_CORS_ORIGIN_REGEX is not None and _CORS_ORIGIN_REGEX.fullmatch(origin) is not None)
+    )
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5500",
-        "http://127.0.0.1:5500",
-        "http://localhost:5501",
-        "http://127.0.0.1:5501",
-        "https://medical-s-ai.vercel.app",
-        "https://medical-ai-mvv1.onrender.com",
-    ],
-    allow_origin_regex=r"https://.*\.(vercel\.app|netlify\.app|onrender\.com)$",
-    allow_credentials=True,
+    allow_origins=sorted(_CORS_ALLOWED_ORIGINS),
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -224,7 +247,7 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
-    logger.info("REQ %s %s origin=%s", request.method, request.url.path, request.headers.get("origin"))
+    logger.info("REQ %s %s origin=%s xff=%s", request.method, request.url.path, request.headers.get("origin"), request.headers.get("x-forwarded-for"))
     try:
         response = await call_next(request)
     except Exception:
@@ -235,27 +258,14 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-_CORS_ALLOWED_ORIGINS = {
-    "http://localhost:5500",
-    "http://127.0.0.1:5500",
-    "http://localhost:5501",
-    "http://127.0.0.1:5501",
-    "https://medical-s-ai.vercel.app",
-    "https://medical-ai-mvv1.onrender.com",
-}
-_CORS_ORIGIN_REGEX = re.compile(r"https://.*\.(vercel\.app|netlify\.app|onrender\.com)$")
-
-
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error("UNHANDLED %s %s\n%s", request.method, request.url.path, traceback.format_exc())
-    # TEMPORARY — surfaces the real exception in the response body itself,
-    # since the Render log viewer isn't showing new entries right now.
-    # REVERT this back to the generic message once the bug above is found;
-    # exposing tracebacks to the client is not something to ship long-term.
+    # Full detail stays in the server log above; the client only ever gets a
+    # generic message (exception text can include SQL and patient data).
     response = JSONResponse(
         status_code=500,
-        content={"detail": f"{type(exc).__name__}: {exc}", "traceback": traceback.format_exc()},
+        content={"detail": "Internal server error"},
     )
     # This handler is attached to Exception (not HTTPException), so Starlette
     # runs it from ServerErrorMiddleware, which wraps OUTSIDE CORSMiddleware.
@@ -264,9 +274,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     # masking the real 500 as what looks like a network/CORS error. Add the
     # header here by hand so real crashes surface as crashes, not phantom CORS.
     origin = request.headers.get("origin")
-    if origin and (origin in _CORS_ALLOWED_ORIGINS or _CORS_ORIGIN_REGEX.match(origin)):
+    if _cors_origin_ok(origin):
         response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Vary"] = "Origin"
     return response
 

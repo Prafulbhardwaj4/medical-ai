@@ -9,9 +9,15 @@ from app.database import get_db
 from app.models.doctor import Doctor, UserRole
 from app.models.chat_message import ChatMessage
 from app.utils.auth import get_current_doctor
+from app.utils.tier_gate import require_tier
 from app.utils.timezone import now_ist_naive
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+# Growth+ only, for every chat endpoint (threads, messages, broadcast, uploads, files).
+router = APIRouter(
+    prefix="/chat",
+    tags=["chat"],
+    dependencies=[Depends(require_tier("growth", "Staff chat"))],
+)
 
 ADMIN_ROLES = ["admin", "sub_admin"]
 STAFF_ROLES = ["doctor", "receptionist", "nurse", "assistant", "lab", "pharmacy", "radiology"]

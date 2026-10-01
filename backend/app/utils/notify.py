@@ -3,8 +3,7 @@ from datetime import date, timedelta
 from app.models.notification import Notification
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.medicine_batch import MedicineBatch
-from app.utils.timezone import now_ist_naive
-
+from app.utils.timezone import now_ist_naive, ist_today
 
 def resolve_notification(db: Session, hospital_id: int, source_key: str):
     """Items 4a/4b — marks a specific notification row read once whatever
@@ -626,9 +625,12 @@ def sync_stock_notifications(db: Session, hospital_id: int):
         HospitalMedicine.is_active == True
     ).all()
 
+    from app.utils.inventory import expired_units_by_medicine
+    expired_map = expired_units_by_medicine(db, hospital_id=hospital_id)
+
     live_low_stock_keys = set()
     for m in medicines:
-        stock = m.stock_quantity or 0
+        stock = max(0, (m.stock_quantity or 0) - expired_map.get(m.id, 0))  # expired units don't count
         if stock <= m.low_stock_threshold:
             key = f"low_stock:{m.id}"
             live_low_stock_keys.add(key)
@@ -638,7 +640,7 @@ def sync_stock_notifications(db: Session, hospital_id: int):
             else:
                 _upsert(db, hospital_id, key, "low_stock", "warning", "Low stock", f"{label} has {stock} unit(s) left (alert at {m.low_stock_threshold}).", "medicine", m.id)
 
-    cutoff = date.today() + timedelta(days=30)
+    cutoff = ist_today() + timedelta(days=30)
     batches = db.query(MedicineBatch).filter(
         MedicineBatch.hospital_id == hospital_id,
         MedicineBatch.expiry_date != None,
@@ -653,7 +655,7 @@ def sync_stock_notifications(db: Session, hospital_id: int):
             continue
         key = f"expiring:{b.id}"
         live_expiry_keys.add(key)
-        days_left = (b.expiry_date - date.today()).days
+        days_left = (b.expiry_date - ist_today()).days
         label = f"{medicine.generic_name}{' ' + medicine.strength if medicine.strength else ''}"
         if days_left < 0:
             _upsert(db, hospital_id, key, "expiring_stock", "critical", "Stock expired", f"{label} (Lot {b.batch_number or '—'}, {b.quantity} units) expired.", "medicine", medicine.id)

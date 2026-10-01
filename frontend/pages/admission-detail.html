@@ -1268,6 +1268,7 @@
   <script src="../js/tutorial.js?v=2"></script>
   <script>
     if (!requireAuth()) { }
+    if (blockPageIfFoundation("IPD / Admissions")) throw new Error("tier-locked");
     if (getDoctor()?.role === "receptionist") {
       document.getElementById("sidebar-doctor").style.display = "none";
       document.getElementById("sidebar-receptionist").style.display = "";

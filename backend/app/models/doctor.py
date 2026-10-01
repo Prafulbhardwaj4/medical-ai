@@ -33,6 +33,7 @@ class Doctor(Base):
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True)
     must_change_password = Column(Boolean, default=False, nullable=False)
+    password_changed_at = Column(DateTime, nullable=True)  # UTC naive; tokens issued before this are rejected
     is_hiv_authorized = Column(Boolean, default=False, nullable=False)  # explicitly granted by admin — tighter access than the general "lab" role (Phase 6 item 21)
 
     role = Column(Enum(UserRole, native_enum=False), default=UserRole.doctor, nullable=False)

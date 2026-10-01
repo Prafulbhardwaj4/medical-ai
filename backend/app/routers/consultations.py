@@ -14,7 +14,6 @@ from app.utils.audit import log_action
 # from app.services.whisper import transcribe_audio
 from app.services.groq_service import structure_transcript, match_tests_to_catalog, match_radiology_to_catalog
 from app.services.pdf_service import generate_prescription_pdf
-from app.services.sms_service import send_sms
 from app.services.sarvam_stream import stream_transcribe
 from app.models.doctor import Doctor as DoctorModel
 from app.models.checkin import Checkin
@@ -27,7 +26,7 @@ from app.models.radiology_form_f import RadiologyFormF
 from app.models.test_order import TestOrder
 from app.models.medicine_order import MedicineOrder
 from app.models.hospital_medicine import HospitalMedicine
-from app.utils.inventory import deduct_stock_fefo, calculate_prescribed_quantity
+from app.utils.inventory import deduct_stock_fefo, calculate_prescribed_quantity, expired_units_by_medicine, line_total
 from app.utils.notify import sync_stock_notifications
 from app.schemas.consultation import ConfirmPrescriptionPayload
 from app.config import settings
@@ -40,7 +39,7 @@ import os
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
+from app.utils.rate_limit import limiter
 router = APIRouter(prefix="/consultations", tags=["consultations"])
 
 
@@ -1056,6 +1055,11 @@ def confirm_prescription(
             HospitalMedicine.is_active == True
         ).all()
 
+        _expired_map = expired_units_by_medicine(db, hospital_id=current_doctor.hospital_id)
+
+        def _has_sellable_stock(cm):
+            return ((cm.stock_quantity or 0) - _expired_map.get(cm.id, 0)) > 0
+
         def _strength_prefix(s):
             # Catalog strength for concentration-based forms is often written as
             # "125mg/5ml" while the prescribed dosage is just "125mg" — compare
@@ -1098,7 +1102,7 @@ def confirm_prescription(
                     # No brand named — pick any matching brand (or the unbranded
                     # row) that actually has stock, so an in-stock brand isn't
                     # skipped in favor of an empty unbranded template row.
-                    in_stock = [cm for cm in strength_matches if (cm.stock_quantity or 0) > 0]
+                    in_stock = [cm for cm in strength_matches if _has_sellable_stock(cm)]
                     if in_stock:
                         return in_stock[0]
                     # Nothing in stock — prefer the unbranded row for a clean
@@ -1116,7 +1120,7 @@ def confirm_prescription(
             # Multiple same-name candidates and no dosage text to disambiguate with —
             # same preference: any in-stock brand first, else the unbranded row,
             # else fall back to the first.
-            in_stock = [cm for cm in candidates if (cm.stock_quantity or 0) > 0]
+            in_stock = [cm for cm in candidates if _has_sellable_stock(cm)]
             if in_stock:
                 return in_stock[0]
             for cm in candidates:
@@ -1273,7 +1277,7 @@ def update_consultation(
                         order.status = "cancelled"
                         cancelled_order_ids.append(order.id)
                         if was_paid:
-                            refund_amount = (order.unit_price or 0) * (order.billed_quantity or order.quantity or 0)
+                            refund_amount = line_total(order.unit_price, (order.billed_quantity or order.quantity or 0))
                             if refund_amount > 0:
                                 refund = Refund(
                                     patient_id=consultation.patient_id,
@@ -1539,50 +1543,6 @@ def void_consultation(
     )
 
     return {"message": "Consultation voided"}
-
-
-@router.post("/send-sms/{consultation_id}")
-@limiter.limit("5/minute")
-def send_prescription_sms(
-    request: Request,
-    consultation_id: int,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    consultation = db.query(Consultation).filter(
-        Consultation.id == consultation_id,
-        Consultation.doctor_id == current_doctor.id
-    ).first()
-    if not consultation:
-        raise HTTPException(status_code=404, detail="Consultation not found")
-    if not consultation.token_number:
-        raise HTTPException(status_code=400, detail="Prescription not confirmed yet.")
-
-    patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
-
-    pdf_filename = f"{consultation.token_number}.pdf"
-    pdf_url = f"{settings.BASE_URL}/prescriptions/{pdf_filename}"
-
-    result = send_sms(
-        to_phone=patient.phone,
-        doctor_name=f"{current_doctor.title} {current_doctor.name}",
-        token_number=consultation.token_number,
-        pdf_url=pdf_url
-    )
-
-    consultation.whatsapp_status = result["status"]
-    db.commit()
-
-    if result["status"] == "failed":
-        raise HTTPException(status_code=502, detail=f"SMS delivery failed: {result.get('error')}")
-
-    return {
-        "consultation_id": consultation.id,
-        "token_number": consultation.token_number,
-        "sms_status": result["status"],
-        "pdf_url": pdf_url,
-        "sent_to": patient.phone
-    }
 
 @router.get("/admin-dashboard")
 def admin_dashboard(
