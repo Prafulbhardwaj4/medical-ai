@@ -17,7 +17,6 @@ from app.models.admission_room import AdmissionRoom
 from app.models.admission_referral import AdmissionReferral
 from app.models.opd_charge import OpdCharge
 from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
-from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
 from app.models.day_end_close import DayEndClose
 from app.models.attendance_coverage import AttendanceCoverage

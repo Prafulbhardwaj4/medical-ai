@@ -251,28 +251,6 @@ class CollectTopupIn(BaseModel):
     payment_method: str  # "cash" | "card" | "upi"
 
 
-class TpaCaseIn(BaseModel):
-    insurer_name: str
-    policy_number: Optional[str] = None
-    room_category_eligibility: Optional[str] = None
-    eligible_daily_rate: Optional[float] = None  # numeric ₹/day — used to compute the proportionate deduction estimate
-    copay_notes: Optional[str] = None
-
-
-class TpaCaseUpdateIn(BaseModel):
-    status: str  # "pending" | "query_raised" | "approved" | "denied"
-    authorized_amount: Optional[float] = None
-    room_category_eligibility: Optional[str] = None
-    eligible_daily_rate: Optional[float] = None
-    copay_notes: Optional[str] = None
-    query_notes: Optional[str] = None
-
-
-class TpaSettleIn(BaseModel):
-    settled_amount: float
-    settlement_notes: Optional[str] = None
-
-
 class ProgressNoteIn(BaseModel):
     note: str
 

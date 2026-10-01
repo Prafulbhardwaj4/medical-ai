@@ -19,7 +19,7 @@ from app.models.checkin import Checkin
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from app.utils.ai_scribe_gate import get_ai_scribe_status, has_ai_scribe_at_all
-from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING, AI_SCRIBE_TIER_CAPS
+from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING, AI_SCRIBE_TIER_CAPS, effective_ai_scribe_cap, cycle_months
 from app.models.suggestion import Suggestion
 from app.models.ai_scribe_topup import AiScribeTopup
 from app.models.upgrade_request import UpgradeRequest
@@ -83,7 +83,7 @@ def get_notifications_feed(
         })
 
     for h in db.query(Hospital).filter(Hospital.is_active == True).all():
-        cap = AI_SCRIBE_TIER_CAPS.get(h.tier)
+        cap = effective_ai_scribe_cap(h)
         if cap and h.ai_scribe_consultations_used >= cap:
             items.append({
                 "id": f"hospital_limit-{h.id}", "notif_type": "hospital_limit", "severity": "warning",
@@ -243,20 +243,29 @@ def serialize_billing_block(db: Session, hospital: Hospital) -> dict:
     views can never disagree on used/total or renew-button state. Returns
     has_ai_scribe=False for Foundation with everything else null — per
     Praful, Foundation shows no topup/usage UI at all, not a 0/0 counter."""
-    if not has_ai_scribe_at_all(hospital.tier):
-        return {
-            "has_ai_scribe": False,
-            "ai_scribe_used": None, "ai_scribe_cap": None, "ai_scribe_topup_remaining": None, "ai_scribe_total_remaining": None,
-            "billing_cycle_start": None, "billing_cycle_end": None, "grace_end": None, "deactivation_at": None,
-            "renew_window_open": False,
-        }
-
-    status = get_ai_scribe_status(db, hospital)
     cycle = get_billing_cycle_info(hospital)
     now = now_ist_naive()
 
+    if not has_ai_scribe_at_all(hospital.tier):
+        # Foundation: no AI Scribe counter/topup, but the billing cycle,
+        # grace/deactivation dates and Renew still apply (the deactivation
+        # sweep runs for every tier).
+        return {
+            "has_ai_scribe": False,
+            "billing_period": hospital.billing_period,
+            "ai_scribe_used": None, "ai_scribe_cap": None, "ai_scribe_topup_remaining": None, "ai_scribe_total_remaining": None,
+            "billing_cycle_start": hospital.billing_cycle_start.isoformat() if hospital.billing_cycle_start else None,
+            "billing_cycle_end": cycle["cycle_end"].isoformat() if cycle else None,
+            "grace_end": cycle["grace_end"].isoformat() if cycle else None,
+            "deactivation_at": cycle["deactivation_at"].isoformat() if cycle else None,
+            "renew_window_open": is_renew_window_open(hospital, now),
+        }
+
+    status = get_ai_scribe_status(db, hospital)
+
     return {
         "has_ai_scribe": True,
+        "billing_period": hospital.billing_period,
         "ai_scribe_used": status["used"],
         "ai_scribe_cap": status["cap"],  # None = unlimited (Enterprise) — frontend must show "Unlimited", not a fraction
         "ai_scribe_topup_remaining": status["topup_remaining"],
@@ -327,6 +336,12 @@ def create_doctor(
 
     if current_doctor.role.value == "sub_admin" and role != "doctor":
         raise HTTPException(status_code=403, detail="Sub admin can only create doctor accounts")
+    if role == "radiology":
+        from app.utils.tier_gate import hospital_has_tier
+        if not hospital_has_tier(db, hospital_id, "enterprise"):
+            raise HTTPException(status_code=403, detail="Radiology staff accounts require the Enterprise plan")
+    if current_doctor.role.value == "receptionist" and role in ("sub_admin", "receptionist"):
+        raise HTTPException(status_code=403, detail="Receptionist cannot create admin-level or reception accounts")
 
     # Admin can only create doctors for their own hospital
     if current_doctor.role.value != "super_admin" and current_doctor.hospital_id != hospital_id:
@@ -1238,6 +1253,34 @@ def buy_ai_scribe_topup(
     return {"id": topup.id, "hospital_id": hospital.id, "block_size": block_size, "price_paid": topup.price_paid, "expires_at": topup.expires_at.isoformat()}
 
 
+@router.patch("/hospitals/{hospital_id}/billing-period")
+def set_hospital_billing_period(
+    hospital_id: int,
+    period: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    period = period.strip().lower()
+    if period not in ("monthly", "yearly"):
+        raise HTTPException(status_code=400, detail="period must be monthly or yearly")
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    previous = hospital.billing_period
+    hospital.billing_period = period
+    db.commit()
+    log_action(
+        db, current_doctor,
+        action="hospital_billing_period_changed",
+        target_type="hospital", target_id=hospital.id, target_label=hospital.name,
+        details=f"{previous} -> {period}",
+        hospital_id=hospital.id
+    )
+    return {"id": hospital.id, "billing_period": hospital.billing_period}
+
+
 @router.post("/hospitals/{hospital_id}/renew")
 def renew_hospital_billing_cycle(
     hospital_id: int,
@@ -1272,7 +1315,7 @@ def renew_hospital_billing_cycle(
     # by exactly one month from the current anchor, not from "now" (item 6:
     # "cycle stays anchored to the original signup date, not the date the
     # button was pressed").
-    hospital.billing_cycle_start = hospital.billing_cycle_start + relativedelta(months=1)
+    hospital.billing_cycle_start = hospital.billing_cycle_start + relativedelta(months=cycle_months(hospital))
     hospital.ai_scribe_consultations_used = 0
     db.commit()
 
@@ -2012,6 +2055,10 @@ def update_account(
             raise HTTPException(status_code=403, detail="Cannot change role of an admin account")
         if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy", "radiology"]:
             raise HTTPException(status_code=400, detail="Invalid role")
+        if role == "radiology":
+            from app.utils.tier_gate import hospital_has_tier
+            if not hospital_has_tier(db, account.hospital_id, "enterprise"):
+                raise HTTPException(status_code=403, detail="Radiology staff accounts require the Enterprise plan")
         account.role = UserRole(role)
         if role not in ["doctor", "sub_admin"]:
             account.consultation_fee = None

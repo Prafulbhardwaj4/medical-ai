@@ -23,7 +23,6 @@ from app.models.radiology_form_f import RadiologyFormF
 from app.models.invoice import Invoice
 from app.models.notification import Notification
 from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
-from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.admission_consent import AdmissionConsent
 from app.models.admission_progress_note import AdmissionProgressNote
 from app.models.admission_vitals import AdmissionVitals
@@ -33,9 +32,9 @@ from app.models.refund import Refund
 from app.schemas.admission import (
     AdmitPatientIn, AddMedicationOrderIn, AddChargeIn, AddAdmissionTestIn, DischargeIn, CollectBalanceIn,
     WardTypeCreateIn, WardTypeOut, UpdateDiagnosisIn, RequestWardChangeIn, ChangeWardIn, SendToAdmissionIn,
-    TopupRequestIn, CollectTopupIn, TpaCaseIn, TpaCaseUpdateIn, ReturnMedicationIn, AdministerMedicationIn, EmergencyAlertIn,
+    TopupRequestIn, CollectTopupIn, ReturnMedicationIn, AdministerMedicationIn, EmergencyAlertIn,
     ProfessionalFeeIn, VALID_ADMISSION_TYPES, AdmissionConsentIn, VALID_CONSENT_TYPES, VALID_DISCHARGE_TYPES,
-    VALID_WARD_CATEGORIES, TpaSettleIn, ProgressNoteIn, EmergencyAdmitIn, RoomCreateIn, RoomOut,
+    VALID_WARD_CATEGORIES, ProgressNoteIn, EmergencyAdmitIn, RoomCreateIn, RoomOut,
     AdmissionVitalsIn, AddAdmissionRadiologyOrderIn,
 )
 from app.models.consultation import Consultation
@@ -1955,35 +1954,23 @@ def _tpa_proportionate_deduction_estimate(db: Session, a: Admission, tpa_case, c
 
 
 def _settlement_summary(db: Session, a: Admission):
-    """(items, subtotal, gst_total, charges_total, deposit_total, tpa_covered, balance) —
+    """(items, subtotal, gst_total, charges_total, deposit_total, balance) —
     charges_total is subtotal + gst_total (tax-inclusive, what's actually payable).
-    tpa_covered is how much of the outstanding balance an approved TPA case offsets
-    (capped at what's actually left after the deposit). balance > 0 means the patient
-    still owes; balance < 0 means a refund is due against the deposit. TPA-covered
-    money is never counted as collected from the patient — it's tracked separately
-    as a receivable via AdmissionTpaCase.settlement_status, reconciled later in
-    settle_tpa_case once the insurer actually pays."""
+    balance > 0 means the patient still owes; balance < 0 means a refund is due
+    against the deposit."""
     items, _pretax_total = _build_discharge_bill(db, a)
     hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
     items, subtotal, gst_total, charges_total = apply_gst(items, hospital)
     deposit_total = _deposit_total(db, a)
 
-    tpa_covered = 0.0
-    tpa_case = db.query(AdmissionTpaCase).filter(
-        AdmissionTpaCase.admission_id == a.id, AdmissionTpaCase.status == "approved"
-    ).order_by(AdmissionTpaCase.resolved_at.desc()).first()
-    if tpa_case and tpa_case.authorized_amount:
-        outstanding_before_tpa = max(charges_total - deposit_total, 0)
-        tpa_covered = min(tpa_case.authorized_amount, outstanding_before_tpa)
-
-    balance = charges_total - deposit_total - tpa_covered
-    return items, subtotal, gst_total, charges_total, deposit_total, tpa_covered, balance
+    balance = charges_total - deposit_total
+    return items, subtotal, gst_total, charges_total, deposit_total, balance
 
 
 @router.get("/{admission_id}/deposit-summary")
 def get_deposit_summary(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    _, subtotal, gst_total, charges_total, deposit_total, tpa_covered, balance = _settlement_summary(db, a)
+    _, subtotal, gst_total, charges_total, deposit_total, balance = _settlement_summary(db, a)
     deposits = db.query(AdmissionDeposit).filter(AdmissionDeposit.admission_id == a.id).order_by(AdmissionDeposit.collected_at).all()
     topups = db.query(AdmissionDepositTopupRequest).filter(AdmissionDepositTopupRequest.admission_id == a.id).order_by(AdmissionDepositTopupRequest.requested_at.desc()).all()
     return {
@@ -1991,7 +1978,6 @@ def get_deposit_summary(admission_id: str, current_doctor: Doctor = Depends(get_
         "subtotal": subtotal,
         "gst_total": gst_total,
         "charges_total": charges_total,
-        "tpa_covered": tpa_covered,
         "balance": balance,
         "deposits": [
             {"id": d.id, "amount": d.amount, "payment_method": d.payment_method, "note": d.note, "collected_at": d.collected_at.isoformat() if d.collected_at else None}
@@ -2078,205 +2064,18 @@ def collect_topup_request(admission_id: str, request_id: int, body: CollectTopup
     db.commit()
     return {"message": "Top-up collected", "amount_collected": req.requested_amount}
 
-VALID_TPA_STATUSES = {"pending", "query_raised", "approved", "denied"}
-
-
-@router.get("/{admission_id}/tpa-case")
-def get_tpa_case(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    case = db.query(AdmissionTpaCase).filter(AdmissionTpaCase.admission_id == a.id).order_by(AdmissionTpaCase.created_at.desc()).first()
-    if not case:
-        return None
-    deduction_ratio, deduction_estimate = 1.0, 0.0
-    if case.eligible_daily_rate and a.status == "admitted":
-        items, _pretax_total = _build_discharge_bill(db, a)
-        hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
-        _, _, _, charges_total = apply_gst(items, hospital)
-        deduction_ratio, deduction_estimate = _tpa_proportionate_deduction_estimate(db, a, case, charges_total)
-
-    return {
-        "id": case.id, "insurer_name": case.insurer_name, "policy_number": case.policy_number,
-        "status": case.status, "authorized_amount": case.authorized_amount,
-        "room_category_eligibility": case.room_category_eligibility, "eligible_daily_rate": case.eligible_daily_rate,
-        "copay_notes": case.copay_notes,
-        "query_notes": case.query_notes, "created_at": case.created_at.isoformat() if case.created_at else None,
-        "updated_at": case.updated_at.isoformat() if case.updated_at else None,
-        "resolved_at": case.resolved_at.isoformat() if case.resolved_at else None,
-        "settlement_status": case.settlement_status,
-        "claim_submitted_amount": case.claim_submitted_amount,
-        "claim_submitted_at": case.claim_submitted_at.isoformat() if case.claim_submitted_at else None,
-        "settled_amount": case.settled_amount,
-        "settled_at": case.settled_at.isoformat() if case.settled_at else None,
-        "settlement_notes": case.settlement_notes,
-        "deduction_ratio": deduction_ratio,
-        "deduction_estimate": deduction_estimate,
-    }
-
-
-@router.post("/{admission_id}/tpa-case")
-def create_tpa_case(admission_id: str, body: TpaCaseIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    existing = db.query(AdmissionTpaCase).filter(
-        AdmissionTpaCase.admission_id == a.id, AdmissionTpaCase.status.in_(["pending", "query_raised"])
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="An open TPA case already exists for this admission")
-    if not body.insurer_name.strip():
-        raise HTTPException(status_code=400, detail="Insurer name is required")
-
-    case = AdmissionTpaCase(
-        admission_id=a.id, hospital_id=a.hospital_id, insurer_name=body.insurer_name.strip(),
-        policy_number=body.policy_number, room_category_eligibility=body.room_category_eligibility,
-        eligible_daily_rate=body.eligible_daily_rate,
-        copay_notes=body.copay_notes, created_by=current_doctor.id,
-    )
-    db.add(case)
-    db.commit()
-    return {"message": "TPA case logged", "id": case.id}
-
-
-@router.patch("/{admission_id}/tpa-case/{case_id}")
-def update_tpa_case(admission_id: str, case_id: int, body: TpaCaseUpdateIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    case = db.query(AdmissionTpaCase).filter(AdmissionTpaCase.id == case_id, AdmissionTpaCase.admission_id == a.id).first()
-    if not case:
-        raise HTTPException(status_code=404, detail="TPA case not found")
-    if body.status not in VALID_TPA_STATUSES:
-        raise HTTPException(status_code=400, detail="Invalid status")
-
-    case.status = body.status
-    if body.authorized_amount is not None:
-        case.authorized_amount = body.authorized_amount
-    if body.room_category_eligibility is not None:
-        case.room_category_eligibility = body.room_category_eligibility
-    if body.eligible_daily_rate is not None:
-        case.eligible_daily_rate = body.eligible_daily_rate
-    if body.copay_notes is not None:
-        case.copay_notes = body.copay_notes
-    if body.query_notes is not None:
-        case.query_notes = body.query_notes
-    if body.status in ("approved", "denied"):
-        case.resolved_at = now_ist_naive()
-    db.commit()
-    return {"message": "TPA case updated"}
-
-
-@router.post("/{admission_id}/tpa-case/{case_id}/settle")
-def settle_tpa_case(admission_id: str, case_id: int, body: TpaSettleIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    """Logs money actually received from the TPA — staff enters this
-    manually once the insurer pays, since MedScribe doesn't integrate with
-    insurers. Reconciles against what was claimed at discharge: a shortfall
-    becomes a debit note against the original discharge invoice (the
-    patient owes the difference); an overpayment becomes a refund + credit
-    note. This can happen weeks after the admission was physically
-    discharged — settlement is tracked independently of Admission.status."""
-    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    case = db.query(AdmissionTpaCase).filter(AdmissionTpaCase.id == case_id, AdmissionTpaCase.admission_id == a.id).first()
-    if not case:
-        raise HTTPException(status_code=404, detail="TPA case not found")
-    if case.settlement_status != "awaiting_settlement":
-        raise HTTPException(status_code=400, detail="This case has no claim awaiting settlement")
-    if body.settled_amount < 0:
-        raise HTTPException(status_code=400, detail="Settled amount cannot be negative")
-
-    case.settlement_status = "settled"
-    case.settled_amount = body.settled_amount
-    case.settled_at = now_ist_naive()
-    case.settlement_notes = (body.settlement_notes or "").strip() or None
-
-    claimed = case.claim_submitted_amount or 0.0
-    shortfall = max(claimed - body.settled_amount, 0)
-    overpayment = max(body.settled_amount - claimed, 0)
-
-    note_number = None
-    if a.discharge_invoice_id:
-        invoice = db.query(Invoice).filter(Invoice.id == a.discharge_invoice_id).first()
-        hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
-        if invoice and hospital:
-            if shortfall > 0:
-                note = CreditDebitNote(
-                    hospital_id=a.hospital_id, invoice_id=invoice.id, patient_id=invoice.patient_id,
-                    note_type="debit", note_number=next_note_number(db, hospital, "debit"),
-                    invoice_number=invoice.receipt_number, invoice_date=invoice.generated_at,
-                    amount=shortfall, reason=f"TPA settled Rs.{body.settled_amount:.2f} against Rs.{claimed:.2f} claimed — shortfall owed by patient",
-                    created_by=current_doctor.id,
-                )
-                db.add(note)
-                db.flush()
-                note_number = note.note_number
-            elif overpayment > 0:
-                refund = Refund(
-                    patient_id=invoice.patient_id, hospital_id=a.hospital_id, source_type="tpa", source_id=case.id,
-                    amount=overpayment, channel="online", status="pending",
-                    reason=f"TPA settled Rs.{body.settled_amount:.2f} against Rs.{claimed:.2f} claimed — overpayment refunded to patient",
-                    processed_by=current_doctor.id,
-                )
-                db.add(refund)
-                db.flush()
-                note = CreditDebitNote(
-                    hospital_id=a.hospital_id, invoice_id=invoice.id, patient_id=invoice.patient_id,
-                    note_type="credit", note_number=next_note_number(db, hospital, "credit"),
-                    invoice_number=invoice.receipt_number, invoice_date=invoice.generated_at,
-                    amount=overpayment, reason=refund.reason, refund_id=refund.id,
-                    created_by=current_doctor.id,
-                )
-                db.add(note)
-                db.flush()
-                note_number = note.note_number
-
-    db.commit()
-    return {"message": "TPA settlement recorded", "shortfall": shortfall, "overpayment": overpayment, "note_number": note_number}
-
-
-@router.get("/tpa-receivables")
-def list_tpa_receivables(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    """All open 'billed to TPA, awaiting settlement' cases across the
-    hospital — the aggregate view finance needs, versus the per-admission
-    lookup on the admission page itself."""
-    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    cases = db.query(AdmissionTpaCase).filter(
-        AdmissionTpaCase.hospital_id == current_doctor.hospital_id,
-        AdmissionTpaCase.settlement_status == "awaiting_settlement"
-    ).order_by(AdmissionTpaCase.claim_submitted_at).all()
-
-    result = []
-    for c in cases:
-        a = db.query(Admission).filter(Admission.id == c.admission_id).first()
-        p = db.query(Patient).filter(Patient.id == a.patient_id).first() if a else None
-        result.append({
-            "case_id": c.id,
-            "admission_id": a.public_token if a else None,
-            "patient_name": p.name if p else None,
-            "patient_uid": p.patient_uid if p else None,
-            "insurer_name": c.insurer_name,
-            "policy_number": c.policy_number,
-            "claim_submitted_amount": c.claim_submitted_amount,
-            "claim_submitted_at": c.claim_submitted_at.isoformat() if c.claim_submitted_at else None,
-            "discharge_date": a.discharge_date.isoformat() if a and a.discharge_date else None,
-        })
-    return result
-
-
 @router.get("/{admission_id}/discharge-preview")
 def discharge_preview(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     """Shows what's owed BEFORE committing discharge — reception collects this first."""
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
-    items, subtotal, gst_total, charges_total, deposit_total, tpa_covered, balance = _settlement_summary(db, a)
+    items, subtotal, gst_total, charges_total, deposit_total, balance = _settlement_summary(db, a)
     return {
         "items": items, "subtotal": subtotal, "gst_total": gst_total, "charges_total": charges_total,
-        "deposit_total": deposit_total, "tpa_covered": tpa_covered, "balance": balance,
+        "deposit_total": deposit_total, "balance": balance,
         "amount_due": max(balance, 0), "refund_due": max(-balance, 0),
         "balance_collected": a.balance_collected,
         "balance_payment_method": a.balance_payment_method,
     }
-
 
 @router.post("/{admission_id}/collect-balance")
 def collect_balance(admission_id: str, body: CollectBalanceIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
@@ -2293,7 +2092,7 @@ def collect_balance(admission_id: str, body: CollectBalanceIn, current_doctor: D
     if body.payment_method not in ("cash", "card", "upi"):
         raise HTTPException(status_code=400, detail="Invalid payment method")
 
-    items, subtotal, gst_total, charges_total, deposit_total, tpa_covered, balance = _settlement_summary(db, a)
+    items, subtotal, gst_total, charges_total, deposit_total, balance = _settlement_summary(db, a)
     amount_due = max(balance, 0)
 
     a.balance_collected = True
@@ -2358,7 +2157,7 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     # discharge_type — no charge waiver for LAMA/DAMA, and for a death the
     # refund is simply routed to whichever payout details staff enter below
     # (next of kin) via the existing refund_channel flow.
-    items, subtotal, gst_total, charges_total, deposit_total, tpa_covered, balance = _settlement_summary(db, a)
+    items, subtotal, gst_total, charges_total, deposit_total, balance = _settlement_summary(db, a)
     amount_due = max(balance, 0)
     refund_due = max(-balance, 0)
 
@@ -2366,7 +2165,7 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     # before Discharge Patient is even reachable — this just verifies that
     # already happened, rather than accepting a fresh self-attestation here.
     if amount_due > 0 and not a.balance_collected:
-        raise HTTPException(status_code=402, detail=f"Payment of Rs.{amount_due:.2f} is still pending (deposit Rs.{deposit_total:.2f}{' + TPA-covered Rs.' + format(tpa_covered, '.2f') if tpa_covered > 0 else ''} vs charges Rs.{charges_total:.2f}) — collect payment before discharge can proceed")
+        raise HTTPException(status_code=402, detail=f"Payment of Rs.{amount_due:.2f} is still pending (deposit Rs.{deposit_total:.2f} vs charges Rs.{charges_total:.2f}) — collect payment before discharge can proceed")
     if refund_due > 0 and not body.refund_channel:
         raise HTTPException(status_code=400, detail=f"Deposit exceeds charges by Rs.{refund_due:.2f} — select how the refund will be paid out")
 
@@ -2400,18 +2199,6 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
         to_hospital = db.query(Hospital).filter(Hospital.id == outbound_referral.to_hospital_id).first()
         from app.utils.notify import notify_referral_departed
         notify_referral_departed(db, outbound_referral.to_hospital_id, outbound_referral.id, outbound_referral.patient_name, hospital.name if (hospital := db.query(Hospital).filter(Hospital.id == a.hospital_id).first()) else "the referring hospital")
-
-    # A physical discharge can happen well before the TPA actually pays —
-    # this just marks the claim as submitted/awaiting settlement; the
-    # admission itself is free to be "discharged" while this stays open.
-    if tpa_covered > 0:
-        tpa_case = db.query(AdmissionTpaCase).filter(
-            AdmissionTpaCase.admission_id == a.id, AdmissionTpaCase.status == "approved"
-        ).order_by(AdmissionTpaCase.resolved_at.desc()).first()
-        if tpa_case:
-            tpa_case.settlement_status = "awaiting_settlement"
-            tpa_case.claim_submitted_amount = tpa_covered
-            tpa_case.claim_submitted_at = now_ist_naive()
 
     db.commit()
 
@@ -2478,7 +2265,7 @@ def download_discharge_invoice(admission_id: str, current_doctor: Doctor = Depen
         admitting_doctor = db.query(Doctor).filter(Doctor.id == a.admitting_doctor_id).first()
         if not invoice.verify_hash:
             invoice.verify_hash = generate_verify_hash(invoice.id, invoice.hospital_id)
-        _items, _subtotal, _gst_total, _charges_total, deposit_total, _tpa_covered, balance = _settlement_summary(db, a)
+        _items, _subtotal, _gst_total, _charges_total, deposit_total, balance = _settlement_summary(db, a)
         refund_due = max(-balance, 0)
         pdf_path = generate_invoice_pdf(
             invoice.id, hospital, json.loads(invoice.items_json), invoice.grand_total, patient, admitting_doctor,

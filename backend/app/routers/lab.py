@@ -1605,7 +1605,7 @@ def get_combined_test_report(
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
 
 
-@router.get("/verify/{order_id}")
+@router.get("/verify/{order_id:int}")
 @limiter.limit("10/minute")
 def verify_lab_report(request: Request, order_id: int, hash: str, db: Session = Depends(get_db)):
     """Public, unauthenticated — item 1, same pattern as billing.py's

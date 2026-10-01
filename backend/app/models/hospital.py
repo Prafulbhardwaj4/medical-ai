@@ -36,6 +36,7 @@ class Hospital(Base):
 
     # --- Billing cycle / AI Scribe usage ---
     billing_cycle_start = Column(DateTime, nullable=True)  # anchor date for the current cycle — set on the hospital's first login, then re-anchored on renewal (rolls +1mo) or reactivation (resets to reactivation date)
+    billing_period = Column(String, default="monthly")  # "monthly" | "yearly" — yearly = 12-month cycle, AI Scribe cap pooled across the year
     ai_scribe_consultations_used = Column(Integer, default=0, nullable=False)  # resets to 0 every cycle roll (renewal or reactivation)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=now_ist_naive)

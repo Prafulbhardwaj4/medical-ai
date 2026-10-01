@@ -27,7 +27,6 @@ from app.models.medicine_order import MedicineOrder
 from app.models.opd_charge import OpdCharge
 from app.models.admission import Admission
 from app.models.admission_deposit import AdmissionDepositTopupRequest
-from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
 from app.models.opd_referral import OpdReferral
 from app.models.admission_referral import AdmissionReferral
@@ -94,8 +93,6 @@ def unified_patient_lookup(
             situations.append("active_admission")
             if db.query(AdmissionDepositTopupRequest).filter(AdmissionDepositTopupRequest.admission_id == active_admission.id, AdmissionDepositTopupRequest.status == "pending").count():
                 situations.append("pending_topup_request")
-            if db.query(AdmissionTpaCase).filter(AdmissionTpaCase.admission_id == active_admission.id, AdmissionTpaCase.status.in_(["pending", "query_raised"])).count():
-                situations.append("open_tpa_case")
 
         if db.query(Refund).filter(Refund.patient_id == p.id, Refund.hospital_id == current_doctor.hospital_id, Refund.status == "pending").count():
             situations.append("refund_settling")
@@ -1079,6 +1076,9 @@ def get_hospital_radiology_templates(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     from app.models.radiology_template import RadiologyTemplate
+    from app.utils.tier_gate import hospital_has_tier
+    if not hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
+        return []
     items = db.query(RadiologyTemplate).filter(
         RadiologyTemplate.hospital_id == current_doctor.hospital_id,
         RadiologyTemplate.is_active == True

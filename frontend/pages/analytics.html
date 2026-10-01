@@ -458,14 +458,6 @@
                         <p style="color:var(--slate)">Loading…</p>
                     </div>
                 </div>
-                <div class="card" style="margin-bottom:20px" id="tpa-receivables-card">
-                    <div class="card-header">
-                        <h2>TPA Receivables</h2>
-                    </div>
-                    <div id="tpa-receivables-list">
-                        <p style="color:var(--slate)">Loading…</p>
-                    </div>
-                </div>
                 <div class="card" style="margin-bottom:20px" id="duplicate-patients-card">
                     <div class="card-header">
                         <h2>Duplicate Patients</h2>
@@ -875,30 +867,7 @@
             loadCollected30Days();
             loadBillingHistory();
             loadPendingWaivers();
-            loadTpaReceivables();
             loadDuplicatePatients();
-        }
-
-        async function loadTpaReceivables() {
-            const el = document.getElementById('tpa-receivables-list');
-            if (typeof isFoundationTier === 'function' && isFoundationTier()) {
-                // Admissions endpoints are Growth+ (server returns 403 below that).
-                el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">TPA receivables come with IPD / Admissions (Growth plan and above).</p>';
-                return;
-            }
-            try {
-                const cases = await api("GET", "/admissions/tpa-receivables");
-                if (!cases.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No open TPA receivables.</p>'; return; }
-                const total = cases.reduce((s, c) => s + (c.claim_submitted_amount || 0), 0);
-                el.innerHTML = `<p style="font-size:13px;color:var(--slate);margin-bottom:10px">Total awaiting settlement: <strong>Rs.${total.toFixed(2)}</strong></p>` + cases.map(c => `
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
-                        <div style="flex:1;min-width:200px">
-                            <strong>${sanitize(c.patient_name || '—')}</strong> (${sanitize(c.patient_uid || '—')}) — Rs.${(c.claim_submitted_amount || 0).toFixed(2)}
-                            <div style="font-size:12px;color:var(--slate)">${sanitize(c.insurer_name)}${c.policy_number ? ' · ' + sanitize(c.policy_number) : ''} · claimed ${c.claim_submitted_at ? new Date(c.claim_submitted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</div>
-                        </div>
-                        <a class="btn btn-outline btn-sm" href="admission-detail.html?id=${c.admission_id}">View Admission</a>
-                    </div>`).join('');
-            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
         }
 
         async function loadPendingWaivers() {

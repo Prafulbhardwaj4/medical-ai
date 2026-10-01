@@ -380,9 +380,9 @@
   function renderAttachment(m) {
     if (!m.attachment_url) return "";
     if (m.attachment_type === "image") {
-      return `<img class="chat-attachment-img" data-attach-url="${m.attachment_url}" alt="${sanitize(m.attachment_name || 'attachment')}" />`;
+      return `<img class="chat-attachment-img" data-attach-url="${sanitize(m.attachment_url)}" alt="${sanitize(m.attachment_name || 'attachment')}" />`;
     }
-    return `<a class="chat-attachment" href="#" onclick="downloadFile('${m.attachment_url}', '${(m.attachment_name || 'file').replace(/'/g, "\\'")}');return false;">📎 ${sanitize(m.attachment_name || 'file')}</a>`;
+    return `<a class="chat-attachment" href="#" data-dl-url="${sanitize(m.attachment_url)}" data-dl-name="${sanitize(m.attachment_name || 'file').replace(/"/g, '&quot;')}" onclick="downloadFile(this.dataset.dlUrl, this.dataset.dlName);return false;">📎 ${sanitize(m.attachment_name || 'file')}</a>`;
   }
 
   function renderMessages(messages) {

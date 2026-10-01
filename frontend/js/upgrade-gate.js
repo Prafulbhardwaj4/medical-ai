@@ -11,7 +11,7 @@
 
 function isFoundationTier() {
   const doc = (typeof getDoctor === "function") ? getDoctor() : null;
-  return !!doc && (doc.hospital_tier || "growth") === "foundation";
+  return !!doc && (doc.hospital_tier || "foundation") === "foundation";
 }
 
 // Full-page lock for pages that belong to a higher tier (typing the URL, an old
@@ -33,7 +33,7 @@ function blockPageIfFoundation(featureLabel) {
 function isBelowScaleTier() {
   const doc = (typeof getDoctor === "function") ? getDoctor() : null;
   if (!doc) return true;
-  return tierIndex(doc.hospital_tier || "growth") < tierIndex("scale");
+  return tierIndex(doc.hospital_tier || "foundation") < tierIndex("scale");
 }
 
 function _ensureUpgradeModalStyles() {
@@ -182,7 +182,7 @@ function ensureUpgradeModal() {
 function openUpgradeModal() {
   ensureUpgradeModal();
   const doc = (typeof getDoctor === "function") ? getDoctor() : null;
-  const currentTierKey = (doc && doc.hospital_tier) || "growth";
+  const currentTierKey = (doc && doc.hospital_tier) || "foundation";
   document.getElementById("upgrade-modal-grid").innerHTML =
     TIER_CATALOG.map((t) => _tierCardHtml(t, currentTierKey)).join("");
   document.getElementById("modal-upgrade").classList.add("open");
@@ -242,7 +242,7 @@ function _ensureUpgradeRequestModal() {
 function openUpgradeRequestModal(tierKey) {
   _ensureUpgradeRequestModal();
   const doc = (typeof getDoctor === "function") ? getDoctor() : null;
-  const currentTierKey = (doc && doc.hospital_tier) || "growth";
+  const currentTierKey = (doc && doc.hospital_tier) || "foundation";
   const currentIdx = tierIndex(currentTierKey);
   const higherTiers = TIER_CATALOG.filter((t, i) => i > currentIdx);
   const sel = document.getElementById("upgrade-request-tier-select");

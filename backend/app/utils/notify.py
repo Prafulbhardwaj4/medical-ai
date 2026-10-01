@@ -473,7 +473,7 @@ def sync_idle_staff_notification(db: Session, doctor):
         return
 
     hospital_id = doctor.hospital_id
-    today = date.today()
+    today = ist_today()
 
     attendance = db.query(AttendanceRecord).filter(
         AttendanceRecord.doctor_id == doctor.id,

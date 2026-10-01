@@ -29,8 +29,11 @@ def require_admin(current_doctor: Doctor):
 
 
 def require_admin_or_pharmacy(current_doctor: Doctor):
-    # Stock viewing/adding is an operational pharmacy task, not catalog curation —
-    # pharmacy can view and add stock, but cannot create/edit/deactivate medicines.
+    # Pharmacy staff run the catalog day to day: they can create and edit medicines
+    # (price, GST, pack size, brands, NPPA ceiling...) and manage stock. Two things are
+    # reserved for admin / sub-admin: DEACTIVATING a medicine (require_admin, below) and
+    # CHANGING a medicine's drug schedule (update_medicine) - lowering Schedule X/H1 to OTC
+    # would silently remove controlled-drug protections.
     if current_doctor.role.value not in ["admin", "sub_admin", "pharmacy"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -344,6 +347,9 @@ def update_medicine(
     if not (payload.generic_name or "").strip():
         raise HTTPException(status_code=400, detail="Generic name is required")
 
+    if schedule != (medicine.schedule or "otc") and current_doctor.role.value not in ("admin", "sub_admin"):
+        raise HTTPException(status_code=403, detail="Only an admin can change a medicine's drug schedule. Ask your hospital admin.")
+
     _audited_fields = ["generic_name", "brand_names", "category", "dosage_forms", "strength", "schedule",
                        "low_stock_threshold", "pack_size", "price_per_pack", "billing_mode", "gst_percent",
                        "hsn_code", "nppa_ceiling_price"]
@@ -378,6 +384,36 @@ def update_medicine(
         details="; ".join(_changes) if _changes else "no field changed",
         hospital_id=current_doctor.hospital_id
     )
+
+    # Brand rows are what orders actually link to, so a change to the generic (parent) row has
+    # to reach them or they keep the OLD schedule / pack / GST. Price per pack is deliberately
+    # NOT copied (brands legitimately differ in price), and neither is stock.
+    if medicine.parent_medicine_id is None:
+        _cascade_fields = ["schedule", "pack_size", "billing_mode", "gst_percent", "hsn_code",
+                           "dosage_forms", "strength", "nppa_ceiling_price"]
+        brands = db.query(HospitalMedicine).filter(
+            HospitalMedicine.parent_medicine_id == medicine.id,
+            HospitalMedicine.hospital_id == current_doctor.hospital_id,
+            HospitalMedicine.is_active == True,  # noqa: E711
+        ).all()
+        for b in brands:
+            b_before = {f: getattr(b, f) for f in _cascade_fields}
+            for f in _cascade_fields:
+                setattr(b, f, getattr(medicine, f))
+            if b.price_per_pack is not None and b.pack_size:
+                b.price = compute_unit_price(b.price_per_pack, b.pack_size)  # pack size changed -> unit price follows
+            b_changes = [f"{f}: {b_before[f]!r} -> {getattr(b, f)!r}" for f in _cascade_fields if b_before[f] != getattr(b, f)]
+            if b_changes:
+                log_action(
+                    db, current_doctor,
+                    action="medicine_brand_updated_via_parent",
+                    target_type="hospital_medicine",
+                    target_id=b.id,
+                    target_label=f"{b.generic_name} ({b.brand_name or 'brand'})",
+                    details="; ".join(b_changes),
+                    hospital_id=current_doctor.hospital_id
+                )
+        db.commit()
     result = serialize(medicine)
     warning = _ceiling_price_warning(medicine)
     if warning:
@@ -401,6 +437,14 @@ def deactivate_medicine(
         raise HTTPException(status_code=404, detail="Medicine not found")
 
     medicine.is_active = False
+    # Deactivating a generic must take its brands with it, otherwise they stay sellable.
+    if medicine.parent_medicine_id is None:
+        for b in db.query(HospitalMedicine).filter(
+            HospitalMedicine.parent_medicine_id == medicine.id,
+            HospitalMedicine.hospital_id == current_doctor.hospital_id,
+            HospitalMedicine.is_active == True,  # noqa: E711
+        ).all():
+            b.is_active = False
     db.commit()
 
     log_action(

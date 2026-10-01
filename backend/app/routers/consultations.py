@@ -11,6 +11,7 @@ from app.utils.ai_scribe_gate import get_ai_scribe_status, consume_ai_scribe_cre
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem, StructureRequest
 from app.utils.auth import get_current_doctor, now_ist_naive, ist_day_bounds, ist_today, decode_access_token, is_token_blacklisted
 from app.utils.audit import log_action
+from app.utils.tier_gate import hospital_has_tier
 # from app.services.whisper import transcribe_audio
 from app.services.groq_service import structure_transcript, match_tests_to_catalog, match_radiology_to_catalog
 from app.services.pdf_service import generate_prescription_pdf
@@ -770,7 +771,11 @@ async def structure(
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     ai_scribe_status = get_ai_scribe_status(db, hospital)
-    if not ai_scribe_status["allowed"]:
+    already_paid = bool(consultation.ai_scribe_credit_consumed)
+    # Re-structuring a consultation that already consumed a credit is free, so a
+    # doctor who edits the transcript isn't blocked by (or charged against) the cap.
+    # Foundation / cycle-ended still block.
+    if not ai_scribe_status["allowed"] and not (already_paid and ai_scribe_status["reason"] == "cap_reached"):
         # 402, not 400/403 — a distinct status the frontend checks for
         # specifically, to fall back to manual entry instead of showing a
         # generic error (item 2: "same as Foundation", not a broken screen).
@@ -800,7 +805,9 @@ async def structure(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI structuring failed: {str(e)}")
 
-    consume_ai_scribe_credit(db, hospital)  # only counts against the cap once structuring actually succeeds
+    if not already_paid:
+        consume_ai_scribe_credit(db, hospital)  # only counts against the cap once structuring actually succeeds
+        consultation.ai_scribe_credit_consumed = True
 
     consultation.chief_complaint = structured.get("chief_complaint", "")
     consultation.diagnosis = structured.get("diagnosis", "")
@@ -840,7 +847,7 @@ async def structure(
     # re-search/re-click it as a radiology chip too.
     matched_radiology = []
     raw_imaging = structured.get("imaging", [])
-    if raw_imaging:
+    if raw_imaging and hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
         radiology_items = db.query(RadiologyTemplate).filter(
             RadiologyTemplate.hospital_id == current_doctor.hospital_id,
             RadiologyTemplate.is_active == True
@@ -984,7 +991,7 @@ def confirm_prescription(
                 clinical_indication=indication,
             ))
 
-    if payload.recommended_radiology_template_ids:
+    if payload.recommended_radiology_template_ids and hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
         radiology_templates = db.query(RadiologyTemplate).filter(
             RadiologyTemplate.id.in_(payload.recommended_radiology_template_ids),
             RadiologyTemplate.hospital_id == current_doctor.hospital_id
@@ -1376,7 +1383,7 @@ def update_consultation(
             consultation.recommended_test_ids = json.dumps(all_ids)
 
     new_radiology_orders = []
-    if was_confirmed and payload.recommended_radiology_template_ids:
+    if was_confirmed and payload.recommended_radiology_template_ids and hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
         old_radiology_ids = set(json.loads(consultation.recommended_radiology_template_ids or "[]"))
         new_radiology_ids = [tid for tid in payload.recommended_radiology_template_ids if tid not in old_radiology_ids]
         if new_radiology_ids:

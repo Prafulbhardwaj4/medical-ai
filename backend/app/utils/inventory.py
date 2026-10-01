@@ -137,6 +137,7 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int, round
         or_(MedicineBatch.expiry_date == None, MedicineBatch.expiry_date >= ist_today()),  # noqa: E711
     ).order_by(MedicineBatch.expiry_date.asc().nullslast()).all()
 
+    allocations = []
     for batch in batches:
         if remaining <= 0:
             break
@@ -144,6 +145,7 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int, round
         batch.quantity -= take
         remaining -= take
         deducted_from_batches += take
+        allocations.append({"batch_id": batch.id, "batch_number": batch.batch_number, "quantity": take})
 
     medicine.stock_quantity = max(0, (medicine.stock_quantity or 0) - min(quantity_needed, sellable_before))
 
@@ -151,5 +153,6 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int, round
         "medicine_id": medicine_id,
         "medicine_name": medicine.generic_name,
         "deducted_from_batches": deducted_from_batches,
+        "allocations": allocations,  # which batches the units came from (stored per dispense, see MedicineOrderBatch)
         "shortfall": remaining  # >0 means batch records under-counted actual stock (legacy/untracked stock consumed)
     }

@@ -588,18 +588,6 @@
     </main>
   </div>
 
-  <!-- TPA / Insurance modal (moved out of the main grid, same pattern as Deposit & Balance — opened from the patient header button) -->
-  <div class="modal-overlay" id="modal-tpa">
-    <div class="modal" style="max-width:480px">
-      <div class="modal-header">
-        <h2>TPA / Insurance</h2><button class="modal-close" onclick="closeModal('modal-tpa')">&times;</button>
-      </div>
-      <div id="tpa-body">
-        <p>Loading...</p>
-      </div>
-    </div>
-  </div>
-
   <!-- Deposit & Balance modal (moved out of the main grid — opened from the patient header button, was a scroll-target card before) -->
   <div class="modal-overlay" id="modal-deposit-balance">
     <div class="modal" style="max-width:480px">
@@ -863,80 +851,6 @@
       <div class="err-msg" id="cp-err"></div>
       <button class="btn btn-primary" style="width:100%" id="btn-cp-submit" onclick="submitCollectPayment()">Collect
         Payment</button>
-    </div>
-  </div>
-
-  <!-- Log TPA Case modal -->
-  <div class="modal-overlay" id="modal-log-tpa">
-    <div class="modal" style="max-width:420px">
-      <div class="modal-header">
-        <h2>Log TPA Case</h2><button class="modal-close" onclick="closeModal('modal-log-tpa')">&times;</button>
-      </div>
-      <div class="form-group"><label class="form-label">Insurer Name</label><input class="form-control"
-          id="tpa-insurer" /></div>
-      <div class="form-group"><label class="form-label">Policy Number (optional)</label><input class="form-control"
-          id="tpa-policy" /></div>
-      <div class="form-group"><label class="form-label">Room Category Eligibility (optional)</label><input
-          class="form-control" id="tpa-room-elig" placeholder="e.g. up to twin-sharing" /></div>
-      <div class="form-group"><label class="form-label">Eligible Daily Rate (₹, optional)</label><input
-          class="form-control" type="number" min="0" step="0.01" id="tpa-eligible-rate"
-          placeholder="Numeric rate the policy covers — used to estimate a proportionate deduction if the actual room costs more" />
-      </div>
-      <div class="form-group"><label class="form-label">Co-pay Notes (optional)</label><input class="form-control"
-          id="tpa-copay-notes" /></div>
-      <div class="err-msg" id="tpa-log-err"></div>
-      <button class="btn btn-primary" style="width:100%" id="btn-tpa-log-submit" onclick="submitLogTpa()">Log
-        Case</button>
-    </div>
-  </div>
-
-  <!-- Update TPA Case modal -->
-  <div class="modal-overlay" id="modal-update-tpa">
-    <div class="modal" style="max-width:420px">
-      <div class="modal-header">
-        <h2>Update TPA Case</h2><button class="modal-close" onclick="closeModal('modal-update-tpa')">&times;</button>
-      </div>
-      <div class="form-group"><label class="form-label">Status</label>
-        <select class="form-control" id="tpa-status">
-          <option value="pending">Pending</option>
-          <option value="query_raised">Query Raised</option>
-          <option value="approved">Approved</option>
-          <option value="denied">Denied</option>
-        </select>
-      </div>
-      <div class="form-group"><label class="form-label">Authorized Amount (₹, optional)</label><input
-          class="form-control" type="number" min="0" step="0.01" id="tpa-authorized-amount" /></div>
-      <div class="form-group"><label class="form-label">Room Category Eligibility (optional)</label><input
-          class="form-control" id="tpa-update-room-elig" /></div>
-      <div class="form-group"><label class="form-label">Eligible Daily Rate (₹, optional)</label><input
-          class="form-control" type="number" min="0" step="0.01" id="tpa-update-eligible-rate" /></div>
-      <div class="form-group"><label class="form-label">Co-pay Notes (optional)</label><input class="form-control"
-          id="tpa-update-copay-notes" /></div>
-      <div class="form-group"><label class="form-label">Query Notes (what the TPA is asking for, optional)</label><input
-          class="form-control" id="tpa-query-notes" /></div>
-      <div class="err-msg" id="tpa-update-err"></div>
-      <button class="btn btn-primary" style="width:100%" id="btn-tpa-update-submit"
-        onclick="submitUpdateTpa()">Save</button>
-    </div>
-  </div>
-
-  <!-- Log TPA Settlement modal -->
-  <div class="modal-overlay" id="modal-tpa-settlement">
-    <div class="modal" style="max-width:420px">
-      <div class="modal-header">
-        <h2>Log TPA Settlement</h2><button class="modal-close"
-          onclick="closeModal('modal-tpa-settlement')">&times;</button>
-      </div>
-      <p style="font-size:13px;color:var(--slate);margin-bottom:10px" id="tpa-settlement-claimed-note"></p>
-      <div class="form-group"><label class="form-label">Amount Received from TPA (₹)</label><input class="form-control"
-          type="number" min="0" step="0.01" id="tpa-settled-amount" /></div>
-      <div class="form-group"><label class="form-label">Notes (optional)</label><input class="form-control"
-          id="tpa-settlement-notes" placeholder="e.g. payment reference" /></div>
-      <p style="font-size:12px;color:var(--slate-light);margin-bottom:10px">A shortfall becomes a debit note on the
-        discharge invoice (patient owes the difference); an overpayment becomes a refund + credit note.</p>
-      <div class="err-msg" id="tpa-settlement-err"></div>
-      <button class="btn btn-primary" style="width:100%" id="btn-tpa-settlement-submit"
-        onclick="submitTpaSettlement()">Save</button>
     </div>
   </div>
 
@@ -1360,7 +1274,6 @@
     }
     const canRequestWardChange = ["doctor", "nurse", "assistant"].includes(getDoctor()?.role);
     const canChangeWard = ["receptionist"].includes(getDoctor()?.role);
-    const canManageTpa = ["receptionist"].includes(getDoctor()?.role);
     // Billing/payment/discharge is reception's job alone — nobody else sees it,
     // admin included, per current policy.
     const canSeeBilling = getDoctor()?.role === "receptionist";
@@ -1483,7 +1396,6 @@
     }
 
     let admissionData = null;
-    let tpaData = null;
     let progressNotesData = [];
     let vitalsData = [];
 
@@ -1579,18 +1491,15 @@
       if (isNurseViewer()) return;
 
       try {
-        const [depositResult, tpaResult] = await Promise.allSettled([
+        const [depositResult] = await Promise.allSettled([
           api("GET", `/admissions/${admissionId}/deposit-summary`),
-          api("GET", `/admissions/${admissionId}/tpa-case`),
         ]);
 
         depositData = depositResult.status === "fulfilled" ? depositResult.value : null;
-        tpaData = tpaResult.status === "fulfilled" ? tpaResult.value : null;
 
         renderDepositCard();
-        renderTpaCard();
 
-        [depositResult, tpaResult].forEach((result) => {
+        [depositResult].forEach((result) => {
           if (result.status === "rejected") console.error("Admission secondary load failed:", result.reason);
         });
       } catch (e) {
@@ -1891,7 +1800,6 @@
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             ${a.status === 'admitted' ? `
-              ${canManageTpa ? `<button class="btn btn-outline btn-sm" onclick="openModal('modal-tpa')">TPA &amp; Insurance</button>` : ''}
               ${canSeeBilling ? `<button class="btn btn-outline btn-sm" onclick="openModal('modal-deposit-balance')">Deposit &amp; Balance</button>` : ''}
               ${!isAdminViewer ? `<button class="btn btn-outline btn-sm" onclick="openModal('modal-other-charges')">Other Charges</button>` : ''}
               ${canSeeBilling ? `<button class="btn btn-outline btn-sm" onclick="openDischargeModal()">Discharge</button>` : ''}
@@ -2504,156 +2412,10 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
-    const TPA_STATUS_BADGE = { pending: "badge-amber", query_raised: "badge-amber", approved: "badge-teal", denied: "badge-grey" };
-    const TPA_STATUS_LABEL = { pending: "Pending", query_raised: "Query Raised", approved: "Approved", denied: "Denied" };
-
-    function renderTpaCard() {
-      const el = document.getElementById("tpa-body");
-      const t = tpaData;
-      if (!t) {
-        el.innerHTML = `
-          <p style="color:var(--slate-light);font-size:13px">No TPA/insurance case logged for this admission.</p>
-          ${canManageTpa && admissionData.status === 'admitted' ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openLogTpaModal()">+ Log TPA Case</button>` : ''}`;
-        return;
-      }
-      el.innerHTML = `
-        <div class="bill-row" style="align-items:center">
-          <span><strong>${sanitize(t.insurer_name)}</strong>${t.policy_number ? ' · ' + sanitize(t.policy_number) : ''}</span>
-          <span class="badge ${TPA_STATUS_BADGE[t.status] || 'badge-grey'}">${TPA_STATUS_LABEL[t.status] || t.status}</span>
-        </div>
-        ${t.room_category_eligibility ? `<div class="bill-row"><span>Room Eligibility</span><span>${sanitize(t.room_category_eligibility)}</span></div>` : ''}
-        ${t.eligible_daily_rate != null ? `<div class="bill-row"><span>Eligible Daily Rate</span><span>₹${Number(t.eligible_daily_rate).toFixed(2)}/day</span></div>` : ''}
-        ${t.deduction_estimate > 0 ? `<div class="bill-row" style="color:var(--danger)"><span>Est. Proportionate Deduction</span><span>−₹${Number(t.deduction_estimate).toFixed(2)} (${(t.deduction_ratio * 100).toFixed(0)}% eligible)</span></div>
-        <p style="font-size:12px;color:var(--slate-light);margin-top:2px;margin-bottom:6px">Room rate exceeds the policy's eligible rate — this is an estimate based on a simple whole-claim ratio; verify the exact figure against the insurer's actual approval letter, and flag it to the patient/family before discharge.</p>` : ''}
-        ${t.authorized_amount != null ? `<div class="bill-row"><span>Authorized Amount</span><span>₹${Number(t.authorized_amount).toFixed(2)}</span></div>` : ''}
-        ${t.copay_notes ? `<p style="font-size:12.5px;color:var(--slate-light);margin-top:6px"><strong>Co-pay:</strong> ${sanitize(t.copay_notes)}</p>` : ''}
-        ${t.status === 'query_raised' && t.query_notes ? `<p style="font-size:12.5px;color:var(--slate-light);margin-top:6px"><strong>Query:</strong> ${sanitize(t.query_notes)}</p>` : ''}
-        ${canManageTpa && admissionData.status === 'admitted' && !['approved', 'denied'].includes(t.status) ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openUpdateTpaModal()">Update Case</button>` : ''}
-        ${canManageTpa && admissionData.status === 'admitted' && ['approved', 'denied'].includes(t.status) ? `<button class="btn btn-outline" style="width:100%;margin-top:10px" onclick="openLogTpaModal()">+ Log New Case</button>` : ''}
-        ${t.settlement_status ? `
-        <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
-          <div class="bill-row"><span>Settlement</span><span class="badge ${t.settlement_status === 'settled' ? 'badge-green' : 'badge-amber'}">${t.settlement_status === 'settled' ? 'Settled' : 'Billed to TPA — Awaiting Settlement'}</span></div>
-          ${t.claim_submitted_amount != null ? `<div class="bill-row"><span>Claimed</span><span>₹${Number(t.claim_submitted_amount).toFixed(2)}</span></div>` : ''}
-          ${t.settlement_status === 'settled' ? `<div class="bill-row"><span>Settled Amount</span><span>₹${Number(t.settled_amount).toFixed(2)}</span></div>` : ''}
-          ${t.settlement_status === 'settled' && t.settlement_notes ? `<p style="font-size:12.5px;color:var(--slate-light);margin-top:4px">${sanitize(t.settlement_notes)}</p>` : ''}
-          ${canManageTpa && t.settlement_status === 'awaiting_settlement' ? `<button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="openLogTpaSettlementModal()">Log Settlement Received</button>` : ''}
-        </div>` : ''}`;
-    }
-
-    function openLogTpaModal() {
-      document.getElementById("tpa-log-err").textContent = "";
-      document.getElementById("tpa-insurer").value = "";
-      document.getElementById("tpa-policy").value = "";
-      document.getElementById("tpa-room-elig").value = "";
-      document.getElementById("tpa-eligible-rate").value = "";
-      document.getElementById("tpa-copay-notes").value = "";
-      openModal("modal-log-tpa");
-    }
-
-    async function submitLogTpa() {
-      const err = document.getElementById("tpa-log-err");
-      err.textContent = "";
-      const insurer_name = document.getElementById("tpa-insurer").value.trim();
-      const policy_number = document.getElementById("tpa-policy").value.trim();
-      const room_category_eligibility = document.getElementById("tpa-room-elig").value.trim();
-      const eligibleRateRaw = document.getElementById("tpa-eligible-rate").value;
-      const copay_notes = document.getElementById("tpa-copay-notes").value.trim();
-      if (!insurer_name) { err.textContent = "Insurer name is required."; return; }
-      const btn = document.getElementById("btn-tpa-log-submit");
-      btn.disabled = true;
-      try {
-        await api("POST", `/admissions/${admissionId}/tpa-case`, {
-          insurer_name,
-          policy_number: policy_number || null,
-          room_category_eligibility: room_category_eligibility || null,
-          eligible_daily_rate: eligibleRateRaw !== "" ? parseFloat(eligibleRateRaw) : null,
-          copay_notes: copay_notes || null,
-        });
-        toast("TPA case logged.", "success");
-        closeModal("modal-log-tpa");
-        await loadAdmission();
-      } catch (e) {
-        err.textContent = e.message;
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
-    function openUpdateTpaModal() {
-      const t = tpaData;
-      document.getElementById("tpa-update-err").textContent = "";
-      document.getElementById("tpa-status").value = t.status;
-      document.getElementById("tpa-authorized-amount").value = t.authorized_amount != null ? t.authorized_amount : "";
-      document.getElementById("tpa-update-room-elig").value = t.room_category_eligibility || "";
-      document.getElementById("tpa-update-eligible-rate").value = t.eligible_daily_rate != null ? t.eligible_daily_rate : "";
-      document.getElementById("tpa-update-copay-notes").value = t.copay_notes || "";
-      document.getElementById("tpa-query-notes").value = t.query_notes || "";
-      openModal("modal-update-tpa");
-    }
-
-    async function submitUpdateTpa() {
-      const err = document.getElementById("tpa-update-err");
-      err.textContent = "";
-      const status = document.getElementById("tpa-status").value;
-      const authorizedRaw = document.getElementById("tpa-authorized-amount").value;
-      const room_category_eligibility = document.getElementById("tpa-update-room-elig").value.trim();
-      const eligibleRateRaw = document.getElementById("tpa-update-eligible-rate").value;
-      const copay_notes = document.getElementById("tpa-update-copay-notes").value.trim();
-      const query_notes = document.getElementById("tpa-query-notes").value.trim();
-      const btn = document.getElementById("btn-tpa-update-submit");
-      btn.disabled = true;
-      try {
-        await api("PATCH", `/admissions/${admissionId}/tpa-case/${tpaData.id}`, {
-          status,
-          authorized_amount: authorizedRaw !== "" ? parseFloat(authorizedRaw) : null,
-          room_category_eligibility: room_category_eligibility || null,
-          eligible_daily_rate: eligibleRateRaw !== "" ? parseFloat(eligibleRateRaw) : null,
-          copay_notes: copay_notes || null,
-          query_notes: query_notes || null,
-        });
-        toast("TPA case updated.", "success");
-        closeModal("modal-update-tpa");
-        await loadAdmission();
-      } catch (e) {
-        err.textContent = e.message;
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
     function formatDuration(ms) {
       const totalMin = Math.round(ms / 60000);
       const h = Math.floor(totalMin / 60), m = totalMin % 60;
       return `${h}h ${m}m`;
-    }
-
-    function openLogTpaSettlementModal() {
-      const t = tpaData;
-      document.getElementById("tpa-settlement-claimed-note").textContent = `Claimed: ₹${Number(t.claim_submitted_amount || 0).toFixed(2)}`;
-      document.getElementById("tpa-settled-amount").value = "";
-      document.getElementById("tpa-settlement-notes").value = "";
-      document.getElementById("tpa-settlement-err").textContent = "";
-      openModal("modal-tpa-settlement");
-    }
-
-    async function submitTpaSettlement() {
-      const err = document.getElementById("tpa-settlement-err");
-      const settled_amount = parseFloat(document.getElementById("tpa-settled-amount").value);
-      if (isNaN(settled_amount) || settled_amount < 0) { err.textContent = "Enter a valid amount."; return; }
-      const btn = document.getElementById("btn-tpa-settlement-submit");
-      btn.disabled = true;
-      try {
-        const result = await api("POST", `/admissions/${admissionId}/tpa-case/${tpaData.id}/settle`, {
-          settled_amount, settlement_notes: document.getElementById("tpa-settlement-notes").value.trim() || null,
-        });
-        closeModal("modal-tpa-settlement");
-        toast(result.note_number ? `Settlement recorded — ${result.note_number} issued.` : "Settlement recorded.", "success");
-        await loadAdmission();
-      } catch (e) {
-        err.textContent = e.message;
-      } finally {
-        btn.disabled = false;
-      }
     }
 
     function renderDischargeCard() {

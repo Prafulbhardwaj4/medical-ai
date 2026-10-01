@@ -59,7 +59,6 @@ def complete_staff_tutorial(page: Optional[str] = None, current_doctor: Doctor =
     return {"message": "Tutorial marked complete"}
 
 
-@router.get("/{role}/{page}", response_model=List[TutorialStepOut])
 def get_tutorial_steps(role: str, page: str, db: Session = Depends(get_db)):
     """No auth requirement beyond just being logged in somewhere — tutorial
     content itself isn't hospital-scoped or sensitive, it's the same
@@ -94,3 +93,7 @@ if get_current_patient_account:
             db.add(TutorialProgress(subject_type="patient_account", subject_id=account.id, role="patient", completed_at=now_ist_naive()))
             db.commit()
         return {"message": "Tutorial marked complete"}
+
+
+# Registered last on purpose: "/{role}/{page}" would otherwise swallow "/status/patient".
+router.add_api_route("/{role}/{page}", get_tutorial_steps, methods=["GET"], response_model=List[TutorialStepOut])

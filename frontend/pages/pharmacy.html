@@ -758,12 +758,15 @@
       </div>
       <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Quantity to Return</label>
       <input class="form-control" id="return-qty-input" type="number" min="1" style="margin-bottom:14px" />
-      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">What happens to it physically?</label>
-      <select class="form-control" id="return-disposition" style="margin-bottom:14px">
-        <option value="returned_to_supplier">Returned to Supplier</option>
-        <option value="sent_to_disposal">Sent to Disposal</option>
-        <option value="restocked_to_shelf">Restocked to Shelf (unopened, unused)</option>
-      </select>
+      <div id="return-disposition-wrap">
+        <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">What happens to it physically?</label>
+        <select class="form-control" id="return-disposition" style="margin-bottom:14px">
+          <option value="returned_to_supplier">Returned to Supplier</option>
+          <option value="sent_to_disposal">Sent to Disposal</option>
+        </select>
+        <div style="font-size:12px;color:var(--slate-light);margin:-6px 0 14px">Dispensed medicines are never put back on the shelf.</div>
+      </div>
+      <div id="return-uncollected-note" style="display:none;font-size:13px;color:var(--slate);margin-bottom:14px">This medicine was paid for but never handed over, so the full amount is refunded and no stock changes.</div>
       <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Refund Via</label>
       <select class="form-control" id="return-channel" style="margin-bottom:14px">
         <option value="cash">Cash</option>
@@ -771,8 +774,8 @@
         <option value="upi">UPI</option>
         <option value="online">Online</option>
       </select>
-      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Note (optional)</label>
-      <input class="form-control" id="return-note" style="margin-bottom:14px" />
+      <label style="display:block;margin-bottom:6px;font-size:14px;color:var(--slate)">Reason (required)</label>
+      <input class="form-control" id="return-note" maxlength="200" placeholder="e.g. wrong strength, patient never collected" style="margin-bottom:14px" />
       <div class="err-msg" id="return-modal-err" style="margin-bottom:8px"></div>
       <div style="display:flex;gap:10px">
         <button class="btn btn-outline" style="flex:1" onclick="closeReturnModal()">Cancel</button>
@@ -1483,7 +1486,11 @@
         const outOfStock = m.included && m.status === 'advised' && (notInCatalog || zeroStock);
         const partialStock = m.included && m.status === 'advised' && !outOfStock && qtyExceedsStock;
         const billedNote = (m.billed_quantity != null && m.quantity != null && m.billed_quantity < m.quantity)
-          ? `<div style="color:var(--danger);font-size:12px;margin-top:4px">Only ${m.billed_quantity} of ${m.quantity} charged — rest out of stock</div>` : '';
+          ? `<div style="color:var(--danger);font-size:12px;margin-top:4px">Only ${m.billed_quantity} of ${m.quantity} charged — short by ${m.shortfall_quantity || (m.quantity - m.billed_quantity)}</div>` : '';
+        const ceilingNote = (m.over_ceiling && m.status === 'advised')
+          ? `<div style="color:#b45309;font-size:12px;margin-top:2px;font-weight:600">Price is above the NPPA ceiling (Rs.${Number(m.nppa_ceiling).toFixed(2)}/unit) — check the catalog price</div>` : '';
+        const packNote = (m.pack_size_rule && m.status === 'advised')
+          ? `<div style="color:var(--slate-light);font-size:12px;margin-top:2px">Sold in whole packs of ${m.pack_size_rule}</div>` : '';
         const outOfStockNote = outOfStock
           ? `<div style="color:var(--danger);font-weight:600;font-size:12px;margin-top:2px">Out of stock — substitute or mark advised outside</div>` : '';
         const partialStockNote = partialStock
@@ -1499,6 +1506,8 @@
                 <div style="color:var(--slate);font-size:12px">${sanitize(m.dosage || '')} — ${sanitize(m.frequency || '')}${m.duration ? ' × ' + sanitize(m.duration) : ''}</div>
                 ${partialStockNote}
                 ${outOfStockNote}
+                ${ceilingNote}
+                ${packNote}
                 ${billedNote}
               </span>
             </label>
@@ -1517,6 +1526,8 @@
             ${m.line_total != null ? `<span style="font-size:13px;font-weight:600">= Rs.${Number(m.line_total).toFixed(2)}</span>` : ''}
             ${!locked ? `<button class="btn btn-outline btn-sm" onclick="openAddMedicineModal(${m.id})">Add Substitute</button>` : ''}
             ${m.schedule === 'x' && !locked ? `<button class="btn btn-outline btn-sm" style="border-color:#b91c1c;color:#b91c1c" onclick="authorizeScheduleXRepeat(${m.id})">${m.repeat_authorized ? '✓ Repeat Authorized' : 'Authorize Repeat (Sch. X)'}</button>` : ''}
+            ${(m.shortfall_quantity || 0) > 0 && (m.status === 'paid' || m.status === 'dispensed') ? `<button class="btn btn-outline btn-sm" onclick="billShortfall(${m.id})">Bill remaining ${m.shortfall_quantity}</button>` : ''}
+            ${m.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, '${sanitize(m.medicine_name).replace(/'/g, "\\'")}', ${m.billed_quantity || 0}, true)">Refund (not collected)</button>` : ''}
             ${m.status === 'dispensed' && (m.billed_quantity || 0) - (m.already_returned || 0) > 0 ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, '${sanitize(m.medicine_name).replace(/'/g, "\\'")}', ${(m.billed_quantity || 0) - (m.already_returned || 0)})">Return</button>` : ''}
           </div>
         </div>
@@ -1544,11 +1555,20 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
+    async function billShortfall(orderId) {
+      try {
+        await api("POST", `/pharmacy/medicine-orders/${orderId}/bill-shortfall`, {});
+        toast('The remaining units were added as a new line - collect payment to bill them.', 'success');
+        openPrescription(currentRxToken);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
     async function updateMedicineQuantity(orderId, value) {
       const qty = parseInt(value);
       if (!qty || qty <= 0) { toast('Enter a valid quantity.', 'error'); return; }
       try {
         const updated = await api("PATCH", `/pharmacy/medicine-orders/${orderId}/quantity`, { quantity: qty });
+        if (updated.rounded_from != null) toast(`Rounded up to ${updated.quantity} - this medicine is sold in whole packs.`, 'info');
         const idx = currentMedicineOrders.findIndex(m => m.id === orderId);
         if (idx > -1) currentMedicineOrders[idx] = updated;
         renderMedicineOrders();
@@ -1672,26 +1692,30 @@
       const payBtn = document.getElementById('rx-pay-btn');
       const dispenseBtn = document.getElementById('rx-dispense-btn');
 
-      if (isDispensed) {
-        payBtn.style.display = 'none';
-        dispenseBtn.disabled = true;
-        dispenseBtn.style.display = '';
-        dispenseBtn.textContent = 'Already Dispensed';
-        return;
-      }
-
+      // Dispensing is per order now: the buttons depend on what is still waiting,
+      // not on a one-way "already dispensed" flag.
       const hasUnpaidIncluded = currentMedicineOrders.some(m => m.included && m.status === 'advised');
+      const hasPaidWaiting = currentMedicineOrders.some(m => m.status === 'paid');
       const hasBlockingStock = currentMedicineOrders.some(m => m.included && m.status === 'advised' && (!m.catalog_medicine_id || (m.stock_quantity != null && m.stock_quantity <= 0)));
+
       if (hasUnpaidIncluded) {
         payBtn.style.display = '';
         payBtn.disabled = hasBlockingStock;
         payBtn.textContent = hasBlockingStock ? 'Resolve out-of-stock items first' : 'Collect Payment';
-        dispenseBtn.style.display = 'none';
       } else {
         payBtn.style.display = 'none';
+      }
+
+      if (hasPaidWaiting) {
         dispenseBtn.style.display = '';
         dispenseBtn.disabled = false;
-        dispenseBtn.textContent = 'Mark Dispensed';
+        dispenseBtn.textContent = hasUnpaidIncluded ? 'Dispense Paid Items' : 'Mark Dispensed';
+      } else if (!hasUnpaidIncluded) {
+        dispenseBtn.style.display = '';
+        dispenseBtn.disabled = true;
+        dispenseBtn.textContent = currentMedicineOrders.some(m => m.status === 'dispensed') ? 'All Dispensed' : 'Nothing to Dispense';
+      } else {
+        dispenseBtn.style.display = 'none';
       }
     }
 
@@ -1834,6 +1858,11 @@
         } else {
           toast(`Rs.${Number(result.charged).toFixed(2)} collected for ${result.count} medicine(s).`, 'success');
         }
+        const notes = [];
+        (result.blocked || []).forEach(b => notes.push(`NOT billed: ${b.reason}`));
+        (result.short || []).forEach(s => notes.push(`${s.medicine_name}: short by ${s.short_by} unit(s) - bill the rest once stock arrives`));
+        (result.nppa_warnings || []).forEach(w => notes.push(`Price warning - ${w}`));
+        if (notes.length) await alertModal(notes.join('\n\n'), { title: 'Please note' });
         openPrescription(currentRxToken);
       } catch (e) {
         document.getElementById('rx-modal-err').textContent = e.message;
@@ -1852,11 +1881,14 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
       try {
-        await api("POST", `/pharmacy/prescription/${currentRxToken}/dispense`, {});
-        toast('Dispensed — stock deducted.', 'success');
-        closePrescriptionModal();
+        const result = await api("POST", `/pharmacy/prescription/${currentRxToken}/dispense`, {});
+        toast(`Dispensed ${result.dispensed_count} item(s) — stock deducted.`, 'success');
+        if (result.held && result.held.length) {
+          await alertModal('These items were NOT handed over yet:\n\n' + result.held.map(h => '- ' + h.reason).join('\n'), { title: 'Held back' });
+        }
         loadQueue();
         loadStockMedicines();
+        if (result.is_dispensed) { closePrescriptionModal(); } else { openPrescription(currentRxToken); }
       } catch (e) {
         document.getElementById('rx-modal-err').textContent = e.message;
         btn.disabled = false;
@@ -1874,8 +1906,13 @@
     }
 
     let returnOrderId = null;
-    function openReturnModal(orderId, medicineName, maxQty) {
+    let returnUncollected = false;
+    function openReturnModal(orderId, medicineName, maxQty, uncollected = false) {
       returnOrderId = orderId;
+      returnUncollected = uncollected;
+      document.getElementById('return-disposition-wrap').style.display = uncollected ? 'none' : '';
+      document.getElementById('return-uncollected-note').style.display = uncollected ? '' : 'none';
+      document.getElementById('return-qty-input').disabled = uncollected;  // never-collected = full refund only
       document.getElementById('return-medicine-name').textContent = medicineName;
       document.getElementById('return-qty-input').value = maxQty;
       document.getElementById('return-qty-input').max = maxQty;
@@ -1895,12 +1932,14 @@
       const errEl = document.getElementById('return-modal-err');
       const quantity = parseInt(document.getElementById('return-qty-input').value);
       if (!quantity || quantity <= 0) { errEl.textContent = 'Enter a valid quantity.'; return; }
+      const reasonText = document.getElementById('return-note').value.trim();
+      if (reasonText.length < 3) { errEl.textContent = 'Please enter a reason.'; return; }
       try {
         const result = await api("POST", `/pharmacy/medicine-orders/${returnOrderId}/return`, {
           quantity,
-          disposition: document.getElementById('return-disposition').value,
+          disposition: returnUncollected ? 'returned_to_supplier' : document.getElementById('return-disposition').value,
           channel: document.getElementById('return-channel').value,
-          note: document.getElementById('return-note').value.trim() || null
+          note: reasonText
         });
         toast(`Return recorded — Rs.${Number(result.refunded_amount).toFixed(2)} ${result.refund_status === 'pending' ? 'refund pending' : 'refunded'}.`, 'success');
         closeReturnModal();

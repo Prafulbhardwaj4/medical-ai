@@ -2216,7 +2216,6 @@
     function renderAiScribeDetailCard(h) {
       const card = document.getElementById('detail-ai-scribe-card');
       const body = document.getElementById('detail-ai-scribe');
-      if (!h.has_ai_scribe) { card.style.display = 'none'; return; }
       card.style.display = '';
 
       const capLine = h.ai_scribe_cap === null
@@ -2232,19 +2231,32 @@
         : '';
 
       body.innerHTML = `
-        <div class="info-row"><span class="info-label">Consultations Used This Cycle</span><span class="info-value">${capLine}</span></div>
+        ${h.has_ai_scribe ? `<div class="info-row"><span class="info-label">Consultations Used This Cycle</span><span class="info-value">${capLine}</span></div>` : ''}
+        <div class="info-row"><span class="info-label">Billing Period</span><span class="info-value">
+          <select class="form-control" style="width:auto;display:inline-block" onchange="setBillingPeriod(${h.id}, this.value)">
+            <option value="monthly" ${h.billing_period !== 'yearly' ? 'selected' : ''}>Monthly</option>
+            <option value="yearly" ${h.billing_period === 'yearly' ? 'selected' : ''}>Yearly</option>
+          </select></span></div>
         <div class="info-row"><span class="info-label">Billing Cycle</span><span class="info-value">${fmtCycleDate(h.billing_cycle_start)} → ${fmtCycleDate(h.billing_cycle_end)}</span></div>
         ${cycleSetControl}
         <div class="info-row"><span class="info-label">Grace Period Ends</span><span class="info-value">${fmtCycleDate(h.grace_end)}</span></div>
         <div class="info-row"><span class="info-label">Full Deactivation From</span><span class="info-value" style="color:var(--danger)">${fmtCycleDate(h.deactivation_at)}</span></div>
         <div class="detail-actions-row">
-          <button class="btn btn-outline btn-sm" onclick="openTopupModal(${h.id})">Topup</button>
+          ${h.has_ai_scribe ? `<button class="btn btn-outline btn-sm" onclick="openTopupModal(${h.id})">Topup</button>` : ''}
           <button class="btn btn-primary btn-sm" ${renewDisabled ? 'disabled title="Opens 2 days before cycle-end, through the end of the grace period"' : ''} onclick="renewHospital(${h.id})">Renew</button>
         </div>
       `;
     }
 
-    async function setBillingCycleStart(hospitalId) {
+    async function setBillingPeriod(hospitalId, period) {
+      try {
+        await api('PATCH', `/admin/hospitals/${hospitalId}/billing-period?period=${encodeURIComponent(period)}`);
+        toast('Billing period updated.', 'success');
+        openDetail(hospitalId);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function setBillingCycleStart(hospitalId) { 
       const val = document.getElementById('cycle-start-input').value;
       if (!val) { toast('Pick a date first.', 'error'); return; }
       try {

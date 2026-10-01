@@ -17,7 +17,7 @@ from app.utils.timezone import now_ist_naive
 
 router = APIRouter(prefix="/refunds", tags=["refunds"])
 
-VALID_SOURCE_TYPES = {"appointment", "pharmacy", "ipd_deposit", "opd_charge", "tpa", "other"}
+VALID_SOURCE_TYPES = {"appointment", "pharmacy", "ipd_deposit", "opd_charge", "other"}
 VALID_CHANNELS = {"cash", "card", "upi", "online"}
 
 

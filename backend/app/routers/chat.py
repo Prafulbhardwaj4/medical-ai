@@ -1,6 +1,7 @@
 import os
 import uuid
 
+import re as _re
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -73,6 +74,20 @@ def upload_chat_attachment(
         "attachment_name": original_name,
         "attachment_type": "image" if ext in IMAGE_EXTENSIONS else "file",
     }
+
+
+_ATTACH_FILE_RE = _re.compile(r"^[0-9a-f]{32}\.[a-z0-9]{2,5}$")
+
+
+def _clean_attachment(payload: dict):
+    fn = payload.get("attachment_filename")
+    if not fn:
+        return None, None, None
+    if not isinstance(fn, str) or not _ATTACH_FILE_RE.match(fn):
+        raise HTTPException(status_code=400, detail="Invalid attachment")
+    name = str(payload.get("attachment_name") or "file")[:150]
+    atype = "image" if payload.get("attachment_type") == "image" else "file"
+    return fn, name, atype
 
 
 @router.get("/files/{filename}")
@@ -169,7 +184,8 @@ def send_as_admin(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     body = (payload.get("message") or "").strip()
-    attachment_filename = payload.get("attachment_filename")
+    _att = _clean_attachment(payload)
+    attachment_filename = _att[0]
     if not body and not attachment_filename:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
@@ -184,9 +200,9 @@ def send_as_admin(
         staff_id=staff.id,
         sender_id=current_doctor.id,
         body=body,
-        attachment_filename=attachment_filename,
-        attachment_name=payload.get("attachment_name"),
-        attachment_type=payload.get("attachment_type"),
+        attachment_filename=_att[0],
+        attachment_name=_att[1],
+        attachment_type=_att[2],
         is_read_by_admin=True,
         is_read_by_staff=False,
         created_at=now_ist_naive()

@@ -710,7 +710,7 @@ def download_invoice_pdf(
             # Item 2 fix: same Payment Summary block the staff-side discharge
             # invoice already shows — patient's own portal copy of this
             # exact invoice was silently missing it.
-            _items, _subtotal, _gst_total, _charges_total, deposit_paid, _tpa_covered, _balance = _settlement_summary(db, admission)
+            _items, _subtotal, _gst_total, _charges_total, deposit_paid, _balance = _settlement_summary(db, admission)
             refund_due = max(-_balance, 0)
 
     if not invoice.verify_hash:

@@ -19,7 +19,8 @@ from app.schemas.patient import PaymentMethodIn
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
-from app.utils.order_lifecycle import is_order_expired
+from app.utils.order_lifecycle import is_order_expired, refresh_consultation_dispensed
+from app.models.medicine_order_batch import MedicineOrderBatch
 from app.utils.inventory import sellable_stock, line_total
 from app.routers.attendance import require_present
 from app.routers.refunds import VALID_CHANNELS
@@ -444,12 +445,17 @@ def serialize_medicine_order(m: MedicineOrder, db: Session = None):
     stock_quantity = None
     low_stock_threshold = None
     schedule = None
+    nppa_ceiling = None
+    pack_rule = None
     if db is not None and m.catalog_medicine_id:
         catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == m.catalog_medicine_id).first()
         if catalog_item:
             stock_quantity = sellable_stock(db, catalog_item)  # excludes expired batches
             low_stock_threshold = catalog_item.low_stock_threshold
             schedule = catalog_item.schedule
+            nppa_ceiling = catalog_item.nppa_ceiling_price
+            if catalog_item.billing_mode == "per_pack" and (catalog_item.pack_size or 1) > 1:
+                pack_rule = catalog_item.pack_size  # sold in whole packs of this many units
 
     already_returned = 0
     if db is not None and m.status == "dispensed":
@@ -477,6 +483,10 @@ def serialize_medicine_order(m: MedicineOrder, db: Session = None):
         "low_stock_threshold": low_stock_threshold,
         "repeat_authorized": m.repeat_authorized,
         "already_returned": already_returned,
+        "shortfall_quantity": m.shortfall_quantity or 0,
+        "pack_size_rule": pack_rule,
+        "over_ceiling": bool(nppa_ceiling is not None and m.unit_price is not None and m.unit_price > nppa_ceiling + 1e-9),
+        "nppa_ceiling": nppa_ceiling,
     }
 
 
@@ -511,9 +521,11 @@ def toggle_medicine_order_include(
     # payment AND from stock deduction at dispense. Re-checking reverts it
     # to a normal advised line so it can be paid/dispensed again.
     order.status = "unavailable" if not order.included else "advised"
+    _c = db.query(Consultation).filter(Consultation.id == order.consultation_id).first()
+    if _c:
+        refresh_consultation_dispensed(db, _c)
     db.commit()
     return {"id": order.id, "included": order.included, "status": order.status}
-
 
 @router.patch("/medicine-orders/{order_id}/quantity")
 def set_medicine_order_quantity(
@@ -537,9 +549,25 @@ def set_medicine_order_quantity(
     if order.status != "advised":
         raise HTTPException(status_code=400, detail="Cannot change quantity after payment")
 
-    order.quantity = payload.quantity
+    # Pack rule: a per-pack medicine is sold in whole packs only. Typing 9 on a 10-per-strip
+    # item used to bill 9 units but deduct a full 10 - now it rounds UP to a whole pack so
+    # billing and stock always agree.
+    quantity = payload.quantity
+    rounded_from = None
+    if order.catalog_medicine_id:
+        item = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.catalog_medicine_id).first()
+        if item and item.billing_mode == "per_pack" and (item.pack_size or 1) > 1:
+            pack = item.pack_size
+            whole = -(-quantity // pack) * pack
+            if whole != quantity:
+                rounded_from = quantity
+                quantity = whole
+    order.quantity = quantity
     db.commit()
-    return serialize_medicine_order(order, db)
+    result = serialize_medicine_order(order, db)
+    if rounded_from is not None:
+        result["rounded_from"] = rounded_from
+    return result
 
 
 @router.patch("/medicine-orders/{order_id}/link-catalog")
@@ -648,21 +676,53 @@ def collect_medicine_payment(
     total = 0
     charged_count = 0
     skipped = []
+    blocked = []
+    short = []
+    nppa_warnings = []
     now = now_ist_naive()
     for o in orders:
+        # Schedule X repeat rule is checked HERE, before any money is taken (it used to fire
+        # at dispense, after payment). Only the blocked line is held back - the rest of the
+        # prescription is still billed. The rule itself is unchanged: a repeat still needs a
+        # doctor's authorization before it can be paid for.
+        block_reason = _schedule_x_repeat_block(db, o)
+        if block_reason:
+            blocked.append({"medicine_name": o.medicine_name, "reason": block_reason})
+            continue
+
         available = None
+        catalog_item = None
+        pack = 1
         if o.catalog_medicine_id:
             catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == o.catalog_medicine_id).first()
             if catalog_item:
                 available = sellable_stock(db, catalog_item)  # None = untracked
+                if catalog_item.billing_mode == "per_pack" and (catalog_item.pack_size or 1) > 1:
+                    pack = catalog_item.pack_size
 
-        billable_qty = min(o.quantity, available) if available is not None else o.quantity
+        wanted = o.quantity
+        if pack > 1:
+            wanted = -(-wanted // pack) * pack  # whole packs only
+        billable_qty = min(wanted, available) if available is not None else wanted
+        if pack > 1:
+            billable_qty = (billable_qty // pack) * pack  # can only sell whole packs out of what is left
 
         if billable_qty <= 0:
             skipped.append(o.medicine_name)
             continue
 
+        o.quantity = wanted
         o.billed_quantity = billable_qty
+        shortfall = max(0, wanted - billable_qty)
+        o.shortfall_quantity = shortfall or None
+        if shortfall:
+            short.append({"medicine_name": o.medicine_name, "short_by": shortfall})
+        # DPCO/NPPA ceiling is checked at SALE too (it used to be a one-off toast when the
+        # catalog entry was saved). Warning, not a block: the ceiling is admin-entered
+        # reference data with no live NPPA feed (same reasoning as medicines._ceiling_price_warning).
+        if catalog_item and catalog_item.nppa_ceiling_price is not None and o.unit_price is not None \
+                and o.unit_price > catalog_item.nppa_ceiling_price + 1e-9:
+            nppa_warnings.append(f"{o.medicine_name}: Rs.{o.unit_price:.2f}/unit is above the NPPA ceiling of Rs.{catalog_item.nppa_ceiling_price:.2f}/unit")
         o.status = "paid"
         o.paid_at = now
         o.payment_method = body.payment_method
@@ -670,6 +730,10 @@ def collect_medicine_payment(
         total += line_total(o.unit_price, billable_qty)
         charged_count += 1
 
+    if charged_count == 0 and blocked and not skipped:
+        raise HTTPException(status_code=400, detail=blocked[0]["reason"] + (f" (+{len(blocked) - 1} more)" if len(blocked) > 1 else ""))
+
+    refresh_consultation_dispensed(db, consultation)
     db.commit()
 
     log_action(
@@ -678,9 +742,11 @@ def collect_medicine_payment(
         target_type="consultation",
         target_id=consultation.id,
         target_label=f"Rs.{total:.2f} for {charged_count} medicines" + (f" ({len(skipped)} skipped — out of stock)" if skipped else ""),
+        details=("; ".join(nppa_warnings) if nppa_warnings else None),
         hospital_id=current_doctor.hospital_id
     )
-    return {"charged": round(total, 2), "count": charged_count, "skipped": skipped}
+    return {"charged": round(total, 2), "count": charged_count, "skipped": skipped,
+            "blocked": blocked, "short": short, "nppa_warnings": nppa_warnings}
 
 @router.get("/pending-tasks")
 def search_pending_pharmacy_tasks(
@@ -887,6 +953,8 @@ def add_medicine_order(
         substitute_for_id=payload.substitute_for_id
     )
     db.add(new_order)
+    db.flush()
+    refresh_consultation_dispensed(db, consultation)
     db.commit()
     db.refresh(new_order)
 
@@ -1066,9 +1134,9 @@ def requeue_medicine_order(
 
 class ReturnMedicineOrderIn(BaseModel):
     quantity: int
-    disposition: str  # "returned_to_supplier" | "sent_to_disposal" | "restocked_to_shelf"
+    disposition: str   # "returned_to_supplier" | "sent_to_disposal" (ignored for a never-collected refund)
     channel: str       # "cash" | "card" | "upi" | "online" — how the refund is issued
-    note: Optional[str] = None
+    note: str          # the reason - required
 
 
 @router.post("/medicine-orders/{order_id}/return")
@@ -1078,11 +1146,16 @@ def return_medicine_order(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    """OPD return — patient paid the hospital pharmacy directly, so this
-    issues a real Refund (unlike the IPD path, which just credits the
-    running admission bill). Stock only ever moves back up on the explicit,
-    deliberate restocked_to_shelf choice — never as a default, never for
-    returned_to_supplier or sent_to_disposal."""
+    """OPD return / refund — the patient paid the hospital pharmacy directly, so this
+    issues a real Refund (unlike the IPD path, which just credits the running admission
+    bill). Two cases:
+      * DISPENSED order: goes back to the supplier or to disposal. Dispensed medicines are
+        NEVER restocked (it can't be proven they were stored properly) - this matches the
+        MedicineOrderReturn rule.
+      * PAID but never dispensed (patient never collected, or the visit expired): full
+        refund, order cancelled. No stock was ever deducted, so none moves back. This works
+        even after the 7-day window - the window only stops re-queueing, not refunds.
+    A reason is always required."""
     require_pharmacy(current_doctor)
     require_present(db, current_doctor)
 
@@ -1092,26 +1165,33 @@ def return_medicine_order(
     ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Medicine order not found")
-    if order.status != "dispensed":
-        raise HTTPException(status_code=400, detail="Only a dispensed medicine can be returned")
+    if order.status not in ("dispensed", "paid"):
+        raise HTTPException(status_code=400, detail="Only a paid or dispensed medicine can be refunded")
     if body.quantity <= 0:
         raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
-    if body.disposition not in ("returned_to_supplier", "sent_to_disposal", "restocked_to_shelf"):
-        raise HTTPException(status_code=400, detail="disposition must be 'returned_to_supplier', 'sent_to_disposal', or 'restocked_to_shelf'")
     if body.channel not in VALID_CHANNELS:
         raise HTTPException(status_code=400, detail="Invalid channel")
+    reason_text = (body.note or "").strip()
+    if len(reason_text) < 3:
+        raise HTTPException(status_code=400, detail="Please enter a reason for the return")
 
-    dispensed_qty = order.billed_quantity or order.quantity or 0
-    already_returned = sum(r.quantity for r in db.query(MedicineOrderReturn).filter(MedicineOrderReturn.order_id == order.id).all())
-    available_to_return = dispensed_qty - already_returned
-    if body.quantity > available_to_return:
-        raise HTTPException(status_code=400, detail=f"Only {available_to_return} unit(s) from this order are eligible for return")
+    billed_qty = order.billed_quantity or order.quantity or 0
+    never_dispensed = order.status == "paid"
 
-    # Stock only moves back up on this one explicit, deliberate choice.
-    if body.disposition == "restocked_to_shelf" and order.catalog_medicine_id:
-        catalog_item = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.catalog_medicine_id).first()
-        if catalog_item:
-            catalog_item.stock_quantity = (catalog_item.stock_quantity or 0) + body.quantity
+    if never_dispensed:
+        if body.quantity != billed_qty:
+            raise HTTPException(status_code=400, detail=f"A medicine that was never collected is refunded in full ({billed_qty} unit(s))")
+        disposition = "never_dispensed"
+    else:
+        if body.disposition == "restocked_to_shelf":
+            raise HTTPException(status_code=400, detail="Dispensed medicines are not restocked. Choose 'returned to supplier' or 'sent to disposal'.")
+        if body.disposition not in ("returned_to_supplier", "sent_to_disposal"):
+            raise HTTPException(status_code=400, detail="disposition must be 'returned_to_supplier' or 'sent_to_disposal'")
+        disposition = body.disposition
+        already_returned = sum(r.quantity for r in db.query(MedicineOrderReturn).filter(MedicineOrderReturn.order_id == order.id).all())
+        available_to_return = billed_qty - already_returned
+        if body.quantity > available_to_return:
+            raise HTTPException(status_code=400, detail=f"Only {available_to_return} unit(s) from this order are eligible for return")
 
     refund_amount = line_total(order.unit_price, body.quantity)
 
@@ -1123,16 +1203,22 @@ def return_medicine_order(
         amount=refund_amount,
         channel=body.channel,
         status="pending" if body.channel == "online" else "completed",
-        reason=f"Pharmacy return — {order.medicine_name} x{body.quantity}",
+        reason=f"Pharmacy {'refund (not collected)' if never_dispensed else 'return'} — {order.medicine_name} x{body.quantity}",
         processed_by=current_doctor.id,
     )
     db.add(refund)
     db.flush()
 
     db.add(MedicineOrderReturn(
-        order_id=order.id, quantity=body.quantity, disposition=body.disposition,
-        note=body.note, refund_id=refund.id, returned_by=current_doctor.id, returned_at=now_ist_naive(),
+        order_id=order.id, quantity=body.quantity, disposition=disposition,
+        note=reason_text, refund_id=refund.id, returned_by=current_doctor.id, returned_at=now_ist_naive(),
     ))
+    if never_dispensed:
+        order.status = "cancelled"
+        _c = db.query(Consultation).filter(Consultation.id == order.consultation_id).first()
+        if _c:
+            db.flush()
+            refresh_consultation_dispensed(db, _c)
     db.commit()
 
     log_action(
@@ -1140,10 +1226,71 @@ def return_medicine_order(
         action="medicine_order_returned",
         target_type="medicine_order",
         target_id=order.id,
-        target_label=f"{order.medicine_name} x{body.quantity} ({body.disposition})",
+        target_label=f"{order.medicine_name} x{body.quantity} ({disposition})",
+        details=f"reason: {reason_text}",
         hospital_id=current_doctor.hospital_id
     )
     return {"message": "Return recorded", "refunded_amount": refund_amount, "refund_status": refund.status}
+
+
+@router.post("/medicine-orders/{order_id}/bill-shortfall")
+def bill_order_shortfall(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """When stock ran short at payment, only part of a line was billed and the rest was
+    recorded as shortfall_quantity. Once fresh stock arrives, this turns the leftover into a
+    NEW advised line on the same prescription (same price), which is then paid and dispensed
+    like any other line. The original line's shortfall is cleared so it can't be billed twice."""
+    require_pharmacy(current_doctor)
+    require_present(db, current_doctor)
+
+    order = db.query(MedicineOrder).filter(
+        MedicineOrder.id == order_id,
+        MedicineOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Medicine order not found")
+    if not order.shortfall_quantity or order.shortfall_quantity <= 0:
+        raise HTTPException(status_code=400, detail="This line has no shortfall to bill")
+    if order.status not in ("paid", "dispensed"):
+        raise HTTPException(status_code=400, detail="Only a paid or dispensed line can have a shortfall")
+
+    new_order = MedicineOrder(
+        consultation_id=order.consultation_id,
+        patient_id=order.patient_id,
+        hospital_id=order.hospital_id,
+        catalog_medicine_id=order.catalog_medicine_id,
+        medicine_name=order.medicine_name,
+        brand_name=order.brand_name,
+        dosage=order.dosage,
+        frequency=order.frequency,
+        duration=order.duration,
+        unit_price=order.unit_price,
+        quantity=order.shortfall_quantity,
+        included=True,
+        status="advised",
+    )
+    db.add(new_order)
+    owed = order.shortfall_quantity
+    order.shortfall_quantity = None
+    db.flush()
+    _c = db.query(Consultation).filter(Consultation.id == order.consultation_id).first()
+    if _c:
+        refresh_consultation_dispensed(db, _c)
+    db.commit()
+    db.refresh(new_order)
+
+    log_action(
+        db, current_doctor,
+        action="medicine_shortfall_billed",
+        target_type="medicine_order",
+        target_id=order.id,
+        target_label=f"{order.medicine_name} x{owed} (new line #{new_order.id})",
+        hospital_id=current_doctor.hospital_id
+    )
+    return serialize_medicine_order(new_order, db)
 
 
 @router.patch("/medicine-orders/{order_id}/authorize-repeat")

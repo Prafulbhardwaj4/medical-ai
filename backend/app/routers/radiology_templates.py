@@ -10,7 +10,9 @@ from app.models.radiology_template_section import RadiologyTemplateSection
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 
-router = APIRouter(prefix="/admin/radiology-templates", tags=["radiology-templates"])
+from app.utils.tier_gate import require_tier
+
+router = APIRouter(prefix="/admin/radiology-templates", tags=["radiology-templates"], dependencies=[Depends(require_tier("enterprise", "Radiology / Imaging"))])
 
 VALID_STUDY_TYPES = ["xray", "ct", "mri", "ultrasound"]
 

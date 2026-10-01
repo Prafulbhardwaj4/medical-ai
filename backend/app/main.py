@@ -46,6 +46,7 @@ from app.routers import plan_inquiries as plan_inquiries_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 from app.models.captcha_challenge import CaptchaChallenge
+from app.models.medicine_order_batch import MedicineOrderBatch
 from app.models.audit_log import AuditLog
 from app.models.checkin import Checkin
 from app.models.attendance import AttendanceRecord
@@ -64,7 +65,6 @@ from app.models.notification import Notification
 from app.models.chat_message import ChatMessage
 from app.models.opd_charge import OpdCharge
 from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
-from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
 from app.models.day_end_close import DayEndClose
 from app.config import settings, validate_startup_secrets, _is_production
@@ -200,7 +200,10 @@ from app.utils.rate_limit import limiter
 app = FastAPI(
     title="MedScribe API",
     version="0.1.0",
-    swagger_ui_parameters={"persistAuthorization": True}
+    swagger_ui_parameters={"persistAuthorization": True},
+    docs_url=None if _is_production(settings) else "/docs",
+    redoc_url=None if _is_production(settings) else "/redoc",
+    openapi_url=None if _is_production(settings) else "/openapi.json",
 )
 
 app.state.limiter = limiter

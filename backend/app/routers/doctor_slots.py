@@ -198,7 +198,7 @@ def delete_slot(slot_id: int, current_doctor: Doctor = Depends(get_current_docto
         raise HTTPException(status_code=404, detail="Slot not found")
     if current_doctor.role == UserRole.doctor and slot.doctor_id != current_doctor.id:
         raise HTTPException(status_code=403, detail="Not your slot")
-    if current_doctor.role in MANAGER_ROLES and slot.hospital_id != current_doctor.hospital_id:
+    if current_doctor.role != UserRole.super_admin and slot.hospital_id != current_doctor.hospital_id:
         raise HTTPException(status_code=403, detail="Not your hospital")
     if slot.booked_count > 0:
         raise HTTPException(status_code=400, detail="Cannot delete a slot that already has bookings")
@@ -240,6 +240,8 @@ def unmark_unavailable(unavailability_id: int, current_doctor: Doctor = Depends(
         raise HTTPException(status_code=404, detail="Not found")
     if current_doctor.role == UserRole.doctor and row.doctor_id != current_doctor.id:
         raise HTTPException(status_code=403, detail="Not your record")
+    if current_doctor.role != UserRole.super_admin and row.hospital_id != current_doctor.hospital_id:
+        raise HTTPException(status_code=404, detail="Not found")
     db.delete(row)
     db.commit()
     return {"message": "Unavailability removed"}
@@ -304,6 +306,8 @@ def trigger_mass_reschedule(
         raise HTTPException(status_code=404, detail="Not found")
     if current_doctor.role == UserRole.doctor and row.doctor_id != current_doctor.id:
         raise HTTPException(status_code=403, detail="Not your record")
+    if current_doctor.role != UserRole.super_admin and row.hospital_id != current_doctor.hospital_id:
+        raise HTTPException(status_code=404, detail="Not found")
 
     start = dt.combine(row.date, dt.min.time())
     end = start + timedelta(days=1)
