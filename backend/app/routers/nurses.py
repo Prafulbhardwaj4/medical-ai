@@ -139,6 +139,34 @@ def vitals_queue(
         })
     return result
 
+_VITALS_LIMITS = {
+    "Pulse": (30, 220), "Temperature": (90, 110), "SpO2": (50, 100),
+    "Respiratory Rate": (8, 60), "Weight": (1, 300), "Height": (30, 250),
+    "Blood Sugar (GRBS)": (20, 600),
+}
+
+
+def _validate_vitals(data: dict) -> None:
+    import re
+    if len(data) > 20:
+        raise HTTPException(status_code=400, detail="Too many vitals fields")
+    for k, v in data.items():
+        if len(k) > 40 or len(v) > 40:
+            raise HTTPException(status_code=400, detail="A vitals field is too long")
+        if k == "Blood Pressure":
+            m = re.fullmatch(r"(\d{2,3})/(\d{2,3})", v)
+            if not m or not (50 <= int(m.group(1)) <= 300 and 20 <= int(m.group(2)) <= 200):
+                raise HTTPException(status_code=400, detail="Blood Pressure must look like 120/80")
+        elif k in _VITALS_LIMITS:
+            try:
+                n = float(v)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"{k} must be a number")
+            lo, hi = _VITALS_LIMITS[k]
+            if not (lo <= n <= hi):
+                raise HTTPException(status_code=400, detail=f"{k} must be between {lo} and {hi}")
+
+
 @router.post("/vitals/{checkin_id}")
 def submit_vitals(
     checkin_id: int,
@@ -160,6 +188,7 @@ def submit_vitals(
     data = {k.strip(): v.strip() for k, v in payload.data.items() if k.strip() and v.strip()}
     if not data:
         raise HTTPException(status_code=400, detail="At least one vitals field is required")
+    _validate_vitals(data)
 
     was_recheck = checkin.vitals_status == "sent_back"
 
@@ -314,6 +343,8 @@ def complete_post_consult(
     data = {k.strip(): v.strip() for k, v in payload.data.items() if k.strip() and v.strip()}
     if not data:
         raise HTTPException(status_code=400, detail="Notes are required to confirm this task was completed")
+    if checkin.post_consult_status != "pending":
+        raise HTTPException(status_code=400, detail="This task is not pending (already completed or never requested)")
 
     checkin.post_consult_data = json.dumps(data)
     checkin.post_consult_status = "done"

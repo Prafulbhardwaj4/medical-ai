@@ -2774,6 +2774,8 @@ def download_prescription_staff(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    if current_doctor.role.value == "lab":
+        raise HTTPException(status_code=403, detail="Not authorized to view prescriptions")
     consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
     if not consultation:
         raise HTTPException(status_code=404, detail="Prescription not found")

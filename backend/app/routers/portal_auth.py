@@ -78,20 +78,21 @@ def _link_all_hospital_records(db: Session, account: PatientAccount, phone: str)
 def login(request: Request, body: LoginIn, db: Session = Depends(get_db)):
     if not verify_captcha_token(body.captcha_token, body.captcha_answer):
         raise HTTPException(status_code=400, detail="Incorrect captcha. Please try again.")
-    if _login_throttle.is_blocked(body.phone):
+    _phone = normalize_phone(body.phone)
+    if _login_throttle.is_blocked(_phone):
         raise HTTPException(status_code=429, detail="Too many failed attempts. Please try again in 15 minutes.")
-    account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
+    account = db.query(PatientAccount).filter(PatientAccount.phone == _phone).first()
 
     # Same generic 401 whether the number has no account or the password is
     # wrong. Registration is closed until WhatsApp OTP exists (see
     # complete_registration), so an unknown number has nowhere to go.
     if not account or not verify_password(body.password, account.password_hash):
-        _login_throttle.record_failure(body.phone)
+        _login_throttle.record_failure(_phone)
         raise HTTPException(status_code=401, detail="Invalid phone number or password")
     if not account.is_active:
         raise HTTPException(status_code=403, detail="This account has been deactivated")
 
-    _login_throttle.reset(body.phone)
+    _login_throttle.reset(_phone)
     return LoginResultOut(
         status="success",
         access_token=create_portal_access_token(account.id),

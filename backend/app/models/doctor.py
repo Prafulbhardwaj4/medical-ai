@@ -59,7 +59,7 @@ class Doctor(Base):
 
     @property
     def hospital_tier(self):
-        return self.hospital.tier if self.hospital else "growth"
+        return self.hospital.tier if self.hospital else "foundation"
 
     @property
     def default_consultation_fee(self):

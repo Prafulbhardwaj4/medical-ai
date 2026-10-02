@@ -641,6 +641,7 @@
     let timerInterval = null;
     let seconds = 0;
     let isRecording = false;
+    window.msKeepSessionAlive = () => isRecording;
     let matchedTestsFromAI = [];
     let matchedRadiologyFromAI = [];
     let currentStream = null;

@@ -160,6 +160,7 @@
   <script>
     // Redirect if already logged in
     if (getToken()) redirectByRole(getDoctor()?.role);
+    else { try { if (localStorage.getItem("ms_portal_token")) redirectByRole("patient"); } catch (e) { } }
 
     let pendingPatientPhone = null;
     let currentCaptchaToken = null;

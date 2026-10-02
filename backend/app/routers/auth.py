@@ -7,7 +7,7 @@ from app.models.doctor import Doctor
 from app.schemas.doctor import DoctorCreate, DoctorLogin, DoctorOut, EditMeIn, Token, CaptchaOut, StaffLoginResultOut, SetNewPasswordIn, ChangePasswordIn
 from app.schemas.doctor import ForgotPasswordRequestIn, ForgotPasswordVerifyIn, ForgotPasswordVerifyOut, ResetPasswordIn
 from app.utils.auth import hash_password, verify_password, create_access_token
-from app.utils.auth import blacklist_token, get_current_doctor
+from app.utils.auth import blacklist_token, get_current_doctor, decode_access_token
 from app.utils.auth import create_captcha_token, verify_captcha_token, generate_captcha_code, generate_captcha_svg
 from app.utils.auth import create_password_reset_token, verify_password_reset_token
 from app.utils.auth import create_password_setup_token, verify_password_setup_token, check_password_strength
@@ -15,6 +15,7 @@ from app.config import settings
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
 from app.utils.rate_limit import limiter
+from app.utils.phone import normalize_phone
 
 security = HTTPBearer()
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -217,15 +218,25 @@ def update_me(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     name = payload.name.strip()
-    phone = payload.phone.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Name is required")
+    phone = normalize_phone(payload.phone)
+    if not name or len(name) > 100:
+        raise HTTPException(status_code=400, detail="Name is required (100 characters max)")
     if not phone:
         raise HTTPException(status_code=400, detail="Contact number is required")
+    if len(phone) != 10 or phone[0] not in "6789":
+        raise HTTPException(status_code=400, detail="Enter a valid 10-digit mobile number")
+
+    _new_reg = (payload.registration_number or "").strip()
+    if len(_new_reg) > 50:
+        raise HTTPException(status_code=400, detail="Registration number is too long")
+    _old_reg = (current_doctor.registration_number or "").strip()
+    if current_doctor.role.value == "doctor" and _old_reg and not _new_reg:
+        raise HTTPException(status_code=400, detail="Registration number can't be removed once set. It prints on prescriptions.")
+    _before = f"name={current_doctor.name!r}, phone={current_doctor.phone!r}, reg={_old_reg!r}"
 
     current_doctor.name = name
     current_doctor.phone = phone
-    current_doctor.registration_number = (payload.registration_number or "").strip()
+    current_doctor.registration_number = _new_reg
     if current_doctor.role.value == "doctor":
         current_doctor.title = "Dr."
     elif payload.title in ("Mr.", "Ms."):
@@ -239,9 +250,35 @@ def update_me(
         target_type="doctor",
         target_id=current_doctor.id,
         target_label=f"{current_doctor.title} {current_doctor.name}",
-        hospital_id=current_doctor.hospital_id
+        hospital_id=current_doctor.hospital_id,
+        details=f"Before: {_before}. After: name={name!r}, phone={phone!r}, reg={_new_reg!r}"
     )
     return current_doctor
+
+MAX_SESSION_HOURS = 12  # one shift; after this the person signs in again
+
+
+@router.post("/refresh")
+@limiter.limit("30/minute")
+def refresh_session(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    current_doctor: Doctor = Depends(get_current_doctor),
+):
+    """Sliding session: swaps a still-valid token for a fresh 60-minute one.
+    The original sign-in time travels with it ("oiat") so a session can never
+    be stretched past MAX_SESSION_HOURS."""
+    payload = decode_access_token(credentials.credentials) or {}
+    started = payload.get("oiat") or payload.get("iat")
+    if not started or datetime.utcnow().timestamp() - float(started) > MAX_SESSION_HOURS * 3600:
+        raise HTTPException(status_code=401, detail="Session ended. Please sign in again.")
+    token = create_access_token({
+        "sub": str(current_doctor.id),
+        "role": current_doctor.role.value,
+        "oiat": int(started),
+    })
+    return {"access_token": token}
+
 
 @router.post("/logout")
 def logout(

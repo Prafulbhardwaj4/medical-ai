@@ -1,6 +1,7 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from app.utils.rate_limit import limiter
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -51,13 +52,19 @@ def list_hospitals(city: Optional[str] = Query(None), state: Optional[str] = Que
 
 
 @router.post("/lead")
+@limiter.limit("5/hour")
 def submit_hospital_lead(
+    request: Request,
     body: HospitalLeadIn,
     db: Session = Depends(get_db),
     account: PatientAccount = Depends(get_current_patient_account),
 ):
     if not body.hospital_name.strip():
         raise HTTPException(status_code=400, detail="Hospital name is required")
+    for _v, _max in ((body.state, 80), (body.city, 80), (body.hospital_name, 150),
+                     (body.location or "", 200), (body.note or "", 500)):
+        if len(_v) > _max:
+            raise HTTPException(status_code=400, detail="One of the fields is too long")
     if not body.state.strip() or not body.city.strip():
         raise HTTPException(status_code=400, detail="State and city are required")
 
@@ -76,7 +83,10 @@ def submit_hospital_lead(
 
 
 @router.get("/{hospital_id}/doctors")
-def list_hospital_doctors(hospital_id: int, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def list_hospital_doctors(request: Request, hospital_id: int, db: Session = Depends(get_db)):
+    if not db.query(Hospital.id).filter(Hospital.id == hospital_id, Hospital.is_active == True).first():  # noqa: E712
+        raise HTTPException(status_code=404, detail="Hospital not found")
     doctors = db.query(Doctor).filter(
         Doctor.hospital_id == hospital_id,
         Doctor.role == UserRole.doctor,
@@ -93,12 +103,15 @@ def list_hospital_doctors(hospital_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{hospital_id}/doctors/{doctor_id}/slots")
-def list_doctor_slots(hospital_id: int, doctor_id: int, date: str, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def list_doctor_slots(request: Request, hospital_id: int, doctor_id: int, date: str, db: Session = Depends(get_db)):
     from datetime import datetime as dt
     from app.models.doctor_slot import DoctorSlot
     from app.models.doctor_availability import DoctorUnavailability
     from app.utils.timezone import now_ist_naive
 
+    if not db.query(Hospital.id).filter(Hospital.id == hospital_id, Hospital.is_active == True).first():  # noqa: E712
+        raise HTTPException(status_code=404, detail="Hospital not found")
     try:
         slot_date = dt.strptime(date, "%Y-%m-%d").date()
     except ValueError:
@@ -155,8 +168,10 @@ def list_doctor_slots(hospital_id: int, doctor_id: int, date: str, db: Session =
 def bed_availability(hospital_id: int, db: Session = Depends(get_db)):
     """Returns the actual vacant bed count, shown by default on the booking flow
     (item 49) — no longer coarsened to available/full/unknown only."""
-    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
-    if hospital and hospital.tier == "foundation":
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id, Hospital.is_active == True).first()  # noqa: E712
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    if hospital.tier == "foundation":
         # Foundation hospitals never have ward/admissions access at all — this
         # isn't a "not configured yet" gap, the feature just doesn't apply to
         # this tier, so the frontend hides the row entirely rather than

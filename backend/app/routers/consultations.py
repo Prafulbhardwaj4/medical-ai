@@ -529,12 +529,17 @@ def get_test_catalog(
     ).all()
     return [{"id": i.id, "name": i.name, "fee": i.fee} for i in items]
 
+_CLINICAL_READ_ROLES = ("doctor", "nurse", "assistant", "admin", "sub_admin")
+
+
 @router.get("/history/{patient_id}", response_model=List[ConsultationHistoryItem])
 def get_history(
     patient_id: int,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    if current_doctor.role.value not in _CLINICAL_READ_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized to view clinical history")
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
         Patient.hospital_id == current_doctor.hospital_id
@@ -620,6 +625,8 @@ def get_prescription_pdf(
     current_doctor: Doctor = Depends(get_current_doctor),
     db: Session = Depends(get_db)
 ):
+    if current_doctor.role.value not in _CLINICAL_READ_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized to view prescriptions")
     consultation = db.query(Consultation).join(
         Patient, Consultation.patient_id == Patient.id
     ).filter(

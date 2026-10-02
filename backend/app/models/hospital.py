@@ -31,7 +31,7 @@ class Hospital(Base):
     contact_numbers = Column(Text, nullable=True)  # JSON list of {"type": "mobile"|"landline", "number": str} — mobile numbers stored pre-formatted as "+91XXXXXXXXXX", landline stored exactly as entered (no fixed pattern)
     emails = Column(Text, nullable=True)  # JSON list of email strings
     logo_base64 = Column(Text, nullable=True)  # optional — full data URI; stored in-DB since Render's disk is ephemeral
-    tier = Column(String, nullable=False, default="growth")  # "foundation" | "growth" | "scale" | "enterprise" — manually set by super admin, gates feature access
+    tier = Column(String, nullable=False, default="foundation")  # "foundation" | "growth" | "scale" | "enterprise" — manually set by super admin, gates feature access
     pcpndt_registration_number = Column(String, nullable=True)  # Registration No. under PC&PNDT Act, 1994 — required on every Form F (item 2 of the statutory form); only relevant to hospitals doing ultrasound
 
     # --- Billing cycle / AI Scribe usage ---

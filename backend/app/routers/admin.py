@@ -336,7 +336,7 @@ def create_doctor(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     # Only admin/sub_admin can create doctors
-    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "receptionist"]:
+    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy", "radiology"]:
@@ -348,8 +348,8 @@ def create_doctor(
         from app.utils.tier_gate import hospital_has_tier
         if not hospital_has_tier(db, hospital_id, "enterprise"):
             raise HTTPException(status_code=403, detail="Radiology staff accounts require the Enterprise plan")
-    if current_doctor.role.value == "receptionist" and role in ("sub_admin", "receptionist"):
-        raise HTTPException(status_code=403, detail="Receptionist cannot create admin-level or reception accounts")
+    if current_doctor.role.value == "sub_admin" and role != "doctor":
+        raise HTTPException(status_code=403, detail="Sub admin can only create doctor accounts")
 
     # Admin can only create doctors for their own hospital
     if current_doctor.role.value != "super_admin" and current_doctor.hospital_id != hospital_id:
@@ -631,8 +631,8 @@ def update_hospital_details(
         if not logo:
             hospital.logo_base64 = None
         else:
-            if not logo.startswith("data:image/"):
-                raise HTTPException(status_code=400, detail="Logo must be an image upload")
+            if not (logo.startswith("data:image/png;base64,") or logo.startswith("data:image/jpeg;base64,")):
+                raise HTTPException(status_code=400, detail="Logo must be a PNG or JPEG image")
             if len(logo) > 700_000:
                 raise HTTPException(status_code=400, detail="Logo image is too large (max ~500KB)")
             hospital.logo_base64 = logo

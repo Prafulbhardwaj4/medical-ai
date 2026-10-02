@@ -22,20 +22,30 @@ function formatNotifTimestamp(iso) {
   return d.toLocaleDateString('en-IN', opts);
 }
 
+// Staff and patient-portal sessions live under separate keys so a patient and a
+// staff member sharing one browser can't log each other out. Portal pages read
+// the portal keys; every other page reads the staff keys.
+const _SK_STAFF = { t: "ms_token", d: "ms_doctor" };
+const _SK_PORTAL = { t: "ms_portal_token", d: "ms_portal_doctor" };
+const _IS_PORTAL_PAGE = /\/my-(health|appointments)(\.html)?\/?$/.test(window.location.pathname);
+const _SK = _IS_PORTAL_PAGE ? _SK_PORTAL : _SK_STAFF;
+
 function getToken() {
-  try { return localStorage.getItem("ms_token"); }
+  try { return localStorage.getItem(_SK.t); }
   catch { return null; }
 }
 
 function getDoctor() {
-  try { return JSON.parse(localStorage.getItem("ms_doctor")); }
+  try { return JSON.parse(localStorage.getItem(_SK.d)); }
   catch { return null; }
 }
 
 function saveSession(token, doctor) {
   try {
-    localStorage.setItem("ms_token", token);
-    localStorage.setItem("ms_doctor", JSON.stringify(doctor));
+    const k = doctor && doctor.role === "patient" ? _SK_PORTAL : _SK_STAFF;
+    localStorage.setItem(k.t, token);
+    localStorage.setItem(k.d, JSON.stringify(doctor));
+    localStorage.setItem("ms_refreshed_at", String(Date.now()));
   } catch (e) {
     toast("Storage blocked. Please enable cookies in browser settings.", "error");
   }
@@ -65,14 +75,14 @@ function togglePwVisibility(inputId, iconId) {
 
 function clearSession() {
   try {
-    localStorage.removeItem("ms_token");
-    localStorage.removeItem("ms_doctor");
+    localStorage.removeItem(_SK.t);
+    localStorage.removeItem(_SK.d);
   } catch (e) { }
 }
 
 function requireAuth() {
   try {
-    if (!localStorage.getItem("ms_token")) {
+    if (!localStorage.getItem(_SK.t)) {
       window.location.href = "/pages/login.html";
       return false;
     }
@@ -167,6 +177,43 @@ async function api(method, path, body = null, isFormData = false, silent = false
     if (triggerBtn && !alreadyDisabled) triggerBtn.disabled = false;
   }
 }
+
+// Session keeper (staff only). Renews the token while someone is working so a
+// doctor is never thrown out mid-day, and signs out a shared PC left idle.
+// A page doing long hands-off work (recording) sets window.msKeepSessionAlive.
+(function () {
+  const REFRESH_AFTER_MS = 20 * 60 * 1000;
+  const IDLE_LIMIT_MS = 45 * 60 * 1000;
+  let lastInput = Date.now();
+  ["click", "keydown", "touchstart", "mousemove", "scroll"].forEach((ev) =>
+    window.addEventListener(ev, () => { lastInput = Date.now(); }, { passive: true })
+  );
+
+  async function tick() {
+    const doc = getDoctor();
+    if (!getToken() || !doc || doc.role === "patient") return;
+    const busy = typeof window.msKeepSessionAlive === "function" && window.msKeepSessionAlive();
+    if (!busy && Date.now() - lastInput > IDLE_LIMIT_MS) {
+      try { fetch(BASE + "/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${getToken()}` } }); } catch (e) { }
+      clearSession();
+      window.location.href = "/pages/login.html";
+      return;
+    }
+    const last = Number(localStorage.getItem("ms_refreshed_at")) || 0;
+    if (Date.now() - last < REFRESH_AFTER_MS) return;
+    try {
+      const res = await fetch(BASE + "/auth/refresh", { method: "POST", headers: { Authorization: `Bearer ${getToken()}` } });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.access_token) saveSession(data.access_token, doc);
+      }
+    } catch (e) { /* offline: try again on the next tick */ }
+  }
+
+  setInterval(tick, 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+  window.addEventListener("pageshow", tick);
+})();
 
 // Global error boundary — catches uncaught JS errors and unhandled promise
 // rejections that would otherwise leave the page silently blank (the root

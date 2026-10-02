@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from app.utils.rate_limit import limiter
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -417,7 +418,9 @@ def submit_no_show_reason(
 
 
 @router.post("/report-issue")
+@limiter.limit("10/hour")
 def report_issue(
+    request: Request,
     body: ReportIssueIn,
     account: PatientAccount = Depends(get_current_patient_account),
     db: Session = Depends(get_db),
@@ -434,9 +437,17 @@ def report_issue(
         raise HTTPException(status_code=400, detail="Invalid context")
 
     from app.models.hospital import Hospital
-    hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id, Hospital.is_active == True).first()  # noqa: E712
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
+
+    # Only an account that actually has a link to this hospital (a patient record
+    # or a booking there) may raise a critical alert on it.
+    _linked = any(a.hospital_id == hospital.id for a in account.appointments) or any(
+        p.patient and p.patient.hospital_id == hospital.id for p in account.profiles
+    )
+    if not _linked:
+        raise HTTPException(status_code=403, detail="You have no visit or booking at this hospital")
 
     appt = None
     if body.appointment_id:
@@ -527,7 +538,9 @@ def request_reschedule(
 
 
 @router.post("/family-booking-request")
+@limiter.limit("10/hour")
 def request_family_booking(
+    request: Request,
     body: FamilyBookingRequestIn,
     account: PatientAccount = Depends(get_current_patient_account),
     db: Session = Depends(get_db),
@@ -542,9 +555,20 @@ def request_family_booking(
     if phone == account.phone:
         raise HTTPException(status_code=400, detail="That's your own account — book under one of your existing profiles instead")
 
+    if body.type != "scheduled":
+        raise HTTPException(status_code=400, detail="Only scheduled appointments can be requested right now")
+
+    # Same reply whether or not the number has an account, so this can't be used
+    # to find out who is registered.
+    _sent = {"message": "Sent — if that number has a portal account, they'll see this the next time they open their portal"}
     target = db.query(PatientAccount).filter(PatientAccount.phone == phone).first()
     if not target:
-        raise HTTPException(status_code=404, detail="No portal account found with that phone number")
+        return _sent
+    from app.models.portal import CrossBookingRequest as _CBR
+    if db.query(_CBR).filter(
+        _CBR.requesting_account_id == account.id, _CBR.target_account_id == target.id, _CBR.status == "pending"
+    ).first():
+        return _sent
 
     hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id, Hospital.is_active == True).first()  # noqa: E712
     if not hospital:

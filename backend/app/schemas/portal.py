@@ -178,8 +178,8 @@ class FamilyBookingRequestIn(BaseModel):
     type: str  # "scheduled" | "queue_home"
     doctor_id: Optional[int] = None
     slot_id: Optional[int] = None
-    notes: Optional[str] = None
-    custom_address: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=500)
+    custom_address: Optional[str] = Field(default=None, max_length=300)
 
 
 class FamilyBookingConfirmIn(BaseModel):
@@ -376,4 +376,4 @@ class ReportIssueIn(BaseModel):
     context: str  # "booking_payment" | "checkin" | "other"
     hospital_id: int  # a PatientAccount has no single hospital of its own (it can link to Patient rows across many hospitals) — the booking/check-in screen this is reported from always knows which hospital it's on, so that's passed explicitly rather than guessed at
     appointment_id: Optional[int] = None  # best-effort — may not resolve to anything if the drop happened mid-flow
-    message: Optional[str] = None
+    message: Optional[str] = Field(default=None, max_length=500)

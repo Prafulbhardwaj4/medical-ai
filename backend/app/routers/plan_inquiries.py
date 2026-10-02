@@ -36,6 +36,12 @@ def submit_plan_inquiry(request: Request, body: PlanInquiryIn, db: Session = Dep
                      (body.preferred_language, 40), (body.message or "", 1000)):
         if len(_v) > _max:
             raise HTTPException(status_code=400, detail="One of the fields is too long")
+    import re
+    _digits = re.sub(r"\D", "", body.contact_phone)
+    if not (10 <= len(_digits) <= 13):
+        raise HTTPException(status_code=400, detail="Please enter a valid phone number")
+    if body.contact_email.strip() and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", body.contact_email.strip()):
+        raise HTTPException(status_code=400, detail="Please enter a valid email address")
     if not body.hospital_name.strip() or not body.contact_name.strip() or not body.contact_phone.strip():
         raise HTTPException(status_code=400, detail="Hospital, contact name and phone are required")
     db.add(PlanInquiry(
