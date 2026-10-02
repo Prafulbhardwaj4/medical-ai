@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Header
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, Field, validator
 from typing import Optional, List, Literal
 from sqlalchemy.orm import Session
 import json
@@ -319,22 +319,38 @@ def generate_doctor_uid(db: Session, hospital_code: str) -> str:
             return uid
 
 
+class CreateDoctorIn(BaseModel):
+    hospital_id: int
+    name: str = Field(max_length=100)
+    email: str = Field(max_length=150)
+    phone: str = Field(max_length=20)
+    specialization: str = Field(default="", max_length=100)
+    title: str = Field(default="Dr.", max_length=20)
+    registration_number: str = Field(default="", max_length=50)
+    role: str = Field(default="doctor", max_length=20)
+    room_number: str = Field(default="", max_length=30)
+    consultation_fee: Optional[float] = Field(default=None, ge=0, le=1000000)
+    professional_fee_per_admission: Optional[float] = Field(default=None, ge=0, le=10000000)
+
+
 @router.post("/doctors", status_code=201)
 def create_doctor(
-    hospital_id: int,
-    name: str,
-    email: str,
-    phone: str,
-    specialization: str,
-    title: str = "Dr.",
-    registration_number: str = "",
-    role: str = "doctor",
-    room_number: str = "",
-    consultation_fee: float = None,
-    professional_fee_per_admission: float = None,
+    body: CreateDoctorIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    # Personal data comes in the JSON body, never the URL, so it stays out of access logs.
+    hospital_id = body.hospital_id
+    name = body.name.strip()
+    email = body.email.strip()
+    phone = body.phone.strip()
+    specialization = body.specialization.strip()
+    title = body.title
+    registration_number = body.registration_number.strip()
+    role = body.role
+    room_number = body.room_number
+    consultation_fee = body.consultation_fee
+    professional_fee_per_admission = body.professional_fee_per_admission
     # Only admin/sub_admin can create doctors
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -2073,21 +2089,34 @@ def update_hospital(
     )
     return {"id": hospital.id, "name": hospital.name, "city": hospital.city, "state": hospital.state, "address": hospital.address}
 
+class UpdateAccountIn(BaseModel):
+    name: str = Field(max_length=100)
+    email: str = Field(max_length=150)
+    phone: str = Field(max_length=20)
+    title: Optional[str] = Field(default=None, max_length=20)
+    specialization: str = Field(default="", max_length=100)
+    room_number: str = Field(default="", max_length=30)
+    consultation_fee: Optional[float] = Field(default=None, ge=0, le=1000000)
+    professional_fee_per_admission: Optional[float] = Field(default=None, ge=0, le=10000000)
+    role: Optional[str] = Field(default=None, max_length=20)
+
+
 @router.patch("/accounts/{doctor_id}")
 def update_account(
     doctor_id: int,
-    name: str,
-    email: str,
-    phone: str,
-    title: str = None,
-    specialization: str = "",
-    room_number: str = "",
-    consultation_fee: float = None,
-    professional_fee_per_admission: float = None,
-    role: str = None,
+    body: UpdateAccountIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    name = body.name.strip()
+    email = body.email.strip()
+    phone = body.phone.strip()
+    title = body.title
+    specialization = body.specialization.strip()
+    room_number = body.room_number
+    consultation_fee = body.consultation_fee
+    professional_fee_per_admission = body.professional_fee_per_admission
+    role = body.role
     if current_doctor.role.value not in ["super_admin", "admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 

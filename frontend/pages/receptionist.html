@@ -4140,7 +4140,7 @@
           <td data-label="">
             <div class="row-actions">
               <button class="btn btn-outline btn-sm" onclick='openEditPatient(${jsArg(p)})'>Edit</button>
-              <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>Select</button>
+              <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, ${jsArg(p.name)})'>Select</button>
             </div>
           </td>
         </tr>

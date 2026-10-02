@@ -27,13 +27,15 @@ class HospitalLeadIn(BaseModel):
 
 
 @router.get("/states")
-def list_states(db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def list_states(request: Request, db: Session = Depends(get_db)):
     rows = db.query(Hospital.state).filter(Hospital.is_active == True, Hospital.state.isnot(None)).distinct().all()  # noqa: E712
     return sorted({r[0] for r in rows if r[0]})
 
 
 @router.get("/cities")
-def list_cities(state: Optional[str] = Query(None), db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def list_cities(request: Request, state: Optional[str] = Query(None), db: Session = Depends(get_db)):
     q = db.query(Hospital.city).filter(Hospital.is_active == True, Hospital.city.isnot(None))  # noqa: E712
     if state:
         q = q.filter(Hospital.state == state)
@@ -42,7 +44,8 @@ def list_cities(state: Optional[str] = Query(None), db: Session = Depends(get_db
 
 
 @router.get("", response_model=list[HospitalOut])
-def list_hospitals(city: Optional[str] = Query(None), state: Optional[str] = Query(None), db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def list_hospitals(request: Request, city: Optional[str] = Query(None), state: Optional[str] = Query(None), db: Session = Depends(get_db)):
     q = db.query(Hospital).filter(Hospital.is_active == True)  # noqa: E712
     if state:
         q = q.filter(Hospital.state == state)
@@ -165,7 +168,8 @@ def list_doctor_slots(request: Request, hospital_id: int, doctor_id: int, date: 
 
 
 @router.get("/{hospital_id}/bed-availability")
-def bed_availability(hospital_id: int, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def bed_availability(request: Request, hospital_id: int, db: Session = Depends(get_db)):
     """Returns the actual vacant bed count, shown by default on the booking flow
     (item 49) — no longer coarsened to available/full/unknown only."""
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id, Hospital.is_active == True).first()  # noqa: E712
@@ -193,7 +197,8 @@ def bed_availability(hospital_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{hospital_id}", response_model=HospitalOut)
-def get_hospital(hospital_id: int, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def get_hospital(request: Request, hospital_id: int, db: Session = Depends(get_db)):
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id, Hospital.is_active == True).first()  # noqa: E712
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")

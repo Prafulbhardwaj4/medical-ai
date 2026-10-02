@@ -515,7 +515,9 @@ async def upload_medicines(
     try:
         extracted = await extract_medicines(raw_text)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Extraction failed: {str(e)}")
+        import logging as _lg
+        _lg.getLogger(__name__).exception("Medicine extraction failed")
+        raise HTTPException(status_code=502, detail="Could not read this file. Please try again or use a different file.")
 
     return {"medicines": extracted}
 

@@ -405,12 +405,7 @@ def get_pharmacy_prescription(
 ):
     require_pharmacy(current_doctor)
 
-    consultation = db.query(Consultation).filter(
-        Consultation.token_number == token_number,
-        Consultation.is_voided == False
-    ).first()
-    if not consultation:
-        raise HTTPException(status_code=404, detail="Prescription not found")
+    consultation = _consultation_for_token(db, token_number, current_doctor)
 
     patient = db.query(Patient).filter(
         Patient.id == consultation.patient_id,
@@ -881,12 +876,7 @@ def add_medicine_order(
     require_pharmacy(current_doctor)
     require_present(db, current_doctor)
 
-    consultation = db.query(Consultation).filter(
-        Consultation.token_number == token_number,
-        Consultation.is_voided == False
-    ).first()
-    if not consultation:
-        raise HTTPException(status_code=404, detail="Prescription not found")
+    consultation = _consultation_for_token(db, token_number, current_doctor)
 
     catalog_item = db.query(HospitalMedicine).filter(
         HospitalMedicine.id == payload.catalog_medicine_id,
@@ -986,12 +976,7 @@ def dispense_prescription(
     require_pharmacy(current_doctor)
     require_present(db, current_doctor)
 
-    consultation = db.query(Consultation).filter(
-        Consultation.token_number == token_number,
-        Consultation.is_voided == False
-    ).first()
-    if not consultation:
-        raise HTTPException(status_code=404, detail="Prescription not found")
+    consultation = _consultation_for_token(db, token_number, current_doctor)
     if consultation.is_dispensed:
         raise HTTPException(status_code=400, detail="Already marked as dispensed")
 

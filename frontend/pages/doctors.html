@@ -624,19 +624,19 @@
       const doctor = getDoctor();
       const fee = document.getElementById('d-fee').value.trim();
       const room = document.getElementById('d-room')?.value.trim() || '';
-      const params = new URLSearchParams({
+      const createBody = {
         hospital_id: doctor.hospital_id,
         name, email, phone: "+91" + phone, specialization, title,
         registration_number: reg, role, room_number: room
-      });
+      };
       if (fee && needsSpecialization && doctor.billing_enabled) {
-        params.set('consultation_fee', fee);
+        createBody.consultation_fee = Number(fee);
       }
 
       const roleLabels = { doctor: 'Doctor', sub_admin: 'Sub Admin', receptionist: 'Receptionist', nurse: 'Nurse', lab: 'Lab Staff', pharmacy: 'Pharmacist' };
 
       try {
-        const created = await api('POST', `/admin/doctors?${params.toString()}`);
+        const created = await api('POST', '/admin/doctors', createBody);
         toast(`${roleLabels[role] || 'Staff'} account created successfully.`, 'success');
         closeModal();
         loadDoctors();
@@ -758,15 +758,13 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
 
-      const params = new URLSearchParams({
-        name, email, phone: '+91' + phone, specialization, title
-      });
-      if (fee) params.append('consultation_fee', fee);
-      if (professionalFee) params.append('professional_fee_per_admission', professionalFee);
-      if (role) params.append('role', role);
+      const editBody = { name, email, phone: '+91' + phone, specialization, title };
+      if (fee) editBody.consultation_fee = Number(fee);
+      if (professionalFee) editBody.professional_fee_per_admission = Number(professionalFee);
+      if (role) editBody.role = role;
 
       try {
-        await api('PATCH', `/admin/accounts/${id}?${params.toString()}`);
+        await api('PATCH', `/admin/accounts/${id}`, editBody);
         toast('Staff updated successfully.', 'success');
         closeEditModal();
         loadDoctors();

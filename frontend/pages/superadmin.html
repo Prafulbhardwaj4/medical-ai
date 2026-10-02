@@ -1946,8 +1946,7 @@
         err.textContent = 'All fields are required.'; return;
       }
       try {
-        const params = new URLSearchParams({ name, email, phone });
-        await api('PATCH', `/admin/accounts/${id}?${params.toString()}`);
+        await api('PATCH', `/admin/accounts/${id}`, { name, email, phone });
         toast('Account updated.', 'success');
         closeEditAccountModal();
         openDetail(currentHospitalId);

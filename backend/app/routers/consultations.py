@@ -317,19 +317,46 @@ async def transcribe(
     }
 
 
+def _ws_ticket_key() -> str:
+    # Derived key: a ticket can never be decoded as a normal login token.
+    return settings.SECRET_KEY + ":ws-ticket"
+
+
+@router.post("/ws-ticket/{patient_id}")
+def create_ws_ticket(
+    patient_id: int,
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    from jose import jwt as _jwt
+    from datetime import timedelta as _td
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id, Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    ticket = _jwt.encode(
+        {"sub": str(current_doctor.id), "pid": patient_id, "typ": "ws_ticket",
+         "exp": datetime.utcnow() + _td(seconds=30)},
+        _ws_ticket_key(), algorithm=settings.ALGORITHM,
+    )
+    return {"ticket": ticket}
+
+
 @router.websocket("/ws/transcribe/{patient_id}")
 async def websocket_transcribe(
     websocket: WebSocket,
     patient_id: int,
-    token: str,
+    ticket: str,
     db: Session = Depends(get_db)
 ):
-    payload = decode_access_token(token)
-    if not payload:
+    from jose import jwt as _jwt, JWTError as _JWTError
+    try:
+        payload = _jwt.decode(ticket, _ws_ticket_key(), algorithms=[settings.ALGORITHM])
+    except _JWTError:
         await websocket.close(code=4001)
         return
-
-    if is_token_blacklisted(token, db):
+    if payload.get("typ") != "ws_ticket" or payload.get("pid") != patient_id:
         await websocket.close(code=4001)
         return
 
@@ -498,10 +525,12 @@ async def websocket_transcribe(
             except Exception:
                 pass
         except Exception as e:
+            import logging as _lg
+            _lg.getLogger(__name__).exception("Transcript save failed")
             try:
                 await websocket.send_json({
                     "type": "error",
-                    "message": f"Failed to save: {str(e)}"
+                    "message": "Failed to save the transcript. Please try again."
                 })
             except Exception:
                 pass
@@ -814,7 +843,9 @@ async def structure(
     try:
         structured = await structure_transcript(consultation.raw_transcript, history_text)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI structuring failed: {str(e)}")
+        import logging as _lg
+        _lg.getLogger(__name__).exception("AI structuring failed")
+        raise HTTPException(status_code=502, detail="AI structuring is temporarily unavailable. Please try again in a moment.")
 
     if not already_paid:
         consume_ai_scribe_credit(db, hospital)  # only counts against the cap once structuring actually succeeds
@@ -1182,7 +1213,9 @@ def confirm_prescription(
         pdf_path = generate_prescription_pdf(current_doctor, patient, consultation, token_number, verify_hash)
         consultation.pdf_path = pdf_path
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+        import logging as _lg
+        _lg.getLogger(__name__).exception("Prescription PDF generation failed")
+        raise HTTPException(status_code=500, detail="Could not generate the prescription PDF. Please try again.")
 
     if current_doctor.active_consultation_id == consultation.id:
         current_doctor.active_consultation_id = None
