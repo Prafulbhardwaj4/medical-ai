@@ -1667,7 +1667,7 @@
     }
 
     function ipdVitalFieldRow(label, value, locked, rule) {
-      const ruleAttr = rule ? ` data-rule='${JSON.stringify(rule).replace(/'/g, "&#39;")}'` : '';
+      const ruleAttr = rule ? ` data-rule='${jsArg(rule).replace(/'/g, "&#39;")}'` : '';
       const unitHtml = `<span style="font-size:12px;color:var(--slate);white-space:nowrap;align-self:center;width:44px;flex:0 0 44px">${rule && rule.unit ? rule.unit : ''}</span>`;
       return `
         <div style="margin-bottom:8px" data-row>
@@ -2011,11 +2011,11 @@
             ${hop.diagnosis ? `<div style="font-size:13px;color:var(--slate);margin-bottom:4px"><strong>Diagnosis:</strong> ${sanitize(hop.diagnosis)}</div>` : ''}
             ${hop.clinical_note ? `<div style="font-size:13px;color:var(--slate);margin-bottom:8px"><strong>Note:</strong> ${sanitize(hop.clinical_note)}</div>` : ''}
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-outline btn-sm" onclick='openVitalsModalWithData("Vitals — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.vitals)})'>Vitals</button>
-              <button class="btn btn-outline btn-sm" onclick='openReportsModalWithData("Reports — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.visits)})'>Test Reports</button>
-              <button class="btn btn-outline btn-sm" onclick='openRadiologyModalWithData("Radiology — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.radiology)})'>Radiology</button>
-              <button class="btn btn-outline btn-sm" onclick='openMedicinesModalWithData("Medicines — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.medicines)})'>Medicines</button>
-              ${hop.progress_notes && hop.progress_notes.length ? `<button class="btn btn-outline btn-sm" onclick='openProgressNotesModalWithData("Progress Notes — ${sanitize(hop.hospital_name)}", ${JSON.stringify(hop.progress_notes)})'>Progress Notes (${hop.progress_notes.length})</button>` : ''}
+              <button class="btn btn-outline btn-sm" onclick='openVitalsModalWithData(${jsArg('Vitals — ' + hop.hospital_name)}, ${jsArg(hop.vitals)})'>Vitals</button>
+              <button class="btn btn-outline btn-sm" onclick='openReportsModalWithData(${jsArg('Reports — ' + hop.hospital_name)}, ${jsArg(hop.visits)})'>Test Reports</button>
+              <button class="btn btn-outline btn-sm" onclick='openRadiologyModalWithData("Radiology — ${sanitize(hop.hospital_name)}", ${jsArg(hop.radiology)})'>Radiology</button>
+              <button class="btn btn-outline btn-sm" onclick='openMedicinesModalWithData(${jsArg('Medicines — ' + hop.hospital_name)}, ${jsArg(hop.medicines)})'>Medicines</button>
+              ${hop.progress_notes && hop.progress_notes.length ? `<button class="btn btn-outline btn-sm" onclick='openProgressNotesModalWithData(${jsArg('Progress Notes — ' + hop.hospital_name)}, ${jsArg(hop.progress_notes)})'>Progress Notes (${hop.progress_notes.length})</button>` : ''}
             </div>
           </div>
         `).join('');
@@ -2138,7 +2138,7 @@
         bedList.innerHTML = roomBeds.map(b => `
           <button type="button" class="btn btn-outline btn-sm cw-bed-btn" data-label="${sanitize(b.label)}"
             ${b.occupied ? 'disabled style="opacity:.4"' : ''}
-            onclick="cwSelectBed('${sanitize(b.label)}', this)">${sanitize(b.label)}</button>
+            onclick="cwSelectBed(${jsArg(b.label)}, this)">${sanitize(b.label)}</button>
         `).join('');
       } catch (e) {
         document.getElementById("cw-err-4").textContent = e.message;

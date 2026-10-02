@@ -244,5 +244,9 @@ def get_current_doctor(
     if doctor.role.value != "super_admin":
         hospital = db.query(Hospital).filter(Hospital.id == doctor.hospital_id).first()
         if not hospital or not hospital.is_active:
-            raise credentials_exception
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="This hospital's account is deactivated. Please contact MedScribe support.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     return doctor

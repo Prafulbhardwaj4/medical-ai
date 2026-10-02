@@ -750,7 +750,7 @@
           if (!hospitals.length) { area.innerHTML = `<p style="color:var(--slate-light)">No hospitals found in ${sanitize(state.city)}.</p>`; return; }
           searchableFullWidthList(
             area, hospitals,
-            (h) => `<div class="select-row-card" onclick='pickHospital(${h.id}, ${JSON.stringify(h.name)})'>
+            (h) => `<div class="select-row-card" onclick='pickHospital(${h.id}, ${jsArg(h.name)})'>
                       <div><div class="src-name">${sanitize(h.name)}</div>${h.address ? `<div class="src-sub">${sanitize(h.address)}</div>` : ''}</div>
                     </div>`,
             (h, q) => h.name.toLowerCase().includes(q),
@@ -791,7 +791,7 @@
               (d.name.toLowerCase().includes(q) || (d.specialization || '').toLowerCase().includes(q))
             );
             document.getElementById("doc-list").innerHTML = filtered.length ? filtered.map(d => `
-              <div class="select-row-card" onclick='pickDoctor(${d.id}, ${JSON.stringify(d.name)}, ${d.consultation_fee || 0})'>
+              <div class="select-row-card" onclick='pickDoctor(${d.id}, ${jsArg(d.name)}, ${d.consultation_fee || 0})'>
                 <div>
                   <div class="src-name">${sanitize(d.name)}</div>
                   <div class="src-sub">${sanitize(d.specialization || 'General')}${d.room_number ? ' · Room ' + sanitize(d.room_number) : ''}</div>
@@ -1015,7 +1015,7 @@
             <div class="slot-period-title">${label}</div>
             <div class="slot-grid">
               ${grouped[key].map(s => `
-                <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick='pickSlot(${s.id}, ${JSON.stringify(s.time)})'`}>
+                <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick='pickSlot(${s.id}, ${jsArg(s.time)})'`}>
                   <span class="dot"></span>${s.time}
                 </div>`).join('')}
             </div>` : '').join('');

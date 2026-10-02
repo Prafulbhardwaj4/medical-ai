@@ -347,6 +347,15 @@ function sanitize(str) {
   return d.innerHTML;
 }
 
+// Safe value for an inline handler: onclick="fn(${jsArg(name)})" or onclick='fn(${jsArg(obj)})'.
+// JSON-encodes, then HTML-entity-escapes & < > ' " so the value survives either attribute quote
+// style (the HTML parser decodes the entities back before the JS runs).
+function jsArg(v) {
+  return JSON.stringify(v === undefined ? null : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 function validatePatient(name, phone, age) {
   if (!name || name.trim().length < 2) return "Name must be at least 2 characters.";
   if (!phone || !/^\+\d{10,15}$/.test(phone.trim())) return "Phone must include country code e.g. +919876543210";

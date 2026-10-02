@@ -300,6 +300,14 @@ def validate_fields(name, email, phone):
 VALID_HOSPITAL_TYPES = {"government", "private"}
 VALID_TIERS = {"foundation", "growth", "scale", "enterprise"}
 
+
+def _check_cycle_start_window(parsed):
+    """A cycle start far in the past deactivates the hospital at the next midnight sweep;
+    one far in the future gives free AI Scribe. Both are almost certainly typos."""
+    delta = (parsed.date() - now_ist_naive().date()).days
+    if delta < -7 or delta > 7:
+        raise HTTPException(status_code=400, detail="Billing cycle start must be within 7 days of today")
+
 def generate_doctor_uid(db: Session, hospital_code: str) -> str:
     import secrets, string
     prefix = (hospital_code or "STAF").replace("-", "")[:4].upper()
@@ -1164,6 +1172,7 @@ def list_hospitals_jwt(
 def set_hospital_billing_cycle_start(
     hospital_id: int,
     cycle_start_date: str,  # "YYYY-MM-DD" — super admin enters this manually (item 4/6), not derived from any login event
+    reason: str = "",       # required when changing a cycle start that is already set
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1179,6 +1188,11 @@ def set_hospital_billing_cycle_start(
     except ValueError:
         raise HTTPException(status_code=400, detail="cycle_start_date must be YYYY-MM-DD")
 
+    _check_cycle_start_window(parsed)
+    previous_start = hospital.billing_cycle_start
+    if previous_start and len(reason.strip()) < 5:
+        raise HTTPException(status_code=400, detail="A reason (at least 5 characters) is required to change an existing billing cycle start")
+
     hospital.billing_cycle_start = parsed
     hospital.ai_scribe_consultations_used = 0  # setting/resetting the anchor starts a fresh cycle
     db.commit()
@@ -1189,7 +1203,7 @@ def set_hospital_billing_cycle_start(
         target_type="hospital",
         target_id=hospital.id,
         target_label=hospital.name,
-        details=f"Billing cycle start set to {cycle_start_date}",
+        details=f"Billing cycle start set to {cycle_start_date}" + (f" (was {previous_start.date().isoformat()}; reason: {reason.strip()})" if previous_start else ""),
         hospital_id=hospital.id
     )
 
@@ -1336,11 +1350,14 @@ def renew_hospital_billing_cycle(
 def set_hospital_tier(
     hospital_id: int,
     tier: str,
+    confirm: bool = False,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     if current_doctor.role.value != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Plan change must be confirmed")
 
     tier = tier.strip().lower()
     if tier not in VALID_TIERS:
@@ -1394,6 +1411,24 @@ def toggle_hospital_billing(
 
     return {"id": hospital.id, "billing_enabled": hospital.billing_enabled}
 
+@router.get("/hospitals/{hospital_id}/live-load")
+def hospital_live_load(
+    hospital_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """What would be cut off if this hospital were deactivated right now."""
+    if current_doctor.role.value != "super_admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    admitted = db.query(func.count(Admission.id)).filter(
+        Admission.hospital_id == hospital_id, Admission.status == "admitted"
+    ).scalar() or 0
+    opd_today = db.query(func.count(Checkin.id)).filter(
+        Checkin.hospital_id == hospital_id, Checkin.visit_date == ist_today()
+    ).scalar() or 0
+    return {"admitted_patients": admitted, "opd_checkins_today": opd_today}
+
+
 @router.patch("/hospitals/{hospital_id}/toggle-active")
 def toggle_hospital_active(
     hospital_id: int,
@@ -1441,7 +1476,7 @@ def create_hospital_jwt(
     state: str,
     address: str = "",
     hospital_type: str = "private",
-    tier: str = "growth",
+    tier: str = "foundation",
     billing_cycle_start: str = None,  # "YYYY-MM-DD" — required, asked at creation time now instead of set separately after the fact
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
@@ -1463,6 +1498,14 @@ def create_hospital_jwt(
         parsed_cycle_start = datetime.strptime(billing_cycle_start, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="billing_cycle_start must be YYYY-MM-DD")
+
+    _check_cycle_start_window(parsed_cycle_start)
+
+    duplicate = db.query(Hospital).filter(
+        func.lower(Hospital.name) == name.strip().lower(), func.lower(Hospital.city) == city.strip().lower()
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail=f"A hospital named '{duplicate.name}' in {duplicate.city} already exists")
 
     words = name.strip().upper().split()
     code_base = "".join([w[0] for w in words])[:4]
@@ -1513,6 +1556,10 @@ def create_admin_jwt(
     existing = db.query(Doctor).filter(Doctor.email == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+    if not hospital.is_active:
+        raise HTTPException(status_code=400, detail="This hospital is deactivated — activate it before adding an admin")
+    if db.query(Doctor).filter(Doctor.hospital_id == hospital_id, Doctor.phone == phone).first():
+        raise HTTPException(status_code=400, detail="Another account at this hospital already uses that phone number")
 
     temp_password = generate_temp_password()
     admin = Doctor(
@@ -1848,7 +1895,9 @@ def platform_patients_usage_analytics(
 
     total_patients = db.query(func.count(Patient.id)).scalar() or 0
     portal_activated = db.query(func.count(func.distinct(PatientProfileLink.patient_id))).scalar() or 0
-    total_consultations = db.query(func.count(Consultation.id)).scalar() or 0
+    total_consultations = db.query(func.count(Consultation.id)).filter(
+        Consultation.token_number != None, Consultation.is_voided == False
+    ).scalar() or 0
     total_admissions = db.query(func.count(Admission.id)).scalar() or 0
     online_count = db.query(func.count(Checkin.id)).filter(Checkin.source == "online").scalar() or 0
     walkin_count = db.query(func.count(Checkin.id)).filter(Checkin.source == "walk_in").scalar() or 0
@@ -2472,8 +2521,14 @@ def platform_month_over_month_comparison(
     patients_this = _window_count(Patient, Patient.created_at, this_month_start, now)
     patients_last = _window_count(Patient, Patient.created_at, last_month_start, last_month_asof)
 
-    opd_this = _window_count(Consultation, Consultation.created_at, this_month_start, now)
-    opd_last = _window_count(Consultation, Consultation.created_at, last_month_start, last_month_asof)
+    def _opd_count(w_start, w_end):
+        return db.query(func.count(Consultation.id)).filter(
+            Consultation.token_number != None, Consultation.is_voided == False,
+            Consultation.created_at >= w_start, Consultation.created_at < w_end
+        ).scalar() or 0
+
+    opd_this = _opd_count(this_month_start, now)
+    opd_last = _opd_count(last_month_start, last_month_asof)
 
     ipd_this = _window_count(Admission, Admission.admission_date, this_month_start, now)
     ipd_last = _window_count(Admission, Admission.admission_date, last_month_start, last_month_asof)

@@ -399,7 +399,7 @@
 
         <div class="stats-row stats-row-4">
           <div class="stat-card">
-            <div class="stat-label">Total Hospitals</div>
+            <div class="stat-label">Active Hospitals</div>
             <div class="stat-value" id="stat-hospitals">—</div>
             <div class="stat-sub" id="stat-new-hospitals">— new this month</div>
           </div>
@@ -410,12 +410,12 @@
             </div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Current Monthly Revenue</div>
+            <div class="stat-label">Expected Monthly Revenue (list price)</div>
             <div class="stat-value" id="stat-revenue">—</div>
             <div class="stat-sub">across onboarded hospitals, by tier</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Annual Revenue</div>
+            <div class="stat-label">Expected Annual Revenue (list price)</div>
             <div class="stat-value" id="stat-arr">—</div>
             <div class="stat-sub">projected</div>
           </div>
@@ -873,8 +873,8 @@
         <option value="government">Government</option>
       </select>
       <select class="form-control" id="h-tier" style="margin-bottom:14px">
-        <option value="foundation">Foundation</option>
-        <option value="growth" selected>Growth</option>
+        <option value="foundation" selected>Foundation</option>
+        <option value="growth">Growth</option>
         <option value="scale">Scale</option>
         <option value="enterprise">Enterprise</option>
       </select>
@@ -1818,7 +1818,7 @@
             </div>
           </div>
           <div class="hosp-card-actions">
-            <button class="btn ${h.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="event.stopPropagation(); toggleHospitalActive(${h.id}, this)">
+            <button class="btn ${h.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="event.stopPropagation(); toggleHospitalActive(${h.id}, ${h.is_active})">
               ${h.is_active ? 'Deactivate' : 'Activate'}
             </button>
             <svg class="hosp-card-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -1838,7 +1838,14 @@
       return `<span class="badge ${isExhausted ? 'badge-red' : 'badge-grey'}">${h.ai_scribe_used}/${h.ai_scribe_cap}${h.ai_scribe_topup_remaining ? ` (+${h.ai_scribe_topup_remaining} topup)` : ''}</span>`;
     }
 
-    async function toggleHospitalActive(hospitalId, btn) {
+    async function toggleHospitalActive(hospitalId, isActive) {
+      if (isActive) {
+        let load = null;
+        try { load = await api('GET', `/admin/hospitals/${hospitalId}/live-load`); } catch (e) { /* fall back to the generic warning */ }
+        const detail = load ? ` Right now: ${load.admitted_patients} admitted patient(s) and ${load.opd_checkins_today} OPD check-in(s) today.` : '';
+        const ok = await confirmDialog(`Deactivating locks out ALL staff of this hospital immediately.${detail} Continue?`, 'Yes, Deactivate');
+        if (!ok) return;
+      }
       try {
         const data = await api('PATCH', `/admin/hospitals/${hospitalId}/toggle-active`);
         toast(`Hospital ${data.is_active ? 'activated' : 'deactivated'}.`, 'success');
@@ -1859,8 +1866,20 @@
     }
 
     async function updateHospitalTier(hospitalId, tier) {
+      const cat = (typeof TIER_CATALOG !== 'undefined') ? TIER_CATALOG : [];
+      const order = cat.map(t => t.key);
+      const from = currentHospitalData ? currentHospitalData.tier : null;
+      const toT = cat.find(t => t.key === tier);
+      const fromT = cat.find(t => t.key === from);
+      const isDowngrade = from && order.indexOf(tier) < order.indexOf(from);
+      let msg = `Change plan from ${fromT ? fromT.label : from} (${fromT ? fromT.price : '-'}${fromT ? fromT.period : ''}) to ${toT ? toT.label : tier} (${toT ? toT.price : '-'}${toT ? toT.period : ''})? Has the hospital agreed and any payment difference been settled?`;
+      if (isDowngrade && currentHospitalData && currentHospitalData.ai_scribe_topup_remaining) {
+        msg += ` WARNING: this hospital still has ${currentHospitalData.ai_scribe_topup_remaining} unused AI Scribe top-up consultations that will be stranded.`;
+      }
+      const ok = await confirmDialog(msg, 'Yes, Change Plan');
+      if (!ok) { openDetail(hospitalId); return; }
       try {
-        const data = await api('PATCH', `/admin/hospitals/${hospitalId}/tier?tier=${encodeURIComponent(tier)}`);
+        const data = await api('PATCH', `/admin/hospitals/${hospitalId}/tier?tier=${encodeURIComponent(tier)}&confirm=true`);
         toast(`Plan changed to ${typeof tierLabel === 'function' ? tierLabel(data.tier) : data.tier}.`, 'success');
         openDetail(hospitalId);
       } catch (e) {
@@ -2190,7 +2209,7 @@
                   <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(a.email)}</div>
                   <div style="color:var(--slate);font-size:13px">${sanitize(a.phone)}</div>
                   <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-                    <button class="btn btn-outline btn-sm" onclick='openEditAccount(${JSON.stringify({id:a.id,name:a.name,email:a.email,phone:a.phone})})'>Edit</button>
+                    <button class="btn btn-outline btn-sm" onclick='openEditAccount(${jsArg({id:a.id,name:a.name,email:a.email,phone:a.phone})})'>Edit</button>
                     <button class="btn btn-outline btn-sm" onclick="resetAccountPassword(${a.id})">Reset Password</button>
                     <button class="btn ${a.is_active ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="toggleAccountActive(${a.id})">${a.is_active ? 'Deactivate' : 'Activate'}</button>
                   </div>

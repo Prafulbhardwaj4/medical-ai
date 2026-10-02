@@ -115,6 +115,26 @@ def create_refund(body: RefundIn, db: Session = Depends(get_db), current_doctor:
     return {"message": "Refund recorded", "id": refund.id, "status": refund.status, "credit_note_number": credit_note_number}
 
 
+@router.get("/pending")
+def list_pending_refunds(db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    """Online/portal refunds stay 'pending' until the gateway settlement is confirmed —
+    this is the admin's worklist for confirming them (see mark-settled)."""
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    rows = db.query(Refund).filter(
+        Refund.hospital_id == current_doctor.hospital_id, Refund.status == "pending"
+    ).order_by(Refund.processed_at.asc()).all()
+    out = []
+    for r in rows:
+        p = db.query(Patient).filter(Patient.id == r.patient_id).first() if r.patient_id else None
+        out.append({
+            "id": r.id, "patient_name": p.name if p else None, "patient_uid": p.patient_uid if p else None,
+            "source_type": r.source_type, "amount": r.amount, "reason": r.reason,
+            "processed_at": r.processed_at.isoformat() if r.processed_at else None,
+        })
+    return out
+
+
 @router.get("/patient/{patient_id}")
 def list_patient_refunds(patient_id: int, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
     refunds = db.query(Refund).filter(

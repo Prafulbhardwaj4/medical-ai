@@ -653,6 +653,9 @@ def verify_prescription(request: Request, token_number: str, hash: str, db: Sess
     if consultation.verify_hash != hash:
         return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
 
+    if consultation.is_voided:
+        return {"valid": False, "reason": "This prescription has been cancelled by the hospital — do not dispense"}
+
     patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
     doctor = db.query(DoctorModel).filter(DoctorModel.id == consultation.doctor_id).first()
 
@@ -716,13 +719,14 @@ def mark_dispensed(
         mo.dispensed_at = now_ist_naive()
     db.commit()
 
+    _prescriber = db.query(DoctorModel).filter(DoctorModel.id == consultation.doctor_id).first()
     log_action(
         db, None,
         action="prescription_dispensed",
         target_type="consultation",
         target_id=consultation.id,
         target_label=consultation.token_number + " (dispensed outside — no hospital stock deducted)",
-        hospital_id=None
+        hospital_id=_prescriber.hospital_id if _prescriber else None
     )
 
     return {"message": "Marked as dispensed", "dispensed_at": consultation.dispensed_at.isoformat()}

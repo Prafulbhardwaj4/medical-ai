@@ -1072,8 +1072,8 @@
           <td data-label="Last Token">${p.last_token ? `<span class="badge badge-teal">${p.last_token}</span>` : '<span style="color:var(--slate-light)">—</span>'}</td>
           <td data-label="">
             <div style="display:flex;gap:6px;align-items:center">
-              <button class="btn btn-sm" style="background:var(--teal);color:#fff;border:none" onclick='event.stopPropagation();openSelectPatientModal(${p.id}, ${JSON.stringify(p.name)})'>Select</button>
-              ${p.currently_admitted ? '<span class="badge badge-amber">Already Admitted</span>' : `<button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openSendToAdmissionModal(${p.id}, ${JSON.stringify(p.name)})'>Send to Admission</button>`}
+              <button class="btn btn-sm" style="background:var(--teal);color:#fff;border:none" onclick='event.stopPropagation();openSelectPatientModal(${p.id}, ${jsArg(p.name)})'>Select</button>
+              ${p.currently_admitted ? '<span class="badge badge-amber">Already Admitted</span>' : `<button class="btn btn-outline btn-sm" onclick='event.stopPropagation();openSendToAdmissionModal(${p.id}, ${jsArg(p.name)})'>Send to Admission</button>`}
             </div>
           </td>
         </tr>

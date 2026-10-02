@@ -458,6 +458,22 @@
                         <p style="color:var(--slate)">Loading…</p>
                     </div>
                 </div>
+                <div class="card" style="margin-bottom:20px" id="pending-refunds-card">
+                    <div class="card-header">
+                        <h2>Pending Online Refunds</h2>
+                    </div>
+                    <div id="pending-refunds-list">
+                        <p style="color:var(--slate)">Loading…</p>
+                    </div>
+                </div>
+                <div class="card" style="margin-bottom:20px" id="patient-feedback-card">
+                    <div class="card-header">
+                        <h2>Patient Feedback</h2>
+                    </div>
+                    <div id="patient-feedback-list">
+                        <p style="color:var(--slate)">Loading…</p>
+                    </div>
+                </div>
                 <div class="card" style="margin-bottom:20px" id="duplicate-patients-card">
                     <div class="card-header">
                         <h2>Duplicate Patients</h2>
@@ -867,7 +883,47 @@
             loadCollected30Days();
             loadBillingHistory();
             loadPendingWaivers();
+            loadPendingRefunds();
+            loadPatientFeedback();
             loadDuplicatePatients();
+        }
+
+        async function loadPendingRefunds() {
+            const el = document.getElementById('pending-refunds-list');
+            try {
+                const rows = await api("GET", "/refunds/pending");
+                if (!rows.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No refunds awaiting settlement.</p>'; return; }
+                el.innerHTML = rows.map(r => `
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+                        <div style="flex:1;min-width:200px">
+                            <strong>${sanitize(r.patient_name || 'Unlinked patient')}</strong> — Rs.${Number(r.amount).toFixed(2)}
+                            <div style="font-size:12px;color:var(--slate)">${sanitize(r.source_type)}${r.reason ? ' · ' + sanitize(r.reason) : ''} · ${r.processed_at ? new Date(r.processed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}</div>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="markRefundSettled(${r.id})">Mark Settled</button>
+                    </div>`).join('');
+            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
+        }
+
+        async function markRefundSettled(refundId) {
+            if (!confirm("Confirm this refund has reached the patient?")) return;
+            try {
+                await api("PATCH", `/refunds/${refundId}/mark-settled`, {});
+                toast("Refund marked settled.", "success");
+                loadPendingRefunds();
+            } catch (e) { toast(e.message, "error"); }
+        }
+
+        async function loadPatientFeedback() {
+            const el = document.getElementById('patient-feedback-list');
+            try {
+                const rows = await api("GET", "/portal/dashboard/hospital-feedback");
+                if (!rows.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No patient feedback yet.</p>'; return; }
+                el.innerHTML = rows.map(r => `
+                    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+                        <strong>${sanitize(r.patient_name)}</strong> — ${'★'.repeat(Number(r.rating) || 0)}
+                        ${r.comment ? `<div style="font-size:13px;color:var(--slate);margin-top:2px">${sanitize(r.comment)}</div>` : ''}
+                    </div>`).join('');
+            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
         }
 
         async function loadPendingWaivers() {
@@ -923,7 +979,7 @@
                 try {
                     const results = await api("GET", `/patients?search=${encodeURIComponent(val)}&limit=6`);
                     resultsEl.innerHTML = results.map(p => `
-                        <div style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-top:4px;cursor:pointer" onclick='selectDupCandidate("${which}", ${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.phone)}, ${JSON.stringify(p.patient_uid)})'>
+                        <div style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-top:4px;cursor:pointer" onclick='selectDupCandidate("${which}", ${p.id}, ${jsArg(p.name)}, ${jsArg(p.phone)}, ${jsArg(p.patient_uid)})'>
                             <strong>${sanitize(p.name)}</strong> <span style="color:var(--slate);font-size:12px">${sanitize(p.phone)} · ${sanitize(p.patient_uid)}</span>
                         </div>`).join('') || '<p style="font-size:12px;color:var(--slate-light)">No matches</p>';
                 } catch (e) { }
@@ -1637,7 +1693,7 @@
           <td data-label="Date" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(c.date)}</td>
           <td data-label="Feedback" style="white-space:nowrap">
             ${c.feedback_rating ? `${c.feedback_rating}/5 stars` : '<span style="color:var(--slate-light)">No feedback</span>'}
-            ${c.feedback_rating ? `<button class="btn btn-outline btn-sm" style="margin-left:8px" onclick='openFeedbackNotesModal(${JSON.stringify(c.patient_name)}, ${JSON.stringify(c.feedback_comment)})'>Notes</button>` : ''}
+            ${c.feedback_rating ? `<button class="btn btn-outline btn-sm" style="margin-left:8px" onclick='openFeedbackNotesModal(${jsArg(c.patient_name)}, ${jsArg(c.feedback_comment)})'>Notes</button>` : ''}
           </td>
         </tr>`).join('');
                 table.innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis', 'Date', 'Feedback'], rows);

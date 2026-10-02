@@ -536,7 +536,7 @@
             <div style="font-size:13px">${t.turnaround_hours != null ? t.turnaround_hours + ' hrs' : '—'}</div>
           </div>
           <div class="test-row-actions">
-            <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(t)})'>Edit</button>
+            <button class="btn btn-outline btn-sm" onclick='openEditModal(${jsArg(t)})'>Edit</button>
             <button class="btn btn-outline btn-sm" onclick="deactivateTest(${t.id})">Deactivate</button>
           </div>
         </div>

@@ -18,6 +18,7 @@ from app.models.hospital import Hospital
 from app.models.day_end_close import DayEndClose
 from app.utils.timezone import ist_today, now_ist, now_ist_naive
 from app.utils.billing_cycle import is_past_grace
+from app.utils.audit import log_action
 
 logger = logging.getLogger("scheduler")
 
@@ -37,11 +38,21 @@ def run_billing_deactivation_sweep_for_all_hospitals():
             Hospital.is_active == True,  # noqa: E712
             Hospital.billing_cycle_start.isnot(None),
         ).all()
+        deactivated = []
         for hospital in hospitals:
             if is_past_grace(hospital, now):
                 hospital.is_active = False
                 logger.info(f"Auto-deactivated hospital {hospital.id} ({hospital.name}) — grace window passed with no renewal.")
+                deactivated.append(hospital)
         db.commit()
+        for hospital in deactivated:
+            log_action(
+                db, None,
+                action="hospital_auto_deactivated",
+                target_type="hospital", target_id=hospital.id, target_label=hospital.name,
+                details="Grace window passed with no renewal",
+                hospital_id=hospital.id
+            )
     finally:
         db.close()
 

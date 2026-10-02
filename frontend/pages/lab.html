@@ -1047,7 +1047,7 @@
               ${v.order_ids.map((oid, i) => `
                 <div class="lr-test-row">
                   <span class="lr-test-row-name">${sanitize(v.test_names[i] || '')}</span>
-                  <a href="#" onclick="openEditReportModal(${oid}, '${sanitize(v.test_names[i] || '').replace(/'/g, "\\'")}');return false;">Edit</a>
+                  <a href="#" onclick="openEditReportModal(${oid}, ${jsArg(medicineName)});return false;">Edit</a>
                 </div>
               `).join('')}
             </div>

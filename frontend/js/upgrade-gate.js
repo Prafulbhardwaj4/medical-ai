@@ -297,6 +297,16 @@ async function submitUpgradeRequest() {
   }
 }
 
+// Radiology is an Enterprise feature (the server blocks it below that). Hide the
+// Radiology role option / filter button so lower tiers don't see a dead choice.
+function hideRadiologyBelowEnterprise() {
+  const doc = (typeof getDoctor === "function") ? getDoctor() : null;
+  if (!doc || doc.role === "super_admin" || doc.hospital_tier === "enterprise") return;
+  document.querySelectorAll('option[value="radiology"], button[onclick*="\'radiology\'"]').forEach((el) => el.remove());
+}
+document.addEventListener("DOMContentLoaded", hideRadiologyBelowEnterprise);
+setInterval(hideRadiologyBelowEnterprise, 2000);
+
 function gateAdmissionsNav() {
   if (!isFoundationTier()) return;
   document.querySelectorAll('a[href="admissions.html"], [onclick*="admissions.html"]').forEach((el) => {

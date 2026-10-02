@@ -2058,7 +2058,7 @@
               <strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber" style="margin-left:6px">Checked in today</span>' : ''} ${p.currently_admitted ? '<span class="badge badge-red" style="margin-left:6px">Already admitted</span>' : ''}
               <div style="font-size:0.82rem;color:var(--slate)">${p.patient_uid} · ${p.phone} · ${p.age}y</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick='selectExistingPatient(${JSON.stringify(p)})'>Select</button>
+            <button class="btn btn-primary btn-sm" onclick='selectExistingPatient(${jsArg(p)})'>Select</button>
           </div>
         `).join('');
       } catch (e) { toast(e.message, "error"); }
@@ -4135,7 +4135,7 @@
           <td data-label="Last Visit">${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
           <td data-label="">
             <div class="row-actions">
-              <button class="btn btn-outline btn-sm" onclick='openEditPatient(${JSON.stringify(p)})'>Edit</button>
+              <button class="btn btn-outline btn-sm" onclick='openEditPatient(${jsArg(p)})'>Edit</button>
               <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>Select</button>
             </div>
           </td>
@@ -4636,13 +4636,27 @@
                    internal "booking's job is done" state, not the patient's visit
                    being done, so it's never shown verbatim here. -->
               ${a.status !== 'completed' ? `<span class="badge badge-teal">${a.status}</span>` : ''}
-              ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${JSON.stringify(a)})'>Collect Payment</button>` : ''}
+              ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${jsArg(a)})'>Collect Payment</button>` : ''}
               ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
+              ${(!a.arrived_at && a.payment_status === 'paid' && a.status === 'confirmed') ? `<button class="btn btn-outline btn-sm" onclick="markPortalArrived(${a.id}, this)">Mark Arrived</button>` : ''}
               ${(a.arrived_at && a.doctor_id && coverageByDoctor[a.doctor_id] === false) ? `<button class="btn btn-outline btn-sm" onclick="notifyDoctorNoAssistant(${a.doctor_id}, this)">Notify Doctor</button>` : ''}
             </div>
           </div>`).join('');
       } catch (e) {
         el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    async function markPortalArrived(appointmentId, btn) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
+      btn.disabled = true;
+      try {
+        await api("POST", `/portal-appointments-staff/${appointmentId}/mark-arrived`);
+        toast("Marked arrived.", "success");
+        await loadExpectedToday();
+      } catch (e) {
+        toast(e.message, "error");
+        btn.disabled = false;
       }
     }
 
@@ -4730,7 +4744,7 @@
             </div>
             ${a.reason === 'awaiting_payment' ? `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-              <button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${JSON.stringify(a)})'>Collect Payment</button>
+              <button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${jsArg(a)})'>Collect Payment</button>
             </div>
             ` : `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">

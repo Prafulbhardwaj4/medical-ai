@@ -70,8 +70,10 @@ def request_upgrade_nudge(
     with super admin yet. target_doctor_id is left None so every admin/
     sub_admin at the hospital sees it (see notifications.py's admin
     visibility rule)."""
+    if body.tier not in [t["key"] for t in TIER_CATALOG_PY]:
+        raise HTTPException(status_code=400, detail="Invalid plan")
     tier_label = next((t["label"] for t in TIER_CATALOG_PY if t["key"] == body.tier), body.tier)
-    role_label = current_doctor.role.value.replace("_", " ").title()
+    role_labels = current_doctor.role.value.replace("_", " ").title()
     db.add(Notification(
         hospital_id=current_doctor.hospital_id,
         source_key=f"upgrade_nudge:{current_doctor.id}:{now_ist_naive().isoformat()}",
@@ -96,6 +98,16 @@ def request_upgrade(
     the real lead that reaches super admin's Upgrade Requests tab."""
     if current_doctor.role.value not in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if body.tier not in [t["key"] for t in TIER_CATALOG_PY]:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    if len((body.message or "")) > 1000:
+        raise HTTPException(status_code=400, detail="Message is too long")
+    if db.query(UpgradeRequest).filter(
+        UpgradeRequest.hospital_id == current_doctor.hospital_id,
+        UpgradeRequest.requested_tier == body.tier,
+        UpgradeRequest.status == "new",
+    ).first():
+        raise HTTPException(status_code=400, detail="You already have an open request for this plan — our team will reach out shortly")
 
     db.add(UpgradeRequest(
         hospital_id=current_doctor.hospital_id,

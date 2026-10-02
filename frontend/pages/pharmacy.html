@@ -1173,11 +1173,14 @@
         const actionHtml = i.is_out_of_stock
           ? `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
                <span style="color:var(--danger);font-weight:600;font-size:13px">Out of stock</span>
-               <button class="btn btn-outline btn-sm" onclick="openAdmSubstituteModal(${i.id}, ${JSON.stringify(i.medicine_name)})">Add Substitute</button>
+               <button class="btn btn-outline btn-sm" onclick="openAdmSubstituteModal(${i.id}, ${jsArg(i.medicine_name)})">Add Substitute</button>
              </div>`
           : i.dispensed_at
             ? '<span class="badge badge-green">Sent</span>'
-            : `<button class="btn btn-primary btn-sm" onclick="dispenseAdmissionMed(${i.id})">Mark Sent</button>`;
+            : `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+                 <button class="btn btn-primary btn-sm" onclick="dispenseAdmissionMed(${i.id})">Mark Sent</button>
+                 <button class="btn btn-outline btn-sm" onclick="markAdmissionOutOfStock(${i.id})">Out of Stock</button>
+               </div>`;
         return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px">
             <div>
@@ -1247,6 +1250,17 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
+    async function markAdmissionOutOfStock(orderId) {
+      if (!confirm("Mark this medicine out of stock? You can then add a substitute.")) return;
+      try {
+        await api("POST", `/pharmacy/admission-orders/${orderId}/mark-out-of-stock`, {});
+        toast("Marked out of stock — add a substitute.", "success");
+        const admissionId = admissionPharmQueueData.find(i => i.id === orderId)?.admission_id;
+        await loadAdmissionPharmQueue();
+        if (admissionId) openAdmissionMedModal(admissionId);
+      } catch (e) { toast(e.message, "error"); }
+    }
+
     let admSubOrderId = null;
     let admSubSearchTimeout = null;
 
@@ -1273,7 +1287,7 @@
           document.getElementById('adm-sub-results').innerHTML = results.length
             ? results.map(r => `
                 <div style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;cursor:pointer"
-                  onclick="confirmAdmSubstitute(${r.id}, ${JSON.stringify(`${r.generic_name}${r.strength ? ' ' + r.strength : ''}`)})">
+                  onclick="confirmAdmSubstitute(${r.id}, ${jsArg(`${r.generic_name}${r.strength ? ' ' + r.strength : ''}`)})">
                   <span>${sanitize(r.generic_name)}${r.strength ? ' ' + sanitize(r.strength) : ''} ${r.brand_names ? `<span style="color:var(--slate);font-size:12px">(${sanitize(r.brand_names)})</span>` : ''}</span>
                   <span style="font-size:13px;color:var(--slate)">${r.price != null ? '₹' + r.price : 'no price'}</span>
                 </div>
@@ -1525,10 +1539,11 @@
             </label>
             ${m.line_total != null ? `<span style="font-size:13px;font-weight:600">= Rs.${Number(m.line_total).toFixed(2)}</span>` : ''}
             ${!locked ? `<button class="btn btn-outline btn-sm" onclick="openAddMedicineModal(${m.id})">Add Substitute</button>` : ''}
+            ${m.status === 'advised' ? `<button class="btn btn-outline btn-sm" onclick="markMedicineAdvisedOutside(${m.id})">Advised Outside</button>` : ''}
             ${m.schedule === 'x' && !locked ? `<button class="btn btn-outline btn-sm" style="border-color:#b91c1c;color:#b91c1c" onclick="authorizeScheduleXRepeat(${m.id})">${m.repeat_authorized ? '✓ Repeat Authorized' : 'Authorize Repeat (Sch. X)'}</button>` : ''}
             ${(m.shortfall_quantity || 0) > 0 && (m.status === 'paid' || m.status === 'dispensed') ? `<button class="btn btn-outline btn-sm" onclick="billShortfall(${m.id})">Bill remaining ${m.shortfall_quantity}</button>` : ''}
-            ${m.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, '${sanitize(m.medicine_name).replace(/'/g, "\\'")}', ${m.billed_quantity || 0}, true)">Refund (not collected)</button>` : ''}
-            ${m.status === 'dispensed' && (m.billed_quantity || 0) - (m.already_returned || 0) > 0 ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, '${sanitize(m.medicine_name).replace(/'/g, "\\'")}', ${(m.billed_quantity || 0) - (m.already_returned || 0)})">Return</button>` : ''}
+            ${m.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, ${jsArg(medicineName)}, ${m.billed_quantity || 0}, true)">Refund (not collected)</button>` : ''}
+            ${m.status === 'dispensed' && (m.billed_quantity || 0) - (m.already_returned || 0) > 0 ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, ${jsArg(medicineName)}, ${(m.billed_quantity || 0) - (m.already_returned || 0)})">Return</button>` : ''}
           </div>
         </div>
       `}).join('') + '<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="openAddMedicineModal()">+ Add Medicine</button>';
@@ -1543,6 +1558,17 @@
       } else {
         totalEl.style.display = 'none';
       }
+    }
+
+    async function markMedicineAdvisedOutside(orderId) {
+      if (!confirm("Mark this medicine as advised outside (patient buys it elsewhere)? It will be removed from this bill.")) return;
+      try {
+        const updated = await api("PATCH", `/pharmacy/medicine-orders/${orderId}/mark-unavailable`, {});
+        const idx = currentMedicineOrders.findIndex(m => m.id === orderId);
+        if (idx > -1) currentMedicineOrders[idx] = { ...currentMedicineOrders[idx], ...updated };
+        renderMedicineOrders();
+        updateRxActionButtons(false);
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     async function toggleMedicineInclude(orderId) {
@@ -2153,7 +2179,7 @@
           </div>
           <div style="font-size:13px;min-width:80px">Stock: <strong>${m.sellable_quantity != null ? m.sellable_quantity : (m.stock_quantity != null ? m.stock_quantity : '—')}</strong>${m.expired_quantity > 0 ? `<div style="color:#991b1b;font-size:11px;font-weight:600">${m.expired_quantity} expired</div>` : ''}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-outline btn-sm" onclick="openEditModal(${JSON.stringify(m).replace(/\"/g, '&quot;')})">Edit</button>
+            <button class="btn btn-outline btn-sm" onclick="openEditModal(${jsArg(m).replace(/\"/g, '&quot;')})">Edit</button>
             ${!m.brand_name && !m.parent_medicine_id ? `<button class="btn btn-outline btn-sm" onclick="openAddBrandModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Brand</button>` : ''}
             <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">View Batches</button>
             <button class="btn btn-primary btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">+ Add Stock</button>
@@ -2617,7 +2643,7 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               ${badge}
-              <button class="btn btn-outline btn-sm" onclick='editBatch(${JSON.stringify(b)}, ${medicineId}, "${medicineName.replace(/"/g, "&quot;")}", ${packSize})'>Edit</button>
+              <button class="btn btn-outline btn-sm" onclick='editBatch(${jsArg(b)}, ${medicineId}, ${jsArg(medicineName)}, ${packSize})'>Edit</button>
               ${b.quantity > 0
                 ? `<button class="btn btn-outline btn-sm" onclick="writeOffBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Write off</button>`
                 : `<button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Remove</button>`}

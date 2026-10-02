@@ -124,12 +124,12 @@
             }
 
             try {
-                const res = await fetch(`${BASE}/consultations/verify/${token}?hash=${hash}`);
+                const res = await fetch(`${BASE}/consultations/verify/${encodeURIComponent(token)}?hash=${encodeURIComponent(hash)}`);
                 const data = await res.json();
 
                 if (!data.valid) {
                     content.innerHTML = `
-          <div class="status-banner status-invalid">⚠ ${data.reason}</div>
+          <div class="status-banner status-invalid">⚠ ${sanitize(data.reason)}</div>
           <p style="text-align:center;color:var(--slate);font-size:0.85rem">This prescription could not be verified. Do not dispense controlled medicines based on this document.</p>
         `;
                     return;
@@ -138,7 +138,7 @@
                 let medsHtml = data.medicines.map(m => `
         <div class="med-item">
           <div>
-            <strong>${m.name}</strong> — ${m.dosage}, ${m.frequency}, ${m.duration}
+            <strong>${sanitize(m.name)}</strong> — ${sanitize(m.dosage)}, ${sanitize(m.frequency)}, ${sanitize(m.duration)}
           </div>
           <span class="rx-badge ${m.schedule === 'controlled' ? 'rx-controlled' : 'rx-otc'}">
             ${m.schedule === 'controlled' ? 'Rx' : 'OTC'}
@@ -153,10 +153,10 @@
                 content.innerHTML = `
         ${dispensedBanner}
         <div style="font-size:0.85rem;margin-bottom:12px">
-          <div><strong>Token:</strong> ${data.token_number}</div>
-          <div><strong>Doctor:</strong> ${data.doctor_name} (${data.specialization})</div>
-          <div><strong>Clinic:</strong> ${data.clinic_name}</div>
-          <div><strong>Patient:</strong> ${data.patient_name}</div>
+          <div><strong>Token:</strong> ${sanitize(data.token_number)}</div>
+          <div><strong>Doctor:</strong> ${sanitize(data.doctor_name)} (${sanitize(data.specialization)})</div>
+          <div><strong>Clinic:</strong> ${sanitize(data.clinic_name)}</div>
+          <div><strong>Patient:</strong> ${sanitize(data.patient_name)}</div>
           <div><strong>Date:</strong> ${formatDate(data.date)}</div>
         </div>
         <div class="section-title" style="font-size:0.75rem;font-weight:700;color:var(--slate);text-transform:uppercase;margin-bottom:8px">Medicines</div>
@@ -177,7 +177,7 @@
 
         async function markDispensed() {
             try {
-                const res = await fetch(`${BASE}/consultations/verify/${token}/dispense?hash=${hash}`, { method: "POST" });
+                const res = await fetch(`${BASE}/consultations/verify/${encodeURIComponent(token)}/dispense?hash=${encodeURIComponent(hash)}`, { method: "POST" });
                 const data = await res.json();
                 if (res.ok) {
                     toast("Marked as dispensed", "success");
@@ -198,11 +198,11 @@
                 return;
             }
             try {
-                const res = await fetch(`${BASE}/billing/verify/${invoiceId}?hash=${hash}`);
+                const res = await fetch(`${BASE}/billing/verify/${encodeURIComponent(invoiceId)}?hash=${encodeURIComponent(hash)}`);
                 const data = await res.json();
                 if (!data.valid) {
                     content.innerHTML = `
-          <div class="status-banner status-invalid">⚠ ${data.reason}</div>
+          <div class="status-banner status-invalid">⚠ ${sanitize(data.reason)}</div>
           <p style="text-align:center;color:var(--slate);font-size:0.85rem">This invoice could not be verified.</p>
         `;
                     return;
@@ -210,9 +210,9 @@
                 content.innerHTML = `
         <div class="status-banner status-valid">✅ Valid Invoice</div>
         <div style="font-size:0.85rem;margin-bottom:12px">
-          <div><strong>Receipt No:</strong> ${data.receipt_number || '-'}</div>
-          <div><strong>Hospital:</strong> ${data.hospital_name || '-'}</div>
-          <div><strong>Patient:</strong> ${data.patient_name}</div>
+          <div><strong>Receipt No:</strong> ${sanitize(data.receipt_number || '-')}</div>
+          <div><strong>Hospital:</strong> ${sanitize(data.hospital_name || '-')}</div>
+          <div><strong>Patient:</strong> ${sanitize(data.patient_name)}</div>
           <div><strong>Amount:</strong> Rs.${Number(data.grand_total).toFixed(2)}</div>
           <div><strong>Date:</strong> ${formatDate(data.date)}</div>
         </div>
@@ -233,11 +233,11 @@
                 return;
             }
             try {
-                const res = await fetch(`${BASE}/lab/verify/${reportId}?hash=${hash}`);
+                const res = await fetch(`${BASE}/lab/verify/${encodeURIComponent(reportId)}?hash=${encodeURIComponent(hash)}`);
                 const data = await res.json();
                 if (!data.valid) {
                     content.innerHTML = `
-          <div class="status-banner status-invalid">⚠ ${data.reason}</div>
+          <div class="status-banner status-invalid">⚠ ${sanitize(data.reason)}</div>
           <p style="text-align:center;color:var(--slate);font-size:0.85rem">This report could not be verified.</p>
         `;
                     return;
@@ -245,10 +245,10 @@
                 content.innerHTML = `
         <div class="status-banner status-valid">✅ Valid Report</div>
         <div style="font-size:0.85rem;margin-bottom:12px">
-          <div><strong>Report Ref:</strong> ${data.report_reference || '-'}</div>
-          <div><strong>Test:</strong> ${data.test_name || '-'}</div>
-          <div><strong>Hospital:</strong> ${data.hospital_name || '-'}</div>
-          <div><strong>Patient:</strong> ${data.patient_name}</div>
+          <div><strong>Report Ref:</strong> ${sanitize(data.report_reference || '-')}</div>
+          <div><strong>Test:</strong> ${sanitize(data.test_name || '-')}</div>
+          <div><strong>Hospital:</strong> ${sanitize(data.hospital_name || '-')}</div>
+          <div><strong>Patient:</strong> ${sanitize(data.patient_name)}</div>
           <div><strong>Date:</strong> ${formatDate(data.date)}</div>
         </div>
         <p style="text-align:center;color:var(--slate);font-size:0.75rem;margin-top:16px">
@@ -268,11 +268,11 @@
                 return;
             }
             try {
-                const res = await fetch(`${BASE}/lab/verify/combined?ids=${reportIds}&hash=${hash}`);
+                const res = await fetch(`${BASE}/lab/verify/combined?ids=${encodeURIComponent(reportIds)}&hash=${encodeURIComponent(hash)}`);
                 const data = await res.json();
                 if (!data.valid) {
                     content.innerHTML = `
-          <div class="status-banner status-invalid">⚠ ${data.reason}</div>
+          <div class="status-banner status-invalid">⚠ ${sanitize(data.reason)}</div>
           <p style="text-align:center;color:var(--slate);font-size:0.85rem">This report could not be verified.</p>
         `;
                     return;
@@ -280,9 +280,9 @@
                 content.innerHTML = `
         <div class="status-banner status-valid">✅ Valid Report</div>
         <div style="font-size:0.85rem;margin-bottom:12px">
-          <div><strong>Tests:</strong> ${(data.test_names || []).join(', ')}</div>
-          <div><strong>Hospital:</strong> ${data.hospital_name || '-'}</div>
-          <div><strong>Patient:</strong> ${data.patient_name}</div>
+          <div><strong>Tests:</strong> ${sanitize((data.test_names || []).join(', '))}</div>
+          <div><strong>Hospital:</strong> ${sanitize(data.hospital_name || '-')}</div>
+          <div><strong>Patient:</strong> ${sanitize(data.patient_name)}</div>
           <div><strong>Date:</strong> ${formatDate(data.date)}</div>
         </div>
         <p style="text-align:center;color:var(--slate);font-size:0.75rem;margin-top:16px">
