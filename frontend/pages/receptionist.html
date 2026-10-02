@@ -3216,7 +3216,9 @@
             await api("PATCH", `/patients/checkin/${checkinId}/mark-paid`, { payment_method: method });
           } else {
             if (!(await confirmModal('Mark the consultation fee as unpaid?', { danger: true, okLabel: 'Mark Unpaid' }))) { renderPaymentToggleBody(); return; }
-            await api("PATCH", `/patients/checkin/${checkinId}/mark-unpaid`, {});
+            const _why = await promptModal('Reason for marking unpaid (required, min 5 characters):');
+            if (!_why || _why.trim().length < 5) { toast('A reason of at least 5 characters is required.', 'error'); renderPaymentToggleBody(); return; }
+            await api("PATCH", `/patients/checkin/${checkinId}/mark-unpaid`, { reason: _why.trim() });
           }
           if (doctorEntry) doctorEntry.buckets.consultation.status = turningOn ? 'paid' : 'unpaid';
         } else if (kind === 'tests') {
@@ -3227,7 +3229,9 @@
             toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
           } else {
             if (!(await confirmModal('Mark tests as unpaid? Only tests not yet started at the lab can be reverted.', { danger: true, okLabel: 'Mark Unpaid' }))) { renderPaymentToggleBody(); return; }
-            await api("POST", `/patients/${row.patient_id}/revert-test-payment`, {});
+            const _why2 = await promptModal('Reason for reverting test payment (required, min 5 characters):');
+            if (!_why2 || _why2.trim().length < 5) { toast('A reason of at least 5 characters is required.', 'error'); renderPaymentToggleBody(); return; }
+            await api("POST", `/patients/${row.patient_id}/revert-test-payment`, { reason: _why2.trim() });
           }
           row.doctors[0].buckets.tests.status = turningOn ? 'paid' : 'unpaid';
         } else if (kind === 'radiology') {

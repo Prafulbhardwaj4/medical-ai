@@ -341,10 +341,11 @@ async function logout() {
   window.location.href = "/pages/login.html";
 }
 
+// Escapes & < > " ' so the result is safe in element text AND in quoted attributes.
 function sanitize(str) {
-  const d = document.createElement("div");
-  d.textContent = str;
-  return d.innerHTML;
+  return String(str === undefined || str === null ? "" : str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 // Safe value for an inline handler: onclick="fn(${jsArg(name)})" or onclick='fn(${jsArg(obj)})'.

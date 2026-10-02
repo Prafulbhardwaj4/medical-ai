@@ -13,11 +13,12 @@ from app.models.opd_charge import OpdCharge
 from app.schemas.billing import RefundIn
 from app.utils.auth import get_current_doctor
 from app.utils.receipts import next_note_number
+from app.utils.audit import log_action
 from app.utils.timezone import now_ist_naive
 
 router = APIRouter(prefix="/refunds", tags=["refunds"])
 
-VALID_SOURCE_TYPES = {"appointment", "pharmacy", "ipd_deposit", "opd_charge", "other"}
+VALID_SOURCE_TYPES = {"appointment", "pharmacy", "ipd_deposit", "opd_charge", "test", "other"}
 VALID_CHANNELS = {"cash", "card", "upi", "online"}
 
 
@@ -159,4 +160,11 @@ def mark_refund_settled(refund_id: int, db: Session = Depends(get_db), current_d
         raise HTTPException(status_code=400, detail="Only a pending refund can be marked settled")
     refund.status = "completed"
     db.commit()
+    log_action(
+        db, current_doctor,
+        action="refund_settled",
+        target_type="refund",
+        target_id=refund.id,
+        details=f"{refund.source_type} #{refund.source_id}, Rs.{refund.amount:.2f}, pending -> completed",
+    )
     return {"message": "Refund marked settled"}

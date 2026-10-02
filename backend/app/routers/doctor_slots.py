@@ -32,6 +32,12 @@ def _resolve_target_doctor(body_doctor_id, current_doctor, db: Session) -> Docto
     return doctor
 
 
+def _require_slot_manager(current_doctor: Doctor) -> None:
+    """Only doctors (own records) and manager roles may touch slot/leave records."""
+    if current_doctor.role != UserRole.doctor and current_doctor.role not in MANAGER_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized to manage doctor availability")
+
+
 # ---------- Template (persistent weekly pattern) ----------
 
 @router.get("/template", response_model=TemplateOut)
@@ -193,6 +199,7 @@ def my_slots(date: str, doctor_id: int = None, current_doctor: Doctor = Depends(
 
 @router.delete("/{slot_id}")
 def delete_slot(slot_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    _require_slot_manager(current_doctor)
     slot = db.query(DoctorSlot).filter(DoctorSlot.id == slot_id).first()
     if not slot:
         raise HTTPException(status_code=404, detail="Slot not found")
@@ -235,6 +242,7 @@ def mark_unavailable(body: MarkUnavailableIn, current_doctor: Doctor = Depends(g
 
 @router.delete("/unavailable/{unavailability_id}")
 def unmark_unavailable(unavailability_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    _require_slot_manager(current_doctor)
     row = db.query(DoctorUnavailability).filter(DoctorUnavailability.id == unavailability_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
@@ -301,6 +309,7 @@ def trigger_mass_reschedule(
     reception approval needed, since the hospital already caused this."""
     from app.models.portal import Appointment, AppointmentStatus
 
+    _require_slot_manager(current_doctor)
     row = db.query(DoctorUnavailability).filter(DoctorUnavailability.id == unavailability_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Not found")

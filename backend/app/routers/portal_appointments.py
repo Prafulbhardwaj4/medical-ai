@@ -157,9 +157,11 @@ def book_appointment(
     db: Session = Depends(get_db),
 ):
     if body.profile_link_id:
-        owned = any(p.id == body.profile_link_id for p in account.profiles)
-        if not owned:
+        _link = next((p for p in account.profiles if p.id == body.profile_link_id), None)
+        if not _link:
             raise HTTPException(status_code=403, detail="This profile does not belong to your account")
+        if not _link.patient or _link.patient.hospital_id != body.hospital_id:
+            raise HTTPException(status_code=400, detail="This patient is not registered at the selected hospital")
     else:
         if not (body.new_patient_name or "").strip():
             raise HTTPException(status_code=400, detail="Please enter the patient's name — this hospital hasn't seen this account before")
@@ -172,6 +174,9 @@ def book_appointment(
         appt_type = AppointmentType(body.type)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid appointment type")
+
+    if appt_type != AppointmentType.scheduled:
+        raise HTTPException(status_code=400, detail="Only scheduled appointments can be booked online right now")
 
     doctor_id = body.doctor_id
     requested_time = body.requested_time
@@ -189,6 +194,14 @@ def book_appointment(
         ).with_for_update().first()
         if not slot:
             raise HTTPException(status_code=404, detail="Slot not found")
+
+        if body.doctor_id and body.doctor_id != slot.doctor_id:
+            raise HTTPException(status_code=400, detail="Selected doctor does not match this slot")
+
+        _slot_start = datetime.combine(slot.slot_date, datetime.strptime(slot.slot_time, "%H:%M").time())
+        _slot_end = _slot_start + timedelta(minutes=slot.window_minutes or 0)
+        if _slot_end <= now_ist_naive():
+            raise HTTPException(status_code=400, detail="This time slot has already passed. Please pick a later one.")
 
         _release_abandoned_holds(db, slot)
 
@@ -296,7 +309,15 @@ def mark_paid(
     'Expected Today' view or get auto-matched at check-in.
     NOTE: when this is wired to a real gateway, the caller also needs to
     pass payment_method through the same way collect_payment_at_reception
-    does — it's never set here today, only payment_status is."""
+    does — it's never set here today, only payment_status is.
+
+    DISABLED until a real payment gateway exists: any portal account could mark
+    its own appointment paid without paying. Pay-at-hospital through reception's
+    collect-payment is the only payment path for now."""
+    raise HTTPException(
+        status_code=503,
+        detail="Online payment is not available yet. Please pay at the hospital reception.",
+    )
     appt = next((a for a in account.appointments if a.id == appointment_id), None)
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")

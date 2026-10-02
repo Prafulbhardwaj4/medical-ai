@@ -1601,7 +1601,7 @@
 
         const tierLabels = { foundation: 'Foundation', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise' };
         document.getElementById('ga-tier-breakdown').innerHTML = Object.entries(data.by_tier)
-          .map(([tier, count]) => `<div style="display:flex;justify-content:space-between;font-size:13px"><span>${tierLabels[tier] || tier}</span><strong>${count}</strong></div>`)
+          .map(([tier, count]) => `<div style="display:flex;justify-content:space-between;font-size:13px"><span>${sanitize(tierLabels[tier] || tier)}</span><strong>${count}</strong></div>`)
           .join('');
 
         const geoEl = document.getElementById('ga-geo-list');

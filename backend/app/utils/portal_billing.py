@@ -22,6 +22,16 @@ def create_patient_cancellation_refund(db: Session, appt, reason: str, percent: 
     yet at all."""
     from app.models.refund import Refund
 
+    # Never refund money that was never collected.
+    if getattr(appt, "payment_status", None) != "paid":
+        return
+
+    # One refund per appointment per reason: guards against double-click / double sweep.
+    if db.query(Refund).filter(
+        Refund.source_type == "appointment", Refund.source_id == appt.id, Refund.reason == reason
+    ).first():
+        return
+
     base = appt.fee_amount or 0
     if fixed_amount is not None:
         amount = fixed_amount

@@ -1441,7 +1441,7 @@
             <div style="font-size:12px;color:var(--slate)">${sanitize(p.phone)} · ${p.age}y / ${sanitize(p.gender || '')}</div>
           </div>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-outline btn-sm" onclick="openDocumentsModal(${p.id}, '${sanitize(p.name).replace(/'/g, "\\'")}')">📄 Docs</button>
+            <button class="btn btn-outline btn-sm" onclick="openDocumentsModal(${p.id}, ${jsArg(p.name)})">📄 Docs</button>
             ${inQueue
             ? `<button class="btn btn-primary btn-sm" onclick="openPrescription('${p.last_token}')">💊 Medicine</button>`
             : `<button class="btn btn-outline btn-sm" disabled title="No active order in today's queue">💊 No Active Order</button>`}
@@ -1973,11 +1973,7 @@
       } catch (e) { errEl.textContent = e.message; }
     }
 
-    function sanitize(s) {
-      const div = document.createElement('div');
-      div.textContent = String(s ?? '');
-      return div.innerHTML;
-    }
+    // sanitize() now comes from api.js (quote-safe). Do not redefine it here.
 
     // Mobile: bottom-nav driven. Attendance is just another tab here (section-attendance
     // included), same as the other sections — only the active one is shown.
@@ -2180,9 +2176,9 @@
           <div style="font-size:13px;min-width:80px">Stock: <strong>${m.sellable_quantity != null ? m.sellable_quantity : (m.stock_quantity != null ? m.stock_quantity : '—')}</strong>${m.expired_quantity > 0 ? `<div style="color:#991b1b;font-size:11px;font-weight:600">${m.expired_quantity} expired</div>` : ''}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-outline btn-sm" onclick="openEditModal(${jsArg(m).replace(/\"/g, '&quot;')})">Edit</button>
-            ${!m.brand_name && !m.parent_medicine_id ? `<button class="btn btn-outline btn-sm" onclick="openAddBrandModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Brand</button>` : ''}
-            <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">View Batches</button>
-            <button class="btn btn-primary btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">+ Add Stock</button>
+            ${!m.brand_name && !m.parent_medicine_id ? `<button class="btn btn-outline btn-sm" onclick="openAddBrandModal(${m.id}, ${jsArg(m.generic_name)})">+ Add Brand</button>` : ''}
+            <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, ${jsArg(m.generic_name)}, ${m.pack_size || 1})">View Batches</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddStockModal(${m.id}, ${jsArg(m.generic_name)}, ${m.pack_size || 1})">+ Add Stock</button>
           </div>
         </div>
       `).join('');
@@ -2645,8 +2641,8 @@
               ${badge}
               <button class="btn btn-outline btn-sm" onclick='editBatch(${jsArg(b)}, ${medicineId}, ${jsArg(medicineName)}, ${packSize})'>Edit</button>
               ${b.quantity > 0
-                ? `<button class="btn btn-outline btn-sm" onclick="writeOffBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Write off</button>`
-                : `<button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Remove</button>`}
+                ? `<button class="btn btn-outline btn-sm" onclick="writeOffBatch(${b.id}, ${medicineId}, ${jsArg(medicineName)}, ${packSize})">Write off</button>`
+                : `<button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, ${jsArg(medicineName)}, ${packSize})">Remove</button>`}
             </div>
           </div>
         `;

@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class InviteTokenInfo(BaseModel):
@@ -164,7 +164,7 @@ class RequestRescheduleIn(BaseModel):
 
 class VisitFeedbackIn(BaseModel):
     rating: int  # 1-5
-    comment: Optional[str] = None
+    comment: Optional[str] = Field(default=None, max_length=1000)
 
 
 class PortalSuggestionIn(BaseModel):

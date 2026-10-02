@@ -343,13 +343,16 @@ def add_opd_charge(
     """Ad-hoc OPD charge (dressing, injection, etc.) — goes straight to the
     bill, no approval gate, same principle as IPD's Other Charges."""
     _require_nurse(current_doctor)
+    from app.routers.attendance import require_present
+    require_present(db, current_doctor)
 
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
-        Checkin.hospital_id == current_doctor.hospital_id
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == ist_today()
     ).first()
     if not checkin:
-        raise HTTPException(status_code=404, detail="Check-in not found")
+        raise HTTPException(status_code=404, detail="Today's check-in not found")
     if not payload.description.strip():
         raise HTTPException(status_code=400, detail="Description is required")
     if payload.amount <= 0:

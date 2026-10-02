@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, Field, validator
 from datetime import datetime, date
 from typing import Optional, Dict, List
 
@@ -162,9 +162,9 @@ class NurseTaskComplete(BaseModel):
     data: Dict[str, str] = {}
 
 class AddOpdChargeIn(BaseModel):
-    description: str
-    amount: float
-    quantity: int = 1
+    description: str = Field(..., min_length=1, max_length=200)
+    amount: float = Field(..., gt=0, le=1000000)
+    quantity: int = Field(1, ge=1, le=1000)
 
 class PaymentMethodIn(BaseModel):
     payment_method: str  # "cash" | "card" | "upi"
@@ -173,6 +173,19 @@ class PaymentMethodIn(BaseModel):
     def valid_method(cls, v):
         if v not in ("cash", "card", "upi"):
             raise ValueError("payment_method must be cash, card, or upi")
+        return v
+
+
+class ReasonIn(BaseModel):
+    reason: str
+
+    @validator("reason")
+    def valid_reason(cls, v):
+        v = (v or "").strip()
+        if len(v) < 5:
+            raise ValueError("A reason of at least 5 characters is required")
+        if len(v) > 300:
+            raise ValueError("Reason is too long (300 characters max)")
         return v
 
 

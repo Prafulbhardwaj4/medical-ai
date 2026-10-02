@@ -24,10 +24,13 @@ from app.routers.portal_appointments import _estimated_slot_datetime, _release_a
 from app.schemas.portal import BookForCallerIn
 import random
 import string
+from app.utils.audit import log_action
+from app.utils.phone import normalize_phone
 
 router = APIRouter(prefix="/portal-appointments-staff", tags=["portal-appointments-staff"])
 
 _STAFF_ROLES = ["admin", "sub_admin", "receptionist"]
+_APPT_VIEW_ROLES = ["admin", "sub_admin", "receptionist", "doctor", "nurse", "assistant"]
 
 
 @router.post("/book-for-caller", response_model=None)
@@ -58,13 +61,16 @@ def book_appointment_for_caller(
 
     link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == patient.id).first()
     if not link:
-        account = db.query(PatientAccount).filter(PatientAccount.phone == body.phone).first()
+        _acct_phone = normalize_phone(patient.phone)
+        if len(_acct_phone) != 10:
+            raise HTTPException(status_code=400, detail="This patient's phone number is invalid. Correct it on the patient record before booking.")
+        account = db.query(PatientAccount).filter(PatientAccount.phone == _acct_phone).first()
         if not account:
             # Not a real login yet — portal password delivery is on hold
             # until WhatsApp is wired up, so this is just an internal,
             # unshared placeholder that satisfies the not-null column.
             placeholder_password = "".join(random.choices(string.ascii_letters + string.digits, k=24))
-            account = PatientAccount(phone=body.phone, password_hash=hash_password(placeholder_password))
+            account = PatientAccount(phone=_acct_phone, password_hash=hash_password(placeholder_password))
             db.add(account)
             db.flush()
         link = PatientProfileLink(account_id=account.id, patient_id=patient.id, relation="self")
@@ -111,6 +117,15 @@ def book_appointment_for_caller(
     db.add(appt)
     db.commit()
     db.refresh(appt)
+
+    log_action(
+        db, current_doctor,
+        action="appointment_booked_for_caller",
+        target_type="appointment",
+        target_id=appt.id,
+        target_label=f"{patient.name} ({patient.patient_uid})",
+        details=f"Slot {slot.slot_date} {slot.slot_time}, doctor_id {slot.doctor_id}, status booked/unpaid",
+    )
 
     return {
         "appointment_id": appt.id,
@@ -186,6 +201,14 @@ def collect_payment_at_reception(
 
     db.commit()
     db.refresh(appt)
+
+    log_action(
+        db, current_doctor,
+        action="appointment_payment_collected",
+        target_type="appointment",
+        target_id=appt.id,
+        details=f"unpaid -> paid via {body.payment_method}, fee Rs.{(appt.fee_amount or 0):.2f}, status -> {appt.status.value}, slot reassigned: {bool(reassigned)}",
+    )
 
     return {
         "message": "Payment collected",
@@ -382,6 +405,8 @@ def appointment_analytics(
     db: Session = Depends(get_db),
 ):
     """Online (portal-booked) appointments, paid, in the last 45 days, grouped by doctor."""
+    if current_doctor.role.value not in _APPT_VIEW_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
     cutoff = now_ist_naive() - timedelta(days=45)
 
     q = db.query(Appointment).filter(
@@ -417,6 +442,8 @@ def list_expected_today(
     current_doctor=Depends(get_current_doctor),
     db: Session = Depends(get_db),
 ):
+    if current_doctor.role.value not in _APPT_VIEW_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
     from app.utils.portal_checkin import sweep_todays_online_checkins
     from app.utils.portal_noshow import detect_no_shows
     sweep_todays_online_checkins(db, current_doctor.hospital_id)
@@ -472,6 +499,8 @@ def list_upcoming_bookings(
     """Next 15 days of paid online bookings, hospital-wide — the piece
     reception previously had no visibility into at all (only ever saw
     today)."""
+    if current_doctor.role.value not in _APPT_VIEW_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
     today_start = datetime.combine(now_ist_naive().date(), datetime.min.time())
     window_end = today_start + timedelta(days=15)
 
@@ -644,7 +673,9 @@ def accept_appointment(
         raise HTTPException(status_code=400, detail="This appointment isn't awaiting review")
 
     if appt.requested_reschedule_slot_id:
-        new_slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.requested_reschedule_slot_id).with_for_update().first()
+        new_slot = db.query(DoctorSlot).filter(
+            DoctorSlot.id == appt.requested_reschedule_slot_id, DoctorSlot.hospital_id == appt.hospital_id
+        ).with_for_update().first()
         if not new_slot:
             raise HTTPException(status_code=404, detail="Requested slot no longer exists")
         if new_slot.booked_count >= new_slot.capacity:
@@ -657,7 +688,7 @@ def accept_appointment(
 
         new_slot.booked_count += 1
         appt.slot_id = new_slot.id
-        appt.requested_time = datetime.combine(new_slot.slot_date, datetime.strptime(new_slot.slot_time, "%H:%M").time())
+        appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
 
         # Fee only changes when the reschedule switches doctors — the
         # self-serve mass-reschedule path (same doctor, different slot)
@@ -695,6 +726,13 @@ def accept_appointment(
     appt.status = AppointmentStatus.confirmed
     resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
     db.commit()
+    log_action(
+        db, current_doctor,
+        action="appointment_review_accepted",
+        target_type="appointment",
+        target_id=appt.id,
+        details=f"pending_review -> confirmed, doctor_id {appt.doctor_id}, time {appt.requested_time.isoformat()}, fee Rs.{(appt.fee_amount or 0):.2f}",
+    )
     return {"message": "Appointment accepted"}
 
 
@@ -727,6 +765,13 @@ def decline_appointment(
         appt.status = AppointmentStatus.confirmed
         resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
         db.commit()
+        log_action(
+            db, current_doctor,
+            action="appointment_reschedule_declined",
+            target_type="appointment",
+            target_id=appt.id,
+            details="no-show reschedule request declined, no refund",
+        )
         return {"message": "Reschedule request declined — patient can request a different slot within their 72hr window"}
 
     reason = f"Declined by hospital{': ' + body.reason if body.reason else ''}"
@@ -739,6 +784,13 @@ def decline_appointment(
     appt.status = AppointmentStatus.cancelled
     resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
     db.commit()
+    log_action(
+        db, current_doctor,
+        action="appointment_declined_refunded",
+        target_type="appointment",
+        target_id=appt.id,
+        details=f"pending_review -> cancelled, full refund Rs.{(appt.fee_amount or 0):.2f}. {reason}"[:1500],
+    )
     return {"message": "Appointment declined and fully refunded"}
 
 
@@ -764,6 +816,20 @@ def suggest_new_slot(
 
     old_fee = appt.fee_amount or 0
     old_slot_id = appt.slot_id
+    old_doctor_id = appt.doctor_id
+
+    if body.new_doctor_id:
+        from app.models.doctor import UserRole
+        _nd = db.query(Doctor).filter(
+            Doctor.id == body.new_doctor_id,
+            Doctor.hospital_id == current_doctor.hospital_id,
+            Doctor.is_active == True,  # noqa: E712
+            Doctor.role == UserRole.doctor,
+        ).first()
+        if not _nd:
+            raise HTTPException(status_code=400, detail="Selected doctor is not available in this hospital")
+        if body.new_doctor_id != appt.doctor_id and not body.new_slot_id:
+            raise HTTPException(status_code=400, detail="Pick a slot with the new doctor")
 
     if body.new_slot_id:
         new_slot = db.query(DoctorSlot).filter(
@@ -773,6 +839,11 @@ def suggest_new_slot(
             raise HTTPException(status_code=404, detail="Slot not found")
         if new_slot.booked_count >= new_slot.capacity:
             raise HTTPException(status_code=400, detail="That slot is already full")
+        if body.new_doctor_id and new_slot.doctor_id != body.new_doctor_id:
+            raise HTTPException(status_code=400, detail="That slot belongs to a different doctor")
+        _s_start = datetime.combine(new_slot.slot_date, datetime.strptime(new_slot.slot_time, "%H:%M").time())
+        if _s_start + timedelta(minutes=new_slot.window_minutes or 0) <= now_ist_naive():
+            raise HTTPException(status_code=400, detail="That slot has already passed")
 
         if old_slot_id:
             old_slot = db.query(DoctorSlot).filter(DoctorSlot.id == old_slot_id).with_for_update().first()
@@ -782,7 +853,7 @@ def suggest_new_slot(
         new_slot.booked_count += 1
         appt.slot_id = new_slot.id
         appt.doctor_id = body.new_doctor_id or new_slot.doctor_id
-        appt.requested_time = datetime.combine(new_slot.slot_date, datetime.strptime(new_slot.slot_time, "%H:%M").time())
+        appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
     elif body.new_doctor_id:
         appt.doctor_id = body.new_doctor_id
 
@@ -797,12 +868,24 @@ def suggest_new_slot(
             )
         appt.status = AppointmentStatus.confirmed
     else:
-        # New doctor/slot costs more — patient pays the difference before
-        # this confirms. Reuses the existing mark-paid placeholder flow
-        # rather than inventing a separate partial-payment mechanism.
-        appt.status = AppointmentStatus.booked
-        appt.payment_status = "unpaid"
+        # New doctor/slot costs more: the original payment stays credited and the
+        # difference is collected at check-in (same logic as accept above).
+        appt.reschedule_balance_due = (appt.reschedule_balance_due or 0.0) + fee_delta
+        appt.status = AppointmentStatus.confirmed
 
+    appt.arrived_at = None
+    appt.no_show_detected_at = None
+    appt.no_show_reason = None
+    appt.no_show_reschedule_deadline = None
+    appt.reschedule_kind = None
+    appt.requested_reschedule_slot_id = None
     resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
     db.commit()
+    log_action(
+        db, current_doctor,
+        action="appointment_change_suggested",
+        target_type="appointment",
+        target_id=appt.id,
+        details=f"doctor {old_doctor_id} -> {appt.doctor_id}, fee Rs.{old_fee:.2f} -> Rs.{new_fee:.2f}, balance due Rs.{(appt.reschedule_balance_due or 0):.2f}",
+    )
     return {"message": "Suggestion applied", "fee_delta": fee_delta, "status": appt.status.value}

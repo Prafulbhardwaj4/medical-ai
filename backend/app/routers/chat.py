@@ -282,7 +282,8 @@ def send_as_staff(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     body = (payload.get("message") or "").strip()
-    attachment_filename = payload.get("attachment_filename")
+    _att = _clean_attachment(payload)
+    attachment_filename = _att[0]
     if not body and not attachment_filename:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
@@ -291,9 +292,9 @@ def send_as_staff(
         staff_id=current_doctor.id,
         sender_id=current_doctor.id,
         body=body,
-        attachment_filename=attachment_filename,
-        attachment_name=payload.get("attachment_name"),
-        attachment_type=payload.get("attachment_type"),
+        attachment_filename=_att[0],
+        attachment_name=_att[1],
+        attachment_type=_att[2],
         is_read_by_admin=False,
         is_read_by_staff=True,
         created_at=now_ist_naive()

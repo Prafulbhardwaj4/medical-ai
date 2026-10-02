@@ -16,7 +16,7 @@ from app.models.test_catalog import TestCatalogItem
 from app.models.test_order import TestOrder
 from app.models.checkin import Checkin
 import os
-from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate, PaymentMethodIn, PatientMergeIn
+from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate, PaymentMethodIn, PatientMergeIn, ReasonIn
 from sqlalchemy import or_
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
 from app.utils.timezone import now_ist_naive
@@ -39,6 +39,15 @@ from app.models.patient_allergy import PatientAllergy
 from app.models.radiology_order import RadiologyOrder
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+
+FRONT_DESK_ROLES = ("receptionist", "admin", "sub_admin")
+CLINICAL_FRONT_ROLES = ("receptionist", "admin", "sub_admin", "doctor", "nurse", "assistant")
+
+
+def _require_roles(current_doctor: Doctor, roles) -> None:
+    if current_doctor.role.value not in roles:
+        raise HTTPException(status_code=403, detail="Not authorized for this action")
 
 
 @router.get("/lookup")
@@ -189,6 +198,7 @@ def create_patient(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     hospital_code = hospital.hospital_code if hospital else "GEN"
 
@@ -695,6 +705,7 @@ def requeue_checkin(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
         Checkin.hospital_id == current_doctor.hospital_id,
@@ -841,6 +852,7 @@ def send_to_nurse(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
         Patient.hospital_id == current_doctor.hospital_id
@@ -881,6 +893,7 @@ def send_to_nurse_postconsult(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
         Patient.hospital_id == current_doctor.hospital_id
@@ -1016,6 +1029,7 @@ def send_back_for_vitals(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     """Mid-consultation recheck request — patient re-enters the SAME nurse
     (checkin.nurse_id is untouched) with priority over fresh vitals-pending
     patients, and the consultation stays open (nothing here confirms it)."""
@@ -1131,12 +1145,15 @@ def update_patient(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
         Patient.hospital_id == current_doctor.hospital_id
     ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    _fields = ("name", "phone", "age", "blood_group", "gender", "abha_number", "address")
+    _before = {k: getattr(patient, k) for k in _fields}
     patient.name = payload.name
     patient.phone = payload.phone
     patient.age = payload.age
@@ -1147,12 +1164,17 @@ def update_patient(
     db.commit()
     db.refresh(patient)
 
+    _changes = [f"{k}: {_before[k]!r} -> {getattr(patient, k)!r}" for k in _fields if _before[k] != getattr(patient, k)]
+    if _before["phone"] != patient.phone:
+        _auto_link_portal_profile(db, patient)
+
     log_action(
         db, current_doctor,
         action="patient_updated",
         target_type="patient",
         target_id=patient.id,
-        target_label=f"{patient.name} ({patient.patient_uid})"
+        target_label=f"{patient.name} ({patient.patient_uid})",
+        details="; ".join(_changes)[:1500] or "no field changes"
     )
 
     return patient
@@ -1229,6 +1251,7 @@ def checkin_patient(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
         Patient.hospital_id == current_doctor.hospital_id
@@ -1436,6 +1459,7 @@ def mark_visit_group_paid(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     """Pay for every checkin in a multi-doctor visit in one action (item 7) —
     reception collects one combined amount instead of paying each doctor's
     checkin separately."""
@@ -1447,14 +1471,25 @@ def mark_visit_group_paid(
         raise HTTPException(status_code=404, detail="Visit group not found")
 
     total = 0.0
+    newly_paid = 0
     for c in members:
         if not c.is_paid:
             c.is_paid = True
             c.paid_at = now_ist_naive()
             c.payment_method = body.payment_method
-        total += (c.consultation_fee or 0) + (c.test_fee or 0)
+            newly_paid += 1
+            total += (c.consultation_fee or 0) + (c.test_fee or 0)
+    if newly_paid == 0:
+        raise HTTPException(status_code=400, detail="This visit is already paid")
     db.commit()
-    return {"paid_checkins": len(members), "total_collected": total}
+    log_action(
+        db, current_doctor,
+        action="visit_group_payment_collected",
+        target_type="visit_group",
+        target_id=visit_group_id,
+        details=f"{newly_paid} check-in(s) paid via {body.payment_method}, Rs.{total:.2f}",
+    )
+    return {"paid_checkins": newly_paid, "total_collected": total}
 
 
 @router.patch("/checkin/{checkin_id}/mark-paid")
@@ -1464,12 +1499,15 @@ def mark_checkin_paid(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
         Checkin.hospital_id == current_doctor.hospital_id
     ).first()
     if not checkin:
         raise HTTPException(status_code=404, detail="Check-in not found")
+    if checkin.is_paid:
+        raise HTTPException(status_code=400, detail="This check-in is already marked paid")
 
     checkin.is_paid = True
     checkin.paid_at = now_ist_naive()
@@ -1491,9 +1529,11 @@ def mark_checkin_paid(
 @router.patch("/checkin/{checkin_id}/mark-unpaid")
 def mark_checkin_unpaid(
     checkin_id: int,
+    body: ReasonIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
         Checkin.hospital_id == current_doctor.hospital_id
@@ -1501,12 +1541,24 @@ def mark_checkin_unpaid(
     if not checkin:
         raise HTTPException(status_code=404, detail="Check-in not found")
 
+    if not checkin.is_paid:
+        raise HTTPException(status_code=400, detail="This check-in is not marked paid")
+    if checkin.is_finalized:
+        raise HTTPException(status_code=400, detail="An invoice was already generated for this visit. Issue a credit note / refund instead of marking it unpaid.")
+    _tok = checkin.token_number
+    _started = db.query(Consultation).filter(
+        Consultation.patient_id == checkin.patient_id,
+        or_(Consultation.token_number == _tok, Consultation.token_number.like(f"{_tok}-%")),
+        or_(Consultation.is_voided == False, Consultation.is_voided.is_(None)),  # noqa: E712
+    ).first()
+    if _started:
+        raise HTTPException(status_code=400, detail="The consultation has already started for this visit. Use the refund flow instead of marking it unpaid.")
+
+    _old_method = checkin.payment_method
+    _old_paid_at = checkin.paid_at
     checkin.is_paid = False
     checkin.paid_at = None
     checkin.payment_method = None
-    if checkin.is_finalized:
-        checkin.is_finalized = False
-        checkin.invoice_id = None
     db.commit()
 
     patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
@@ -1516,7 +1568,7 @@ def mark_checkin_unpaid(
         target_type="patient",
         target_id=checkin.patient_id,
         target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),
-        details=f"Token {checkin.token_number} — consultation fee marked unpaid"
+        details=f"Token {checkin.token_number} — consultation fee Rs.{(checkin.consultation_fee or 0):.2f} marked unpaid (was {_old_method}, paid {_old_paid_at}). Reason: {body.reason}"
     )
     return {"is_paid": False}
 
@@ -1524,9 +1576,11 @@ def mark_checkin_unpaid(
 @router.post("/{patient_id}/revert-test-payment")
 def revert_test_payment(
     patient_id: int,
+    body: ReasonIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     todays_checkin = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
         Checkin.hospital_id == current_doctor.hospital_id,
@@ -1555,14 +1609,19 @@ def revert_test_payment(
     if not orders:
         raise HTTPException(status_code=400, detail="No paid tests to revert for today's visit — they may already be in progress at the lab")
 
+    if todays_checkin.is_finalized:
+        raise HTTPException(status_code=400, detail="An invoice was already generated for this visit. Cancel the test and refund it instead of reverting payment.")
+
+    # paid_at is cleared below, so the money drops out of "collected" on its own;
+    # a Refund row here would be subtracted a second time at day-end. The audit
+    # entry (who, why, amount, original method) is the reversal record.
+    _amount = sum((o.price or 0) for o in orders)
+    _methods = ",".join(sorted({o.payment_method or "?" for o in orders}))
     for o in orders:
         o.status = "payment_pending"
         o.paid_at = None
         o.queued_at = None
-
-    if todays_checkin.is_finalized:
-        todays_checkin.is_finalized = False
-        todays_checkin.invoice_id = None
+        o.payment_method = None
 
     db.commit()
 
@@ -1571,7 +1630,8 @@ def revert_test_payment(
         action="test_payment_reverted",
         target_type="patient",
         target_id=patient_id,
-        target_label=f"{len(orders)} test(s) reverted to unpaid"
+        target_label=f"{len(orders)} test(s) reverted to unpaid",
+        details=f"Rs.{_amount:.2f} (was {_methods}). Reason: {body.reason}"
     )
     return {"reverted": len(orders)}
 
@@ -2152,6 +2212,7 @@ def collect_test_payment_anyday(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     """Used from the search-based pending-tasks modal — collects payment for
     included, non-expired payment_pending tests regardless of what day they
     were ordered on."""
@@ -2222,6 +2283,7 @@ def collect_opd_charges(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     today_start, today_end = ist_day_bounds()
 
     charges = db.query(OpdCharge).filter(
@@ -2261,6 +2323,7 @@ def collect_opd_charges_anyday(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     charges = db.query(OpdCharge).filter(
         OpdCharge.patient_id == patient_id,
         OpdCharge.hospital_id == current_doctor.hospital_id,
@@ -2424,6 +2487,7 @@ def toggle_test_order_include(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     order = db.query(TestOrder).filter(
         TestOrder.id == order_id,
         TestOrder.hospital_id == current_doctor.hospital_id
@@ -2445,6 +2509,7 @@ def collect_test_payment(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     today_start, today_end = ist_day_bounds()
 
     voided_consultation_ids = [
@@ -2496,6 +2561,7 @@ def mark_test_order_paid(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     order = db.query(TestOrder).filter(
         TestOrder.id == order_id,
         TestOrder.hospital_id == current_doctor.hospital_id
@@ -2525,6 +2591,52 @@ def mark_test_order_paid(
     )
 
     return {"id": order.id, "status": order.status, "paid_at": order.paid_at.isoformat()}
+
+@router.post("/test-orders/{order_id}/cancel")
+def cancel_test_order(
+    order_id: int,
+    body: ReasonIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Cancel ONE test that has not reached the lab yet. If it was paid, a
+    completed refund record (source_type 'test') is created."""
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
+    order = db.query(TestOrder).filter(
+        TestOrder.id == order_id,
+        TestOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Test order not found")
+    if order.status not in ("payment_pending", "paid"):
+        raise HTTPException(status_code=400, detail="Only tests that have not reached the lab yet can be cancelled")
+
+    refunded = 0.0
+    if order.status == "paid" and (order.price or 0) > 0:
+        _channel = order.payment_method if order.payment_method in ("cash", "card", "upi") else "cash"
+        db.add(Refund(
+            patient_id=order.patient_id, hospital_id=order.hospital_id,
+            source_type="test", source_id=order.id, amount=order.price,
+            channel=_channel, status="completed",
+            reason=f"Test cancelled: {order.test_name}. {body.reason}"[:250],
+            processed_by=current_doctor.id,
+        ))
+        refunded = order.price
+
+    order.status = "cancelled"
+    order.queued_at = None
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="test_order_cancelled",
+        target_type="patient",
+        target_id=order.patient_id,
+        target_label=order.test_name,
+        details=f"Refund Rs.{refunded:.2f}. Reason: {body.reason}"
+    )
+    return {"cancelled": True, "refunded": refunded}
+
 
 @router.get("/{patient_id}/test-orders")
 def get_patient_test_orders(
