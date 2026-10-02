@@ -63,7 +63,10 @@ class TestOrder(Base):
     collected_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)  # now: when the raw result was entered ("result_entered"), not final release
     completed_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # now: who entered the raw result
-    result_data = Column(Text, nullable=True)  # JSON: {param_name: value}
+    result_data = Column(Text, nullable=True)
+    amended_at = Column(DateTime, nullable=True)       # set when a RELEASED result is corrected
+    amended_by = Column(Integer, nullable=True)        # doctors.id of the person who corrected it
+    amendment_reason = Column(Text, nullable=True)  # JSON: {param_name: value}
     created_at = Column(DateTime, default=now_ist_naive)
 
     # Verification/release gate (Phase 2) — status flow is now

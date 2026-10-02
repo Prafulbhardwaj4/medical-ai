@@ -15,6 +15,18 @@ class PatientCreate(BaseModel):
     name: str
     phone: str
     age: int
+    date_of_birth: Optional[date] = None
+
+    @validator("date_of_birth")
+    def validate_dob(cls, v):
+        if v is None:
+            return v
+        today = date.today()
+        if v > today:
+            raise ValueError("Date of birth can't be in the future")
+        if (today - v).days > 365 * 120:
+            raise ValueError("Date of birth looks wrong")
+        return v
     blood_group: Optional[str] = None
     gender: str
     abha_number: Optional[str] = None
@@ -88,6 +100,7 @@ class PatientOut(BaseModel):
     name: str
     phone: str
     age: int
+    date_of_birth: Optional[date] = None
     blood_group: Optional[str] = None
     gender: str
     abha_number: Optional[str] = None
@@ -119,14 +132,14 @@ class PatientSummary(BaseModel):
 
 class AdditionalDoctorIn(BaseModel):
     doctor_id: int
-    consultation_fee: Optional[float] = None  # reception can override per doctor; falls back to that doctor's own default, same as the primary
+    consultation_fee: Optional[float] = Field(default=None, ge=0, le=100000)  # reception can override per doctor; falls back to that doctor's own default, same as the primary
 
 class CheckinCreate(BaseModel):
     issue_category: str
     doctor_id: int
     send_to_nurse: Optional[bool] = True
-    consultation_fee: Optional[float] = None
-    test_fee: Optional[float] = None
+    consultation_fee: Optional[float] = Field(default=None, ge=0, le=100000)
+    test_fee: Optional[float] = Field(default=None, ge=0, le=1000000)
     force: Optional[bool] = False  # bypass the already-admitted warning once reception has confirmed
     additional_doctors: Optional[List[AdditionalDoctorIn]] = None  # item 7 — one visit, multiple doctors, one Add Doctor step before Generate Token
 

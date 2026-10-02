@@ -1548,19 +1548,31 @@ def create_hospital_jwt(
     )
     return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type, "billing_enabled": hospital.billing_enabled}
 
+class CreateAdminIn(BaseModel):
+    hospital_id: int
+    name: str = Field(max_length=100)
+    email: str = Field(max_length=150)
+    phone: str = Field(max_length=20)
+    specialization: str = Field(default="Hospital Admin", max_length=100)
+    title: str = Field(default="Dr.", max_length=20)
+
+
 @router.post("/create-admin-jwt", status_code=201)
 def create_admin_jwt(
-    hospital_id: int,
-    name: str,
-    email: str,
-    phone: str,
-    specialization: str,
-    title: str = "Dr.",
+    body: CreateAdminIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     if current_doctor.role.value != "super_admin":
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Personal data comes in the JSON body, never the URL, so it stays out of access logs.
+    hospital_id = body.hospital_id
+    name = body.name.strip()
+    email = body.email.strip()
+    phone = body.phone.strip()
+    specialization = body.specialization.strip() or "Hospital Admin"
+    title = body.title
 
     validate_fields(name, email, phone)
 

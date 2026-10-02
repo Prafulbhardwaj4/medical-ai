@@ -1,6 +1,9 @@
 from datetime import datetime, date
 from typing import Optional, List
-from pydantic import BaseModel, Field
+import re as _re
+from pydantic import BaseModel, Field, validator
+
+_HHMM = _re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 class InviteTokenInfo(BaseModel):
@@ -190,16 +193,50 @@ class FamilyBookingConfirmIn(BaseModel):
 
 class SaveTemplateIn(BaseModel):
     doctor_id: Optional[int] = None  # required if caller is admin/sub_admin/super_admin/receptionist
-    weekdays: List[int]              # 0=Monday ... 6=Sunday
-    morning_times: List[str] = []
-    afternoon_times: List[str] = []
-    evening_times: List[str] = []
+    weekdays: List[int] = Field(min_length=1, max_length=7)   # 0=Monday ... 6=Sunday
+    morning_times: List[str] = Field(default=[], max_length=48)
+    afternoon_times: List[str] = Field(default=[], max_length=48)
+    evening_times: List[str] = Field(default=[], max_length=48)
     custom_windows: dict = {}        # {"HH:MM": duration_minutes} for times added via "Add Custom Time"
     capacity_mode: str = "same"      # "same" | "per_period"
-    capacity_same: int = 1
-    capacity_morning: int = 1
-    capacity_afternoon: int = 1
-    capacity_evening: int = 1
+    capacity_same: int = Field(default=1, ge=1, le=200)
+    capacity_morning: int = Field(default=1, ge=1, le=200)
+    capacity_afternoon: int = Field(default=1, ge=1, le=200)
+    capacity_evening: int = Field(default=1, ge=1, le=200)
+
+    @validator("weekdays")
+    def _check_weekdays(cls, v):
+        if any((not isinstance(d, int)) or d < 0 or d > 6 for d in v):
+            raise ValueError("Weekdays must be numbers from 0 (Monday) to 6 (Sunday)")
+        return sorted(set(v))
+
+    @validator("morning_times", "afternoon_times", "evening_times")
+    def _check_times(cls, v):
+        for t in v:
+            if not _HHMM.match(t or ""):
+                raise ValueError(f"'{t}' is not a valid time (use HH:MM, 24-hour)")
+        return v
+
+    @validator("custom_windows")
+    def _check_windows(cls, v):
+        clean = {}
+        for k, d in (v or {}).items():
+            if not _HHMM.match(str(k)):
+                raise ValueError(f"'{k}' is not a valid time (use HH:MM, 24-hour)")
+            try:
+                mins = int(d)
+            except (TypeError, ValueError):
+                raise ValueError("Custom slot length must be a number of minutes")
+            if mins < 5 or mins > 480:
+                raise ValueError("Custom slot length must be between 5 and 480 minutes")
+            clean[k] = mins
+        return clean
+
+    @validator("capacity_mode")
+    def _check_mode(cls, v):
+        if v not in ("same", "per_period"):
+            raise ValueError("capacity_mode must be 'same' or 'per_period'")
+        return v
 
 
 class TemplateOut(BaseModel):

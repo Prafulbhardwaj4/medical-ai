@@ -234,7 +234,8 @@ def create_patient(
         url_token=generate_url_token(db),
         name=payload.name,
         phone=payload.phone,
-        age=payload.age,
+        age=_age_from_dob(payload.date_of_birth, payload.age),
+        date_of_birth=payload.date_of_birth,
         blood_group=payload.blood_group,
         gender=payload.gender,
         abha_number=payload.abha_number,
@@ -1130,7 +1131,7 @@ def get_hospital_medicines(
         for m in items
     ]
 
-@router.get("/{patient_id}", response_model=PatientOut)
+@router.get("/{patient_id:int}", response_model=PatientOut)
 def get_patient(
     patient_id: int,
     db: Session = Depends(get_db),
@@ -1143,6 +1144,15 @@ def get_patient(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     return patient
+
+def _age_from_dob(dob, fallback_age):
+    """Whole years from date of birth (IST today); falls back to the typed age."""
+    if not dob:
+        return fallback_age
+    from app.utils.timezone import ist_today
+    t = ist_today()
+    return max(0, t.year - dob.year - ((t.month, t.day) < (dob.month, dob.day)))
+
 
 @router.put("/{patient_id}", response_model=PatientOut)
 def update_patient(
@@ -1162,7 +1172,8 @@ def update_patient(
     _before = {k: getattr(patient, k) for k in _fields}
     patient.name = payload.name
     patient.phone = payload.phone
-    patient.age = payload.age
+    patient.age = _age_from_dob(payload.date_of_birth, payload.age)
+    patient.date_of_birth = payload.date_of_birth
     patient.blood_group = payload.blood_group
     patient.gender = payload.gender
     patient.abha_number = payload.abha_number
@@ -1285,10 +1296,11 @@ def checkin_patient(
     doctor = db.query(Doctor).filter(
         Doctor.id == payload.doctor_id,
         Doctor.hospital_id == current_doctor.hospital_id,
+        Doctor.is_active == True,  # noqa: E712
         Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
     ).first()
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Doctor not found or no longer active")
 
     nurse = None
     if payload.send_to_nurse:
@@ -1307,11 +1319,15 @@ def checkin_patient(
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
-    consultation_fee = payload.consultation_fee
-    if consultation_fee is None:
-        consultation_fee = doctor.consultation_fee
-    if consultation_fee is None and hospital:
-        consultation_fee = hospital.default_consultation_fee
+    _standard_fee = doctor.consultation_fee
+    if _standard_fee is None and hospital:
+        _standard_fee = hospital.default_consultation_fee
+    consultation_fee = payload.consultation_fee if payload.consultation_fee is not None else _standard_fee
+    _override_note = ""
+    if payload.consultation_fee is not None and payload.consultation_fee != _standard_fee:
+        _override_note += f" · consultation fee OVERRIDDEN to Rs.{payload.consultation_fee:.2f} (standard Rs.{(_standard_fee or 0):.2f})"
+    if payload.test_fee:
+        _override_note += f" · test fee Rs.{payload.test_fee:.2f} entered at check-in"
 
     # generate_token_number's check-then-generate isn't airtight under real
     # concurrency — the DB's unique constraint on token_number is the actual
@@ -1356,7 +1372,7 @@ def checkin_patient(
         target_type="patient",
         target_id=patient.id,
         target_label=f"{patient.name} ({patient.patient_uid})",
-        details=f"Token {token} → {doctor.title} {doctor.name} ({payload.issue_category})" + (
+        details=f"Token {token} → {doctor.title} {doctor.name} ({payload.issue_category})" + _override_note + (
             " · vitals reused from within the last 4 hours" if reused_vitals else
             (f" · sent to {nurse.title} {nurse.name} for vitals" if nurse else "")
         )
@@ -1369,6 +1385,7 @@ def checkin_patient(
             extra_doctor = db.query(Doctor).filter(
                 Doctor.id == extra.doctor_id,
                 Doctor.hospital_id == current_doctor.hospital_id,
+                Doctor.is_active == True,  # noqa: E712
                 Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
             ).first()
             if not extra_doctor or extra_doctor.id == doctor.id:
@@ -1413,7 +1430,7 @@ def checkin_patient(
                 except IntegrityError:
                     db.rollback()
                     if attempt == max_token_attempts - 1:
-                        continue
+                        raise HTTPException(status_code=500, detail="Could not issue the additional doctor's token - please try again")
                     suffix_n += 100  # collision on the suffixed token — jump the suffix rather than issuing an unrelated token number
                     extra_token = f"{token}-{suffix_n}"
             db.refresh(extra_checkin)

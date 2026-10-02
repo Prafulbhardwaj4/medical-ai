@@ -90,7 +90,11 @@ def login(request: Request, body: LoginIn, db: Session = Depends(get_db)):
         _login_throttle.record_failure(_phone)
         raise HTTPException(status_code=401, detail="Invalid phone number or password")
     if not account.is_active:
-        raise HTTPException(status_code=403, detail="This account has been deactivated")
+        # They just proved they own the account (correct password + captcha), and
+        # self-deactivation is the only way an account gets here - welcome them back
+        # instead of leaving the phone number locked forever.
+        account.is_active = True
+        db.commit()
 
     _login_throttle.reset(_phone)
     return LoginResultOut(
@@ -228,6 +232,7 @@ def deactivate_account(
     if not verify_password(body.password, account.password_hash):
         raise HTTPException(status_code=401, detail="Password is incorrect")
     account.is_active = False
+    account.password_changed_at = datetime.utcnow()  # every token issued before now is rejected
     db.commit()
     return {"message": "Account deactivated"}
 

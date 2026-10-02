@@ -1023,6 +1023,13 @@ def generate_test_report_pdf(
         if getattr(order, "sample_condition_caveat", None):
             elements.append(Paragraph(f"⚠ Sample condition note: {order.sample_condition_caveat} — reported as-is per irreplaceable-sample policy.", caveat_style))
 
+    if getattr(order, "amended_at", None):
+        elements.append(Paragraph(
+            f"<b>AMENDED REPORT</b> - corrected on {order.amended_at.strftime('%d %b %Y, %I:%M %p')}. "
+            f"Reason: {(order.amendment_reason or '').replace('<', '&lt;').replace('>', '&gt;')}",
+            body_style))
+        elements.append(Spacer(1, 3*mm))
+
     if notes:
         elements.append(Paragraph("Notes", section_style))
         elements.append(Paragraph(notes, body_style))
@@ -1192,6 +1199,12 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
         ] + row_styles))
         elements.append(result_table)
 
+        if test.get("amended_at"):
+            elements.append(Spacer(1, 2*mm))
+            _r = (test.get("amendment_reason") or "").replace("<", "&lt;").replace(">", "&gt;")
+            elements.append(Paragraph(
+                f"<b>AMENDED</b> - corrected on {test['amended_at'].strftime('%d %b %Y, %I:%M %p')}. Reason: {_r}",
+                body_style))
         if test.get("notes"):
             elements.append(Spacer(1, 2*mm))
             elements.append(Paragraph(f"<b>Notes:</b> {test['notes']}", body_style))

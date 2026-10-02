@@ -565,7 +565,7 @@ def sync_idle_staff_notifications_for_hospital(db: Session, hospital_id: int):
     from app.models.attendance import AttendanceRecord
     from app.models.doctor import Doctor
 
-    today = date.today()
+    today = ist_today()
     staff_ids = [
         r[0] for r in db.query(AttendanceRecord.doctor_id).filter(
             AttendanceRecord.hospital_id == hospital_id,

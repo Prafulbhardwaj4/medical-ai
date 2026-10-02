@@ -1840,7 +1840,7 @@
       const review = [];
       const payloads = [];
       const skipped = [];
-      const NUM_RE = /^-?\d+(\.\d+)?$/;
+      const NUM_RE = /^(<=|>=|<|>)?\s*-?(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/;
 
       for (const test of bulkResultOrders) {
         if (test.mode === 'panel') {
@@ -1991,7 +1991,7 @@
     async function saveReportEdit() {
       const errEl = document.getElementById('edit-report-err');
       errEl.textContent = '';
-      const NUM_RE = /^-?\d+(\.\d+)?$/;
+      const NUM_RE = /^(<=|>=|<|>)?\s*-?(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/;
       const results = {};
 
       if (editReportMode === 'panel') {
@@ -2008,11 +2008,14 @@
         results.value = val;
       }
 
+      const amendReason = await promptModal("Why are you correcting this released report? (printed on the report as an amendment)", "");
+      if (amendReason === null) return;
+      if (amendReason.trim().length < 3) { errEl.textContent = "A reason is required to correct a released report."; return; }
       const btn = document.getElementById('btn-save-report-edit');
       btn.disabled = true;
       btn.textContent = 'Saving…';
       try {
-        await api("POST", `/lab/orders/${editReportOrderId}/result`, { results });
+        await api("POST", `/lab/orders/${editReportOrderId}/result`, { results, reason: amendReason.trim() });
         toast('Report corrected.', 'success');
         closeEditReportModal();
       } catch (e) {

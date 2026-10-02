@@ -567,6 +567,46 @@ function ensureDeactivateAccountModal() {
   document.body.appendChild(wrap.firstElementChild);
 }
 
+function openChangePassword() {
+  closeProfileMenu();
+  const overlay = _createOverlayModal("Change password", 420);
+  const body = overlay.querySelector(".generic-modal-body");
+  body.innerHTML = `
+    <input type="password" class="form-control" id="cp-old" placeholder="Current password" autocomplete="current-password" style="margin-bottom:10px" />
+    <input type="password" class="form-control" id="cp-new" placeholder="New password (8+ characters, 1 number, 1 capital)" autocomplete="new-password" style="margin-bottom:10px" />
+    <input type="password" class="form-control" id="cp-new2" placeholder="Repeat new password" autocomplete="new-password" style="margin-bottom:8px" />
+    <div id="cp-err" style="color:#c0392b;font-size:13px;min-height:18px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline btn-sm" id="cp-cancel">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="cp-save">Change password</button>
+    </div>`;
+  const errEl = body.querySelector("#cp-err");
+  body.querySelector("#cp-cancel").addEventListener("click", () => overlay.remove());
+  body.querySelector("#cp-save").addEventListener("click", async () => {
+    const oldP = body.querySelector("#cp-old").value;
+    const newP = body.querySelector("#cp-new").value;
+    const newP2 = body.querySelector("#cp-new2").value;
+    errEl.textContent = "";
+    if (!oldP || !newP) { errEl.textContent = "Fill in all the fields."; return; }
+    if (newP.length < 8 || !/\d/.test(newP) || !/[A-Z]/.test(newP)) {
+      errEl.textContent = "New password needs 8+ characters, 1 number and 1 capital letter."; return;
+    }
+    if (newP !== newP2) { errEl.textContent = "The two new passwords don't match."; return; }
+    const btn = body.querySelector("#cp-save");
+    btn.disabled = true;
+    try {
+      const data = await api("POST", "/portal/auth/change-password", { old_password: oldP, new_password: newP });
+      if (data && data.access_token) saveSession(data.access_token, data.doctor);
+      overlay.remove();
+      if (typeof toast === "function") toast("Password changed.", "success");
+    } catch (e) {
+      errEl.textContent = e.message;
+      btn.disabled = false;
+    }
+  });
+  body.querySelector("#cp-old").focus();
+}
+
 function confirmDeactivateAccount() {
   closeProfileMenu();
   ensureDeactivateAccountModal();

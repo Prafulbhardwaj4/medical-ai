@@ -2390,9 +2390,11 @@
         err.textContent = 'Enter a valid 10-digit phone number.'; return;
       }
 
-      const params = new URLSearchParams({ hospital_id: currentHospitalId, name, email, phone: "+91" + phone, specialization: specialization || "Hospital Admin" });
       try {
-        const created = await api('POST', `/admin/create-admin-jwt?${params.toString()}`);
+        const created = await api('POST', '/admin/create-admin-jwt', {
+          hospital_id: currentHospitalId, name, email, phone: "+91" + phone,
+          specialization: specialization || "Hospital Admin"
+        });
         toast('Admin created.', 'success');
         closeAdminModal();
         openDetail(currentHospitalId);

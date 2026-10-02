@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from datetime import datetime, timedelta
@@ -907,6 +907,56 @@ def _clamp_monthly_range(from_month: str, to_month: str):
     if from_d > to_d:
         from_d = to_d
     return from_d, to_d
+
+def _csv_response(rows, filename):
+    import csv, io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    for r in rows:
+        # Guard against spreadsheet formula injection from text cells.
+        w.writerow([("'" + c) if isinstance(c, str) and c[:1] in ("=", "+", "-", "@") else c for c in r])
+    return Response(
+        content="\ufeff" + buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/revenue-history/daily/export")
+def export_revenue_history_daily(
+    from_date: str = None,
+    to_date: str = None,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    data = revenue_history_daily(from_date, to_date, db, current_doctor)
+    rows = [["Date", "Billed (pre-tax, from invoices)", "Invoices"]]
+    rows += [[d["date"], d["total"], d["invoice_count"]] for d in data["days"]]
+    return _csv_response(rows, f"billed-{data['from_date']}-to-{data['to_date']}.csv")
+
+
+@router.get("/day-end-summary/export")
+def export_day_end_summary(
+    date: str = None,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    data = day_end_summary(date, db, current_doctor)
+    rows = [["Date", "Section", "Item", "Amount (Rs)"]]
+    for mode, cats in (data.get("by_mode") or {}).items():
+        for cat, amt in (cats or {}).items():
+            rows.append([data["date"], f"Collected - {mode}", cat, amt])
+    for ch, amt in (data.get("refunds_by_channel") or {}).items():
+        rows.append([data["date"], "Refunds paid back", ch, -abs(amt)])
+    for mode, amt in (data.get("system_totals") or {}).items():
+        rows.append([data["date"], "Net system total (after refunds)", mode, amt])
+    cl = data.get("close")
+    if cl:
+        rows.append([data["date"], "Counted at close", "cash", cl.get("counted_cash")])
+        rows.append([data["date"], "Counted at close", "card", cl.get("counted_card")])
+        rows.append([data["date"], "Counted at close", "upi", cl.get("counted_upi")])
+    return _csv_response(rows, f"day-end-{data['date']}.csv")
+
 
 @router.get("/revenue-history/monthly")
 def revenue_history_monthly(

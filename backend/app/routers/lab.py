@@ -110,6 +110,45 @@ def generate_accession_number(db: Session, hospital_id: int, hospital_code: str)
     raise HTTPException(status_code=500, detail="Could not generate a sample number. Please try again.")
 
 
+def _parse_lab_value(raw):
+    """'12.5' -> ('', 12.5); '<0.5' -> ('<', 0.5); '>1,000' -> ('>', 1000.0); text -> None."""
+    import re
+    m = re.fullmatch(r"\s*(<=|>=|<|>)?\s*(-?\d[\d,]*\.?\d*)\s*", str(raw if raw is not None else ""))
+    if not m:
+        return None
+    try:
+        return (m.group(1) or "", float(m.group(2).replace(",", "")))
+    except ValueError:
+        return None
+
+
+def _critical_sides(cmp_, val, lo, hi):
+    """Which critical limits a comparator-style value definitely crosses."""
+    out = []
+    if lo is not None:
+        if (cmp_ == "" and val < lo) or (cmp_ == "<" and val <= lo) or (cmp_ == "<=" and val < lo):
+            out.append("low")
+    if hi is not None:
+        if (cmp_ == "" and val > hi) or (cmp_ == ">" and val >= hi) or (cmp_ == ">=" and val > hi):
+            out.append("high")
+    return out
+
+
+def _pick_range(gender, male_r, female_r):
+    """Reference range for the patient's sex. If sex isn't male/female, only show a
+    range when both sexes share it; otherwise say it's unavailable (no silent female default)."""
+    g = (gender or "").strip().lower()
+    male_r = (male_r or "").strip()
+    female_r = (female_r or "").strip()
+    if g == "male":
+        return male_r or female_r
+    if g == "female":
+        return female_r or male_r
+    if male_r and male_r == female_r:
+        return male_r
+    return "Range not available (patient sex not recorded)" if (male_r or female_r) else ""
+
+
 def _check_critical_breach(db: Session, order: TestOrder, results: dict) -> list:
     """Compares entered value(s) against the catalog's configured critical
     thresholds. Panels are checked per-parameter (keyed by parameter name,
@@ -132,26 +171,26 @@ def _check_critical_breach(db: Session, order: TestOrder, results: dict) -> list
             p = param_by_name.get(name)
             if not p or (p.critical_low is None and p.critical_high is None):
                 continue
-            try:
-                val = float(raw_val)
-            except (TypeError, ValueError):
+            parsed = _parse_lab_value(raw_val)
+            if parsed is None:
                 continue
-            if p.critical_low is not None and val < p.critical_low:
-                breaches.append(f"{name} {val} (critical low — threshold <{p.critical_low})")
-            if p.critical_high is not None and val > p.critical_high:
-                breaches.append(f"{name} {val} (critical high — threshold >{p.critical_high})")
+            cmp_, val = parsed
+            for side in _critical_sides(cmp_, val, p.critical_low, p.critical_high):
+                if side == "low":
+                    breaches.append(f"{name} {cmp_}{val} (critical low — threshold <{p.critical_low})")
+                else:
+                    breaches.append(f"{name} {cmp_}{val} (critical high — threshold >{p.critical_high})")
     else:
         if test.critical_low is not None or test.critical_high is not None:
             raw_val = (results or {}).get("value")
-            try:
-                val = float(raw_val)
-            except (TypeError, ValueError):
-                val = None
-            if val is not None:
-                if test.critical_low is not None and val < test.critical_low:
-                    breaches.append(f"{test.name} {val} (critical low — threshold <{test.critical_low})")
-                if test.critical_high is not None and val > test.critical_high:
-                    breaches.append(f"{test.name} {val} (critical high — threshold >{test.critical_high})")
+            parsed = _parse_lab_value(raw_val)
+            if parsed is not None:
+                cmp_, val = parsed
+                for side in _critical_sides(cmp_, val, test.critical_low, test.critical_high):
+                    if side == "low":
+                        breaches.append(f"{test.name} {cmp_}{val} (critical low — threshold <{test.critical_low})")
+                    else:
+                        breaches.append(f"{test.name} {cmp_}{val} (critical high — threshold >{test.critical_high})")
 
     return breaches
 
@@ -219,6 +258,7 @@ class VerifyReleaseIn(BaseModel):
 
 class ResultIn(BaseModel):
     results: dict
+    reason: Optional[str] = None  # required when correcting an already-released report
 
 
 def _escalate_unacknowledged_critical_results(db: Session, hospital_id: int) -> None:
@@ -1089,8 +1129,7 @@ def _build_result_snapshot(db: Session, order: TestOrder, patient) -> str:
     is_male = (getattr(patient, "gender", "") or "").lower() == "male"
 
     def _rng(o):
-        return ((o.reference_range_male if is_male else o.reference_range_female)
-                or o.reference_range_male or o.reference_range_female) or ""
+        return _pick_range(getattr(patient, "gender", ""), o.reference_range_male, o.reference_range_female)
 
     item = db.query(TestCatalogItem).filter(TestCatalogItem.id == order.test_id).first() if order.test_id else None
     if item and item.is_panel:
@@ -1136,8 +1175,15 @@ def save_order_result(
 
     was_already_completed = order.status == "verified_released"
     changed_fields = [k for k in payload.results if old_results.get(k) != payload.results.get(k)]
+    _amend_reason = (payload.reason or "").strip()
+    if was_already_completed and changed_fields and len(_amend_reason) < 3:
+        raise HTTPException(status_code=400, detail="Please give a reason for correcting a released report")
 
     order.result_data = json.dumps(payload.results)
+    if was_already_completed and changed_fields:
+        order.amended_at = now_ist_naive()
+        order.amended_by = current_doctor.id
+        order.amendment_reason = _amend_reason[:300]
     if not order.result_snapshot:
         _pt = db.query(Patient).filter(Patient.id == order.patient_id).first()
         order.result_snapshot = _build_result_snapshot(db, order, _pt)
@@ -1435,8 +1481,8 @@ def get_patient_reports(
                 # Fall back to whichever gender's range is actually filled
                 # in — a range entered under just one gender shouldn't read
                 # as "no range set" for a patient of the other gender.
-                gender_range = (p.reference_range_male if is_male else p.reference_range_female) or ""
-                fallback_range = p.reference_range_female if is_male else p.reference_range_male
+                gender_range = _pick_range(patient.gender, p.reference_range_male, p.reference_range_female)
+                fallback_range = ""
                 rows.append({
                     "name": p.name,
                     "value": raw_results.get(p.name, ""),
@@ -1444,8 +1490,8 @@ def get_patient_reports(
                     "range": gender_range or fallback_range or "",
                 })
         elif raw_results:
-            gender_range = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) if catalog_item else ""
-            fallback_range = (catalog_item.reference_range_female if is_male else catalog_item.reference_range_male) if catalog_item else ""
+            gender_range = _pick_range(patient.gender, catalog_item.reference_range_male, catalog_item.reference_range_female) if catalog_item else ""
+            fallback_range = ""
             rows.append({
                 "name": o.test_name,
                 "value": raw_results.get("value", ""),
@@ -1612,14 +1658,14 @@ def get_combined_test_report(
             rows = [{
                 "name": p.name,
                 "unit": p.unit or "",
-                "range": ((p.reference_range_male if is_male else p.reference_range_female) or p.reference_range_male or p.reference_range_female) or "",
+                "range": _pick_range(patient.gender, p.reference_range_male, p.reference_range_female),
                 "value": result_data.get(p.name, "")
             } for p in params if result_data.get(p.name)]  # untested subtests are excluded from the final report entirely
         else:
             range_str = ""
             unit = ""
             if catalog_item:
-                range_str = ((catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) or catalog_item.reference_range_male or catalog_item.reference_range_female) or ""
+                range_str = _pick_range(patient.gender, catalog_item.reference_range_male, catalog_item.reference_range_female)
                 unit = catalog_item.unit or ""
             rows = [{
                 "name": order.test_name,
@@ -1632,6 +1678,8 @@ def get_combined_test_report(
             "test_name": order.test_name,
             "rows": rows,
             "notes": result_data.get("notes", ""),
+            "amended_at": order.amended_at,
+            "amendment_reason": order.amendment_reason,
             "fasting_confirmed": order.fasting_confirmed,
             "drawn_from_iv_line": order.drawn_from_iv_line,
             "sample_condition_caveat": order.sample_condition_caveat,
