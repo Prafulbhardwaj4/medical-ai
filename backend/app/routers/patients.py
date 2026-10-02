@@ -36,6 +36,8 @@ from app.models.patient_merge_request import PatientMergeRequest
 from app.models.portal import PatientProfileLink, InviteStatus
 from app.schemas.patient import MergeRequestIn, MergeConfirmIn, PatientAllergyIn
 from app.models.patient_allergy import PatientAllergy
+from app.models.credit_debit_note import CreditDebitNote
+from app.models.cross_hospital_referral import CrossHospitalReferral
 from app.models.radiology_order import RadiologyOrder
 
 router = APIRouter(prefix="/patients", tags=["patients"])
@@ -332,6 +334,10 @@ def merge_duplicate_patients(
     otherwise)."""
     if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    raise HTTPException(
+        status_code=410,
+        detail="This one-step merge has been retired. Flag the duplicate for review, confirm by phone, then an admin executes it."
+    )
     if not body.phone_confirmed:
         raise HTTPException(status_code=400, detail="Please confirm this with the patient by phone before merging")
     if body.primary_patient_id == body.duplicate_patient_id:
@@ -2920,8 +2926,11 @@ def execute_merge_request(request_id: int, db: Session = Depends(get_db), curren
         raise HTTPException(status_code=400, detail="Cannot execute a merge while either patient has an active admission")
 
     # Straightforward repoints — no uniqueness constraints on patient_id in any of these.
-    for model in (Admission, AdmissionReferral, Checkin, Consultation, VisitFeedback, Invoice, MedicineOrder, OpdCharge, OpdReferral, Refund, TestOrder, InviteStatus):
+    for model in (Admission, AdmissionReferral, Checkin, Consultation, VisitFeedback, Invoice, MedicineOrder, OpdCharge, OpdReferral, Refund, TestOrder, InviteStatus, PatientAllergy, CreditDebitNote):
         db.query(model).filter(model.patient_id == duplicate_id).update({model.patient_id: primary_id}, synchronize_session=False)
+    db.query(CrossHospitalReferral).filter(CrossHospitalReferral.origin_patient_id == duplicate_id).update(
+        {CrossHospitalReferral.origin_patient_id: primary_id}, synchronize_session=False
+    )
 
     # patient_profile_links has a unique constraint on patient_id — only
     # repoint if the primary doesn't already have its own portal link;

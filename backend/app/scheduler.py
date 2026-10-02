@@ -87,6 +87,35 @@ def run_midnight_close_for_all_hospitals():
         db.close()
 
 
+def run_lab_escalation_tick():
+    """Idempotent: critical-result escalation and uncollected IPD-sample pings for
+    every active hospital, so they fire after hours too (not only when someone loads the lab queue)."""
+    from app.routers.lab import _escalate_unacknowledged_critical_results, _escalate_uncollected_admission_samples
+
+    db = SessionLocal()
+    try:
+        hospital_ids = [h.id for h in db.query(Hospital.id).filter(Hospital.is_active == True).all()]  # noqa: E712
+        for hospital_id in hospital_ids:
+            try:
+                _escalate_unacknowledged_critical_results(db, hospital_id)
+                _escalate_uncollected_admission_samples(db, hospital_id)
+            except Exception as e:
+                db.rollback()
+                logger.warning(f"Lab escalation tick failed for hospital {hospital_id}: {e}")
+    finally:
+        db.close()
+
+
+async def lab_escalation_loop():
+    while True:
+        try:
+            await asyncio.sleep(120)
+            await asyncio.get_running_loop().run_in_executor(None, run_lab_escalation_tick)
+        except Exception as e:
+            logger.warning(f"Lab escalation loop error: {e}")
+            await asyncio.sleep(60)
+
+
 async def midnight_close_loop():
     while True:
         try:

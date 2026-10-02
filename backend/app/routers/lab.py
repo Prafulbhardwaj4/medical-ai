@@ -95,15 +95,19 @@ def generate_accession_number(db: Session, hospital_id: int, hospital_code: str)
     today = ist_today()
     prefix = hospital_code.replace("-", "")[:4].upper()
     date_part = today.strftime("%d%m%y")
-    while True:
-        count = db.query(TestOrder).filter(
-            TestOrder.hospital_id == hospital_id,
-            TestOrder.accessioned_at.isnot(None),
-            TestOrder.accessioned_at >= datetime.combine(today, datetime.min.time()),
-        ).count() + 1
+    count = db.query(TestOrder).filter(
+        TestOrder.hospital_id == hospital_id,
+        TestOrder.accessioned_at.isnot(None),
+        TestOrder.accessioned_at >= datetime.combine(today, datetime.min.time()),
+    ).count() + 1
+    # Uniqueness is checked platform-wide (two hospitals can share a 4-letter prefix),
+    # so on a collision move the counter forward instead of retrying the same number.
+    for _ in range(500):
         number = f"ULR-{prefix}-{date_part}-{count:04d}"
         if not db.query(TestOrder).filter(TestOrder.accession_number == number).first():
             return number
+        count += 1
+    raise HTTPException(status_code=500, detail="Could not generate a sample number. Please try again.")
 
 
 def _check_critical_breach(db: Session, order: TestOrder, results: dict) -> list:
@@ -218,8 +222,8 @@ class ResultIn(BaseModel):
 
 
 def _escalate_unacknowledged_critical_results(db: Session, hospital_id: int) -> None:
-    """No background scheduler in this codebase — same lazy-sweep pattern
-    used for online-booking review deadlines. First escalates to
+    """Runs from scheduler.lab_escalation_loop every 2 minutes (and still on queue load).
+    First escalates to
     nurse/ward coverage if the ordering doctor hasn't acknowledged within
     LAB_CRITICAL_ACK_MINUTES, then to admin directly if still unacknowledged
     LAB_CRITICAL_ESCALATION_GRACE_MINUTES after that."""
@@ -925,6 +929,17 @@ def update_order_status(
         raise HTTPException(status_code=404, detail="Test order not found")
     _require_hiv_access(db, order, current_doctor)
 
+    _ALLOWED_NEXT = {
+        "paid": {"sample_collected"},
+        "sample_collected": {"processing", "result_entered"},
+        "processing": {"result_entered"},
+    }
+    if status not in _ALLOWED_NEXT.get(order.status, set()):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Can't move this test from '{order.status}' to '{status}'. Refresh the queue to see its current state."
+        )
+
     if status == "result_entered" and not order.result_data:
         raise HTTPException(status_code=400, detail="Save the test results before marking this order's entry complete")
 
@@ -1069,6 +1084,26 @@ def get_order_current_result(
     }
 
 
+def _build_result_snapshot(db: Session, order: TestOrder, patient) -> str:
+    """Freeze parameter names, units and the patient's reference range as of now."""
+    is_male = (getattr(patient, "gender", "") or "").lower() == "male"
+
+    def _rng(o):
+        return ((o.reference_range_male if is_male else o.reference_range_female)
+                or o.reference_range_male or o.reference_range_female) or ""
+
+    item = db.query(TestCatalogItem).filter(TestCatalogItem.id == order.test_id).first() if order.test_id else None
+    if item and item.is_panel:
+        params = db.query(TestCatalogParameter).filter(
+            TestCatalogParameter.test_catalog_item_id == item.id,
+            TestCatalogParameter.is_active == True  # noqa: E712
+        ).order_by(TestCatalogParameter.display_order).all()
+        snap = {"panel": True, "rows": [{"name": p.name, "unit": p.unit or "", "range": _rng(p)} for p in params]}
+    else:
+        snap = {"panel": False, "rows": [{"name": order.test_name, "unit": (item.unit if item else "") or "", "range": _rng(item) if item else ""}]}
+    return json.dumps(snap)
+
+
 @router.post("/orders/{order_id}/result")
 def save_order_result(
     order_id: int,
@@ -1087,6 +1122,11 @@ def save_order_result(
         raise HTTPException(status_code=404, detail="Test order not found")
     _require_hiv_access(db, order, current_doctor)
 
+    if order.status not in ("sample_collected", "processing", "result_entered", "verified_released"):
+        raise HTTPException(status_code=400, detail=f"Results can't be entered while the test is '{order.status}'. Collect the sample first.")
+    if not payload.results or not any(str(v).strip() for v in payload.results.values()):
+        raise HTTPException(status_code=400, detail="Enter at least one result value before saving")
+
     old_results = {}
     if order.result_data:
         try:
@@ -1098,6 +1138,9 @@ def save_order_result(
     changed_fields = [k for k in payload.results if old_results.get(k) != payload.results.get(k)]
 
     order.result_data = json.dumps(payload.results)
+    if not order.result_snapshot:
+        _pt = db.query(Patient).filter(Patient.id == order.patient_id).first()
+        order.result_snapshot = _build_result_snapshot(db, order, _pt)
 
     # Critical-value check (Phase 1) — recomputed on every save so a
     # correction that clears a breach un-flags it, and a newly-entered
@@ -1544,7 +1587,23 @@ def get_combined_test_report(
         except Exception:
             result_data = {}
 
-        if catalog_item and catalog_item.is_panel:
+        _snap = None
+        if order.result_snapshot:
+            try:
+                _snap = json.loads(order.result_snapshot)
+            except Exception:
+                _snap = None
+
+        if _snap:
+            if _snap.get("panel"):
+                rows = [{"name": r["name"], "unit": r.get("unit", ""), "range": r.get("range", ""),
+                         "value": result_data.get(r["name"], "")}
+                        for r in _snap["rows"] if result_data.get(r["name"])]
+            else:
+                _r0 = _snap["rows"][0]
+                rows = [{"name": _r0["name"], "unit": _r0.get("unit", ""), "range": _r0.get("range", ""),
+                         "value": result_data.get("value", "")}]
+        elif catalog_item and catalog_item.is_panel:
             params = db.query(TestCatalogParameter).filter(
                 TestCatalogParameter.test_catalog_item_id == catalog_item.id,
                 TestCatalogParameter.is_active == True

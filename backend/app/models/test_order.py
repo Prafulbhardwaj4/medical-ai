@@ -53,6 +53,9 @@ class TestOrder(Base):
     # when the doctor placed the order.
     accession_number = Column(String, nullable=True, index=True)
     accessioned_at = Column(DateTime, nullable=True)
+    # JSON frozen at result entry: parameter names, units and reference ranges as they were
+    # THEN, so later catalog edits never change an already-released report.
+    result_snapshot = Column(Text, nullable=True)
 
     paid_at = Column(DateTime, nullable=True)
     payment_method = Column(String, nullable=True)  # "cash" | "card" | "upi"

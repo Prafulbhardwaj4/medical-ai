@@ -1251,3 +1251,13 @@ async function editOffDutyTime(containerId) {
 async function markAttendanceCommon(status, room_id, extra, alreadyActive) {
   return api("POST", "/doctors/attendance", { status, room_id, ...(extra || {}) });
 }
+
+// "New version available" banner. Injected here so every page that loads
+// api.js gets it without a per-page edit (see js/update-check.js).
+(function () {
+  if (window.__msUpdateCheck) return;
+  const s = document.createElement("script");
+  s.src = "/js/update-check.js";
+  s.async = true;
+  document.head.appendChild(s);
+})();

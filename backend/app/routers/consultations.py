@@ -226,13 +226,26 @@ def create_draft_consultation(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
+    _day_start, _day_end = ist_day_bounds()
     consultation = db.query(Consultation).filter(
         Consultation.patient_id == patient_id,
         Consultation.doctor_id == current_doctor.id,
-        Consultation.token_number == None
-    ).first()
+        Consultation.token_number == None,
+        Consultation.is_voided == False,
+        Consultation.created_at >= _day_start,  # never resurrect an abandoned draft from an earlier day
+    ).order_by(desc(Consultation.created_at)).first()
 
     if not consultation:
+        # Same gate as the live-recording path: a new consultation must trace back
+        # to a paid token for today with THIS doctor.
+        _paid = db.query(Checkin).filter(
+            Checkin.patient_id == patient_id,
+            Checkin.doctor_id == current_doctor.id,
+            Checkin.visit_date == ist_today(),
+            Checkin.is_paid == True,  # noqa: E712
+        ).first()
+        if not _paid:
+            raise HTTPException(status_code=400, detail="No paid token found for this patient with you today. A consultation can't be started without one.")
         consultation = Consultation(patient_id=patient_id, doctor_id=current_doctor.id)
         db.add(consultation)
         db.commit()
@@ -1001,6 +1014,27 @@ def confirm_prescription(
         except Exception:
             pass
 
+    try:
+        _meds_for_allergy = json.loads(consultation.medicines or "[]")
+    except Exception:
+        _meds_for_allergy = []
+    _conflicts = _allergy_conflicts(db, consultation.patient_id, _meds_for_allergy)
+    if _conflicts:
+        _why = (payload.allergy_override_reason or "").strip()
+        if len(_why) < 5:
+            raise HTTPException(status_code=409, detail={
+                "message": "Allergy warning: " + "; ".join(f"{c['medicine']} (patient allergic to {c['allergen']})" for c in _conflicts),
+                "allergy_conflict": _conflicts,
+            })
+        log_action(
+            db, current_doctor,
+            action="allergy_warning_overridden",
+            target_type="consultation",
+            target_id=consultation.id,
+            target_label=f"Patient ID {consultation.patient_id}",
+            details="; ".join(f"{c['medicine']} vs {c['allergen']} ({c['severity']})" for c in _conflicts) + f". Reason: {_why}"
+        )
+
     if payload.recommended_test_ids:
         test_items = db.query(TestCatalogItem).filter(
             TestCatalogItem.id.in_(payload.recommended_test_ids),
@@ -1350,18 +1384,11 @@ def update_consultation(
                 HospitalMedicine.is_active == True
             ).all()
 
-            def _match(name, brand):
-                name_l = (name or "").strip().lower()
-                brand_l = (brand or "").strip().lower()
-                for cm in catalog_medicines:
-                    if name_l and (name_l == (cm.generic_name or "").strip().lower() or name_l == (cm.brand_name or "").strip().lower()):
-                        return cm
-                    if brand_l and brand_l == (cm.brand_name or "").strip().lower():
-                        return cm
-                return None
-
             for med in newly_added:
-                matched = _match(med.get("name", ""), med.get("brand_name", ""))
+                matched = _match_catalog_for_edit(
+                    db, current_doctor.hospital_id, catalog_medicines,
+                    med.get("name", ""), med.get("brand_name", ""), med.get("dosage", "")
+                )
                 quantity = calculate_prescribed_quantity(matched, med.get("times_per_day"), med.get("duration_days"))
                 order = MedicineOrder(
                     consultation_id=consultation.id,
@@ -1425,6 +1452,47 @@ def update_consultation(
 
             all_ids = list(old_test_ids) + [t.id for t in test_items]
             consultation.recommended_test_ids = json.dumps(all_ids)
+
+    # Tests the doctor REMOVED during this edit: cancel those not yet at the lab,
+    # refund the paid ones, keep the ordered_tests snapshot in step.
+    if was_confirmed and "recommended_test_ids" in payload.__fields_set__:
+        _keep_ids = set(payload.recommended_test_ids or [])
+        _removed = db.query(TestOrder).filter(
+            TestOrder.consultation_id == consultation.id,
+            TestOrder.status.in_(["payment_pending", "paid"]),
+            ~TestOrder.test_id.in_(_keep_ids) if _keep_ids else True,
+        ).all()
+        if _removed:
+            _chk = db.query(Checkin).filter(
+                Checkin.patient_id == consultation.patient_id,
+                Checkin.doctor_id == consultation.doctor_id,
+                Checkin.visit_date == ist_today()
+            ).order_by(desc(Checkin.created_at)).first()
+            try:
+                _snap = json.loads(consultation.ordered_tests or "[]")
+            except Exception:
+                _snap = []
+            for _o in _removed:
+                _was_paid = _o.status == "paid"
+                _o.status = "cancelled"
+                _o.queued_at = None
+                if _chk and (_o.price or 0) > 0:
+                    _chk.test_fee = max((_chk.test_fee or 0) - _o.price, 0)
+                if _was_paid and (_o.price or 0) > 0:
+                    _r = Refund(
+                        patient_id=consultation.patient_id, hospital_id=current_doctor.hospital_id,
+                        source_type="test", source_id=_o.id, amount=_o.price,
+                        channel=_o.payment_method if _o.payment_method in ("cash", "card", "upi") else "cash",
+                        status="pending",
+                        reason=f"Prescription changed after payment, before the test was done: {_o.test_name}. Confirm refund channel with patient.",
+                    )
+                    db.add(_r)
+                    refunds_created.append(_r)
+                for _s in _snap:
+                    if _s.get("test_id") == _o.test_id:
+                        _s["status"] = "cancelled"
+            consultation.ordered_tests = json.dumps(_snap)
+        consultation.recommended_test_ids = json.dumps(list(payload.recommended_test_ids or []))
 
     new_radiology_orders = []
     if was_confirmed and payload.recommended_radiology_template_ids and hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
@@ -1544,9 +1612,92 @@ def update_consultation(
     }
 
 
+from pydantic import BaseModel as _BM, Field as _F
+
+
+class VoidConsultationIn(_BM):
+    reason: str = _F(..., min_length=5, max_length=300)
+
+def _allergy_conflicts(db, patient_id, medicines):
+    """Soft allergy check: an active recorded allergen that appears in a prescribed
+    medicine's name/brand (or vice versa). Names only, so it can warn but never prove safety."""
+    from app.models.patient_allergy import PatientAllergy
+    allergies = db.query(PatientAllergy).filter(
+        PatientAllergy.patient_id == patient_id, PatientAllergy.is_active == True  # noqa: E712
+    ).all()
+    out = []
+    for a in allergies:
+        al = (a.allergen or "").strip().lower()
+        if len(al) < 3:
+            continue
+        for m in medicines:
+            for nm in ((m.get("name") or ""), (m.get("brand_name") or "")):
+                n = nm.strip().lower()
+                if n and (al in n or (len(n) >= 3 and n in al)):
+                    out.append({"medicine": nm.strip(), "allergen": a.allergen, "severity": a.severity})
+                    break
+    return out
+
+
+def _match_catalog_for_edit(db, hospital_id, catalog_medicines, name, brand, dosage):
+    """Same rules as confirm_prescription's match_catalog (brand first, then strength-aware).
+    Never falls back to the first generic-name hit with a different strength."""
+    _expired = expired_units_by_medicine(db, hospital_id=hospital_id)
+
+    def _sellable(cm):
+        return ((cm.stock_quantity or 0) - _expired.get(cm.id, 0)) > 0
+
+    def _sp(s):
+        if not s:
+            return ""
+        s = s.strip().lower().replace(" ", "")
+        m = re.match(r"(\d+(?:\.\d+)?)(mg|mcg|g|ml|iu|%)", s)
+        return m.group(0) if m else s
+
+    name_l = (name or "").strip().lower()
+    brand_l = (brand or "").strip().lower()
+    candidates = []
+    for cm in catalog_medicines:
+        g = (cm.generic_name or "").strip().lower()
+        b = (cm.brand_name or "").strip().lower()
+        legacy = [x.strip().lower() for x in (cm.brand_names or "").split(",") if x.strip()]
+        n_ok = name_l and (name_l == g or name_l in legacy or name_l == b or g in name_l)
+        b_ok = brand_l and (brand_l == b or brand_l in legacy or brand_l == g)
+        if n_ok or b_ok:
+            candidates.append(cm)
+    if not candidates:
+        return None
+    if brand_l:
+        for cm in candidates:
+            if (cm.brand_name or "").strip().lower() == brand_l:
+                return cm
+    d = _sp(dosage)
+    if d:
+        same = [cm for cm in candidates if _sp(cm.strength) == d]
+        if not same:
+            return None
+        stocked = [cm for cm in same if _sellable(cm)]
+        if stocked:
+            return stocked[0]
+        for cm in same:
+            if not cm.brand_name:
+                return cm
+        return same[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    stocked = [cm for cm in candidates if _sellable(cm)]
+    if stocked:
+        return stocked[0]
+    for cm in candidates:
+        if not cm.brand_name:
+            return cm
+    return candidates[0]
+
+
 @router.post("/void/{consultation_id}")
 def void_consultation(
     consultation_id: int,
+    body: VoidConsultationIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1558,6 +1709,17 @@ def void_consultation(
     ).first()
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
+    if consultation.is_voided:
+        raise HTTPException(status_code=400, detail="This consultation is already voided")
+    _handed_over = consultation.is_dispensed or db.query(MedicineOrder).filter(
+        MedicineOrder.consultation_id == consultation.id,
+        MedicineOrder.status == "dispensed"
+    ).first()
+    if _handed_over:
+        raise HTTPException(
+            status_code=400,
+            detail="Medicines from this prescription were already handed over. It cannot be voided. Use the pharmacy return/refund flow instead."
+        )
 
     consultation.is_voided = True
 
@@ -1569,18 +1731,52 @@ def void_consultation(
     # Already-paid lines are left alone — voiding doesn't refund; that's a
     # separate, explicit action.
     excluded_count = 0
+    refunded_total = 0.0
     for order in db.query(TestOrder).filter(
         TestOrder.consultation_id == consultation.id,
         TestOrder.status == "payment_pending"
     ).all():
         order.included = False
         excluded_count += 1
+    # Paid but not yet processed by the lab: cancel and refund.
+    for order in db.query(TestOrder).filter(
+        TestOrder.consultation_id == consultation.id,
+        TestOrder.status == "paid"
+    ).all():
+        order.status = "cancelled"
+        order.queued_at = None
+        excluded_count += 1
+        if (order.price or 0) > 0:
+            db.add(Refund(
+                patient_id=consultation.patient_id, hospital_id=current_doctor.hospital_id,
+                source_type="test", source_id=order.id, amount=order.price,
+                channel=order.payment_method if order.payment_method in ("cash", "card", "upi") else "cash",
+                status="pending",
+                reason=f"Prescription voided before the test was done: {order.test_name}. Confirm refund channel with patient.",
+            ))
+            refunded_total += order.price
     for order in db.query(MedicineOrder).filter(
         MedicineOrder.consultation_id == consultation.id,
         MedicineOrder.status == "advised"
     ).all():
         order.included = False
         excluded_count += 1
+    # Paid but never handed over: cancel and refund.
+    for order in db.query(MedicineOrder).filter(
+        MedicineOrder.consultation_id == consultation.id,
+        MedicineOrder.status == "paid"
+    ).all():
+        order.status = "cancelled"
+        excluded_count += 1
+        _amt = line_total(order.unit_price, (order.billed_quantity or order.quantity or 0))
+        if _amt > 0:
+            db.add(Refund(
+                patient_id=consultation.patient_id, hospital_id=current_doctor.hospital_id,
+                source_type="pharmacy", source_id=order.id, amount=_amt, channel="cash",
+                status="pending",
+                reason=f"Prescription voided before dispensing: {order.medicine_name} was paid for but never handed over. Confirm refund channel with patient.",
+            ))
+            refunded_total += _amt
 
     db.commit()
 
@@ -1590,7 +1786,9 @@ def void_consultation(
         target_type="consultation",
         target_id=consultation.id,
         target_label=consultation.token_number or f"Draft #{consultation.id}",
-        details=f"Patient ID: {consultation.patient_id}" + (f" — {excluded_count} unpaid line(s) excluded" if excluded_count else "")
+        details=f"Patient ID: {consultation.patient_id}. Reason: {body.reason}"
+                + (f". {excluded_count} line(s) cancelled/excluded" if excluded_count else "")
+                + (f", Rs.{refunded_total:.2f} refund(s) pending" if refunded_total else "")
     )
 
     return {"message": "Consultation voided"}

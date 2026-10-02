@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Patient</title>
-  <link rel="stylesheet" href="../css/style.css?v=4" />
+  <link rel="stylesheet" href="../css/style.css" />
   <script src="../js/custom-select.js" defer></script>
   <style>
     .patient-header {
@@ -423,13 +423,13 @@
 
   <div id="toast"></div>
 
-  <script src="../js/api.js?v=4"></script>
+  <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
-  <script src="../js/chat-widget.js?v=1"></script>
+  <script src="../js/chat-widget.js"></script>
   <script src="../js/suggestion-widget.js"></script>
-  <script src="../js/tutorial.js?v=2"></script>
-  <script src="../js/doctor-demo.js?v=2"></script>
+  <script src="../js/tutorial.js"></script>
+  <script src="../js/doctor-demo.js"></script>
   <script>
     if (!requireAuth()) throw new Error();
     fillTopbar();
@@ -847,7 +847,8 @@
       overlay.innerHTML = `
         <div style="background:white;border-radius:12px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
           <div style="font-size:1.1rem;font-weight:700;color:var(--navy);margin-bottom:8px">Void Consultation?</div>
-          <div style="color:var(--slate);font-size:14px;margin-bottom:24px">This consultation will be marked as void and hidden from active history. This cannot be undone.</div>
+          <div style="color:var(--slate);font-size:14px;margin-bottom:12px">This consultation will be marked as void and hidden from active history. Paid tests/medicines that were not yet done/handed over are cancelled and refunded. This cannot be undone.</div>
+          <textarea id="void-reason" rows="2" maxlength="300" placeholder="Reason for voiding (required, min 5 characters)" style="width:100%;margin-bottom:16px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:inherit"></textarea>
           <div style="display:flex;gap:12px">
             <button id="void-confirm-btn" class="btn btn-sm" style="flex:1;background:#dc2626;color:white;border:none">Yes, Void It</button>
             <button id="void-cancel-btn" class="btn btn-outline btn-sm" style="flex:1">Cancel</button>
@@ -856,13 +857,18 @@
       `;
       document.body.appendChild(overlay);
       const confirmed = await new Promise(resolve => {
-        document.getElementById('void-confirm-btn').onclick = () => { document.body.removeChild(overlay); resolve(true); };
+        document.getElementById('void-confirm-btn').onclick = () => {
+          const r = document.getElementById('void-reason').value.trim();
+          if (r.length < 5) { toast("Please enter a reason (at least 5 characters)", "error"); return; }
+          window._voidReason = r;
+          document.body.removeChild(overlay); resolve(true);
+        };
         document.getElementById('void-cancel-btn').onclick = () => { document.body.removeChild(overlay); resolve(false); };
         overlay.onclick = (e) => { if (e.target === overlay) { document.body.removeChild(overlay); resolve(false); } };
       });
       if (!confirmed) return;
       try {
-        await api("POST", `/consultations/void/${id}`);
+        await api("POST", `/consultations/void/${id}`, { reason: window._voidReason });
         toast("Consultation voided", "success");
         loadHistory();
       } catch (e) {

@@ -212,8 +212,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.on_event("startup")
 async def _start_midnight_scheduler():
-    from app.scheduler import midnight_close_loop
+    from app.scheduler import midnight_close_loop, lab_escalation_loop
     asyncio.create_task(midnight_close_loop())
+    asyncio.create_task(lab_escalation_loop())
 
 # Single source of truth for CORS: the middleware AND the 500 handler below both
 # use these, so they can't drift.
@@ -258,6 +259,18 @@ async def log_requests(request: Request, call_next):
         raise
     elapsed_ms = int((time.perf_counter() - start) * 1000)
     logger.info("RES %s %s status=%s duration_ms=%s", request.method, request.url.path, response.status_code, elapsed_ms)
+    return response
+
+
+@app.middleware("http")
+async def no_store_authenticated_get(request: Request, call_next):
+    # Patient data must never sit in a browser/proxy cache on a shared device.
+    # Only authenticated GET/HEAD; public endpoints and responses that already
+    # set their own Cache-Control (e.g. PDF downloads) are left alone.
+    response = await call_next(request)
+    if request.method in ("GET", "HEAD") and request.headers.get("authorization") \
+            and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
