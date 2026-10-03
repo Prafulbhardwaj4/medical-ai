@@ -125,6 +125,20 @@ def _release_abandoned_holds(db: Session, slot: DoctorSlot) -> None:
         db.flush()
 
 
+def _ensure_slot_bookable(db: Session, slot: DoctorSlot, hospital_id: int) -> None:
+    """Same hospital, not already over, and the doctor isn't on leave that day."""
+    from app.models.doctor_availability import DoctorUnavailability
+    if slot.hospital_id != hospital_id:
+        raise HTTPException(status_code=404, detail="Slot not found")
+    _start = datetime.combine(slot.slot_date, datetime.strptime(slot.slot_time, "%H:%M").time())
+    if _start + timedelta(minutes=slot.window_minutes or 0) <= now_ist_naive():
+        raise HTTPException(status_code=400, detail="That time slot has already passed")
+    if db.query(DoctorUnavailability).filter(
+        DoctorUnavailability.doctor_id == slot.doctor_id, DoctorUnavailability.date == slot.slot_date
+    ).first():
+        raise HTTPException(status_code=400, detail="The doctor is not available on that date. Please pick another day.")
+
+
 ACTIVE_APPOINTMENT_STATUSES = (AppointmentStatus.booked, AppointmentStatus.pending_review, AppointmentStatus.confirmed)
 
 
@@ -515,6 +529,13 @@ def request_reschedule(
     else:
         raise HTTPException(status_code=400, detail="Reschedule isn't available for this appointment right now")
 
+    _req_slot = db.query(DoctorSlot).filter(DoctorSlot.id == body.new_slot_id).first()
+    if not _req_slot:
+        raise HTTPException(status_code=404, detail="Slot not found")
+    _ensure_slot_bookable(db, _req_slot, appt.hospital_id)
+    if _req_slot.booked_count >= _req_slot.capacity:
+        raise HTTPException(status_code=400, detail="That slot is already full")
+
     appt.reschedule_kind = kind
     appt.requested_reschedule_slot_id = body.new_slot_id
     appt.status = AppointmentStatus.pending_review
@@ -733,6 +754,7 @@ def self_serve_mass_reschedule(
         raise HTTPException(status_code=404, detail="Slot not found")
     if new_slot.doctor_id != appt.doctor_id:
         raise HTTPException(status_code=400, detail="Please pick a slot with the same doctor")
+    _ensure_slot_bookable(db, new_slot, appt.hospital_id)
     if new_slot.booked_count >= new_slot.capacity:
         raise HTTPException(status_code=400, detail="That slot is already full")
 
@@ -767,6 +789,13 @@ def cancel_appointment(
         raise HTTPException(status_code=404, detail="Appointment not found")
     if appt.status in (AppointmentStatus.completed, AppointmentStatus.cancelled):
         raise HTTPException(status_code=400, detail=f"Cannot cancel a {appt.status.value} appointment")
+
+    from app.models.checkin import Checkin as _Checkin
+    if db.query(_Checkin).filter(_Checkin.portal_appointment_id == appt.id).first():
+        raise HTTPException(
+            status_code=400,
+            detail="Your token for today is already generated. Please ask the hospital reception to cancel it."
+        )
 
     if appt.payment_status == "paid":
         now = now_ist_naive()

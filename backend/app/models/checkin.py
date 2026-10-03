@@ -16,7 +16,7 @@ class Checkin(Base):
     created_at = Column(DateTime, default=now_ist_naive)
 
     source = Column(String, nullable=False, default="walk_in")  # "walk_in" | "online" — see Phase 2 item 5
-    portal_appointment_id = Column(Integer, ForeignKey("portal_appointments.id"), nullable=True)
+    portal_appointment_id = Column(Integer, ForeignKey("portal_appointments.id"), nullable=True, unique=True)
     booked_time = Column(DateTime, nullable=True)  # the online-booked slot time, for dashboards to show "booked for HH:MM"
     queue_priority_time = Column(DateTime, nullable=True)  # if set, queue sort uses this instead of created_at (Phase 2 item 7)
 

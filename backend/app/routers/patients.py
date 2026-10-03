@@ -871,10 +871,13 @@ def send_to_nurse(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    checkin = db.query(Checkin).filter(
+    _q = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
         Checkin.visit_date == ist_today()
-    ).order_by(desc(Checkin.created_at)).first()
+    )
+    if current_doctor.role.value == "doctor":
+        _q = _q.filter(Checkin.doctor_id == current_doctor.id)  # multi-doctor visit: act on MY check-in
+    checkin = _q.order_by(desc(Checkin.created_at)).first()
     if not checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today.")
 
@@ -912,10 +915,13 @@ def send_to_nurse_postconsult(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    checkin = db.query(Checkin).filter(
+    _q = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
         Checkin.visit_date == ist_today()
-    ).order_by(desc(Checkin.created_at)).first()
+    )
+    if current_doctor.role.value == "doctor":
+        _q = _q.filter(Checkin.doctor_id == current_doctor.id)
+    checkin = _q.order_by(desc(Checkin.created_at)).first()
     if not checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today.")
 
@@ -1051,10 +1057,13 @@ def send_back_for_vitals(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    checkin = db.query(Checkin).filter(
+    _q = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
         Checkin.visit_date == ist_today()
-    ).order_by(desc(Checkin.created_at)).first()
+    )
+    if current_doctor.role.value == "doctor":
+        _q = _q.filter(Checkin.doctor_id == current_doctor.id)
+    checkin = _q.order_by(desc(Checkin.created_at)).first()
     if not checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today.")
 

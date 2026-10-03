@@ -984,6 +984,11 @@ def confirm_prescription(
         ).first()
         if referral:
             referral.status = "consulted"
+        if todays_checkin.portal_appointment_id:
+            from app.models.portal import Appointment as _PortalAppt, AppointmentStatus as _PortalApptStatus
+            _ap = db.query(_PortalAppt).filter(_PortalAppt.id == todays_checkin.portal_appointment_id).first()
+            if _ap and _ap.status == _PortalApptStatus.confirmed:
+                _ap.status = _PortalApptStatus.completed
     else:
         # No check-in exists for today — this happens when a doctor opens a
         # patient directly from their own patient list instead of the queue.

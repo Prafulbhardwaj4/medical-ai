@@ -527,8 +527,20 @@ def update_fee_settings(
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
 
+    if not (0 <= default_consultation_fee <= 1_000_000):
+        raise HTTPException(status_code=400, detail="Consultation fee must be between 0 and 10,00,000")
+    _old_fee = hospital.default_consultation_fee
     hospital.default_consultation_fee = default_consultation_fee
     db.commit()
+    log_action(
+        db, current_doctor,
+        action="fee_settings_updated",
+        target_type="hospital",
+        target_id=hospital.id,
+        target_label=hospital.name,
+        details=f"default_consultation_fee: {_old_fee!r} -> {default_consultation_fee!r}",
+        hospital_id=hospital.id,
+    )
     return {"default_consultation_fee": hospital.default_consultation_fee}
 
 
@@ -607,9 +619,23 @@ class HospitalDetailsUpdate(BaseModel):
         v = v.strip().upper()
         if not v:
             return None
-        if len(v) != 15:
-            raise ValueError("GSTIN must be exactly 15 characters")
+        if not re.fullmatch(r"(0[1-9]|[12][0-9]|3[0-8])[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]", v):
+            raise ValueError("Enter a valid 15-character GSTIN (e.g. 06ABCDE1234F1Z5)")
         return v
+
+    @validator("consultation_gst_percent", "test_gst_percent", "room_gst_percent", "charge_gst_percent",
+               "waiver_auto_approve_percent", allow_reuse=True)
+    def validate_percent(cls, v):
+        if v is not None and not (0 <= v <= 100):
+            raise ValueError("Percentage must be between 0 and 100")
+        return v
+
+    @validator("waiver_auto_approve_cap", "room_gst_threshold_per_day", allow_reuse=True)
+    def validate_amount(cls, v):
+        if v is not None and not (0 <= v <= 10_000_000):
+            raise ValueError("Amount must be between 0 and 1,00,00,000")
+        return v
+
     logo_base64: Optional[str] = None
     consultation_gst_percent: Optional[float] = None
     test_gst_percent: Optional[float] = None
@@ -639,6 +665,15 @@ def update_hospital_details(
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
+
+    _audit_fields = (
+        "address", "gstin", "phone", "consultation_gst_percent", "test_gst_percent", "room_gst_percent",
+        "charge_gst_percent", "room_gst_threshold_per_day", "waiver_auto_approve_cap",
+        "waiver_auto_approve_percent", "hsn_consultation", "hsn_test", "hsn_room", "hsn_charge",
+        "contact_numbers", "emails",
+    )
+    _before = {k: getattr(hospital, k) for k in _audit_fields}
+    _logo_before = bool(hospital.logo_base64)
 
     if payload.address is not None:
         hospital.address = payload.address.strip()
@@ -684,6 +719,20 @@ def update_hospital_details(
         hospital.hsn_charge = payload.hsn_charge or None
 
     db.commit()
+
+    _changes = [f"{k}: {_before[k]!r} -> {getattr(hospital, k)!r}" for k in _audit_fields if _before[k] != getattr(hospital, k)]
+    if _logo_before != bool(hospital.logo_base64):
+        _changes.append(f"logo: {'set' if hospital.logo_base64 else 'removed'}")
+    if _changes:
+        log_action(
+            db, current_doctor,
+            action="hospital_details_updated",
+            target_type="hospital",
+            target_id=hospital.id,
+            target_label=hospital.name,
+            details="; ".join(_changes)[:1800],
+            hospital_id=hospital.id,
+        )
     return {
         "address": hospital.address,
         "gstin": hospital.gstin,
@@ -842,8 +891,27 @@ def delete_room(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
+    from app.models.attendance import AttendanceRecord
+    from app.utils.timezone import ist_today as _ist_today
+    _in_use = db.query(AttendanceRecord).filter(
+        AttendanceRecord.hospital_id == current_doctor.hospital_id,
+        AttendanceRecord.room_id == room.id,
+        AttendanceRecord.date == _ist_today(),
+        AttendanceRecord.status.in_(["present", "on_break", "away_emergency"]),
+    ).first()
+    if _in_use:
+        raise HTTPException(status_code=400, detail="A doctor is currently marked present in this room. Ask them to go off duty or change room first.")
+
     room.is_active = False
     db.commit()
+    log_action(
+        db, current_doctor,
+        action="room_deleted",
+        target_type="room",
+        target_id=room.id,
+        target_label=room.name or room.room_number or f"Room {room.id}",
+        hospital_id=current_doctor.hospital_id,
+    )
     return {"deleted": True}
 
 @router.get("/doctors")
@@ -917,6 +985,7 @@ def list_doctors(
 @router.patch("/doctors/{doctor_id}/toggle-active")
 def toggle_doctor_active(
     doctor_id: int,
+    confirm: bool = False,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -943,6 +1012,44 @@ def toggle_doctor_active(
     if current_doctor.role.value == "admin" and doctor.role.value in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Cannot deactivate admin or sub admin accounts")
 
+    _warnings = []
+    if doctor.is_active:  # this call would DEACTIVATE
+        from app.models.portal import Appointment, AppointmentStatus
+        from app.models.checkin import Checkin
+        from app.models.doctor_slot import DoctorSlot
+        _today = ist_today()
+        _open_appts = db.query(Appointment).filter(
+            Appointment.doctor_id == doctor.id,
+            Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed, AppointmentStatus.pending_review]),
+            Appointment.requested_time >= datetime.combine(_today, datetime.min.time()),
+        ).count()
+        _waiting = db.query(Checkin).filter(
+            Checkin.doctor_id == doctor.id, Checkin.visit_date == _today,
+            Checkin.is_finalized == False,  # noqa: E712
+        ).count()
+        if _open_appts:
+            _warnings.append(f"{_open_appts} upcoming online appointment(s)")
+        if _waiting:
+            _warnings.append(f"{_waiting} patient(s) in today's queue")
+        if doctor.role.value in ("lab", "pharmacy", "nurse"):
+            _others = db.query(Doctor).filter(
+                Doctor.hospital_id == doctor.hospital_id, Doctor.role == doctor.role,
+                Doctor.is_active == True, Doctor.id != doctor.id,  # noqa: E712
+            ).count()
+            if _others == 0:
+                _warnings.append(f"this is the only active {doctor.role.value} user")
+        if _warnings and not confirm:
+            raise HTTPException(
+                status_code=409,
+                detail={"message": "Deactivating this account affects: " + "; ".join(_warnings) + ". Confirm to continue.", "needs_confirm": True},
+            )
+        # Free their unbooked future slots so patients can't book a deactivated doctor.
+        if doctor.role.value == "doctor":
+            db.query(DoctorSlot).filter(
+                DoctorSlot.doctor_id == doctor.id,
+                DoctorSlot.slot_date >= _today, DoctorSlot.booked_count == 0,
+            ).delete(synchronize_session=False)
+
     doctor.is_active = not doctor.is_active
     db.commit()
 
@@ -951,7 +1058,8 @@ def toggle_doctor_active(
         action="account_activated" if doctor.is_active else "account_deactivated",
         target_type="doctor",
         target_id=doctor.id,
-        target_label=f"{doctor.title} {doctor.name}"
+        target_label=f"{doctor.title} {doctor.name}",
+        details=("Confirmed despite: " + "; ".join(_warnings)) if (_warnings and not doctor.is_active) else None
     )
 
     return {"id": doctor.id, "is_active": doctor.is_active}
@@ -1323,6 +1431,7 @@ def set_hospital_billing_period(
 def renew_hospital_billing_cycle(
     hospital_id: int,
     confirm: bool,
+    amount: float = None,   # amount actually collected; defaults to the list price for the tier/period
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1353,8 +1462,23 @@ def renew_hospital_billing_cycle(
     # by exactly one month from the current anchor, not from "now" (item 6:
     # "cycle stays anchored to the original signup date, not the date the
     # button was pressed").
-    hospital.billing_cycle_start = hospital.billing_cycle_start + relativedelta(months=cycle_months(hospital))
+    from app.models.subscription_payment import SubscriptionPayment
+    from app.utils.billing_cycle import TIER_MONTHLY_PRICE
+    _yearly = {"foundation": 109999, "growth": 350000}
+    _months = cycle_months(hospital)
+    _list_price = _yearly.get(hospital.tier, TIER_MONTHLY_PRICE.get(hospital.tier, 0) * 12) if _months == 12 else TIER_MONTHLY_PRICE.get(hospital.tier, 0)
+    _paid = _list_price if amount is None else amount
+    if _paid < 0 or _paid > 100_000_000:
+        raise HTTPException(status_code=400, detail="Invalid payment amount")
+    _period_start = hospital.billing_cycle_start
+    hospital.billing_cycle_start = hospital.billing_cycle_start + relativedelta(months=_months)
     hospital.ai_scribe_consultations_used = 0
+    db.add(SubscriptionPayment(
+        hospital_id=hospital.id, tier=hospital.tier, billing_period=hospital.billing_period or "monthly",
+        amount=_paid, period_start=_period_start, period_end=hospital.billing_cycle_start,
+        collected_by=current_doctor.id,
+        note=None if amount is None else "Amount entered manually",
+    ))
     db.commit()
 
     log_action(

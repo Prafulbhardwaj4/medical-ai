@@ -86,6 +86,9 @@ def convert_appointment_to_checkin(db: Session, appt, patient):
             break
         except IntegrityError:
             db.rollback()
+            _already = db.query(Checkin).filter(Checkin.portal_appointment_id == appt.id).first()
+            if _already:
+                return _already
             if attempt == max_token_attempts - 1:
                 raise
             token = generate_token_number(db, appt.hospital_id, hospital_code)
@@ -102,7 +105,8 @@ def convert_appointment_to_checkin(db: Session, appt, patient):
         ))
         appt.reschedule_balance_due = None
 
-    appt.status = AppointmentStatus.completed  # booking's job is done — the real visit now lives on the Checkin
+    # The appointment stays "confirmed" until the doctor actually confirms the consultation
+    # (see confirm_prescription), so "I've arrived", reschedule and no-show detection keep working.
     db.commit()
     db.refresh(checkin)
     return checkin

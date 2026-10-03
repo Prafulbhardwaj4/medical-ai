@@ -106,6 +106,10 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
     # never leave the doctor with slots wiped and nothing rebuilt in their place.
     db.flush()
 
+    if not target.is_active:
+        db.commit()  # an inactive doctor gets no new slots (unbooked ones were just cleared)
+        return []
+
     unavailable_dates = {
         u.date for u in db.query(DoctorUnavailability).filter(
             DoctorUnavailability.doctor_id == target.id,
@@ -117,13 +121,15 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
     # the delete above. The regenerated pattern must skip these exact
     # (date, time) pairs too, or it tries to INSERT a second row into the
     # same (doctor_id, slot_date, slot_time) unique slot and crashes.
-    booked_keys = {
-        (s.slot_date, s.slot_time) for s in db.query(DoctorSlot).filter(
+    booked_slots = {
+        (s.slot_date, s.slot_time): s for s in db.query(DoctorSlot).filter(
             DoctorSlot.doctor_id == target.id,
             DoctorSlot.slot_date >= today, DoctorSlot.slot_date <= window_end,
             DoctorSlot.booked_count > 0,
         ).all()
     }
+    booked_keys = set(booked_slots.keys())
+    _now_hhmm = now_ist_naive().strftime("%H:%M")
 
     def capacity_for(period: str) -> int:
         if body.capacity_mode == "per_period":
@@ -157,7 +163,12 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
                 if t in times_seen_today:
                     continue
                 times_seen_today.add(t)
+                if current_date == today and t <= _now_hhmm:
+                    continue  # never recreate a slot whose start time has already passed today
                 if (current_date, t) in booked_keys:
+                    # keep existing bookings, but let capacity follow the new template (never below bookings)
+                    _bs = booked_slots[(current_date, t)]
+                    _bs.capacity = max(cap, _bs.booked_count)
                     continue  # an already-booked slot occupies this exact date/time
                 if t in (body.custom_windows or {}) and body.custom_windows[t]:
                     window = int(body.custom_windows[t])  # explicit From/To duration wins over any inferred gap
@@ -250,8 +261,28 @@ def unmark_unavailable(unavailability_id: int, current_doctor: Doctor = Depends(
         raise HTTPException(status_code=403, detail="Not your record")
     if current_doctor.role != UserRole.super_admin and row.hospital_id != current_doctor.hospital_id:
         raise HTTPException(status_code=404, detail="Not found")
+    _doc_id = row.doctor_id
     db.delete(row)
     db.commit()
+
+    # mark_unavailable deleted that day's unbooked slots: rebuild from the saved weekly template.
+    _t = db.query(DoctorAvailabilityTemplate).filter(DoctorAvailabilityTemplate.doctor_id == _doc_id).first()
+    _target = db.query(Doctor).filter(Doctor.id == _doc_id).first()
+    if _t and _target:
+        _body = SaveTemplateIn(
+            doctor_id=_target.id,
+            weekdays=json.loads(_t.weekdays),
+            morning_times=json.loads(_t.morning_times),
+            afternoon_times=json.loads(_t.afternoon_times),
+            evening_times=json.loads(_t.evening_times),
+            custom_windows=json.loads(_t.custom_windows or "{}"),
+            capacity_mode=_t.capacity_mode,
+            capacity_same=_t.capacity_same,
+            capacity_morning=_t.capacity_morning,
+            capacity_afternoon=_t.capacity_afternoon,
+            capacity_evening=_t.capacity_evening,
+        )
+        _regenerate_from_template(db, _target, _body)
     return {"message": "Unavailability removed"}
 
 
