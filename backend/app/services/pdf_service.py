@@ -624,6 +624,8 @@ def generate_prescription_pdf(
         Paragraph("CONSULTING DOCTOR", label_style),
         Paragraph(doctor_name_line, biz_bold_style),
     ]
+    if getattr(doctor, "registration_number", None):
+        doctor_lines.append(Paragraph(f"Reg. No: <b>{doctor.registration_number}</b>", biz_style))
 
     # Date / Time — separate block under patient details, with a gap
     rx_now = now_ist()

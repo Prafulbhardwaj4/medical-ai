@@ -999,6 +999,9 @@ def revenue_history_monthly(
     }
 
 
+AUTO_CLOSE_NOTE = "[AUTO-CLOSED, NOT COUNTED] No cash count was entered before day rollover. Variance is unknown, not zero."
+
+
 def close_day_for_hospital(db: Session, hospital_id: int, d, closed_by: int = None, note: str = None):
     """Shared close-one-day logic — used both by the lazy per-request
     catch-up below and by the midnight scheduler in app/scheduler.py.
@@ -1018,7 +1021,7 @@ def close_day_for_hospital(db: Session, hospital_id: int, d, closed_by: int = No
         close_date=d,
         system_cash=totals.get("cash", 0), system_card=totals.get("card", 0), system_upi=totals.get("upi", 0),
         counted_cash=totals.get("cash", 0), counted_card=totals.get("card", 0), counted_upi=totals.get("upi", 0),
-        notes=note or "Auto-closed by system — no manual count was entered before day rollover.",
+        notes=note or AUTO_CLOSE_NOTE,
         closed_by=closed_by,
     ))
     db.commit()
@@ -1154,8 +1157,11 @@ def _day_end_summary_core(db: Session, hospital_id: int, target_date):
         "refunds_by_channel": refunds_by_channel,
         "system_totals": system_totals,
         "already_closed": bool(existing_close),
+        "auto_closed": bool(existing_close and (existing_close.notes or "").startswith("[AUTO-CLOSED")),
         "close": ({
-            "counted_cash": existing_close.counted_cash, "counted_card": existing_close.counted_card, "counted_upi": existing_close.counted_upi,
+            "counted_cash": None if (existing_close.notes or "").startswith("[AUTO-CLOSED") else existing_close.counted_cash,
+            "counted_card": None if (existing_close.notes or "").startswith("[AUTO-CLOSED") else existing_close.counted_card,
+            "counted_upi": None if (existing_close.notes or "").startswith("[AUTO-CLOSED") else existing_close.counted_upi,
             "notes": existing_close.notes, "closed_at": existing_close.closed_at.isoformat() if existing_close.closed_at else None,
         } if existing_close else None),
     }
@@ -1183,6 +1189,20 @@ def close_day_end(
     close = existing or DayEndClose(hospital_id=current_doctor.hospital_id, close_date=target_date, closed_by=current_doctor.id)
     if not existing:
         db.add(close)
+    else:
+        log_action(
+            db, current_doctor,
+            action="day_end_reclosed",
+            target_type="day_end_close",
+            target_id=existing.id,
+            target_label=target_date.isoformat(),
+            details=(
+                f"old counted cash/card/upi: {existing.counted_cash}/{existing.counted_card}/{existing.counted_upi} "
+                f"(notes: {(existing.notes or '')[:80]}); "
+                f"new: {body.counted_cash}/{body.counted_card}/{body.counted_upi}"
+            ),
+            hospital_id=current_doctor.hospital_id,
+        )
 
     close.system_cash = system_totals.get("cash", 0)
     close.system_card = system_totals.get("card", 0)

@@ -225,20 +225,6 @@ def last_diagnosis(patient_id: int, current_doctor: Doctor = Depends(get_current
     ).order_by(Consultation.created_at.desc()).first()
     return {"diagnosis": last.diagnosis if last and last.diagnosis else None}
 
-
-@router.get("/last-doctor/{patient_id}")
-def last_doctor(patient_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    """Suggests the patient's actual last consulting doctor as the admitting doctor —
-    NOT whoever is performing the admission (reception), which was the previous bug."""
-    last = db.query(Consultation).filter(
-        Consultation.patient_id == patient_id
-    ).order_by(Consultation.created_at.desc()).first()
-    if not last:
-        return {"doctor_id": None, "doctor_name": None}
-    doc = db.query(Doctor).filter(Doctor.id == last.doctor_id).first()
-    return {"doctor_id": last.doctor_id, "doctor_name": f"{doc.title} {doc.name}" if doc else None}
-
-
 @router.patch("/{admission_id}/diagnosis")
 def update_diagnosis(admission_id: str, body: UpdateDiagnosisIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     if not body.diagnosis.strip():
@@ -830,19 +816,6 @@ def radiology_catalog_for_ward(current_doctor: Doctor = Depends(get_current_doct
         RadiologyTemplate.hospital_id == current_doctor.hospital_id, RadiologyTemplate.is_active == True
     ).order_by(RadiologyTemplate.name).all()
     return [{"id": t.id, "name": t.name, "study_type": t.study_type, "fee": t.fee} for t in items]
-
-
-@router.get("/medicine-forms")
-def list_medicine_forms(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
-    if current_doctor.role.value not in ["doctor", "nurse", "assistant", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    rows = db.query(HospitalMedicine.dosage_forms).filter(
-        HospitalMedicine.hospital_id == current_doctor.hospital_id,
-        HospitalMedicine.is_active == True,
-        HospitalMedicine.dosage_forms.isnot(None),
-    ).distinct().all()
-    return sorted({r[0] for r in rows if r[0]})
-
 
 @router.get("/medicine-catalog")
 def medicine_catalog_for_ward(dosage_form: str = "", current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):

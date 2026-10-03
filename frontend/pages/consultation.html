@@ -771,9 +771,22 @@
     let wsConnection = null;
     let mediaProcessor = null;
 
+    let _aiConsentRecorded = false;
     async function toggleRecording() {
-      if (!isRecording) await startRecording();
-      else await stopRecording();
+      if (!isRecording) {
+        if (!_aiConsentRecorded) {
+          const ok = await confirmDialog(
+            "Has the patient been informed that this conversation will be recorded and processed by AI to draft the consultation note? (Notice wording: PENDING LEGAL REVIEW)",
+            "Yes, patient informed"
+          );
+          if (!ok) return;
+          try {
+            await api("POST", `/consent/patients/${patientId}`, { purpose: "ai_recording" });
+            _aiConsentRecorded = true;
+          } catch (e) { toast(e.message, "error"); return; }
+        }
+        await startRecording();
+      } else await stopRecording();
     }
 
     let isPaused = false;

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from app.utils.rate_limit import limiter
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from sqlalchemy.exc import IntegrityError
@@ -20,7 +21,7 @@ from app.utils.inventory import expired_units_by_medicine
 router = APIRouter(prefix="/admin/medicines", tags=["medicines"])
 
 VALID_SCHEDULES = {"otc", "h", "h1", "x"}
-NEAR_EXPIRY_DAYS = 30  # named constant so the near-expiry cutoff is easy to adjust laterVALID_SCHEDULES = {"otc", "h", "h1", "x"}
+NEAR_EXPIRY_DAYS = 30  # named constant so the near-expiry cutoff is easy to adjust later
 
 
 def require_admin(current_doctor: Doctor):
@@ -485,7 +486,9 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 @router.post("/upload")
+@limiter.limit("10/hour")
 async def upload_medicines(
+    request: Request,
     file: UploadFile = File(...),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):

@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from app.utils.rate_limit import limiter
+
+MAX_TEST_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional
@@ -451,14 +454,20 @@ def _extract_text_from_excel(content: bytes) -> str:
 
 
 @router.post("/upload")
+@limiter.limit("10/hour")
 async def upload_tests(
+    request: Request,
     file: UploadFile = File(...),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_admin(current_doctor)
 
     filename = (file.filename or "").lower()
-    content = await file.read()
+    if filename.endswith(".xls"):
+        raise HTTPException(status_code=400, detail="Old .xls files are not supported. Open it in Excel, choose Save As .xlsx, and upload that.")
+    content = await file.read(MAX_TEST_UPLOAD_BYTES + 1)
+    if len(content) > MAX_TEST_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File is too large (max 10 MB)")
 
     if filename.endswith(".pdf"):
         raw_text = _extract_text_from_pdf(content)

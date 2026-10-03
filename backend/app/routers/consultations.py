@@ -28,7 +28,6 @@ from app.models.test_order import TestOrder
 from app.models.medicine_order import MedicineOrder
 from app.models.hospital_medicine import HospitalMedicine
 from app.utils.inventory import deduct_stock_fefo, calculate_prescribed_quantity, expired_units_by_medicine, line_total
-from app.utils.notify import sync_stock_notifications
 from app.schemas.consultation import ConfirmPrescriptionPayload
 from app.config import settings
 from sqlalchemy import exists, func

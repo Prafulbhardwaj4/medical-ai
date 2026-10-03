@@ -357,6 +357,8 @@ def create_doctor(
     
     if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy", "radiology"]:
         raise HTTPException(status_code=400, detail="Invalid role")
+    if role == "doctor" and not registration_number:
+        raise HTTPException(status_code=400, detail="Medical registration number is required for doctors (it is printed on prescriptions)")
 
     if current_doctor.role.value == "sub_admin" and role != "doctor":
         raise HTTPException(status_code=403, detail="Sub admin can only create doctor accounts")
@@ -1780,7 +1782,8 @@ def superadmin_stats(
             hospitals_by_tier[h.tier] += 1
 
     return {
-        "total_hospitals": total_hospitals,
+        "total_hospitals": db.query(Hospital).count(),
+        "active_hospitals": total_hospitals,
         "new_hospitals_this_month": new_hospitals_this_month,
         "monthly_revenue": monthly_revenue,
         "hospitals_by_tier": hospitals_by_tier,
@@ -1806,7 +1809,6 @@ def platform_growth_analytics(
 
     now = now_ist_naive()
     TIER_ORDER = ["foundation", "growth", "scale", "enterprise"]
-    TIER_RANK = {t: i for i, t in enumerate(TIER_ORDER)}
 
     all_hospitals = db.query(Hospital).all()
     total_hospitals = len(all_hospitals)

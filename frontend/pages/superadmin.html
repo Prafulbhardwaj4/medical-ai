@@ -467,7 +467,7 @@
 
           <div class="stats-row stats-row-4">
             <div class="stat-card">
-              <div class="stat-label">Total Hospitals</div>
+              <div class="stat-label">Hospitals (Total / Active)</div>
               <div class="stat-value" id="ga-total-hospitals">—</div>
               <div class="stat-sub" id="ga-active-count">—</div>
             </div>
@@ -1291,7 +1291,7 @@
     async function loadStats() {
       try {
         const data = await api('GET', '/admin/stats');
-        document.getElementById('stat-hospitals').textContent = data.total_hospitals;
+        document.getElementById('stat-hospitals').textContent = `${data.total_hospitals} / ${data.active_hospitals}`;
         document.getElementById('stat-revenue').textContent = `Rs.${data.monthly_revenue.toLocaleString('en-IN')}`;
         document.getElementById('stat-arr').textContent = `Rs.${(data.monthly_revenue * 12).toLocaleString('en-IN')}`;
         document.getElementById('stat-new-hospitals').textContent = `+${data.new_hospitals_this_month} this month`;
