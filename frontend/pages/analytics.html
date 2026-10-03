@@ -550,6 +550,16 @@
                         <input class="form-control" id="hd-gstin" maxlength="15" placeholder="e.g. 07AAAAA0000A1Z5" />
                     </div>
                     <div style="max-width:600px;margin-bottom:14px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Hospital registration number <span
+                                style="color:var(--slate-light);font-weight:400">(optional — printed on every report and bill)</span></label>
+                        <input class="form-control" id="hd-reg-no" maxlength="60" />
+                    </div>
+                    <div style="max-width:600px;margin-bottom:14px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Drug licence number <span
+                                style="color:var(--slate-light);font-weight:400">(optional — printed on invoices)</span></label>
+                        <input class="form-control" id="hd-drug-lic" maxlength="60" />
+                    </div>
+                    <div style="max-width:600px;margin-bottom:14px">
                         <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Contact
                             Numbers <span style="color:var(--slate-light);font-weight:400">(shown on invoices, test
                                 reports & prescriptions)</span></label>
@@ -1302,6 +1312,8 @@
                 document.getElementById('hd-state').value = h.state || '';
                 document.getElementById('hd-address').value = h.address || '';
                 document.getElementById('hd-gstin').value = h.gstin || '';
+                document.getElementById('hd-reg-no').value = h.clinical_establishment_reg_no || '';
+                document.getElementById('hd-drug-lic').value = h.drug_licence_no || '';
                 hdContactNumbers = Array.isArray(h.contact_numbers) ? h.contact_numbers.map(c => ({
                     type: c.type,
                     number: c.type === 'mobile' ? (c.number || '').replace(/\D/g, '').slice(-10) : c.number
@@ -1399,6 +1411,8 @@
                 const payload = {
                     address: document.getElementById('hd-address').value.trim(),
                     gstin: document.getElementById('hd-gstin').value.trim(),
+                    clinical_establishment_reg_no: document.getElementById('hd-reg-no').value.trim(),
+                    drug_licence_no: document.getElementById('hd-drug-lic').value.trim(),
                     contact_numbers: hdContactNumbers.map(c => ({ type: c.type, number: c.type === 'mobile' ? c.number : c.number.trim() })),
                     emails: hdEmails.map(e => e.trim()),
                     consultation_gst_percent: gstRateField('hd-gst-consultation'),

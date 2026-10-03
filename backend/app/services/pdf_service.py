@@ -162,8 +162,12 @@ def _hospital_detail_lines(hospital, style, include_gstin=False):
     elif getattr(hospital, "phone", None):
         lines.append(line("Contact Number", hospital.phone))
 
+    if getattr(hospital, "clinical_establishment_reg_no", None):
+        lines.append(line("Registration No.", hospital.clinical_establishment_reg_no))
     if include_gstin and hospital.gstin:
         lines.append(line("GSTIN", hospital.gstin))
+    if include_gstin and getattr(hospital, "drug_licence_no", None):
+        lines.append(line("Drug Licence No.", hospital.drug_licence_no))
 
     return lines
 
@@ -977,11 +981,25 @@ def generate_test_report_pdf(
     reference_range = ""
     unit = ""
     if catalog_item:
-        reference_range = (
-            catalog_item.reference_range_male if patient.gender.lower() == "male"
-            else catalog_item.reference_range_female
-        ) or ""
+        _g = (patient.gender or "").strip().lower()
+        _m = (catalog_item.reference_range_male or "").strip()
+        _f = (catalog_item.reference_range_female or "").strip()
+        if _g == "male":
+            reference_range = _m or _f
+        elif _g == "female":
+            reference_range = _f or _m
+        else:
+            reference_range = _m if (_m and _m == _f) else ("Range not available (patient sex not recorded)" if (_m or _f) else "")
         unit = catalog_item.unit or ""
+    # Prefer the range/unit frozen when the result was entered, so later catalog edits
+    # can't silently change a released report.
+    try:
+        _snap = json.loads(getattr(order, "result_snapshot", None) or "null")
+        if _snap and not _snap.get("panel") and _snap.get("rows"):
+            reference_range = _snap["rows"][0].get("range", reference_range) or reference_range
+            unit = _snap["rows"][0].get("unit", unit) or unit
+    except Exception:
+        pass
 
     try:
         result_data = json.loads(order.result_data or "{}")
@@ -989,7 +1007,7 @@ def generate_test_report_pdf(
         result_data = {}
 
     value = result_data.get("value", "—")
-    flag = result_data.get("flag", "N")
+    flag = result_data.get("flag") or _flag_for(value, reference_range)
     notes = result_data.get("notes", "")
 
     flag_labels = {"H": "High", "L": "Low", "N": "Normal"}
@@ -1117,6 +1135,26 @@ def _is_out_of_range(value_str, range_str):
         return True
     return False
 
+def _flag_for(value_str, range_str):
+    """'H' / 'L' when the value is outside the printed range, else 'N'."""
+    bounds = _parse_range_bounds(range_str)
+    if not bounds or not value_str:
+        return "N"
+    nums = re.findall(r'\d+\.?\d*', str(value_str).replace(",", ""))
+    if not nums:
+        return "N"
+    try:
+        val = float(nums[0])
+    except ValueError:
+        return "N"
+    low, high = bounds
+    if low is not None and val < low:
+        return "L"
+    if high is not None and val > high:
+        return "H"
+    return "N"
+
+
 def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, ordering_doctor, lab_staff, hospital, verify_hash: str = None, token_number: str = None, report_created_by: object = None) -> str:
     ensure_reports_dir()
 
@@ -1180,8 +1218,10 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
         table_data = [["Parameter", "Result", "Unit", "Reference Range"]]
         row_styles = []
         for i, row in enumerate(test["rows"]):
-            out = _is_out_of_range(row["value"], row["range"])
-            table_data.append([row["name"], row["value"] or "—", row["unit"] or "—", row["range"] or "—"])
+            _fl = _flag_for(row["value"], row["range"])
+            out = _fl != "N"
+            _shown = (f"{row['value']}  {_fl}" if out else (row["value"] or "—"))
+            table_data.append([row["name"], _shown, row["unit"] or "—", row["range"] or "—"])
             if out:
                 row_styles.append(("FONTNAME", (1, i+1), (1, i+1), "Helvetica-Bold"))
                 row_styles.append(("TEXTCOLOR", (1, i+1), (1, i+1), colors.HexColor("#ef4444")))

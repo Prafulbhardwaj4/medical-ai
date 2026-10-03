@@ -986,6 +986,8 @@ def dispense_prescription(
         MedicineOrder.consultation_id == consultation.id,
         MedicineOrder.status == "paid"
     ).all()
+    if not paid_orders:
+        raise HTTPException(status_code=400, detail="Nothing paid is waiting to be dispensed. Collect payment first.")
 
     for o in paid_orders:
         block_reason = _schedule_x_repeat_block(db, o)
@@ -1032,8 +1034,8 @@ def dispense_prescription(
                 hospital_id=current_doctor.hospital_id
             )
 
-    consultation.is_dispensed = True
-    consultation.dispensed_at = now_ist_naive()
+    db.flush()
+    refresh_consultation_dispensed(db, consultation)
     db.commit()
 
     from app.utils.notify import sync_stock_notifications

@@ -566,6 +566,8 @@ def get_hospital_details(
         # Editable by hospital admin
         "address": hospital.address,
         "gstin": hospital.gstin,
+        "clinical_establishment_reg_no": hospital.clinical_establishment_reg_no,
+        "drug_licence_no": hospital.drug_licence_no,
         "phone": hospital.phone,
         "contact_numbers": json.loads(hospital.contact_numbers) if hospital.contact_numbers else [],
         "emails": json.loads(hospital.emails) if hospital.emails else [],
@@ -608,6 +610,8 @@ class ContactNumberIn(BaseModel):
 class HospitalDetailsUpdate(BaseModel):
     address: Optional[str] = None
     gstin: Optional[str] = None
+    clinical_establishment_reg_no: Optional[str] = Field(default=None, max_length=60)
+    drug_licence_no: Optional[str] = Field(default=None, max_length=60)
     phone: Optional[str] = None
     contact_numbers: Optional[List[ContactNumberIn]] = None
     emails: Optional[List[EmailStr]] = None
@@ -679,6 +683,10 @@ def update_hospital_details(
         hospital.address = payload.address.strip()
     if payload.gstin is not None:
         hospital.gstin = payload.gstin.strip() or None
+    if payload.clinical_establishment_reg_no is not None:
+        hospital.clinical_establishment_reg_no = payload.clinical_establishment_reg_no.strip() or None
+    if payload.drug_licence_no is not None:
+        hospital.drug_licence_no = payload.drug_licence_no.strip() or None
     if payload.phone is not None:
         hospital.phone = payload.phone.strip() or None
     if payload.contact_numbers is not None:
@@ -740,6 +748,8 @@ def update_hospital_details(
         "contact_numbers": json.loads(hospital.contact_numbers) if hospital.contact_numbers else [],
         "emails": json.loads(hospital.emails) if hospital.emails else [],
         "logo_base64": hospital.logo_base64,
+        "clinical_establishment_reg_no": hospital.clinical_establishment_reg_no,
+        "drug_licence_no": hospital.drug_licence_no,
         "consultation_gst_percent": hospital.consultation_gst_percent,
         "test_gst_percent": hospital.test_gst_percent,
         "room_gst_percent": hospital.room_gst_percent,

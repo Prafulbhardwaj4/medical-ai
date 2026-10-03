@@ -14,7 +14,9 @@ class Hospital(Base):
     hospital_type = Column(String, default="private", nullable=False)
     billing_enabled = Column(Boolean, default=True, nullable=False)
     default_consultation_fee = Column(Float, nullable=True)
-    gstin = Column(String, nullable=True)  # optional — hospital adds this later if/when they need GST on invoices
+    gstin = Column(String, nullable=True)
+    clinical_establishment_reg_no = Column(String, nullable=True)  # state Clinical Establishments Act registration - printed on every document
+    drug_licence_no = Column(String, nullable=True)  # in-house pharmacy licence - printed on invoices  # optional — hospital adds this later if/when they need GST on invoices
     consultation_gst_percent = Column(Float, nullable=True)  # blank = no GST on consultation fee
     test_gst_percent = Column(Float, nullable=True)  # blank = no GST on lab tests
     room_gst_percent = Column(Float, nullable=True)  # blank = no GST on the taxable-excess portion of room charges
