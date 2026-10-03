@@ -13,7 +13,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 PHARMACY_VISIBLE_TYPES = ["low_stock", "expiring_stock", "admission_medicine_order", "suggestion_reply"]
 RECEPTIONIST_VISIBLE_TYPES = ["new_portal_patient", "ward_change_request", "sample_rejected", "admission_referral", "referral_incoming", "referral_departed", "referral_rejected", "referral_sent", "referral_admitted", "suggestion_reply", "appointment_needs_review", "deposit_topup_request", "discharge_order_placed"]
 LAB_VISIBLE_TYPES = ["admission_test_sample", "admission_sample_overdue", "suggestion_reply"]
-DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "critical_vitals", "no_assistant_alert", "emergency_ward_intake", "admission_medicine_substitute", "emergency_admission", "referral_rejected", "referral_admitted", "suggestion_reply"]
+DOCTOR_VISIBLE_TYPES = ["emergency_alert", "critical_result", "report_released", "critical_vitals", "no_assistant_alert", "emergency_ward_intake", "admission_medicine_substitute", "emergency_admission", "referral_rejected", "referral_admitted", "suggestion_reply"]
 NURSE_VISIBLE_TYPES = ["critical_result_escalation", "critical_vitals_escalation", "sample_rejected", "emergency_assistant_hold", "emergency_alert_for_assistant", "referral_rejected", "referral_admitted", "suggestion_reply"]
 
 ADMIN_EXCLUDED_TYPES = list(set(

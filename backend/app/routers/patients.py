@@ -61,13 +61,15 @@ def unified_patient_lookup(
     """§1 — single reception entry point: search by phone/UID/token and see which
     situations apply to the patient(s) found, instead of hunting across separate screens."""
     q = query.strip()
-    if not q:
-        return []
+    if len(q) < 3:
+        return []  # one or two characters would match half the hospital
 
     patients_found = {}
 
     by_phone_uid = db.query(Patient).filter(
         Patient.hospital_id == current_doctor.hospital_id,
+        Patient.merged_into_id.is_(None),
+        Patient.is_active == True,
         or_(Patient.phone.like(f"%{q}%"), Patient.patient_uid.ilike(f"%{q}%"))
     ).limit(10).all()
     for p in by_phone_uid:
@@ -77,7 +79,7 @@ def unified_patient_lookup(
         Checkin.hospital_id == current_doctor.hospital_id, Checkin.token_number.ilike(f"%{q}%")
     ).order_by(Checkin.created_at.desc()).limit(5).all()
     for c in by_token:
-        p = db.query(Patient).filter(Patient.id == c.patient_id).first()
+        p = db.query(Patient).filter(Patient.id == c.patient_id, Patient.merged_into_id.is_(None), Patient.is_active == True).first()
         if p:
             patients_found[p.id] = p
 
@@ -393,6 +395,8 @@ def list_patients(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    page = max(page, 1)
+    limit = min(max(limit, 1), 200)
     offset = (page - 1) * limit
     query = db.query(Patient).filter(Patient.hospital_id == current_doctor.hospital_id, Patient.merged_into_id.is_(None), Patient.is_active == True)
     if search:
@@ -1301,6 +1305,30 @@ def checkin_patient(
     ).first()
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found or no longer active")
+
+    # Same patient, same doctor, same day, not yet seen: almost always a double click or a
+    # second desk. Needs an explicit reason so we don't create two tokens and two fees.
+    _ds, _de = ist_day_bounds()
+    _open_same = db.query(Checkin).filter(
+        Checkin.patient_id == patient.id,
+        Checkin.doctor_id == doctor.id,
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == ist_today(),
+    ).first()
+    if _open_same:
+        _seen = db.query(Consultation.id).filter(
+            Consultation.patient_id == patient.id,
+            Consultation.doctor_id == doctor.id,
+            Consultation.token_number != None,
+            Consultation.is_voided == False,
+            Consultation.created_at >= _ds, Consultation.created_at < _de,
+        ).first()
+        if not _seen and not (payload.duplicate_reason or "").strip():
+            raise HTTPException(status_code=409, detail={
+                "message": f"{patient.name} already has token {_open_same.token_number} with this doctor today. Give a reason to issue another one.",
+                "existing_token": _open_same.token_number,
+                "needs_duplicate_reason": True,
+            })
 
     nurse = None
     if payload.send_to_nurse:

@@ -2583,7 +2583,7 @@
     }
 
     let _tokenGenerationInFlight = false;
-    async function generateToken(force) {
+    async function generateToken(force, duplicateReason) {
       if (_tokenGenerationInFlight) return;
       const btn = document.getElementById('btn-generate-token');
       const doctorId = document.getElementById('doc-select').value;
@@ -2603,6 +2603,7 @@
           send_to_nurse: true,
           consultation_fee: billingOn ? (parseFloat(document.getElementById('consultation-fee').value) || null) : null,
           force: !!force,
+          duplicate_reason: duplicateReason || null,
           additional_doctors: additionalDoctorsPayload.length ? additionalDoctorsPayload : null,
         });
         currentCheckinId = result.checkin_id;
@@ -2625,6 +2626,14 @@
             btn.disabled = false;
             btn.innerHTML = 'Generate Token';
             return generateToken(true);
+          }
+        } else if (e.data && e.data.needs_duplicate_reason) {
+          const _dupWhy = await promptModal(`${e.data.message}\n\nReason for a second token (min 5 characters):`);
+          if (_dupWhy && _dupWhy.trim().length >= 5) {
+            _tokenGenerationInFlight = false;
+            btn.disabled = false;
+            btn.innerHTML = 'Generate Token';
+            return generateToken(force, _dupWhy.trim());
           }
         } else {
           toast(e.message, "error");

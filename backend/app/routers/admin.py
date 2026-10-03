@@ -480,6 +480,13 @@ def billing_today(
     paid = [c for c in checkins if c.is_paid]
     unpaid = [c for c in checkins if not c.is_paid]
 
+    from app.models.refund import Refund as _Refund
+    _rs, _re = ist_day_bounds()
+    refunds_today = round(sum((r.amount or 0) for r in db.query(_Refund).filter(
+        _Refund.hospital_id == current_doctor.hospital_id,
+        _Refund.processed_at >= _rs, _Refund.processed_at < _re
+    ).all()), 2)
+
     total_collected = sum((c.consultation_fee or 0) + (c.test_fee or 0) for c in paid)
     total_unpaid = sum((c.consultation_fee or 0) + (c.test_fee or 0) for c in unpaid)
 
@@ -497,7 +504,8 @@ def billing_today(
         pharmacy_by_method[key] = round(pharmacy_by_method.get(key, 0) + line_total(m.unit_price or 0, ((m.billed_quantity if m.billed_quantity is not None else m.quantity) or 0)), 2)
 
     return {
-        "total_collected": total_collected + pharmacy_collected,
+        "total_collected": round(total_collected + pharmacy_collected - refunds_today, 2),
+        "refunds_today": refunds_today,
         "consultation_and_test_collected": total_collected,
         "pharmacy_collected": pharmacy_collected,
         "pharmacy_by_method": pharmacy_by_method,

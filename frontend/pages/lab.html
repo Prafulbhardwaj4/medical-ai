@@ -1780,6 +1780,7 @@
             orderId: t.id,
             testName: t.test_name,
             mode: 'panel',
+            notifiable: !!(detail && detail.notifiable_disease_id),
             // Fall back to whichever gender's range is actually filled in —
             // if the hospital only entered one (e.g. only Male), showing
             // nothing for the other gender was hiding a range that does
@@ -1794,6 +1795,7 @@
             orderId: t.id,
             testName: t.test_name,
             mode: 'single',
+            notifiable: !!(detail && detail.notifiable_disease_id),
             unit: detail ? detail.unit : '',
             range: detail ? ((isMale ? detail.reference_range_male : detail.reference_range_female) || detail.reference_range_male || detail.reference_range_female) : ''
           });
@@ -1803,6 +1805,11 @@
       bodyEl.innerHTML = bulkResultOrders.map(test => `
         <div class="bulk-test-block">
           <h3>${sanitize(test.testName)}</h3>
+          ${test.notifiable ? `
+            <label style="display:flex;align-items:center;gap:8px;margin:4px 0 10px;font-size:13px;color:var(--danger,#b91c1c);font-weight:600">
+              <input type="checkbox" id="bulk-idsp-${test.orderId}" />
+              Positive / confirmed case of a notifiable disease (include in IDSP report)
+            </label>` : ''}
           ${test.mode === 'panel'
             ? test.params.map(p => `
               <div class="bulk-param-row">
@@ -1823,6 +1830,10 @@
               </div>
             `
           }
+          <div style="margin-top:8px">
+            <label style="font-size:12px;color:var(--slate)">Lab remarks (optional, printed on the report)</label>
+            <textarea class="form-control" id="bulk-notes-${test.orderId}" rows="2" maxlength="500" placeholder="e.g. Sample slightly haemolysed"></textarea>
+          </div>
         </div>
       `).join('');
     }
@@ -1861,12 +1872,17 @@
             const val = document.getElementById(`bulk-val-${test.orderId}-${p.id}`).value.trim();
             review.push({ test: test.testName, param: p.name, value: val || null, unit: p.unit });
           }
-          payloads.push({ orderId: test.orderId, results });
+          const _panelNote = (document.getElementById(`bulk-notes-${test.orderId}`) || {}).value;
+          if (_panelNote && _panelNote.trim()) results.notes = _panelNote.trim();
+          payloads.push({ orderId: test.orderId, results, idsp: test.notifiable ? !!(document.getElementById(`bulk-idsp-${test.orderId}`) || {}).checked : undefined });
         } else {
           const val = document.getElementById(`bulk-val-${test.orderId}-single`).value.trim();
           if (!val) { skipped.push(test.testName); continue; }  // not ready yet — comes back next time
           if (test.unit && !NUM_RE.test(val)) { errEl.textContent = `${test.testName} must be a number.`; return null; }
-          payloads.push({ orderId: test.orderId, results: { value: val } });
+          const _singleResults = { value: val };
+          const _singleNote = (document.getElementById(`bulk-notes-${test.orderId}`) || {}).value;
+          if (_singleNote && _singleNote.trim()) _singleResults.notes = _singleNote.trim();
+          payloads.push({ orderId: test.orderId, results: _singleResults, idsp: test.notifiable ? !!(document.getElementById(`bulk-idsp-${test.orderId}`) || {}).checked : undefined });
           review.push({ test: test.testName, param: null, value: val, unit: test.unit });
         }
       }
@@ -1905,7 +1921,7 @@
         const payloads = bulkResultsDraft.payloads;
         let stillAwaitingVerification = false;
         for (const p of payloads) {
-          await api("POST", `/lab/orders/${p.orderId}/result`, { results: p.results });
+          await api("POST", `/lab/orders/${p.orderId}/result`, { results: p.results, ...(p.idsp !== undefined ? { is_idsp_notifiable: p.idsp } : {}) });
           // The backend auto-skips straight to verified_released when this
           // tech is the only lab-role staff at the hospital — read back what
           // it actually did instead of assuming 'result_entered' happened.

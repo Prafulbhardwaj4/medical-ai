@@ -816,6 +816,8 @@ async def structure(
         db.commit()
 
     if payload.transcript and payload.transcript.strip():
+        if len(payload.transcript) > 60000:
+            raise HTTPException(status_code=400, detail="Transcript is too long. Please shorten it and try again.")
         consultation.raw_transcript = payload.transcript.strip()
         db.commit()
 
@@ -839,7 +841,8 @@ async def structure(
         .filter(
             Consultation.patient_id == consultation.patient_id,
             Consultation.id != consultation_id,
-            Consultation.diagnosis != None
+            Consultation.diagnosis != None,
+            Consultation.is_voided == False
         )
         .order_by(desc(Consultation.created_at))
         .limit(3)
@@ -1289,7 +1292,21 @@ def update_consultation(
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
 
+    if consultation.is_voided:
+        raise HTTPException(status_code=400, detail="This prescription was voided and can no longer be edited.")
+
     was_confirmed = consultation.token_number is not None
+    if was_confirmed:
+        _visit_today = db.query(Checkin.id).filter(
+            Checkin.patient_id == consultation.patient_id,
+            Checkin.doctor_id == consultation.doctor_id,
+            Checkin.visit_date == ist_today()
+        ).first()
+        if not _visit_today:
+            raise HTTPException(
+                status_code=400,
+                detail="A confirmed prescription can only be edited on the day of the visit. Please start a new consultation."
+            )
     old_medicines = json.loads(consultation.medicines or "[]") if was_confirmed else []
 
     new_values = {
@@ -1887,6 +1904,11 @@ def admin_dashboard(
     patient_consult_count = {}
     for c in all_consults:
         patient_consult_count[c.patient_id] = patient_consult_count.get(c.patient_id, 0) + 1
+    last_consult_by_patient = {}
+    for c in all_consults:
+        prev = last_consult_by_patient.get(c.patient_id)
+        if prev is None or c.created_at > prev.created_at:
+            last_consult_by_patient[c.patient_id] = c
     new_patient_visits = sum(1 for count in patient_consult_count.values() if count == 1)
     returning_patient_visits = sum(1 for count in patient_consult_count.values() if count > 1)
 
@@ -1921,11 +1943,7 @@ def admin_dashboard(
         last_checkin = patient_checkins.get(p.id)
         doctor = doctor_map.get(last_checkin.doctor_id) if last_checkin else None
         consult_count = max(patient_consult_count.get(p.id, 0), patient_checkin_count.get(p.id, 0))
-        last_consult = max(
-            [c for c in all_consults if c.patient_id == p.id],
-            key=lambda c: c.created_at,
-            default=None
-        )
+        last_consult = last_consult_by_patient.get(p.id)
 
         candidates = []
         if last_consult:
@@ -2169,6 +2187,9 @@ def admin_consultations(
     from datetime import datetime
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    page = max(page, 1)
+    limit = min(max(limit, 1), 100)
 
     doctor_id_query = db.query(DoctorModel).filter(
         DoctorModel.role.in_([UserRole.doctor, UserRole.sub_admin])

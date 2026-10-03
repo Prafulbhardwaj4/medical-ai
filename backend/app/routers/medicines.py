@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import date, datetime, timedelta
 import io
 
@@ -597,11 +597,11 @@ def bulk_confirm_medicines(
     return {"created": [serialize(m) for m in created], "skipped": skipped}
 
 class BatchIn(BaseModel):
-    quantity: int
+    quantity: int = Field(le=10_000_000)
     expiry_date: Optional[date] = None
-    batch_number: Optional[str] = ""
-    reason: Optional[str] = None   # required by edit_batch when the quantity goes DOWN (see WRITE_OFF_REASONS)
-    note: Optional[str] = None
+    batch_number: Optional[str] = Field(default="", max_length=50)
+    reason: Optional[str] = Field(default=None, max_length=50)   # required by edit_batch when the quantity goes DOWN (see WRITE_OFF_REASONS)
+    note: Optional[str] = Field(default=None, max_length=300)
 
 
 WRITE_OFF_REASONS = {"expired", "damaged", "theft_loss", "correction", "returned_to_supplier", "other"}

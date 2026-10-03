@@ -141,6 +141,7 @@ class CheckinCreate(BaseModel):
     consultation_fee: Optional[float] = Field(default=None, ge=0, le=100000)
     test_fee: Optional[float] = Field(default=None, ge=0, le=1000000)
     force: Optional[bool] = False  # bypass the already-admitted warning once reception has confirmed
+    duplicate_reason: Optional[str] = Field(default=None, max_length=200)  # required to issue a 2nd token to the same patient + doctor on the same day
     additional_doctors: Optional[List[AdditionalDoctorIn]] = None  # item 7 — one visit, multiple doctors, one Add Doctor step before Generate Token
 
 class CheckinOut(BaseModel):

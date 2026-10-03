@@ -1058,7 +1058,7 @@ def day_end_summary(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     if date is None:  # only auto-catch-up when viewing "today" — avoid recursion when auto-closing past days calls this same function
-        auto_close_past_days(db, current_doctor)
+        pass  # past-day closing now runs in the scheduler, so this GET stays read-only
 
     target_date = datetime.fromisoformat(date).date() if date else ist_today()
     return _day_end_summary_core(db, current_doctor.hospital_id, target_date)

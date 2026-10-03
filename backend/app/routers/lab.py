@@ -259,6 +259,7 @@ class VerifyReleaseIn(BaseModel):
 class ResultIn(BaseModel):
     results: dict
     reason: Optional[str] = None  # required when correcting an already-released report
+    is_idsp_notifiable: Optional[bool] = None  # set from the result-entry screen for notifiable-disease tests
 
 
 def _escalate_unacknowledged_critical_results(db: Session, hospital_id: int) -> None:
@@ -1036,6 +1037,14 @@ def update_order_status(
         order.report_reference = next_report_number(db, release_hospital, "lab")
         order.verify_hash = generate_verify_hash(order.id, order.hospital_id, kind="lab_report")
 
+        # Tell the ordering doctor the report is ready (never for HIV tests: names stay confidential).
+        if order.consultation_id and not _is_hiv_order(db, order):
+            _cons = db.query(Consultation).filter(Consultation.id == order.consultation_id).first()
+            _pat = db.query(Patient).filter(Patient.id == order.patient_id).first()
+            if _cons and _pat:
+                from app.utils.notify import notify_report_released
+                notify_report_released(db, order.hospital_id, order.id, _pat.name, _cons.doctor_id, order.test_name)
+
     db.commit()
 
     log_action(
@@ -1193,6 +1202,8 @@ def save_order_result(
     # breach on an edit still gets caught.
     was_critical = order.is_critical
     breaches = _check_critical_breach(db, order, payload.results)
+    if payload.is_idsp_notifiable is not None:
+        order.is_idsp_notifiable = bool(payload.is_idsp_notifiable)
     order.is_critical = bool(breaches)
     order.critical_note = "; ".join(breaches) if breaches else None
     if breaches and not was_critical:

@@ -134,7 +134,14 @@ def sweep_todays_online_checkins(db: Session, hospital_id: int) -> None:
         Appointment.requested_time < today_end,
     ).all()
 
+    import logging
     for appt in appts:
-        link = db.query(PatientProfileLink).filter(PatientProfileLink.id == appt.profile_link_id).first()
-        if link and link.patient:
-            convert_appointment_to_checkin(db, appt, link.patient)
+        if not appt.doctor_id:
+            continue  # a check-in needs a doctor; doctorless bookings stay for reception to handle
+        try:
+            link = db.query(PatientProfileLink).filter(PatientProfileLink.id == appt.profile_link_id).first()
+            if link and link.patient:
+                convert_appointment_to_checkin(db, appt, link.patient)
+        except Exception:
+            db.rollback()
+            logging.getLogger(__name__).exception("Online check-in sweep failed for appointment %s", appt.id)

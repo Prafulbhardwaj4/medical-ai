@@ -64,11 +64,16 @@ def _seconds_until_next_midnight_ist():
 
 
 def run_midnight_close_for_all_hospitals():
+    """Closes yesterday and any earlier unclosed day (up to 14 back, e.g. after downtime)."""
+    for days_back in range(14, 0, -1):
+        _close_day_for_all_hospitals(ist_today() - timedelta(days=days_back))
+
+
+def _close_day_for_all_hospitals(yesterday):
     from app.routers.billing import close_day_for_hospital  # local import avoids a circular import at module load time
 
     db = SessionLocal()
     try:
-        yesterday = ist_today() - timedelta(days=1)
         hospital_ids = [h.id for h in db.query(Hospital.id).all()]
         for hospital_id in hospital_ids:
             already = db.query(DayEndClose).filter(
@@ -117,6 +122,10 @@ async def lab_escalation_loop():
 
 
 async def midnight_close_loop():
+    try:
+        run_midnight_close_for_all_hospitals()  # catch up on any day missed while the server was down
+    except Exception as e:
+        logger.warning(f"Startup day-end catch-up failed: {e}")
     while True:
         try:
             wait_seconds = _seconds_until_next_midnight_ist()

@@ -1032,7 +1032,8 @@ def generate_test_report_pdf(
 
     if notes:
         elements.append(Paragraph("Notes", section_style))
-        elements.append(Paragraph(notes, body_style))
+        from xml.sax.saxutils import escape as _xml_escape
+        elements.append(Paragraph(_xml_escape(str(notes)), body_style))
         elements.append(Spacer(1, 4*mm))
 
     # ── QR Code + Verification (item 1) ──
@@ -1207,7 +1208,8 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
                 body_style))
         if test.get("notes"):
             elements.append(Spacer(1, 2*mm))
-            elements.append(Paragraph(f"<b>Notes:</b> {test['notes']}", body_style))
+            from xml.sax.saxutils import escape as _xml_escape
+            elements.append(Paragraph(f"<b>Notes:</b> {_xml_escape(str(test['notes']))}", body_style))
 
     elements.append(Spacer(1, 5*mm))
     elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
