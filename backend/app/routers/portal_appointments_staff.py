@@ -19,6 +19,7 @@ from app.utils.portal_billing import current_doctor_fee, create_patient_cancella
 from app.utils.notify import resolve_notification
 from app.utils.portal_checkin import convert_appointment_to_checkin
 from app.utils.portal_auth import hash_password
+from app.utils.portal_otp import issue_temporary_password
 from app.models.portal import PatientAccount, PatientProfileLink
 from app.routers.portal_appointments import _estimated_slot_datetime, _release_abandoned_holds, _check_no_duplicate_active_booking, _reassign_late_arrival_slot
 from app.schemas.portal import BookForCallerIn
@@ -66,11 +67,12 @@ def book_appointment_for_caller(
             raise HTTPException(status_code=400, detail="This patient's phone number is invalid. Correct it on the patient record before booking.")
         account = db.query(PatientAccount).filter(PatientAccount.phone == _acct_phone).first()
         if not account:
-            # Not a real login yet — portal password delivery is on hold
-            # until WhatsApp is wired up, so this is just an internal,
-            # unshared placeholder that satisfies the not-null column.
-            placeholder_password = "".join(random.choices(string.ascii_letters + string.digits, k=24))
-            account = PatientAccount(phone=_acct_phone, password_hash=hash_password(placeholder_password))
+            # The patient signs in with the temporary password and must replace it
+            # (later this password is generated per patient and sent on WhatsApp).
+            account = PatientAccount(
+                phone=_acct_phone, password_hash=hash_password(issue_temporary_password()),
+                must_change_password=True,
+            )
             db.add(account)
             db.flush()
         link = PatientProfileLink(account_id=account.id, patient_id=patient.id, relation="self")

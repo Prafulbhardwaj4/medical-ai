@@ -74,6 +74,26 @@ def decode_link_confirm_token(token: str) -> dict:
         raise HTTPException(status_code=400, detail="This confirmation link is invalid or has expired")
 
 
+def create_portal_register_token(phone: str) -> str:
+    """Issued after a patient proved the temporary password; lets them set their own."""
+    now = datetime.utcnow()
+    return jwt.encode(
+        {"type": "portal_register", "sub": phone, "iat": now, "exp": now + timedelta(minutes=15)},
+        settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
+
+
+def verify_portal_register_token(token: str):
+    """Returns the phone number the token was issued for, or None."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        return None
+    if payload.get("type") != "portal_register":
+        return None
+    return payload.get("sub")
+
+
 def create_patient_password_reset_token(account_id: int, otp: str) -> str:
     payload = {
         "sub": str(account_id),

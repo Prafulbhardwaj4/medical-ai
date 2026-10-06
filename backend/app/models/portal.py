@@ -31,6 +31,9 @@ class PatientAccount(Base):
     email = Column(String, unique=True, nullable=True, index=True)
     password_hash = Column(String, nullable=False)
     password_changed_at = Column(DateTime, nullable=True)  # UTC naive; tokens issued before this are rejected
+    must_change_password = Column(Boolean, default=False, nullable=False)  # temporary password still in use
+    reset_otp_hash = Column(String, nullable=True)         # hashed forgot-password OTP (single use)
+    reset_otp_expires_at = Column(DateTime, nullable=True)  # IST naive
     address = Column(String, nullable=True)  # saved default address, used unless a booking opts for a different one
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=now_ist_naive)

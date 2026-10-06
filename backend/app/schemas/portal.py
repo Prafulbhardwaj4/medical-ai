@@ -42,6 +42,7 @@ class PatientSessionOut(BaseModel):
 class LoginResultOut(BaseModel):
     status: str
     access_token: Optional[str] = None
+    registration_token: Optional[str] = None  # only with status="needs_registration"
     doctor: Optional[PatientSessionOut] = None
 
 
@@ -377,6 +378,7 @@ class VisitDetailOut(BaseModel):
 class CompleteRegisterIn(BaseModel):
     phone: str
     new_password: str
+    registration_token: str
 
 
 class ConfirmProfileIn(BaseModel):

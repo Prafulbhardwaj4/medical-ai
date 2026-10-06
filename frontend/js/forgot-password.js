@@ -89,7 +89,7 @@
   // Self-service reset is switched off on the server until WhatsApp OTP exists
   // (the old fixed OTP let anyone take over any account). Flip to false and
   // restore the server endpoints when WhatsApp delivery goes live.
-  const FP_DISABLED = true;
+  const FP_DISABLED = false;
 
   window.openForgotPasswordModal = function () {
     injectModal();

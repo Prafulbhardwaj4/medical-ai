@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     PORTAL_INVITE_SECRET: str = "changeme-invite-secret"
     PORTAL_INVITE_EXPIRE_DAYS: int = 30
     PORTAL_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
+    # TEMPORARY, until WhatsApp delivery is live. Set either to "" to switch it off.
+    PORTAL_TEMP_PASSWORD: str = "Test1234"   # first-login password for patients; they must replace it
+    PORTAL_FIXED_OTP: str = "1234"           # "" = real random 6-digit OTP
     PORTAL_LINK_CONFIRM_EXPIRE_HOURS: int = 24
     PORTAL_FRONTEND_URL: str = "http://localhost:5501"
 
