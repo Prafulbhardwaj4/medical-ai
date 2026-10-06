@@ -34,6 +34,11 @@ CATEGORY_PATTERNS = {
               "refund_%", "waiver_%", "invoice_%", "day_end%"],
     "pharmacy": ["medicine_%", "batch_%", "stock_%", "pharmacy_%"],
     "settings": ["hospital_%", "fee_settings%", "waiver_settings%"],
+    "lab": ["test_%", "tests_%", "sample_%", "critical_%", "lab_%"],
+    "admissions": ["admission_%", "room_%", "ward_%"],
+    "appointments": ["appointment_%", "checkin_%", "portal_%"],
+    "referrals": ["referral_%", "opd_referral_%", "cross_hospital_%"],
+    "record_access": ["%_viewed", "%_downloaded"],
 }
 
 @router.get("/logs")
@@ -111,6 +116,22 @@ def get_audit_logs(
         ]
     }
 
+@router.get("/actions")
+def list_audit_actions(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Every action name this hospital has logged, for the Event Type filter."""
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    rows = (
+        db.query(AuditLog.action)
+        .filter(AuditLog.hospital_id == current_doctor.hospital_id, AuditLog.actor_role != "super_admin")
+        .distinct().order_by(AuditLog.action).all()
+    )
+    return [r[0] for r in rows]
+
+
 @router.get("/export")
 def export_audit_logs(
     from_date: Optional[str] = None,
@@ -179,6 +200,7 @@ def get_audit_summary(
 
     return {
         "total_events": total,
+        "record_access_events": sum(n for a, n in action_counts.items() if a.endswith("_viewed") or a.endswith("_downloaded")),
         "action_breakdown": action_counts,
         "recent": [
             {

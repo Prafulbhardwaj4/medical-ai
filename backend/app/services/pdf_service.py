@@ -897,7 +897,7 @@ def generate_prescription_pdf(
     elements.append(Spacer(1, 2*mm))
     footer_style = ParagraphStyle("footer", fontSize=8, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
     elements.append(Paragraph("This prescription is digitally generated and valid without a physical signature.", footer_style))
-    elements.append(Paragraph("This prescription is generated and digitally verified by MedScribe.",
+    elements.append(Paragraph("Powered by MedScribe",
                                ParagraphStyle("brand", fontSize=8, fontName="Helvetica-Oblique", alignment=TA_CENTER, textColor=colors.HexColor("#64748b"))))
 
     doc.build(elements, canvasmaker=_make_numbered_canvas(""))
@@ -991,7 +991,7 @@ def generate_test_report_pdf(
         elif _g == "female":
             reference_range = _f or _m
         else:
-            reference_range = _m if (_m and _m == _f) else ("Range not available (patient sex not recorded)" if (_m or _f) else "")
+            reference_range = _m if (_m and _m == _f) else ("Range not available for this patient (sex not recorded)" if (_m or _f) else "")
         unit = catalog_item.unit or ""
     # Prefer the range/unit frozen when the result was entered, so later catalog edits
     # can't silently change a released report.
@@ -1009,11 +1009,23 @@ def generate_test_report_pdf(
         result_data = {}
 
     value = result_data.get("value", "—")
-    flag = result_data.get("flag") or _flag_for(value, reference_range)
+    # Structured numeric range first (frozen snapshot, else live catalog); old free-text parsing is the fallback.
+    _sf = ""
+    try:
+        from app.utils.ref_ranges import row_fields, flag_for_row
+        _sn = json.loads(getattr(order, "result_snapshot", None) or "null")
+        if _sn and not _sn.get("panel") and _sn.get("rows") and "range_status" in _sn["rows"][0]:
+            _sf = flag_for_row(value, _sn["rows"][0])
+        elif catalog_item:
+            _sf = flag_for_row(value, row_fields(patient.gender, catalog_item))
+    except Exception:
+        _sf = ""
+    flag = result_data.get("flag") or _sf or _flag_for(value, reference_range)
     notes = result_data.get("notes", "")
 
-    flag_labels = {"H": "High", "L": "Low", "N": "Normal"}
-    flag_colors = {"H": colors.HexColor("#b45309"), "L": colors.HexColor("#1e40af"), "N": colors.HexColor("#065f46")}
+    flag_labels = {"H": "High", "L": "Low", "N": "Normal", "CH": "CRITICAL High", "CL": "CRITICAL Low", "NA": "Range n/a"}
+    flag_colors = {"H": colors.HexColor("#b45309"), "L": colors.HexColor("#1e40af"), "N": colors.HexColor("#065f46"),
+                   "CH": colors.HexColor("#b91c1c"), "CL": colors.HexColor("#b91c1c"), "NA": colors.HexColor("#64748b")}
 
     table_data = [
         ["Test Name", "Result", "Unit", "Reference Range", "Flag"],
@@ -1087,7 +1099,7 @@ def generate_test_report_pdf(
     elements.append(Spacer(1, 3*mm))
     end_style = ParagraphStyle("report_end", fontSize=8, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
     elements.append(Paragraph("This report is digitally generated and valid without a physical signature.", end_style))
-    elements.append(Paragraph("This report is generated and digitally verified by MedScribe.",
+    elements.append(Paragraph("Powered by MedScribe",
                                ParagraphStyle("brand", fontSize=8, fontName="Helvetica-Oblique", alignment=TA_CENTER, textColor=colors.HexColor("#64748b"))))
 
     doc.build(elements, canvasmaker=_make_numbered_canvas(""))
@@ -1220,9 +1232,10 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
         table_data = [["Parameter", "Result", "Unit", "Reference Range"]]
         row_styles = []
         for i, row in enumerate(test["rows"]):
-            _fl = _flag_for(row["value"], row["range"])
-            out = _fl != "N"
-            _shown = (f"{row['value']}  {_fl}" if out else (row["value"] or "—"))
+            _fl = row.get("flag") or _flag_for(row["value"], row["range"])
+            _lbl = {"H": "H", "L": "L", "CH": "CRIT H", "CL": "CRIT L"}.get(_fl)
+            out = _lbl is not None
+            _shown = (f"{row['value']}  {_lbl}" if out else (row["value"] or "—"))
             table_data.append([row["name"], _shown, row["unit"] or "—", row["range"] or "—"])
             if out:
                 row_styles.append(("FONTNAME", (1, i+1), (1, i+1), "Helvetica-Bold"))
@@ -1289,7 +1302,7 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     elements.append(Spacer(1, 3*mm))
     end_style = ParagraphStyle("report_end", fontSize=8, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.grey)
     elements.append(Paragraph("This report is digitally generated and valid without a physical signature.", end_style))
-    elements.append(Paragraph("This report is generated and digitally verified by MedScribe.",
+    elements.append(Paragraph("Powered by MedScribe",
                                ParagraphStyle("brand", fontSize=8, fontName="Helvetica-Oblique", alignment=TA_CENTER, textColor=colors.HexColor("#64748b"))))
 
     doc.build(elements, canvasmaker=_make_numbered_canvas(""))
@@ -1695,7 +1708,7 @@ def generate_invoice_pdf(
                                    ParagraphStyle("ref_only", fontSize=8, alignment=TA_CENTER, textColor=colors.HexColor("#334155"))))
         elements.append(Spacer(1, 3*mm))
 
-    elements.append(Paragraph("This invoice is generated and digitally verified by MedScribe.",
+    elements.append(Paragraph("Powered by MedScribe",
                                ParagraphStyle("brand", fontSize=8, fontName="Helvetica-Oblique", alignment=TA_CENTER, textColor=colors.HexColor("#64748b"))))
 
     doc.build(elements, canvasmaker=_make_numbered_canvas(""))

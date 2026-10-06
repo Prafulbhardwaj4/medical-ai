@@ -135,20 +135,6 @@ def list_pending_refunds(db: Session = Depends(get_db), current_doctor: Doctor =
         })
     return out
 
-
-@router.get("/patient/{patient_id}")
-def list_patient_refunds(patient_id: int, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
-    refunds = db.query(Refund).filter(
-        Refund.patient_id == patient_id, Refund.hospital_id == current_doctor.hospital_id
-    ).order_by(Refund.processed_at.desc()).all()
-    return [
-        {"id": r.id, "source_type": r.source_type, "source_id": r.source_id, "amount": r.amount,
-         "channel": r.channel, "status": r.status, "reason": r.reason,
-         "processed_at": r.processed_at.isoformat() if r.processed_at else None}
-        for r in refunds
-    ]
-
-
 @router.patch("/{refund_id}/mark-settled")
 def mark_refund_settled(refund_id: int, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
     if current_doctor.role.value not in ["admin", "sub_admin"]:

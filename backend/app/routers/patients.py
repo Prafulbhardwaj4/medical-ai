@@ -690,7 +690,7 @@ def checkin_today(
         "checkin_id": checkin.id,
         "consultation_fee": checkin.consultation_fee,
         "test_fee": checkin.test_fee,
-        "total_fee": (checkin.consultation_fee or 0) + (checkin.test_fee or 0),
+        "total_fee": (checkin.consultation_fee or 0),  # tests are billed from lab orders, not Checkin.test_fee
         "is_paid": checkin.is_paid,
         "is_consulted": db.query(Consultation).filter(
             Consultation.token_number == checkin.token_number
@@ -786,7 +786,7 @@ def get_checkin_slip(
         "checked_in_at": checkin.created_at.isoformat() if checkin.created_at else None,
         "nurse_name": f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
         "checkin_id": checkin.id,
-        "total_fee": (checkin.consultation_fee or 0) + (checkin.test_fee or 0),
+        "total_fee": (checkin.consultation_fee or 0),
         "is_paid": checkin.is_paid
     }
 
@@ -946,11 +946,8 @@ def refer_to_doctor(
     doctor (its own token, its own queue slot) so it flows through the exact
     same queue mechanism everything else does, tagged as a referral.
 
-    ASSUMPTION FLAGGED, not silently decided: this referral checkin carries
-    consultation_fee=0 / is_paid=True — no new fee, since it's a continuation
-    of the same paid OPD visit, not a fresh registration. If your hospitals
-    actually want to charge a second consultation fee for a referral, tell me
-    and I'll flip this to require payment like a normal checkin does.
+    Referrals are fee-free: the referral check-in carries consultation_fee=0 and
+    is marked paid, because it continues the same paid OPD visit.
     """
     if current_doctor.role.value != "doctor":
         raise HTTPException(status_code=403, detail="Only a doctor can refer a patient")
@@ -980,15 +977,21 @@ def refer_to_doctor(
     if not origin_checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today under you for this patient.")
 
+    _already_referred = db.query(OpdReferral.id).join(
+        Checkin, Checkin.id == OpdReferral.checkin_id
+    ).filter(
+        OpdReferral.patient_id == patient.id,
+        OpdReferral.referred_to_doctor_id == to_doctor.id,
+        Checkin.visit_date == ist_today(),
+    ).first()
+    if _already_referred:
+        raise HTTPException(status_code=400, detail="This patient was already referred to that doctor today.")
+
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
-    # Same fee resolution as a normal check-in — a referral isn't a
-    # discounted/free consult, it's a regular visit with the receiving
-    # doctor, just arriving via referral instead of the front desk.
-    referral_fee = to_doctor.consultation_fee
-    if referral_fee is None and hospital:
-        referral_fee = hospital.default_consultation_fee
+    # Fee-free referral: continuation of the same paid OPD visit.
+    referral_fee = 0
 
     referral_checkin = Checkin(
         hospital_id=current_doctor.hospital_id,
@@ -1000,10 +1003,23 @@ def refer_to_doctor(
         visit_date=ist_today(),
         consultation_fee=referral_fee,
         test_fee=0,
-        is_paid=False
+        is_paid=True,
+        paid_at=now_ist_naive()
     )
     db.add(referral_checkin)
     db.flush()
+
+    # Same visit: share the visit group, and carry the vitals over so the nurse does not repeat them.
+    if not origin_checkin.visit_group_id:
+        origin_checkin.visit_group_id = origin_checkin.id
+    referral_checkin.visit_group_id = origin_checkin.visit_group_id
+    if origin_checkin.vitals_status == "done" and origin_checkin.vitals_data:
+        referral_checkin.vitals_status = "done"
+        referral_checkin.vitals_data = origin_checkin.vitals_data
+        referral_checkin.vitals_recorded_by = origin_checkin.vitals_recorded_by
+        referral_checkin.vitals_recorded_at = origin_checkin.vitals_recorded_at
+    elif origin_checkin.vitals_status in ("pending", "sent_back"):
+        referral_checkin.vitals_status = "pending"  # same group, so one set of vitals fans out to both
 
     referral = OpdReferral(
         hospital_id=current_doctor.hospital_id,
@@ -1060,7 +1076,10 @@ def send_back_for_vitals(
         raise HTTPException(status_code=400, detail="Say what needs to be rechecked.")
 
     if not checkin.nurse_id:
-        checkin.nurse_id = pick_random_nurse(db, current_doctor.hospital_id, current_doctor.id)
+        # Pick from nurses covering the doctor this check-in belongs to, and store the
+        # nurse's id (this line used to assign the whole nurse object to the id column).
+        _nurse = pick_random_nurse(db, current_doctor.hospital_id, checkin.doctor_id)
+        checkin.nurse_id = _nurse.id if _nurse else None
 
     checkin.vitals_status = "sent_back"
     checkin.vitals_recheck_request = note
@@ -1526,7 +1545,7 @@ def mark_visit_group_paid(
             c.paid_at = now_ist_naive()
             c.payment_method = body.payment_method
             newly_paid += 1
-            total += (c.consultation_fee or 0) + (c.test_fee or 0)
+            total += (c.consultation_fee or 0)
     if newly_paid == 0:
         raise HTTPException(status_code=400, detail="This visit is already paid")
     db.commit()
@@ -1569,7 +1588,7 @@ def mark_checkin_paid(
         target_type="patient",
         target_id=checkin.patient_id,
         target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),
-        details=f"Token {checkin.token_number} · Rs.{(checkin.consultation_fee or 0) + (checkin.test_fee or 0):.2f}"
+        details=f"Token {checkin.token_number} · Rs.{(checkin.consultation_fee or 0):.2f}"
     )
     return {"is_paid": True, "paid_at": checkin.paid_at.isoformat()}
 
@@ -1762,8 +1781,7 @@ def todays_queue(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.doctor_id == current_doctor.id,
         Checkin.visit_date == ist_today(),
-        Checkin.is_paid == True,
-        or_(Checkin.emergency_status.is_(None), Checkin.emergency_status != "holding")
+        Checkin.is_paid == True
     ).order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
 
     patient_ids = [c.patient_id for c in checkins]
@@ -1885,94 +1903,6 @@ def skip_next_patient(
     checkin.up_next_skip = True
     db.commit()
     return {"ok": True}
-
-
-@router.get("/assistant-queue")
-def assistant_queue(
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """Combined walk-in + online queue across every doctor the assistant is
-    currently covering (today's AttendanceCoverage doctor_ids) — not one
-    doctor's queue like /queue/today, since an assistant stands in front of
-    a cabin and may be covering several doctors' patients at once. Excludes
-    already-consulted patients; includes vitals_status so the assistant can
-    see Vitals Pending / Sent Back for More Vitals / Vitals Recorded at a
-    glance without touching the vitals themselves."""
-    if current_doctor.role.value not in ("nurse", "assistant"):
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    from app.models.attendance import AttendanceRecord
-    from app.models.attendance_coverage import AttendanceCoverage
-    from app.utils.portal_checkin import sweep_todays_online_checkins
-    try:
-        sweep_todays_online_checkins(db, current_doctor.hospital_id)
-    except Exception:
-        db.rollback()
-
-    my_record = db.query(AttendanceRecord).filter(
-        AttendanceRecord.doctor_id == current_doctor.id,
-        AttendanceRecord.hospital_id == current_doctor.hospital_id,
-        AttendanceRecord.date == ist_today(),
-        AttendanceRecord.status.in_(["present", "on_break"])
-    ).first()
-    if not my_record:
-        return {"covering_doctor_ids": [], "walk_in": [], "online": []}
-
-    covering_doctor_ids = [
-        row.doctor_id for row in db.query(AttendanceCoverage).filter(
-            AttendanceCoverage.attendance_record_id == my_record.id,
-            AttendanceCoverage.doctor_id.isnot(None)
-        ).all()
-    ]
-    if not covering_doctor_ids:
-        return {"covering_doctor_ids": [], "walk_in": [], "online": []}
-
-    checkins = db.query(Checkin).filter(
-        Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.doctor_id.in_(covering_doctor_ids),
-        Checkin.visit_date == ist_today(),
-        Checkin.is_paid == True
-    ).order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
-
-    token_numbers = [c.token_number for c in checkins]
-    confirmed_tokens = set(
-        t[0] for t in db.query(Consultation.token_number)
-        .filter(Consultation.token_number.in_(token_numbers)).all()
-    )
-    checkins = [c for c in checkins if c.token_number not in confirmed_tokens]
-
-    patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
-    doctors = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_(covering_doctor_ids)).all()}
-
-    walk_in, online = [], []
-    for c in checkins:
-        p = patients.get(c.patient_id)
-        if not p:
-            continue
-        d = doctors.get(c.doctor_id)
-        row = {
-            "checkin_id": c.id,
-            "patient_id": p.id,
-            "patient_name": p.name,
-            "patient_uid": p.patient_uid,
-            "age": p.age,
-            "gender": p.gender,
-            "token_number": c.token_number,
-            "issue_category": c.issue_category,
-            "doctor_id": d.id if d else None,
-            "doctor_name": f"{d.title} {d.name}" if d else "—",
-            "created_at": c.created_at.isoformat(),
-            "is_emergency": c.is_emergency,
-            "is_returned": c.is_returned,
-            "vitals_status": c.vitals_status,
-            "source": c.source,
-            "booked_time": c.booked_time.isoformat() if c.booked_time else None,
-        }
-        (online if c.source == "online" else walk_in).append(row)
-
-    return {"covering_doctor_ids": covering_doctor_ids, "walk_in": walk_in, "online": online}
-
 
 @router.get("/reception/pending-payments")
 def reception_pending_payments(
@@ -2844,6 +2774,9 @@ def download_prescription_staff(
         consultation.verify_hash or ""
     )
     consultation.pdf_path = pdf_path
+    from app.utils.audit import stage_action
+    stage_action(db, current_doctor, "prescription_pdf_downloaded", "consultation", consultation.id,
+                 f"{patient.name} · {consultation.token_number or consultation.id}")
     db.commit()
 
     from fastapi.responses import FileResponse

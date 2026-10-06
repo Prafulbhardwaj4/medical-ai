@@ -225,6 +225,9 @@
         </svg>
         Change Password
       </button>
+      <button class="profile-menu-item" onclick="openDataRequestModal()">
+        Data &amp; privacy requests
+      </button>
       <button class="profile-menu-item danger" onclick="confirmDeactivateAccount()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -256,6 +259,45 @@
         <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
           <button class="btn btn-outline" onclick="closeAddressModal()">Cancel</button>
           <button class="btn btn-primary" id="btn-save-address" onclick="saveAddress()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-terms">
+      <div class="modal" style="max-width:440px">
+        <div class="modal-header"><h2>Terms and Privacy</h2></div>
+        <p style="background:#fef3c7;border:1px solid #f59e0b;padding:10px;border-radius:8px;font-size:13px">
+          <strong>PENDING LEGAL REVIEW.</strong> Placeholder wording, not the final text.
+        </p>
+        <p style="font-size:13.5px;margin:12px 0">
+          To keep using the patient portal, please read and accept our
+          <a href="terms.html" target="_blank">Terms of Service</a> and
+          <a href="privacy.html" target="_blank">Privacy Policy</a>.
+        </p>
+        <label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px">
+          <input type="checkbox" id="terms-accept-check" style="margin-top:3px" />
+          I have read and accept the Terms of Service and the Privacy Policy.
+        </label>
+        <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+          <button class="btn btn-primary" id="btn-accept-terms" onclick="acceptTerms()">Continue</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-data-request">
+      <div class="modal" style="max-width:440px">
+        <div class="modal-header">
+          <h2>Data &amp; privacy requests</h2>
+          <button class="modal-close" onclick="closeDataRequestModal()">&times;</button>
+        </div>
+        <p style="font-size:13.5px;color:var(--slate);margin-bottom:12px">
+          Choose what you need. Our team will contact you on your registered phone number.
+          (Process wording: PENDING LEGAL REVIEW.)
+        </p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <button class="btn btn-outline" onclick="sendDataRequest('export')">Get a copy of my data</button>
+          <button class="btn btn-outline" onclick="sendDataRequest('correction')">Correct my data</button>
+          <button class="btn btn-outline" onclick="sendDataRequest('erasure')">Delete my data</button>
         </div>
       </div>
     </div>
@@ -455,7 +497,12 @@
     async function loadRecords() {
       const list = document.getElementById("records-list");
       try {
-        allVisits = await api("GET", "/portal/dashboard/visits");
+        allVisits = [];
+        for (let off = 0; ; off += 100) {
+          const page = await api("GET", `/portal/dashboard/visits?limit=100&offset=${off}`);
+          allVisits = allVisits.concat(page);
+          if (page.length < 100) break;
+        }
         const hospitalSet = new Set(allVisits.map(v => v.hospital_name));
         const patientSet = new Set(allVisits.map(v => v.patient_name));
         dischargedAdmissions.forEach(a => { hospitalSet.add(a.hospital_name); patientSet.add(a.patient_name); });
@@ -644,7 +691,7 @@
         if (!v.consultation_id && !v.invoice_id && (!v.tests || !v.tests.length)) {
           html += `<p style="color:var(--slate-light);font-size:13px;padding-top:12px">No documents available for this visit yet.</p>`;
         }
-        if (!v.feedback_given) {
+        if (!v.feedback_given && v.feedback_allowed) {
           html += `
             <div style="padding-top:14px;border-top:1px solid var(--border);margin-top:8px">
               <div style="font-weight:500;margin-bottom:6px">How was your visit?</div>
@@ -655,11 +702,11 @@
                 <button class="btn btn-outline btn-sm" onclick="closeVisitModal()">Skip</button>
               </div>
             </div>`;
-        } else {
+        } else if (v.feedback_given) {
           html += `<p style="padding-top:14px;border-top:1px solid var(--border);margin-top:8px;font-size:13px;color:var(--slate-light)">Thanks — you've already shared feedback for this visit.</p>`;
         }
         body.innerHTML = html;
-        if (!v.feedback_given) setupStarPicker(v.checkin_id);
+        if (!v.feedback_given && v.feedback_allowed) setupStarPicker(v.checkin_id);
       } catch (e) {
         body.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
       }
@@ -786,6 +833,45 @@
     }
     function closeAddressModal() {
       document.getElementById("modal-address").classList.remove("open");
+    }
+
+    async function checkTermsAccepted() {
+      try {
+        const s = await api("GET", "/portal/auth/consent-status");
+        if (s && !s.accepted) document.getElementById("modal-terms").classList.add("open");
+      } catch (e) { /* never block the page if this check fails */ }
+    }
+    async function acceptTerms() {
+      if (!document.getElementById("terms-accept-check").checked) {
+        toast("Please tick the box to continue", "error");
+        return;
+      }
+      const btn = document.getElementById("btn-accept-terms");
+      btn.disabled = true;
+      try {
+        await api("POST", "/portal/auth/consent");
+        document.getElementById("modal-terms").classList.remove("open");
+      } catch (e) {
+        toast(e.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    function openDataRequestModal() {
+      closeProfileMenu();
+      document.getElementById("modal-data-request").classList.add("open");
+    }
+    function closeDataRequestModal() {
+      document.getElementById("modal-data-request").classList.remove("open");
+    }
+    async function sendDataRequest(kind) {
+      try {
+        const res = await api("POST", "/portal/auth/data-request", { kind });
+        toast(res.message, "success");
+        closeDataRequestModal();
+      } catch (e) {
+        toast(e.message, "error");
+      }
     }
     async function saveAddress() {
       const btn = document.getElementById("btn-save-address");
@@ -975,6 +1061,7 @@
     loadRecords();
     loadAdmissions();
     loadPendingProfiles();
+    checkTermsAccepted();
 
     // Auto-launches only if this patient account hasn't completed/skipped
     // the tutorial yet (backend-tracked via TutorialProgress) — shows

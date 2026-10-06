@@ -18,6 +18,7 @@ from app.models.doctor import Doctor
 from app.models.hospital import Hospital
 from app.models.hospital_medicine import HospitalMedicine
 from app.models.test_order import TestOrder
+from app.models.test_catalog import TestCatalogItem
 from app.models.radiology_order import RadiologyOrder
 from app.models.radiology_form_f import RadiologyFormF
 from app.models.invoice import Invoice
@@ -45,7 +46,7 @@ from app.utils.timezone import now_ist_naive, ist_day_bounds
 from app.utils.audit import log_action
 from app.routers.patients import generate_patient_uid, generate_url_token
 from sqlalchemy.exc import IntegrityError
-from app.utils.inventory import deduct_stock_fefo, sellable_stock
+from app.utils.inventory import deduct_stock_fefo, sellable_stock, restock_to_batches
 from app.utils.notify import notify_ward_change_request, notify_emergency_alert, notify_admission_medicines_ordered, notify_admission_tests_ordered, notify_discharge_order_placed, notify_critical_vitals, notify_critical_vitals_escalation, resolve_notification, resolve_notifications_for_link
 from app.config import settings
 from app.utils.receipts import next_receipt_number, next_note_number, generate_verify_hash
@@ -1197,6 +1198,8 @@ def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_curren
         med_out.append({
             "id": m.id, "medicine_id": m.medicine_id, "medicine_name": m.medicine_name, "quantity": m.quantity, "dosage": m.dosage, "route": m.route,
             "frequency_note": m.frequency_note, "is_active": m.is_active, "sourced_outside": m.sourced_outside,
+            "repeat_auth_status": m.repeat_auth_status,
+            "substitution_status": m.substitution_status, "substitute_for_id": m.substitute_for_id,
             "doses": [{
                 "id": d.id, "administered_at": d.administered_at.isoformat(), "notes": d.notes,
                 "administered_by_name": (lambda doc: f"{doc.title} {doc.name}" if doc else None)(db.query(Doctor).filter(Doctor.id == d.administered_by).first()),
@@ -1396,6 +1399,59 @@ def change_ward(admission_id: str, body: ChangeWardIn, current_doctor: Doctor = 
 
 # ---------- Medications (MAR) ----------
 
+def _ipd_schedule_x_needs_authorization(db: Session, a: Admission, medicine) -> bool:
+    """Same rule as OPD: a Schedule X drug already dispensed to this patient
+    (same generic, any brand, OPD or IPD) needs a doctor's authorization again."""
+    if not medicine or medicine.schedule != "x":
+        return False
+    from app.models.medicine_order import MedicineOrder
+
+    def _identity(med):
+        if med.parent_medicine_id:
+            parent = db.query(HospitalMedicine).filter(HospitalMedicine.id == med.parent_medicine_id).first()
+            if parent:
+                return (parent.generic_name or "").strip().lower()
+        return (med.generic_name or "").strip().lower()
+
+    target = _identity(medicine)
+    if not target:
+        return False
+
+    prior_opd = db.query(HospitalMedicine).join(
+        MedicineOrder, MedicineOrder.catalog_medicine_id == HospitalMedicine.id
+    ).filter(
+        MedicineOrder.patient_id == a.patient_id, MedicineOrder.hospital_id == a.hospital_id,
+        MedicineOrder.status == "dispensed", HospitalMedicine.schedule == "x",
+    ).all()
+    prior_ipd = db.query(HospitalMedicine).join(
+        AdmissionMedicationOrder, AdmissionMedicationOrder.medicine_id == HospitalMedicine.id
+    ).join(Admission, AdmissionMedicationOrder.admission_id == Admission.id).filter(
+        Admission.patient_id == a.patient_id, Admission.hospital_id == a.hospital_id,
+        AdmissionMedicationOrder.dispensed_at.isnot(None), HospitalMedicine.schedule == "x",
+    ).all()
+    return any(_identity(m) == target for m in prior_opd + prior_ipd)
+
+
+def _request_schedule_x_authorization(db: Session, a: Admission, order: AdmissionMedicationOrder, actor: Doctor):
+    """Holds the order and asks the admitting doctor in-app. Never auto-approves."""
+    order.repeat_auth_status = "pending"
+    patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
+    db.add(Notification(
+        hospital_id=a.hospital_id, target_doctor_id=(a.admitting_doctor_id or order.prescribed_by),
+        source_key=f"admission_x_auth:{order.id}",
+        type="admission_schedule_x_authorization", severity="warning",
+        title=f"Authorization needed: Schedule X repeat for {patient.name if patient else 'patient'}",
+        message=f"{order.medicine_name} was already dispensed to this patient before. It cannot be sent until you authorize it in the medication list.",
+        link_type="admission_medicine_order", link_id=a.id, is_read=False,
+    ))
+    log_action(
+        db, actor, action="admission_schedule_x_authorization_requested",
+        target_type="admission_medication_order", target_id=order.id,
+        target_label=order.medicine_name, details="Schedule X repeat for this patient, held for doctor authorization",
+        hospital_id=a.hospital_id,
+    )
+
+
 @router.post("/{admission_id}/medications")
 def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     if current_doctor.role.value not in ["doctor", "nurse", "admin", "sub_admin"]:
@@ -1434,6 +1490,11 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
     if existing:
         existing.quantity += units
         existing.order_batch_id = body.order_batch_id or existing.order_batch_id
+        _x_pending = False
+        if (not existing.sourced_outside) and existing.repeat_auth_status != "authorized" \
+                and _ipd_schedule_x_needs_authorization(db, a, medicine):
+            _request_schedule_x_authorization(db, a, existing, current_doctor)
+            _x_pending = True
         if not existing.sourced_outside:
             if body.medicine_id:
                 # Out-of-stock detection is automatic, not a manual pharmacy
@@ -1442,11 +1503,10 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
                 # really be filled (e.g. 1 strip on hand, 2-3 needed) is
                 # flagged the moment it's placed, not discovered later at
                 # "Mark Sent".
-                required_units = units * (medicine.pack_size or 1)
-                available_units = sellable_stock(db, medicine) or 0  # excludes expired batches
-                if available_units < required_units:
-                    existing.is_out_of_stock = True
-                deduct_stock_fefo(db, body.medicine_id, required_units, round_to_pack=True)
+                # Ordering only CHECKS availability (in-date stock, whole order). It deducts nothing:
+                # stock moves when pharmacy presses Mark Sent.
+                _sellable = sellable_stock(db, medicine)  # excludes expired batches; None = not tracked
+                existing.is_out_of_stock = bool(_sellable is not None and _sellable < existing.quantity * (medicine.pack_size or 1))
             patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
             batch_count = db.query(AdmissionMedicationOrder).filter(
                 AdmissionMedicationOrder.admission_id == a.id,
@@ -1458,7 +1518,8 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
             )
         db.commit()
         db.refresh(existing)
-        return {"id": existing.id, "message": "Existing order updated — units increased"}
+        return {"id": existing.id, "message": "Existing order updated — units increased",
+                "needs_authorization": _x_pending}
 
     order = AdmissionMedicationOrder(
         admission_id=a.id, medicine_id=body.medicine_id, medicine_name=body.medicine_name,
@@ -1469,15 +1530,18 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
         order_batch_id=body.order_batch_id,
     )
     db.add(order)
+    db.flush()  # order.id is needed for the authorization request
+    _x_pending_new = False
+    if (not order.sourced_outside) and _ipd_schedule_x_needs_authorization(db, a, medicine):
+        _request_schedule_x_authorization(db, a, order, current_doctor)
+        _x_pending_new = True
 
     if not order.sourced_outside:
         if body.medicine_id:
             # Same automatic check as the merge branch above, for a brand-new order.
-            required_units = units * (medicine.pack_size or 1)
-            available_units = sellable_stock(db, medicine) or 0  # excludes expired batches
-            if available_units < required_units:
-                order.is_out_of_stock = True
-            deduct_stock_fefo(db, body.medicine_id, required_units, round_to_pack=True)
+            # Check only. Nothing is deducted until Mark Sent.
+            _sellable = sellable_stock(db, medicine)  # excludes expired batches; None = not tracked
+            order.is_out_of_stock = bool(_sellable is not None and _sellable < order.quantity * (medicine.pack_size or 1))
         patient = db.query(Patient).filter(Patient.id == a.patient_id).first()
         db.flush()  # assign order.id before the batch-count query below
         batch_count = db.query(AdmissionMedicationOrder).filter(
@@ -1491,7 +1555,9 @@ def add_medication_order(admission_id: str, body: AddMedicationOrderIn, current_
 
     db.commit()
     db.refresh(order)
-    return {"id": order.id, "message": "Medication order added"}
+    return {"id": order.id, "needs_authorization": _x_pending_new,
+            "message": ("Schedule X repeat: sent to the doctor for authorization. Pharmacy cannot send it until approved."
+                        if _x_pending_new else "Medication order added")}
 
 
 @router.patch("/{admission_id}/medications/{order_id}/stop")
@@ -1517,9 +1583,121 @@ def resume_medication(admission_id: str, order_id: int, current_doctor: Doctor =
     order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Medication order not found")
+    if order.substitution_status in ("pending_approval", "rejected"):
+        raise HTTPException(status_code=400, detail="This substitute was not approved, so it cannot be resumed")
     order.is_active = True
     db.commit()
     return {"message": "Medication resumed"}
+
+
+from pydantic import BaseModel as _BM
+from typing import Optional as _Opt
+
+
+class SubstitutionDecisionIn(_BM):
+    approve: bool
+    reason: _Opt[str] = None
+
+
+@router.patch("/{admission_id}/medications/{order_id}/substitution")
+def decide_medicine_substitution(admission_id: str, order_id: int, body: SubstitutionDecisionIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    if current_doctor.role.value not in ["doctor", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor can approve or reject a substitute medicine")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="This patient is no longer admitted")
+    new_order = db.query(AdmissionMedicationOrder).filter(
+        AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id
+    ).first()
+    if not new_order:
+        raise HTTPException(status_code=404, detail="Medication order not found")
+    if new_order.substitution_status != "pending_approval" or not new_order.substitute_for_id:
+        raise HTTPException(status_code=400, detail="There is no substitute waiting for approval on this order")
+    if current_doctor.id not in (a.admitting_doctor_id, new_order.prescribed_by):
+        raise HTTPException(status_code=403, detail="Only the admitting or prescribing doctor can decide this substitute")
+
+    original = db.query(AdmissionMedicationOrder).filter(
+        AdmissionMedicationOrder.id == new_order.substitute_for_id, AdmissionMedicationOrder.admission_id == a.id
+    ).first()
+
+    if not body.approve:
+        new_order.substitution_status = "rejected"
+        new_order.is_active = False
+        if original and not original.dispensed_at:
+            original.is_out_of_stock = True  # back to "out of stock" so pharmacy can act again
+        log_action(
+            db, current_doctor, action="admission_med_substitution_rejected",
+            target_type="admission_medication_order", target_id=new_order.id,
+            target_label=new_order.medicine_name, details=(body.reason or "").strip() or None,
+            hospital_id=a.hospital_id,
+        )
+        db.commit()
+        return {"message": "Substitute rejected. The original order is back to out of stock."}
+
+    if not original or original.dispensed_at or not original.is_out_of_stock or not original.is_active:
+        raise HTTPException(status_code=400, detail="The original order has changed. Ask pharmacy to raise the substitute again.")
+    medicine = db.query(HospitalMedicine).filter(
+        HospitalMedicine.id == new_order.medicine_id, HospitalMedicine.hospital_id == a.hospital_id
+    ).first()
+    if not medicine:
+        raise HTTPException(status_code=400, detail="Substitute medicine is no longer in the catalog")
+    needed_units = original.quantity * (medicine.pack_size or 1)
+    _sellable = sellable_stock(db, medicine)
+    if not original.sourced_outside and _sellable is not None and _sellable < needed_units:
+        raise HTTPException(status_code=400, detail=f"Not enough in-date stock of {medicine.generic_name} any more")
+    # No stock moves here: the substitute is deducted when pharmacy sends it.
+    new_order.is_active = True
+    new_order.substitution_status = "approved"
+    new_order.created_at = now_ist_naive()  # so it shows in today's pharmacy queue
+    original.is_active = False
+    log_action(
+        db, current_doctor, action="admission_med_substitution_approved",
+        target_type="admission_medication_order", target_id=new_order.id,
+        target_label=f"{original.medicine_name} -> {new_order.medicine_name}",
+        hospital_id=a.hospital_id,
+    )
+    db.commit()
+    return {"message": "Substitute approved. Pharmacy can now send it."}
+
+
+@router.patch("/{admission_id}/medications/{order_id}/authorize-repeat")
+def authorize_ipd_schedule_x_repeat(admission_id: str, order_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Doctor sign-off for a Schedule X repeat on an admitted patient. Same people
+    as OPD: the admitting or prescribing doctor, or admin/sub_admin as a separately
+    audited override. Never automatic."""
+    role = current_doctor.role.value
+    if role not in ["doctor", "sub_admin", "admin"]:
+        raise HTTPException(status_code=403, detail="Only a doctor can authorize a Schedule X repeat")
+    a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    if a.status != "admitted":
+        raise HTTPException(status_code=400, detail="This patient is no longer admitted")
+    order = db.query(AdmissionMedicationOrder).filter(
+        AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Medication order not found")
+    if order.repeat_auth_status != "pending":
+        raise HTTPException(status_code=400, detail="There is no Schedule X authorization waiting on this order")
+
+    is_override = False
+    if role in ("doctor", "sub_admin") and current_doctor.id in (a.admitting_doctor_id, order.prescribed_by):
+        pass
+    elif role in ("admin", "sub_admin"):
+        is_override = True
+    else:
+        raise HTTPException(status_code=403, detail="Only the admitting or prescribing doctor can authorize this repeat")
+
+    order.repeat_auth_status = "authorized"
+    order.repeat_authorized_by = current_doctor.id
+    order.repeat_authorized_at = now_ist_naive()
+    db.commit()
+    log_action(
+        db, current_doctor,
+        action="admission_schedule_x_repeat_authorized_by_admin_override" if is_override else "admission_schedule_x_repeat_authorized",
+        target_type="admission_medication_order", target_id=order.id, target_label=order.medicine_name,
+        hospital_id=a.hospital_id,
+    )
+    return {"message": "Repeat authorized. Pharmacy can now send it."}
 
 
 @router.post("/{admission_id}/medications/{order_id}/administer")
@@ -1530,6 +1708,8 @@ def administer_medication(admission_id: str, order_id: int, body: AdministerMedi
     order = db.query(AdmissionMedicationOrder).filter(AdmissionMedicationOrder.id == order_id, AdmissionMedicationOrder.admission_id == a.id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Medication order not found")
+    if order.substitution_status in ("pending_approval", "rejected"):
+        raise HTTPException(status_code=400, detail="This substitute is not approved by the doctor, so it cannot be given")
 
     # Deliberately allowed even when the order is currently stopped (is_active
     # == False) — this is a clinical/MAR log of a dose actually given at the
@@ -1560,6 +1740,8 @@ def return_medication(admission_id: str, order_id: int, body: ReturnMedicationIn
 
     if order.sourced_outside:
         raise HTTPException(status_code=400, detail="This medicine was family-sourced — nothing was billed or stocked, so there's nothing to return")
+    if not order.dispensed_at:
+        raise HTTPException(status_code=400, detail="This medicine was never sent to the ward, so it was never billed and there is nothing to return")
 
     # Units are billed and stock-deducted upfront, all at once, when the order
     # is placed — so what's actually returnable is the ordered quantity minus
@@ -1586,7 +1768,18 @@ def return_medication(admission_id: str, order_id: int, body: ReturnMedicationIn
         # so a returned strip goes back as pack_size raw units, mirroring the
         # deduction at order time.
         if body.disposition == "restocked_to_shelf":
-            medicine.stock_quantity = (medicine.stock_quantity or 0) + body.quantity * (medicine.pack_size or 1)
+            # Back into the SAME batches it was taken from when it was sent.
+            _pack = medicine.pack_size or 1
+            _restocked_before = sum(
+                r.quantity for r in db.query(AdmissionMedicationReturn).filter(
+                    AdmissionMedicationReturn.order_id == order.id, AdmissionMedicationReturn.restocked == True  # noqa: E712
+                ).all()
+            ) * _pack
+            try:
+                _allocs = json.loads(order.stock_allocations or "[]")
+            except Exception:
+                _allocs = []
+            restock_to_batches(db, medicine, _allocs, body.quantity * _pack, _restocked_before)
     else:
         unit_price = order.manual_unit_price or 0.0
 
@@ -1762,11 +1955,23 @@ def order_admission_test(admission_id: str, body: AddAdmissionTestIn, current_do
     if a.status != "admitted":
         raise HTTPException(status_code=400, detail="Cannot order tests for a discharged admission")
 
+    # Name and price always come from THIS hospital's catalog. Whatever
+    # test_name / price the client sends is ignored.
+    if not body.test_id:
+        raise HTTPException(status_code=400, detail="Pick the test from the catalog list")
+    catalog_test = db.query(TestCatalogItem).filter(
+        TestCatalogItem.id == body.test_id,
+        TestCatalogItem.hospital_id == a.hospital_id,
+        TestCatalogItem.is_active == True  # noqa: E712
+    ).first()
+    if not catalog_test:
+        raise HTTPException(status_code=400, detail="This test is not in your hospital's catalog")
+
     valid_priorities = {"routine", "urgent", "stat"}
     priority = body.priority if body.priority in valid_priorities else "routine"
     test = TestOrder(
         admission_id=a.id, patient_id=a.patient_id, hospital_id=a.hospital_id,
-        test_id=body.test_id, test_name=body.test_name, price=body.price,
+        test_id=catalog_test.id, test_name=catalog_test.name, price=catalog_test.fee or 0,
         included=False, status="paid",  # billed at discharge, so it can go straight to the lab queue
         paid_at=now_ist_naive(), queued_at=now_ist_naive(),
         priority=priority,
@@ -2145,6 +2350,16 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     a.status = "discharged"
     a.discharge_date = now_ist_naive()
     a.discharge_summary = body.discharge_summary
+
+    # Tests ordered but never collected die with the admission: they leave the
+    # lab queue and can never add a charge to the closed bill (nothing was
+    # billed yet, so there is nothing to refund). Samples already collected
+    # keep going so the lab can finish and release the result.
+    for _pending in db.query(TestOrder).filter(
+        TestOrder.admission_id == a.id, TestOrder.status == "paid"
+    ).all():
+        _pending.status = "cancelled"
+        _pending.queued_at = None
     a.discharge_type = discharge_type
     a.discharging_doctor_id = body.discharging_doctor_id or a.admitting_doctor_id
     a.course_in_hospital = (body.course_in_hospital or "").strip() or None

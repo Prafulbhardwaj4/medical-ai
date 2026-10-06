@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     # LOCAL DEV ONLY. When set, this fixed text is accepted as the captcha answer on
     # login. It is ignored (and the app refuses to start) in production.
     DEV_CAPTCHA_ANSWER: str = ""
+    DEV_SKIP_SUPERADMIN_2FA: bool = False  # local dev only; startup refuses to run with it in production
 
     DATABASE_URL: str = "sqlite:///./medscribe.db"
 
@@ -52,6 +53,14 @@ class Settings(BaseSettings):
     # treated as abandoned and the slot is released back for others to book.
     # Placeholder value pending real payment-gateway timing — easy to tune here.
     PORTAL_BOOKING_HOLD_MINUTES: int = 15
+
+    # Pay-at-reception rule (no payment gateway yet): a patient may pay up to this many minutes
+    # AFTER their booked slot time and still keep that slot. Later than that, reception must
+    # choose a new slot or the walk-in queue. Same rule for online and phone bookings.
+    PORTAL_PAYMENT_GRACE_MINUTES: int = 60
+
+    # One portal account may not sit on more than this many unpaid, future slot holds at once.
+    PORTAL_MAX_UNPAID_HOLDS_PER_ACCOUNT: int = 3
 
     # Refund tiers for patient-initiated cancellation — placeholder values
     # pending legal sign-off, kept as named constants so they're easy to
@@ -119,6 +128,8 @@ def _is_production(s) -> bool:
 
 def validate_startup_secrets(s) -> None:
     problems = []
+    if s.DEV_SKIP_SUPERADMIN_2FA and _is_production(s):
+        raise RuntimeError("Refusing to start: DEV_SKIP_SUPERADMIN_2FA must never be set in production")
     if s.DEV_CAPTCHA_ANSWER and _is_production(s):
         raise RuntimeError("Refusing to start: DEV_CAPTCHA_ANSWER must never be set in production")
     for name in ("SECRET_KEY", "PORTAL_INVITE_SECRET"):

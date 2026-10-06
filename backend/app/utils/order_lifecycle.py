@@ -15,6 +15,9 @@ def is_order_expired(db: Session, patient_id: int, consultation_id: int, order_c
     if now_ist_naive() - order_created_at > timedelta(days=WINDOW_DAYS):
         return True
 
+    if consultation_id is None:
+        return False  # walk-in / self-referred order: only the 7-day rule applies
+
     newer_consultation = db.query(Consultation).filter(
         Consultation.patient_id == patient_id,
         Consultation.id != consultation_id,

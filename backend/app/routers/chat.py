@@ -23,7 +23,7 @@ router = APIRouter(
 ADMIN_ROLES = ["admin", "sub_admin"]
 STAFF_ROLES = ["doctor", "receptionist", "nurse", "assistant", "lab", "pharmacy", "radiology"]
 
-CHAT_UPLOAD_DIR = "chat_uploads"
+CHAT_UPLOAD_DIR = os.environ.get("CHAT_UPLOAD_DIR", "chat_uploads")
 os.makedirs(CHAT_UPLOAD_DIR, exist_ok=True)
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10MB
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}

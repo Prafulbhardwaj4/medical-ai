@@ -839,6 +839,57 @@
   </div>
 
   <!-- Tier Trail Modal -->
+  <div class="modal-overlay" id="followup-modal">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h2>Follow-up</h2>
+        <button class="modal-close" onclick="closeModal('followup-modal')">×</button>
+      </div>
+      <label class="form-label" style="font-size:12.5px;color:var(--slate)">Status</label>
+      <select class="form-control" id="fu-status" style="margin-bottom:14px">
+        <option value="new">New</option>
+        <option value="contacted">Contacted</option>
+        <option value="closed">Closed</option>
+      </select>
+      <input class="form-control" id="fu-owner" placeholder="Owner (who is following up)" maxlength="100" style="margin-bottom:14px" />
+      <label class="form-label" style="font-size:12.5px;color:var(--slate)">Next follow-up date</label>
+      <input type="date" class="form-control" id="fu-date" style="margin-bottom:14px" />
+      <textarea class="form-control" id="fu-notes" rows="4" maxlength="2000" placeholder="Notes" style="margin-bottom:14px"></textarea>
+      <div class="err-msg" id="fu-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="saveFollowUp()">Save</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeModal('followup-modal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="lead-hospital-modal">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h2>Create hospital from lead</h2>
+        <button class="modal-close" onclick="closeModal('lead-hospital-modal')">×</button>
+      </div>
+      <input class="form-control" id="lh-name" placeholder="Hospital name" style="margin-bottom:14px" />
+      <select class="form-control" id="lh-type" style="margin-bottom:14px">
+        <option value="private">Private</option>
+        <option value="government">Government</option>
+      </select>
+      <select class="form-control" id="lh-tier" style="margin-bottom:14px">
+        <option value="foundation" selected>Foundation</option>
+        <option value="growth">Growth</option>
+        <option value="scale">Scale</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+      <label class="form-label" style="font-size:12.5px;color:var(--slate)">Billing Cycle Start Date</label>
+      <input type="date" class="form-control" id="lh-cycle" style="margin-bottom:14px" />
+      <div class="err-msg" id="lh-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" onclick="submitLeadHospital()">Create</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeModal('lead-hospital-modal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="tier-trail-modal">
     <div class="modal" style="max-width:560px;max-height:85vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
       <div style="background:var(--navy);color:#fff;padding:20px 24px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
@@ -1032,6 +1083,7 @@
       const el = document.getElementById('upgrade-requests-list');
       try {
         const data = await api('GET', '/admin/upgrade-requests');
+        allUpgradeRequests = data;
         const newCount = data.filter(r => r.status === 'new').length;
         const badge = document.getElementById('upgrade-requests-nav-badge');
         if (newCount) { badge.textContent = newCount; badge.style.display = ''; } else { badge.style.display = 'none'; }
@@ -1049,7 +1101,7 @@
                   <span class="badge badge-teal">${typeof tierLabel === 'function' ? tierLabel(r.requested_tier) : r.requested_tier}</span>
                 </div>
               </div>
-              <span class="badge ${r.status === 'new' ? 'badge-amber' : 'badge-teal'}">${r.status === 'new' ? 'New' : 'Contacted'}</span>
+              <span class="badge ${followBadge(r.status)}">${followLabel(r.status)}</span>
             </div>
 
             <div style="background:var(--teal-subtle);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px">
@@ -1061,12 +1113,13 @@
             </div>
 
             ${r.message ? `<div style="font-size:13px;color:var(--navy);margin-bottom:10px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(r.message)}</div>` : ''}
+            ${followInfo(r)}
 
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
               <span style="font-size:12px;color:var(--slate-light)">${new Date(r.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
               <div style="display:flex;gap:8px">
                 <button class="btn btn-outline btn-sm" onclick="showSection('hospitals');openDetail(${r.hospital_id})">View Hospital</button>
-                <button class="btn btn-outline btn-sm" onclick="toggleUpgradeRequestStatus(${r.id})">${r.status === 'new' ? 'Mark Contacted' : 'Mark New'}</button>
+                <button class="btn btn-outline btn-sm" onclick="openFollowUp('upgrade', ${r.id})">Follow-up</button>
               </div>
             </div>
           </div>
@@ -1074,6 +1127,83 @@
       } catch (e) {
         el.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
+    }
+
+    let allUpgradeRequests = [];
+    let followUpCtx = null;
+    let leadHospitalCtx = null;
+
+    function followLabel(s) { return ({ new: 'New', contacted: 'Contacted', converted: 'Converted', closed: 'Closed' })[s] || s; }
+    function followBadge(s) { return s === 'new' ? 'badge-amber' : s === 'contacted' ? 'badge-teal' : s === 'converted' ? 'badge-green' : 'badge-grey'; }
+    function followInfo(x) {
+      const bits = [];
+      if (x.owner) bits.push('Owner: ' + sanitize(x.owner));
+      if (x.next_follow_up_at) bits.push('Next follow-up: ' + sanitize(x.next_follow_up_at));
+      if (x.converted_hospital_name) bits.push('Hospital: ' + sanitize(x.converted_hospital_name));
+      const notes = x.follow_up_notes ? `<div style="margin-top:4px;white-space:pre-line">${sanitize(x.follow_up_notes)}</div>` : '';
+      if (!bits.length && !notes) return '';
+      return `<div style="font-size:12.5px;color:var(--slate);margin-bottom:10px">${bits.join(' · ')}${notes}</div>`;
+    }
+
+    function openFollowUp(kind, id) {
+      const row = (kind === 'lead' ? allHospitalLeads : allUpgradeRequests).find(r => r.id === id);
+      if (!row) return;
+      followUpCtx = { kind, id };
+      const st = document.getElementById('fu-status');
+      st.value = row.status === 'converted' ? 'contacted' : row.status;
+      st.disabled = row.status === 'converted';
+      document.getElementById('fu-owner').value = row.owner || '';
+      document.getElementById('fu-date').value = row.next_follow_up_at || '';
+      document.getElementById('fu-notes').value = row.follow_up_notes || '';
+      document.getElementById('fu-err').textContent = '';
+      openModal('followup-modal');
+    }
+
+    async function saveFollowUp() {
+      if (!followUpCtx) return;
+      const st = document.getElementById('fu-status');
+      const body = {
+        owner: document.getElementById('fu-owner').value,
+        next_follow_up_at: document.getElementById('fu-date').value || '',
+        follow_up_notes: document.getElementById('fu-notes').value,
+      };
+      if (!st.disabled) body.status = st.value;
+      const path = followUpCtx.kind === 'lead'
+        ? `/admin/hospital-leads/${followUpCtx.id}/follow-up`
+        : `/admin/upgrade-requests/${followUpCtx.id}/follow-up`;
+      try {
+        await api('PATCH', path, body);
+        closeModal('followup-modal');
+        toast('Saved', 'success');
+        if (followUpCtx.kind === 'lead') loadHospitalLeads(); else loadUpgradeRequests();
+      } catch (e) { document.getElementById('fu-err').textContent = e.message; }
+    }
+
+    function openLeadHospital(id) {
+      const l = allHospitalLeads.find(x => x.id === id);
+      if (!l) return;
+      leadHospitalCtx = id;
+      document.getElementById('lh-name').value = l.hospital_name;
+      document.getElementById('lh-type').value = 'private';
+      document.getElementById('lh-tier').value = 'foundation';
+      document.getElementById('lh-cycle').value = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      document.getElementById('lh-err').textContent = '';
+      openModal('lead-hospital-modal');
+    }
+
+    async function submitLeadHospital() {
+      if (!leadHospitalCtx) return;
+      try {
+        const h = await api('POST', `/admin/hospital-leads/${leadHospitalCtx}/create-hospital`, {
+          name: document.getElementById('lh-name').value,
+          hospital_type: document.getElementById('lh-type').value,
+          tier: document.getElementById('lh-tier').value,
+          billing_cycle_start: document.getElementById('lh-cycle').value || null,
+        });
+        closeModal('lead-hospital-modal');
+        toast(`Hospital created (${h.hospital_code}). Add its admin from the hospital page.`, 'success');
+        loadHospitalLeads();
+      } catch (e) { document.getElementById('lh-err').textContent = e.message; }
     }
 
     async function toggleUpgradeRequestStatus(id) {
@@ -1136,7 +1266,7 @@
                   <span class="badge badge-grey">${sanitize(l.city)}, ${sanitize(l.state)}</span>
                 </div>
               </div>
-              <span class="badge ${l.status === 'new' ? 'badge-amber' : 'badge-teal'}">${l.status === 'new' ? 'New' : 'Contacted'}</span>
+              <span class="badge ${followBadge(l.status)}">${followLabel(l.status)}</span>
             </div>
 
             <div style="background:var(--teal-subtle);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px">
@@ -1145,10 +1275,16 @@
             </div>
 
             ${l.note ? `<div style="font-size:13px;color:var(--navy);margin-bottom:10px;background:var(--smoke);border-radius:var(--radius);padding:8px 10px">${sanitize(l.note)}</div>` : ''}
+            ${followInfo(l)}
 
             <div style="display:flex;justify-content:space-between;align-items:center">
               <span style="font-size:12px;color:var(--slate-light)">${new Date(l.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-              <button class="btn btn-outline btn-sm" onclick="toggleHospitalLeadStatus(${l.id})">${l.status === 'new' ? 'Mark Contacted' : 'Mark New'}</button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                ${l.converted_hospital_id
+                  ? `<button class="btn btn-outline btn-sm" onclick="showSection('hospitals');openDetail(${l.converted_hospital_id})">View Hospital</button>`
+                  : `<button class="btn btn-outline btn-sm" onclick="openLeadHospital(${l.id})">Create Hospital</button>`}
+                <button class="btn btn-outline btn-sm" onclick="openFollowUp('lead', ${l.id})">Follow-up</button>
+              </div>
             </div>
           </div>
         `).join('');
@@ -1254,7 +1390,7 @@
           return;
         }
         body.innerHTML = data.notifications.map(n => `
-          <div class="notif-item ${n.unread ? 'unread' : ''}" onclick="onNotifClick('${n.nav_section}', ${n.hospital_id || 'null'})">
+          <div class="notif-item ${n.unread ? 'unread' : ''}" onclick="onNotifClick('${n.nav_section}', ${n.hospital_id || 'null'}, '${n.computed ? n.id : ''}')">
             <div class="notif-item-title">
               <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
               ${sanitize(n.title)}
@@ -1268,10 +1404,19 @@
       }
     }
 
-    function onNotifClick(navSection, hospitalId) {
+    async function onNotifClick(navSection, hospitalId, alertId) {
+      if (alertId) {
+        try { await api('POST', '/admin/notifications-feed/seen', { alert_id: alertId }); loadNotifUnreadCount(); } catch (e) { }
+      }
       closeNotifPanel();
       showSection(navSection);
       if (hospitalId) openDetail(hospitalId);
+    }
+
+    async function markAllNotifsRead() {
+      try { await api('POST', '/admin/notifications-feed/seen-all', {}); } catch (e) { }
+      loadNotifList();
+      loadNotifUnreadCount();
     }
 
     async function loadNotifUnreadCount() {

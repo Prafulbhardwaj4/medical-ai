@@ -2185,15 +2185,22 @@
       if (!admissionData.medications.length) { list.innerHTML = `<p style="color:var(--slate-light)">No medications ordered yet.</p>`; return; }
       list.innerHTML = admissionData.medications.map(m => `
         <div class="med-card ${m.is_active ? '' : 'stopped'}">
+          ${m.repeat_auth_status === 'pending' ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <span>Schedule X repeat: needs doctor authorization before pharmacy can send it.</span>
+            ${['doctor', 'sub_admin', 'admin'].includes(getDoctor()?.role) && admissionData.status === 'admitted' ? `<button class="btn btn-primary btn-sm" onclick="authorizeXRepeat(${m.id})">Authorize</button>` : ''}
+          </div>` : ''}
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
             <div>
               <div style="font-weight:600">${sanitize(m.medicine_name)} ${m.sourced_outside ? '<span class="badge badge-slate" style="font-weight:400">Family-sourced</span>' : ''}</div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              ${canManageMedOrders() && admissionData.status === 'admitted' ? `<button class="btn btn-primary btn-sm" onclick="openAdministerMedModal(${m.id})">Mark Administered</button>` : ''}
+              ${m.substitution_status === 'pending_approval' ? `<span class="badge badge-amber">Substitute for ${sanitize((admissionData.medications.find(x => x.id === m.substitute_for_id) || {}).medicine_name || 'out-of-stock medicine')}: awaiting approval</span>` : ''}
+              ${m.substitution_status === 'pending_approval' && getDoctor()?.role === 'doctor' && admissionData.status === 'admitted' ? `<button class="btn btn-primary btn-sm" onclick="decideSubstitution(${m.id}, true)">Approve</button><button class="btn btn-outline btn-sm" onclick="decideSubstitution(${m.id}, false)">Reject</button>` : ''}
+              ${m.substitution_status === 'rejected' ? `<span class="badge badge-grey">Substitute rejected</span>` : ''}
+              ${!['pending_approval', 'rejected'].includes(m.substitution_status) && canManageMedOrders() && admissionData.status === 'admitted' ? `<button class="btn btn-primary btn-sm" onclick="openAdministerMedModal(${m.id})">Mark Administered</button>` : ''}
               ${canManageMedOrders() && admissionData.status === 'admitted' && m.is_active ? `<button class="btn btn-outline btn-sm" onclick="stopMed(${m.id})">Stop</button>` : ''}
-              ${!m.is_active ? `<span class="badge badge-grey">Stopped</span>` : ''}
-              ${canManageMedOrders() && admissionData.status === 'admitted' && !m.is_active ? `<button class="btn btn-primary btn-sm" onclick="resumeMed(${m.id})">Resume</button>` : ''}
+              ${!m.is_active && !['pending_approval', 'rejected'].includes(m.substitution_status) ? `<span class="badge badge-grey">Stopped</span>` : ''}
+              ${canManageMedOrders() && admissionData.status === 'admitted' && !m.is_active && !['pending_approval', 'rejected'].includes(m.substitution_status) ? `<button class="btn btn-primary btn-sm" onclick="resumeMed(${m.id})">Resume</button>` : ''}
               ${canReturnMed() && admissionData.status === 'admitted' && !m.sourced_outside && m.quantity > (m.returned_quantity || 0) ? `<button class="btn btn-outline btn-sm" onclick="openReturnMedModal(${m.id})">Return</button>` : ''}
             </div>
           </div>
@@ -2677,6 +2684,28 @@
       try {
         await api("PATCH", `/admissions/${admissionId}/medications/${orderId}/resume`);
         toast("Medication resumed", "success");
+        loadAdmission();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function decideSubstitution(orderId, approve) {
+      let reason = null;
+      if (!approve) {
+        reason = prompt("Reason for rejecting this substitute (optional):") ;
+        if (reason === null) return;
+      } else if (!confirm("Approve this substitute medicine? Pharmacy will be able to send it.")) return;
+      try {
+        const res = await api("PATCH", `/admissions/${admissionId}/medications/${orderId}/substitution`, { approve, reason });
+        toast(res.message, "success");
+        loadAdmission();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function authorizeXRepeat(orderId) {
+      if (!confirm("Authorize this Schedule X repeat for this patient? This is recorded under your name.")) return;
+      try {
+        const res = await api("PATCH", `/admissions/${admissionId}/medications/${orderId}/authorize-repeat`);
+        toast(res.message, "success");
         loadAdmission();
       } catch (e) { toast(e.message, "error"); }
     }

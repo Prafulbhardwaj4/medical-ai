@@ -83,16 +83,6 @@ class PatientCreate(BaseModel):
         return v
 
 
-class EmergencyIntakeIn(BaseModel):
-    name: Optional[str] = None
-    approx_age: Optional[int] = None
-    approx_gender: Optional[str] = None
-    doctor_id: int
-    reason: str
-    destination: str  # "ward" | "cabin"
-    consultation_fee: Optional[float] = None
-
-
 class PatientOut(BaseModel):
     id: int
     patient_uid: str
@@ -205,6 +195,8 @@ class ReasonIn(BaseModel):
 
 class CollectAppointmentPaymentIn(PaymentMethodIn):
     fee_amount: Optional[float] = None
+    late_choice: Optional[str] = None   # "next_slot" | "walk_in": required only when the payment is past the grace window
+    slot_id: Optional[int] = None       # the new slot, when late_choice == "next_slot"
 
 
 class DoctorLite(BaseModel):

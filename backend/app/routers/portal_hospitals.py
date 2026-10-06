@@ -2,6 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from app.utils.rate_limit import limiter
+from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -92,7 +93,15 @@ def list_hospital_doctors(request: Request, hospital_id: int, db: Session = Depe
         raise HTTPException(status_code=404, detail="Hospital not found")
     doctors = db.query(Doctor).filter(
         Doctor.hospital_id == hospital_id,
-        Doctor.role == UserRole.doctor,
+        or_(
+            Doctor.role == UserRole.doctor,
+            and_(
+                Doctor.role == UserRole.sub_admin,
+                Doctor.specialization.isnot(None),
+                Doctor.specialization != "",
+                Doctor.specialization != "Hospital Admin",
+            ),
+        ),
         Doctor.is_active == True  # noqa: E712
     ).all()
     return [

@@ -134,19 +134,14 @@ def _critical_sides(cmp_, val, lo, hi):
     return out
 
 
+from app.utils.ref_ranges import pick_range_text, row_fields, flag_for_row  # noqa: E402
+
+
 def _pick_range(gender, male_r, female_r):
     """Reference range for the patient's sex. If sex isn't male/female, only show a
-    range when both sexes share it; otherwise say it's unavailable (no silent female default)."""
-    g = (gender or "").strip().lower()
-    male_r = (male_r or "").strip()
-    female_r = (female_r or "").strip()
-    if g == "male":
-        return male_r or female_r
-    if g == "female":
-        return female_r or male_r
-    if male_r and male_r == female_r:
-        return male_r
-    return "Range not available (patient sex not recorded)" if (male_r or female_r) else ""
+    range when both sexes share it; otherwise say it's unavailable (no silent female default).
+    Single implementation lives in utils/ref_ranges.py so lab, portal and PDFs agree."""
+    return pick_range_text(gender, male_r, female_r)
 
 
 def _check_critical_breach(db: Session, order: TestOrder, results: dict) -> list:
@@ -156,7 +151,10 @@ def _check_critical_breach(db: Session, order: TestOrder, results: dict) -> list
     the single 'value' key. Non-numeric entries are silently skipped rather
     than erroring — free-text results (e.g. 'Negative') just can't be
     threshold-checked."""
-    test = db.query(TestCatalogItem).filter(TestCatalogItem.id == order.test_id).first() if order.test_id else None
+    test = db.query(TestCatalogItem).filter(
+        TestCatalogItem.id == order.test_id,
+        TestCatalogItem.hospital_id == order.hospital_id
+    ).first() if order.test_id else None
     if not test:
         return []
 
@@ -622,9 +620,13 @@ def get_admission_lab_queue(
 
     today_start, today_end = ist_day_bounds()
 
-    orders = db.query(TestOrder).filter(
+    # Uncollected tests of a discharged patient never show (discharge also
+    # cancels them). Samples already in the lab stay so results can be finished.
+    from app.models.admission import Admission as _Adm
+    orders = db.query(TestOrder).join(_Adm, TestOrder.admission_id == _Adm.id).filter(
         TestOrder.hospital_id == current_doctor.hospital_id,
         TestOrder.admission_id.isnot(None),
+        or_(_Adm.status == "admitted", TestOrder.status != "paid"),
         or_(
             TestOrder.status.in_(["paid", "sample_collected", "processing", "result_entered"]),
             and_(
@@ -692,6 +694,8 @@ def get_lab_test_detail(
             "reference_range_female": p.reference_range_female or "",
             "critical_low": p.critical_low,
             "critical_high": p.critical_high,
+            "ref_low_male": p.ref_low_male, "ref_high_male": p.ref_high_male,
+            "ref_low_female": p.ref_low_female, "ref_high_female": p.ref_high_female,
         } for p in rows]
 
     return {
@@ -703,6 +707,8 @@ def get_lab_test_detail(
         "reference_range_female": test.reference_range_female or "",
         "critical_low": test.critical_low,
         "critical_high": test.critical_high,
+        "ref_low_male": test.ref_low_male, "ref_high_male": test.ref_high_male,
+        "ref_low_female": test.ref_low_female, "ref_high_female": test.ref_high_female,
         "fasting_required": test.fasting_required,
         "required_tube": test.required_tube,
         "notifiable_disease_id": test.notifiable_disease_id,
@@ -997,6 +1003,11 @@ def update_order_status(
             order.fasting_confirmed = payload.fasting_confirmed
         if payload.drawn_from_iv_line is not None:
             order.drawn_from_iv_line = payload.drawn_from_iv_line
+        if order.admission_id is not None:
+            from app.models.admission import Admission as _Adm
+            _adm = db.query(_Adm).filter(_Adm.id == order.admission_id).first()
+            if not _adm or _adm.status != "admitted":
+                raise HTTPException(status_code=400, detail="This patient has been discharged — the sample can no longer be collected or billed")
         if order.admission_id is not None and order.price:
             # Running-bill charge happens here, at sample collection —
             # not at order time (see order_admission_test in admissions.py).
@@ -1146,9 +1157,9 @@ def _build_result_snapshot(db: Session, order: TestOrder, patient) -> str:
             TestCatalogParameter.test_catalog_item_id == item.id,
             TestCatalogParameter.is_active == True  # noqa: E712
         ).order_by(TestCatalogParameter.display_order).all()
-        snap = {"panel": True, "rows": [{"name": p.name, "unit": p.unit or "", "range": _rng(p)} for p in params]}
+        snap = {"panel": True, "rows": [{"name": p.name, "unit": p.unit or "", "range": _rng(p), **row_fields(getattr(patient, "gender", ""), p)} for p in params]}
     else:
-        snap = {"panel": False, "rows": [{"name": order.test_name, "unit": (item.unit if item else "") or "", "range": _rng(item) if item else ""}]}
+        snap = {"panel": False, "rows": [{"name": order.test_name, "unit": (item.unit if item else "") or "", "range": _rng(item) if item else "", **(row_fields(getattr(patient, "gender", ""), item) if item else {})}]}
     return json.dumps(snap)
 
 
@@ -1499,6 +1510,7 @@ def get_patient_reports(
                     "value": raw_results.get(p.name, ""),
                     "unit": p.unit or "",
                     "range": gender_range or fallback_range or "",
+                    "flag": flag_for_row(raw_results.get(p.name, ""), row_fields(patient.gender, p)),
                 })
         elif raw_results:
             gender_range = _pick_range(patient.gender, catalog_item.reference_range_male, catalog_item.reference_range_female) if catalog_item else ""
@@ -1508,6 +1520,7 @@ def get_patient_reports(
                 "value": raw_results.get("value", ""),
                 "unit": (catalog_item.unit if catalog_item else "") or "",
                 "range": gender_range or fallback_range or "",
+                "flag": flag_for_row(raw_results.get("value", ""), row_fields(patient.gender, catalog_item)) if catalog_item else "",
             })
 
         v["tests"].append({
@@ -1654,11 +1667,13 @@ def get_combined_test_report(
         if _snap:
             if _snap.get("panel"):
                 rows = [{"name": r["name"], "unit": r.get("unit", ""), "range": r.get("range", ""),
+                         "flag": flag_for_row(result_data.get(r["name"], ""), r),
                          "value": result_data.get(r["name"], "")}
                         for r in _snap["rows"] if result_data.get(r["name"])]
             else:
                 _r0 = _snap["rows"][0]
                 rows = [{"name": _r0["name"], "unit": _r0.get("unit", ""), "range": _r0.get("range", ""),
+                         "flag": flag_for_row(result_data.get("value", ""), _r0),
                          "value": result_data.get("value", "")}]
         elif catalog_item and catalog_item.is_panel:
             params = db.query(TestCatalogParameter).filter(
@@ -1670,6 +1685,7 @@ def get_combined_test_report(
                 "name": p.name,
                 "unit": p.unit or "",
                 "range": _pick_range(patient.gender, p.reference_range_male, p.reference_range_female),
+                "flag": flag_for_row(result_data.get(p.name, ""), row_fields(patient.gender, p)),
                 "value": result_data.get(p.name, "")
             } for p in params if result_data.get(p.name)]  # untested subtests are excluded from the final report entirely
         else:
@@ -1682,6 +1698,7 @@ def get_combined_test_report(
                 "name": order.test_name,
                 "unit": unit,
                 "range": range_str,
+                "flag": flag_for_row(result_data.get("value", ""), row_fields(patient.gender, catalog_item)) if catalog_item else "",
                 "value": result_data.get("value", "")
             }]
 

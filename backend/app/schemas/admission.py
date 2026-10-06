@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 VALID_ADMISSION_TYPES = {"planned", "emergency", "maternity", "transfer_in", "day_care"}

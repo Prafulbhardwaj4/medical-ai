@@ -239,6 +239,11 @@
                         <div class="stat-value" id="stat-total">—</div>
                         <div class="stat-sub" id="stat-month">— this month</div>
                     </div>
+                    <div class="stat-card" id="scribe-card" style="display:none">
+                        <div class="stat-label">AI Scribe Usage</div>
+                        <div class="stat-value" id="stat-scribe">—</div>
+                        <div class="stat-sub" id="stat-scribe-sub"></div>
+                    </div>
                 </div>
                 <div class="section-grid-2" style="margin-bottom:20px">
                     <div class="card">
@@ -423,7 +428,7 @@
                 </div>
                 <div class="stats-row" style="margin-bottom:20px">
                     <div class="stat-card">
-                        <div class="stat-label">Collected Today</div>
+                        <div class="stat-label">Collected Today (net)</div>
                         <div class="stat-value" id="stat-collected-today">—</div>
                         <div class="stat-sub" id="stat-paid-count">—</div>
                     </div>
@@ -433,9 +438,19 @@
                         <div class="stat-sub" id="stat-unpaid-count">—</div>
                     </div>
                     <div class="stat-card">
+                        <div class="stat-label">Billed Today</div>
+                        <div class="stat-value" id="stat-billed-today">—</div>
+                        <div class="stat-sub">invoices dated today</div>
+                    </div>
+                    <div class="stat-card">
                         <div class="stat-label">Collected in Last 30 Days</div>
                         <div class="stat-value" id="stat-collected-30d">—</div>
-                        <div class="stat-sub" id="stat-collected-30d-count">—</div>
+                        <div class="stat-sub" id="stat-collected-30d-count">after refunds &amp; waivers</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Billed in Last 30 Days</div>
+                        <div class="stat-value" id="stat-billed-30d">—</div>
+                        <div class="stat-sub" id="stat-billed-30d-count">—</div>
                     </div>
                 </div>
                 <div class="card" style="margin-bottom:20px">
@@ -885,6 +900,7 @@
                 const b = await api("GET", "/admin/billing/today");
                 document.getElementById('stat-collected-today').textContent = `Rs.${b.total_collected.toFixed(2)}`;
                 document.getElementById('stat-paid-count').textContent = `${b.paid_count} paid`;
+                document.getElementById('stat-billed-today').textContent = `Rs.${(b.billed || 0).toFixed(2)}`;
                 document.getElementById('stat-unpaid-today').textContent = `Rs.${b.unpaid_amount.toFixed(2)}`;
                 document.getElementById('stat-unpaid-count').textContent = `${b.unpaid_count} unpaid`;
             } catch (e) {
@@ -1082,12 +1098,15 @@
                 from.setDate(from.getDate() - 29);
                 const params = new URLSearchParams({ from_date: from.toISOString().slice(0, 10), to_date: to.toISOString().slice(0, 10) });
                 const data = await api("GET", `/billing/revenue-history/daily?${params.toString()}`);
-                const total = data.days.reduce((s, d) => s + d.total, 0);
+                const billed = data.days.reduce((s, d) => s + d.total, 0);
+                const collected = data.days.reduce((s, d) => s + (d.collected || 0), 0);
                 const count = data.days.reduce((s, d) => s + d.invoice_count, 0);
-                document.getElementById('stat-collected-30d').textContent = `Rs.${total.toFixed(2)}`;
-                document.getElementById('stat-collected-30d-count').textContent = `${count} invoice${count !== 1 ? 's' : ''}`;
+                document.getElementById('stat-collected-30d').textContent = `Rs.${collected.toFixed(2)}`;
+                document.getElementById('stat-billed-30d').textContent = `Rs.${billed.toFixed(2)}`;
+                document.getElementById('stat-billed-30d-count').textContent = `${count} invoice${count !== 1 ? 's' : ''}`;
             } catch (e) {
                 document.getElementById('stat-collected-30d').textContent = '—';
+                document.getElementById('stat-billed-30d').textContent = '—';
             }
         }
 
@@ -1547,6 +1566,21 @@
                 document.getElementById("stat-total").textContent = ov.total_consultations;
                 document.getElementById("stat-month").textContent = `${ov.month_consultations} this month`;
 
+                const sc = d.ai_scribe;
+                const scribeCard = document.getElementById("scribe-card");
+                if (sc && sc.included) {
+                    scribeCard.style.display = "";
+                    document.getElementById("stat-scribe").textContent =
+                        sc.cap === null ? `${sc.used} (Unlimited)` : `${sc.used} / ${sc.cap}`;
+                    let sub = sc.cap === null ? "this cycle" : `${sc.total_remaining} left`;
+                    if (sc.topup_remaining) sub += ` (incl. ${sc.topup_remaining} top-up)`;
+                    if (!sc.allowed && sc.reason === "cycle_ended") sub = "Billing cycle ended";
+                    if (!sc.allowed && sc.reason === "cycle_not_started") sub = "Billing cycle not started";
+                    document.getElementById("stat-scribe-sub").textContent = sub;
+                } else {
+                    scribeCard.style.display = "none";
+                }
+
                 document.getElementById("visit-type-summary").innerHTML = `
           ${statItem('New Patients (1 visit)', ov.new_patient_visits)}
           ${statItem('Returning Patients (2+ visits)', ov.returning_patient_visits)}
@@ -1576,9 +1610,8 @@
             <td data-label="Token" style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}${c.is_voided ? ' <span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626">Voided</span>' : ''}</td>
             <td data-label="Patient"><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
             <td data-label="Doctor" style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
-            <td data-label="Diagnosis">${sanitize(c.diagnosis)}</td>
           </tr>`).join('');
-                    document.getElementById("today-activity").innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis'], rows);
+                    document.getElementById("today-activity").innerHTML = makeTable(['Token', 'Patient', 'Doctor'], rows);
                 }
             }
 
@@ -1703,14 +1736,13 @@
           <td data-label="Token" style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}${c.is_voided ? ' <span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626">Voided</span>' : ''}</td>
           <td data-label="Patient"><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
           <td data-label="Doctor" style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
-          <td data-label="Diagnosis">${sanitize(c.diagnosis)}</td>
           <td data-label="Date" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(c.date)}</td>
           <td data-label="Feedback" style="white-space:nowrap">
             ${c.feedback_rating ? `${c.feedback_rating}/5 stars` : '<span style="color:var(--slate-light)">No feedback</span>'}
             ${c.feedback_rating ? `<button class="btn btn-outline btn-sm" style="margin-left:8px" onclick='openFeedbackNotesModal(${jsArg(c.patient_name)}, ${jsArg(c.feedback_comment)})'>Notes</button>` : ''}
           </td>
         </tr>`).join('');
-                table.innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis', 'Date', 'Feedback'], rows);
+                table.innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Date', 'Feedback'], rows);
                 pagination.innerHTML = `
           <span style="color:var(--slate);font-size:13px">Page ${data.page} of ${data.pages} · ${data.total} total</span>
           <div style="display:flex;gap:8px">
@@ -1848,13 +1880,13 @@
                         const data = await api("GET", `/billing/revenue-history/monthly?from_month=${month}&to_month=${month}`);
                         const m = data.months[0];
                         renderRevenueHistory(
-                            m ? [{ label: formatMonthLabel(data.from_month), total: m.total, count: m.invoice_count }] : [],
+                            m ? [{ label: formatMonthLabel(data.from_month), total: m.total, collected: m.collected || 0, count: m.invoice_count }] : [],
                             "Selected month"
                         );
                     } else {
                         const data = await api("GET", "/billing/revenue-history/monthly");
                         renderRevenueHistory(
-                            data.months.map(m => ({ label: formatMonthLabel(m.month), total: m.total, count: m.invoice_count })),
+                            data.months.map(m => ({ label: formatMonthLabel(m.month), total: m.total, collected: m.collected || 0, count: m.invoice_count })),
                             "Past 18 months"
                         );
                     }
@@ -1869,8 +1901,9 @@
                     const data = await api("GET", `/billing/revenue-history/daily?${params.toString()}`);
                     const total = data.days.reduce((s, d) => s + d.total, 0);
                     const count = data.days.reduce((s, d) => s + d.invoice_count, 0);
+                    const collected = data.days.reduce((s, d) => s + (d.collected || 0), 0);
                     renderRevenueHistory(
-                        [{ label: `${formatDayLabel(data.from_date)} – ${formatDayLabel(data.to_date)}`, total, count }],
+                        [{ label: `${formatDayLabel(data.from_date)} – ${formatDayLabel(data.to_date)}`, total, collected, count }],
                         "Selected range, totaled"
                     );
                 }
@@ -1932,7 +1965,10 @@
             const label = new Date(rhCalSelectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
             side.innerHTML = `
                 <p style="font-size:12px;color:var(--slate-light);margin-bottom:6px">${label}</p>
-                <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin-bottom:4px">Rs.${(d ? d.total : 0).toFixed(2)}</div>
+                <p style="font-size:11px;color:var(--slate-light);margin-bottom:2px">Collected (net of refunds &amp; waivers)</p>
+                <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin-bottom:8px">Rs.${(d ? (d.collected || 0) : 0).toFixed(2)}</div>
+                <p style="font-size:11px;color:var(--slate-light);margin-bottom:2px">Billed (invoices dated this day)</p>
+                <div style="font-size:1.1rem;font-weight:700;color:var(--slate);margin-bottom:4px">Rs.${(d ? d.total : 0).toFixed(2)}</div>
                 <p style="font-size:12.5px;color:var(--slate)">${d ? d.invoice_count : 0} invoice${d && d.invoice_count === 1 ? '' : 's'}</p>
             `;
         }
@@ -1951,14 +1987,16 @@
                 return;
             }
             const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+            const grandCollected = rows.reduce((s, r) => s + (r.collected || 0), 0);
             const totalCount = rows.reduce((s, r) => s + r.count, 0);
             const bodyRows = rows.map(r => `
-                <tr><td data-label="Period">${r.label}</td><td data-label="Invoices">${r.count}</td><td data-label="Revenue">Rs.${r.total.toFixed(2)}</td></tr>
+                <tr><td data-label="Period">${r.label}</td><td data-label="Invoices">${r.count}</td><td data-label="Billed">Rs.${r.total.toFixed(2)}</td><td data-label="Collected">Rs.${(r.collected || 0).toFixed(2)}</td></tr>
             `).join('') + (rows.length > 1
-                    ? `<tr style="font-weight:600"><td data-label="Period">Total</td><td data-label="Invoices">${totalCount}</td><td data-label="Revenue">Rs.${grandTotal.toFixed(2)}</td></tr>`
+                    ? `<tr style="font-weight:600"><td data-label="Period">Total</td><td data-label="Invoices">${totalCount}</td><td data-label="Billed">Rs.${grandTotal.toFixed(2)}</td><td data-label="Collected">Rs.${grandCollected.toFixed(2)}</td></tr>`
                     : '');
             listEl.innerHTML = `<p style="color:var(--slate);font-size:12px;margin-bottom:10px">${boundNote}</p>` +
-                makeTable(["Period", "Invoices", "Revenue"], bodyRows);
+                `<p style="color:var(--slate-light);font-size:11.5px;margin-bottom:8px">Billed = invoices dated in the period (before tax). Collected = money received in the period, minus refunds and approved waivers.</p>` +
+                makeTable(["Period", "Invoices", "Billed", "Collected"], bodyRows);
         }
     </script>
 

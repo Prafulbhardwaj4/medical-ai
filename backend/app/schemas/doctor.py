@@ -28,6 +28,8 @@ class StaffLoginResultOut(BaseModel):
     token_type: Optional[str] = "bearer"
     doctor: Optional["DoctorOut"] = None
     setup_token: Optional[str] = None  # only with status="needs_password_change"
+    totp_token: Optional[str] = None  # only with status="totp_required" / "totp_setup_required"
+    backup_codes: Optional[list] = None  # shown once, right after 2FA setup
 
 class SetNewPasswordIn(BaseModel):
     email: EmailStr

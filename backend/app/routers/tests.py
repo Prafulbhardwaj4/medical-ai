@@ -72,6 +72,8 @@ def serialize_parameter(p: TestCatalogParameter):
         "display_order": p.display_order,
         "critical_low": p.critical_low,
         "critical_high": p.critical_high,
+        "ref_low_male": p.ref_low_male, "ref_high_male": p.ref_high_male,
+        "ref_low_female": p.ref_low_female, "ref_high_female": p.ref_high_female,
     }
 
 
@@ -99,6 +101,8 @@ def serialize(t: TestCatalogItem, db: Session = None):
         "aliases": t.aliases or "",
         "critical_low": t.critical_low,
         "critical_high": t.critical_high,
+        "ref_low_male": t.ref_low_male, "ref_high_male": t.ref_high_male,
+        "ref_low_female": t.ref_low_female, "ref_high_female": t.ref_high_female,
         "fasting_required": t.fasting_required,
         "required_tube": t.required_tube or "",
         "is_irreplaceable_sample": t.is_irreplaceable_sample,

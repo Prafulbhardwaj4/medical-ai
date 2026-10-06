@@ -7,6 +7,7 @@ from app.models.suggestion import Suggestion
 from app.models.suggestion_reply import SuggestionReply
 from app.schemas.suggestion import SuggestionIn, SuggestionEditIn, SuggestionStatusIn, SuggestionReplyIn, VALID_SUGGESTION_STATUSES
 from app.utils.auth import get_current_doctor
+from app.utils.roles import require_super_admin
 from app.utils.timezone import now_ist_naive
 from datetime import timedelta
 
@@ -81,25 +82,6 @@ def list_my_suggestions(
     ]
 
 
-@router.get("/unread-count")
-def suggestions_unread_count(
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """Staff-side badge count — questions from Super Admin the staff member
-    hasn't opened yet, across all their own suggestions. Registered ahead of
-    the /{suggestion_id} routes below so "unread-count" is never swallowed
-    as a suggestion_id path param."""
-    count = db.query(SuggestionReply).join(
-        Suggestion, Suggestion.id == SuggestionReply.suggestion_id
-    ).filter(
-        Suggestion.submitted_by == current_doctor.id,
-        SuggestionReply.sender == "super_admin",
-        SuggestionReply.is_read_by_staff == False
-    ).count()
-    return {"unread_count": count}
-
-
 @router.patch("/{suggestion_id}")
 def edit_suggestion(
     suggestion_id: int,
@@ -156,12 +138,10 @@ def follow_up_suggestion(
 def list_all_suggestions(
     status: str = None,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Super Admin's dashboard tab — every suggestion across every hospital,
     optionally filtered by status."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     query = db.query(Suggestion)
     if status:
@@ -288,11 +268,9 @@ def update_suggestion_status(
     suggestion_id: int,
     body: SuggestionStatusIn,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Super Admin only — staff never set status themselves."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     if body.status not in VALID_SUGGESTION_STATUSES:
         raise HTTPException(status_code=400, detail=f"status must be one of {sorted(VALID_SUGGESTION_STATUSES)}")

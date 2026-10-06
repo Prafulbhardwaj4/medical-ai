@@ -18,5 +18,9 @@ class UpgradeRequest(Base):
     contact_name = Column(String, nullable=False)
     contact_phone = Column(String, nullable=False)
     contact_email = Column(String, nullable=False)
-    status = Column(String, default="new", nullable=False)  # new | contacted
+    status = Column(String, default="new", nullable=False)  # new | contacted | closed
+    follow_up_notes = Column(Text, nullable=True)
+    owner = Column(String, nullable=True)
+    next_follow_up_at = Column(DateTime, nullable=True)
+    contacted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=now_ist_naive, nullable=False)

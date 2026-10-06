@@ -54,6 +54,28 @@ def vitals_queue(
     )
     if not include_done:
         query = query.filter(Checkin.is_returned == False)
+
+    if current_doctor.role.value == "nurse":
+        from sqlalchemy import or_
+        from app.models.attendance import AttendanceRecord
+        from app.models.attendance_coverage import AttendanceCoverage
+        _live = ["present", "on_break"]
+        _base = db.query(AttendanceCoverage.doctor_id).join(
+            AttendanceRecord, AttendanceCoverage.attendance_record_id == AttendanceRecord.id
+        ).filter(
+            AttendanceRecord.hospital_id == current_doctor.hospital_id,
+            AttendanceRecord.date == ist_today(),
+            AttendanceRecord.status.in_(_live),
+            AttendanceCoverage.doctor_id.isnot(None),
+        )
+        covered_by_anyone = {r[0] for r in _base.all()}
+        my_covered = {r[0] for r in _base.filter(AttendanceRecord.doctor_id == current_doctor.id).all()}
+        if covered_by_anyone:
+            _conds = [Checkin.nurse_id == current_doctor.id, Checkin.doctor_id.is_(None),
+                      ~Checkin.doctor_id.in_(covered_by_anyone)]
+            if my_covered:
+                _conds.append(Checkin.doctor_id.in_(my_covered))
+            query = query.filter(or_(*_conds))
     checkins = query.order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
 
     # Rechecks jump the fresh-vitals-pending line — the doctor's already mid-turn

@@ -134,6 +134,153 @@ def book_appointment_for_caller(
     }
 
 
+@router.get("/{appointment_id}/payment-timing")
+def payment_timing(
+    appointment_id: int,
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Tells reception, before taking money, whether this payment is inside the
+    keep-the-same-slot window. Same rule for online and phone bookings."""
+    if current_doctor.role.value not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    appt = db.query(Appointment).filter(
+        Appointment.id == appointment_id, Appointment.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    grace_until = appt.requested_time + timedelta(minutes=settings.PORTAL_PAYMENT_GRACE_MINUTES)
+    return {
+        "late": bool(appt.slot_id and now_ist_naive() > grace_until),
+        "grace_minutes": settings.PORTAL_PAYMENT_GRACE_MINUTES,
+        "slot_time": appt.requested_time.isoformat(),
+        "grace_until": grace_until.isoformat(),
+        "doctor_id": appt.doctor_id,
+        "hospital_id": appt.hospital_id,
+    }
+
+
+def _late_unresolved(appt) -> bool:
+    """True when the patient arrived more than PORTAL_PAYMENT_GRACE_MINUTES after their
+    booked slot and reception has not yet chosen walk-in or a new slot."""
+    return bool(
+        appt.slot_id and appt.arrived_at
+        and appt.arrived_at > appt.requested_time + timedelta(minutes=settings.PORTAL_PAYMENT_GRACE_MINUTES)
+    )
+
+
+from pydantic import BaseModel as _LABaseModel
+
+
+class LateArrivalIn(_LABaseModel):
+    late_choice: str          # "walk_in" | "next_slot"
+    slot_id: int = None       # required for "next_slot"
+
+
+@router.post("/{appointment_id}/arrived-before-payment")
+def mark_arrived_before_payment(
+    appointment_id: int,
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Step 1 at reception (until a payment gateway exists): record that the patient
+    is here. The arrival time is compared with the booked slot. On time -> collect
+    payment. Late -> reception must choose walk-in queue or a new slot BEFORE any
+    money is taken."""
+    if current_doctor.role.value not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    appt = db.query(Appointment).filter(
+        Appointment.id == appointment_id, Appointment.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if appt.status != AppointmentStatus.booked or appt.payment_status == "paid":
+        raise HTTPException(status_code=400, detail="This appointment is not waiting for payment")
+    if not appt.arrived_at:
+        appt.arrived_at = now_ist_naive()
+        db.commit()
+        log_action(
+            db, current_doctor, action="appointment_arrived_before_payment",
+            target_type="appointment", target_id=appt.id,
+            details=f"slot {appt.requested_time.isoformat()}, arrived {appt.arrived_at.isoformat()}",
+        )
+    return {
+        "late": _late_unresolved(appt),
+        "arrived_at": appt.arrived_at.isoformat(),
+        "slot_time": appt.requested_time.isoformat(),
+        "grace_minutes": settings.PORTAL_PAYMENT_GRACE_MINUTES,
+        "doctor_id": appt.doctor_id,
+        "hospital_id": appt.hospital_id,
+    }
+
+
+@router.post("/{appointment_id}/late-arrival")
+def resolve_late_arrival(
+    appointment_id: int,
+    body: LateArrivalIn,
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Step 2 for a late patient, still BEFORE payment: walk-in queue, or the next
+    available slot (today or a later day). If the patient refuses both, nothing is
+    collected and the booking simply stays unpaid."""
+    if current_doctor.role.value not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    appt = db.query(Appointment).filter(
+        Appointment.id == appointment_id, Appointment.hospital_id == current_doctor.hospital_id
+    ).with_for_update().first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if appt.status != AppointmentStatus.booked or appt.payment_status == "paid":
+        raise HTTPException(status_code=400, detail="This appointment is not waiting for payment")
+    if not _late_unresolved(appt):
+        raise HTTPException(status_code=400, detail="This patient is not late, so no slot change is needed")
+
+    now = now_ist_naive()
+    choice = (body.late_choice or "").strip()
+    old_slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.slot_id).with_for_update().first()
+
+    if choice == "next_slot":
+        if not body.slot_id:
+            raise HTTPException(status_code=400, detail="Pick the new slot for this patient")
+        new_slot = db.query(DoctorSlot).filter(
+            DoctorSlot.id == body.slot_id, DoctorSlot.hospital_id == current_doctor.hospital_id
+        ).with_for_update().first()
+        if not new_slot:
+            raise HTTPException(status_code=404, detail="Slot not found")
+        if new_slot.doctor_id != appt.doctor_id:
+            raise HTTPException(status_code=400, detail="Pick a slot of the same doctor")
+        if new_slot.id == appt.slot_id:
+            raise HTTPException(status_code=400, detail="Pick a different slot. The booked one is too late now")
+        from app.routers.portal_appointments import _ensure_slot_bookable
+        _ensure_slot_bookable(db, new_slot, current_doctor.hospital_id)
+        _release_abandoned_holds(db, new_slot)
+        if new_slot.booked_count >= new_slot.capacity:
+            raise HTTPException(status_code=400, detail="That slot is already full")
+        if old_slot and old_slot.booked_count > 0:
+            old_slot.booked_count -= 1
+        new_slot.booked_count += 1
+        appt.slot_id = new_slot.id
+        appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
+        # arrived_at stays: the patient is here now, which is before the new slot.
+    elif choice == "walk_in":
+        if old_slot and old_slot.booked_count > 0:
+            old_slot.booked_count -= 1
+        appt.slot_id = None
+        appt.requested_time = now
+        appt.arrived_at = now
+    else:
+        raise HTTPException(status_code=400, detail="Choose the walk-in queue or a new slot")
+
+    db.commit()
+    log_action(
+        db, current_doctor, action=f"appointment_late_arrival_{choice}",
+        target_type="appointment", target_id=appt.id,
+        details=f"now {appt.requested_time.isoformat()}",
+    )
+    return {"message": "Walk-in queue chosen" if choice == "walk_in" else "New slot booked", "requested_time": appt.requested_time.isoformat()}
+
+
 @router.post("/{appointment_id}/collect-payment")
 def collect_payment_at_reception(
     appointment_id: int,
@@ -162,7 +309,13 @@ def collect_payment_at_reception(
         raise HTTPException(status_code=400, detail="Payment already collected for this appointment")
 
     now = now_ist_naive()
-    reassigned = _reassign_late_arrival_slot(db, appt, current_doctor.hospital_id, now)
+    reassigned = False
+    late_choice_used = None
+    # Order is: patient arrived -> (if late: walk-in queue or new slot) -> payment LAST.
+    if not appt.arrived_at:
+        raise HTTPException(status_code=400, detail="Mark the patient as arrived first. Payment is collected after arrival is recorded.")
+    if _late_unresolved(appt):
+        raise HTTPException(status_code=400, detail="The patient arrived late. Choose the walk-in queue or a new date and slot first. Payment is collected last.")
 
     from app.utils.portal_billing import current_doctor_fee
     if body.fee_amount is not None:
@@ -213,6 +366,7 @@ def collect_payment_at_reception(
     return {
         "message": "Payment collected",
         "reassigned": reassigned,
+        "late_choice": late_choice_used,
         "estimated_time": appt.requested_time.isoformat(),
     }
 
@@ -436,6 +590,183 @@ def appointment_analytics(
     return {"total": len(appts), "by_doctor": result}
 
 
+from pydantic import BaseModel as _NSBaseModel
+
+
+class NoShowRebookIn(_NSBaseModel):
+    slot_id: int
+    note: str = None
+
+
+class NoShowRefundIn(_NSBaseModel):
+    percent: int = 100
+    note: str = None
+
+
+def _noshow_appt_or_404(db: Session, appointment_id: int, hospital_id: int) -> Appointment:
+    appt = db.query(Appointment).filter(
+        Appointment.id == appointment_id, Appointment.hospital_id == hospital_id
+    ).with_for_update().first()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if (appt.status != AppointmentStatus.confirmed or appt.payment_status != "paid"
+            or not appt.no_show_detected_at):
+        raise HTTPException(status_code=400, detail="This is not a paid no-show waiting for action")
+    return appt
+
+
+def _park_stale_checkin(db: Session, appt: Appointment, detach: bool) -> None:
+    """The sweep made a token for this appointment on its day. The patient never
+    consulted, so take that token out of the doctor's way. For a rebook it is also
+    detached (its fee moves to the new token, so money is counted once)."""
+    from app.models.checkin import Checkin
+    from app.models.consultation import Consultation
+    c = db.query(Checkin).filter(Checkin.portal_appointment_id == appt.id).first()
+    if not c:
+        return
+    if db.query(Consultation.id).filter(Consultation.token_number == c.token_number).first():
+        return  # already consulted: never touch
+    c.up_next_skip = True
+    if detach:
+        c.portal_appointment_id = None
+        c.consultation_fee = 0.0
+
+
+@router.get("/no-shows")
+def list_no_shows(
+    days: int = Query(14, ge=1, le=90),
+    doctor_id: int = Query(None),
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Paid appointments the patient did not turn up for. Nothing here is cancelled
+    automatically: reception picks Rebook or Refund for each one."""
+    if current_doctor.role.value not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    from app.utils.portal_noshow import detect_no_shows
+    detect_no_shows(db, current_doctor.hospital_id)
+
+    since = now_ist_naive() - timedelta(days=days)
+    q = db.query(Appointment).filter(
+        Appointment.hospital_id == current_doctor.hospital_id,
+        Appointment.status == AppointmentStatus.confirmed,
+        Appointment.payment_status == "paid",
+        Appointment.no_show_detected_at.isnot(None),
+        Appointment.requested_time >= since,
+    )
+    if doctor_id:
+        q = q.filter(Appointment.doctor_id == doctor_id)
+    appts = q.order_by(Appointment.requested_time.desc()).all()
+
+    result = []
+    for a in appts:
+        patient = a.profile_link.patient if a.profile_link_id and a.profile_link and a.profile_link.patient else None
+        doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
+        result.append({
+            "id": a.id,
+            "hospital_id": a.hospital_id,
+            "doctor_id": a.doctor_id,
+            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
+            "patient_name": patient.name if patient else (a.new_patient_name or "Unknown"),
+            "patient_uid": patient.patient_uid if patient else None,
+            "requested_time": a.requested_time.isoformat(),
+            "no_show_detected_at": a.no_show_detected_at.isoformat(),
+            "no_show_reason": a.no_show_reason,
+            "fee_amount": a.fee_amount,
+            "payment_method": a.payment_method,
+        })
+    return {"count": len(result), "appointments": result}
+
+
+@router.post("/{appointment_id}/no-show/rebook")
+def rebook_no_show(
+    appointment_id: int,
+    body: NoShowRebookIn,
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Move a paid no-show to a later slot of the SAME doctor. The fee already paid
+    carries over, so no new charge and no refund."""
+    if current_doctor.role.value not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    appt = _noshow_appt_or_404(db, appointment_id, current_doctor.hospital_id)
+
+    new_slot = db.query(DoctorSlot).filter(
+        DoctorSlot.id == body.slot_id, DoctorSlot.hospital_id == appt.hospital_id
+    ).with_for_update().first()
+    if not new_slot:
+        raise HTTPException(status_code=404, detail="Slot not found")
+    if new_slot.doctor_id != appt.doctor_id:
+        raise HTTPException(status_code=400, detail="Rebook is for the same doctor. To change doctor, use Refund and book again.")
+    if new_slot.slot_date <= now_ist_naive().date():
+        raise HTTPException(status_code=400, detail="Pick a slot on a later day")
+    from app.routers.portal_appointments import _ensure_slot_bookable
+    _ensure_slot_bookable(db, new_slot, appt.hospital_id)
+    _release_abandoned_holds(db, new_slot)
+    if new_slot.booked_count >= new_slot.capacity:
+        raise HTTPException(status_code=400, detail="That slot is already full")
+
+    old_time = appt.requested_time
+    if appt.slot_id:
+        old_slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.slot_id).with_for_update().first()
+        if old_slot and old_slot.booked_count > 0:
+            old_slot.booked_count -= 1
+    new_slot.booked_count += 1
+    appt.slot_id = new_slot.id
+    appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
+
+    _park_stale_checkin(db, appt, detach=True)
+
+    appt.arrived_at = None
+    appt.no_show_detected_at = None
+    appt.no_show_reason = None
+    appt.no_show_reschedule_deadline = None
+    appt.reschedule_kind = None
+    appt.requested_reschedule_slot_id = None
+    db.commit()
+    log_action(
+        db, current_doctor,
+        action="appointment_noshow_rebooked",
+        target_type="appointment", target_id=appt.id,
+        details=f"{old_time.isoformat()} -> {appt.requested_time.isoformat()}" + (f". Note: {body.note}" if body.note else ""),
+    )
+    return {"message": "Rebooked. The fee already paid carries over.", "requested_time": appt.requested_time.isoformat()}
+
+
+@router.post("/{appointment_id}/no-show/refund")
+def refund_no_show(
+    appointment_id: int,
+    body: NoShowRefundIn,
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Cancel a paid no-show and refund through the normal refund flow (pending refund
+    that reception settles from the Refunds list)."""
+    if current_doctor.role.value not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if body.percent < 1 or body.percent > 100:
+        raise HTTPException(status_code=400, detail="Refund percent must be between 1 and 100")
+    appt = _noshow_appt_or_404(db, appointment_id, current_doctor.hospital_id)
+
+    create_patient_cancellation_refund(
+        db, appt, reason="No-show refund approved by reception", percent=body.percent,
+    )
+    if appt.slot_id:
+        slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.slot_id).with_for_update().first()
+        if slot and slot.booked_count > 0:
+            slot.booked_count -= 1
+    _park_stale_checkin(db, appt, detach=False)
+    appt.status = AppointmentStatus.cancelled
+    db.commit()
+    log_action(
+        db, current_doctor,
+        action="appointment_noshow_refunded",
+        target_type="appointment", target_id=appt.id,
+        details=f"{body.percent}% of Rs.{(appt.fee_amount or 0):.2f}" + (f". Note: {body.note}" if body.note else ""),
+    )
+    return {"message": "Cancelled. A refund is pending in the Refunds list."}
+
+
 @router.get("/today")
 def list_expected_today(
     doctor_id: int = Query(None),
@@ -617,6 +948,10 @@ def list_pending_review(
         result.append({
             "id": a.id,
             "reason": "awaiting_payment",
+            "hospital_id": a.hospital_id,
+            "arrived_at": a.arrived_at.isoformat() if a.arrived_at else None,
+            "late_unresolved": _late_unresolved(a),
+            "grace_minutes": settings.PORTAL_PAYMENT_GRACE_MINUTES,
             "patient_name": patient_name,
             "doctor_id": a.doctor_id,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",

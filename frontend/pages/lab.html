@@ -1047,7 +1047,7 @@
               ${v.order_ids.map((oid, i) => `
                 <div class="lr-test-row">
                   <span class="lr-test-row-name">${sanitize(v.test_names[i] || '')}</span>
-                  <a href="#" onclick="openEditReportModal(${oid}, ${jsArg(medicineName)});return false;">Edit</a>
+                  <a href="#" onclick="openEditReportModal(${oid}, ${jsArg(v.test_names[i] || '')});return false;">Edit</a>
                 </div>
               `).join('')}
             </div>
@@ -1464,7 +1464,6 @@
       const btn = document.getElementById('patient-tests-top-action');
       const hasPaid = group.tests.some(t => t.status === 'paid' && !t._deferred);
       const hasProcessing = group.tests.some(t => t.status === 'processing');
-      const awaitingVerification = group.tests.filter(t => t.status === 'result_entered');
       const releasedTests = group.tests.filter(t => t.status === 'verified_released');
       if (hasPaid) {
         btn.style.display = '';
@@ -1480,30 +1479,6 @@
         btn.onclick = () => downloadReport(releasedTests.map(t => t.id));
       } else {
         btn.style.display = 'none';
-      }
-    }
-
-    async function verifyAndReleaseTests(orderIds) {
-      const btn = document.getElementById('patient-tests-top-action');
-      btn.disabled = true;
-      try {
-        for (const id of orderIds) {
-          const order = findQueueOrder(id);
-          const detail = order && order.test_id != null ? testDetailCache[order.test_id] : null;
-          let isNotifiable = false;
-          if (detail && detail.notifiable_disease_id) {
-            isNotifiable = confirm("This test is linked to an IDSP notifiable disease. Is this a confirmed notifiable finding?");
-          }
-          await api("POST", `/lab/orders/${id}/verify`, { is_idsp_notifiable: isNotifiable });
-          if (order) order.status = 'verified_released';
-        }
-        toast('Verified and released', 'success');
-        renderBothQueues();
-        refreshOpenPatientModal();
-      } catch (e) {
-        toast(e.message, 'error');
-      } finally {
-        btn.disabled = false;
       }
     }
 
@@ -1768,6 +1743,7 @@
       document.getElementById('modal-bulk-results').classList.add('open');
 
       const isMale = (group.tests[0].patient_gender || '').toLowerCase() === 'male';
+      const pGender = group.tests[0].patient_gender || '';
       bulkResultOrders = [];
 
       for (const t of processingTests) {
@@ -1787,7 +1763,8 @@
             // exist, not correctly reflecting "no range set at all".
             params: detail.parameters.map(p => ({
               id: p.id, name: p.name, unit: p.unit,
-              range: (isMale ? p.reference_range_male : p.reference_range_female) || p.reference_range_male || p.reference_range_female
+              range: labPickRange(pGender, p.reference_range_male, p.reference_range_female),
+              flagAttrs: labFlagAttrs(labBounds(pGender, p), p)
             }))
           });
         } else {
@@ -1797,7 +1774,8 @@
             mode: 'single',
             notifiable: !!(detail && detail.notifiable_disease_id),
             unit: detail ? detail.unit : '',
-            range: detail ? ((isMale ? detail.reference_range_male : detail.reference_range_female) || detail.reference_range_male || detail.reference_range_female) : ''
+            range: detail ? labPickRange(pGender, detail.reference_range_male, detail.reference_range_female) : '',
+            flagAttrs: detail ? labFlagAttrs(labBounds(pGender, detail), detail) : ''
           });
         }
       }
@@ -1817,7 +1795,8 @@
                   <strong>${sanitize(p.name)}</strong>${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}
                   <span class="range-text">${p.range ? 'Reference: ' + sanitize(p.range) : 'No reference range set'}</span>
                 </div>
-                <input class="form-control" id="bulk-val-${test.orderId}-${p.id}" placeholder="Value" />
+                <input class="form-control" id="bulk-val-${test.orderId}-${p.id}" placeholder="Value" ${p.flagAttrs} oninput="labLiveFlag(this)" />
+                <span class="lab-flag" style="min-width:70px;font-size:12px;font-weight:700"></span>
               </div>
             `).join('')
             : `
@@ -1826,7 +1805,8 @@
                   <strong>Result</strong>${test.unit ? ' (' + sanitize(test.unit) + ')' : ''}
                   <span class="range-text">${test.range ? 'Reference: ' + sanitize(test.range) : 'No reference range set'}</span>
                 </div>
-                <input class="form-control" id="bulk-val-${test.orderId}-single" placeholder="Value" />
+                <input class="form-control" id="bulk-val-${test.orderId}-single" placeholder="Value" ${test.flagAttrs} oninput="labLiveFlag(this)" />
+                <span class="lab-flag" style="min-width:70px;font-size:12px;font-weight:700"></span>
               </div>
             `
           }
@@ -1836,6 +1816,52 @@
           </div>
         </div>
       `).join('');
+    }
+
+    // ---- Reference range + High/Low helpers (mirror the server rules in utils/ref_ranges.py) ----
+    function labPickRange(gender, m, f) {
+      const g = (gender || '').trim().toLowerCase();
+      m = (m || '').trim(); f = (f || '').trim();
+      if (g === 'male') return m || f;
+      if (g === 'female') return f || m;
+      if (m && m === f) return m;
+      return (m || f) ? 'Range not available for this patient (sex not recorded)' : '';
+    }
+    function labBounds(gender, o) {
+      const g = (gender || '').trim().toLowerCase();
+      const has = (lo, hi) => (lo != null || hi != null);
+      const hm = has(o.ref_low_male, o.ref_high_male), hf = has(o.ref_low_female, o.ref_high_female);
+      if (!hm && !hf) return { lo: null, hi: null, st: 'none' };
+      const M = { lo: o.ref_low_male ?? null, hi: o.ref_high_male ?? null, st: 'ok' };
+      const F = { lo: o.ref_low_female ?? null, hi: o.ref_high_female ?? null, st: 'ok' };
+      if (g === 'male') return hm ? M : F;
+      if (g === 'female') return hf ? F : M;
+      if (hm && hf && M.lo === F.lo && M.hi === F.hi) return M;
+      return { lo: null, hi: null, st: 'na' };
+    }
+    function labFlagAttrs(b, o) {
+      return `data-lo="${b.lo ?? ''}" data-hi="${b.hi ?? ''}" data-st="${b.st}" data-cl="${o.critical_low ?? ''}" data-ch="${o.critical_high ?? ''}"`;
+    }
+    function labLiveFlag(el) {
+      const out = el.nextElementSibling;
+      if (!out) return;
+      const m = String(el.value || '').replace(/,/g, '').match(/-?\d+\.?\d*/);
+      let text = '', color = '';
+      if (m) {
+        const v = parseFloat(m[0]);
+        const num = k => (el.dataset[k] === undefined || el.dataset[k] === '') ? null : parseFloat(el.dataset[k]);
+        const cl = num('cl'), ch = num('ch'), lo = num('lo'), hi = num('hi');
+        if (cl !== null && v < cl) { text = 'CRITICAL LOW'; color = '#b91c1c'; }
+        else if (ch !== null && v > ch) { text = 'CRITICAL HIGH'; color = '#b91c1c'; }
+        else if (el.dataset.st === 'na') { text = 'range not available for this patient'; color = '#64748b'; }
+        else if (el.dataset.st === 'ok') {
+          if (lo !== null && v < lo) { text = 'LOW'; color = '#1e40af'; }
+          else if (hi !== null && v > hi) { text = 'HIGH'; color = '#b45309'; }
+          else { text = 'Normal'; color = '#065f46'; }
+        }
+      }
+      out.textContent = text;
+      out.style.color = color;
     }
 
     function closeBulkResultsModal() {
@@ -1919,7 +1945,6 @@
 
       try {
         const payloads = bulkResultsDraft.payloads;
-        let stillAwaitingVerification = false;
         for (const p of payloads) {
           await api("POST", `/lab/orders/${p.orderId}/result`, { results: p.results, ...(p.idsp !== undefined ? { is_idsp_notifiable: p.idsp } : {}) });
           // The backend auto-skips straight to verified_released when this
@@ -1928,10 +1953,10 @@
           const statusResult = await api("PATCH", `/lab/orders/${p.orderId}/status`, { status: 'result_entered' });
           const order = findQueueOrder(p.orderId);
           if (order) order.status = statusResult.status;
-          if (statusResult.status === 'result_entered') stillAwaitingVerification = true;
+
         }
         renderBothQueues();
-        toast(stillAwaitingVerification ? 'Results saved — awaiting independent verification before release' : 'Results saved and released.', 'success');
+        toast('Results saved and released.', 'success');
         document.getElementById('modal-results-confirm').classList.remove('open');
         closeBulkResultsModal();
         refreshOpenPatientModal();
@@ -1969,28 +1994,30 @@
           editReportMode = 'panel';
           editReportParams = detail.parameters;
           bodyEl.innerHTML = detail.parameters.map(p => {
-            const range = isMale ? p.reference_range_male : p.reference_range_female;
+            const range = labPickRange(current.patient_gender, p.reference_range_male, p.reference_range_female);
             return `
             <div class="bulk-param-row">
               <div class="bulk-param-meta">
                 <strong>${sanitize(p.name)}</strong>${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}
                 <span class="range-text">${range ? 'Reference: ' + sanitize(range) : 'No reference range set'}</span>
               </div>
-              <input class="form-control" id="edit-val-${p.id}" value="${sanitize(current.results[p.name] ?? '')}" placeholder="Value" />
+              <input class="form-control" id="edit-val-${p.id}" value="${sanitize(current.results[p.name] ?? '')}" placeholder="Value" ${labFlagAttrs(labBounds(current.patient_gender, p), p)} oninput="labLiveFlag(this)" />
+              <span class="lab-flag" style="min-width:70px;font-size:12px;font-weight:700"></span>
             </div>
           `;
           }).join('');
         } else {
           editReportMode = 'single';
           editReportParams = [];
-          const range = detail ? (isMale ? detail.reference_range_male : detail.reference_range_female) : '';
+          const range = detail ? labPickRange(current.patient_gender, detail.reference_range_male, detail.reference_range_female) : '';
           bodyEl.innerHTML = `
             <div class="bulk-param-row">
               <div class="bulk-param-meta">
                 <strong>Result</strong>${detail?.unit ? ' (' + sanitize(detail.unit) + ')' : ''}
                 <span class="range-text">${range ? 'Reference: ' + sanitize(range) : 'No reference range set'}</span>
               </div>
-              <input class="form-control" id="edit-val-single" value="${sanitize(current.results.value ?? '')}" placeholder="Value" />
+              <input class="form-control" id="edit-val-single" value="${sanitize(current.results.value ?? '')}" placeholder="Value" ${detail ? labFlagAttrs(labBounds(current.patient_gender, detail), detail) : ''} oninput="labLiveFlag(this)" />
+              <span class="lab-flag" style="min-width:70px;font-size:12px;font-weight:700"></span>
             </div>
           `;
         }

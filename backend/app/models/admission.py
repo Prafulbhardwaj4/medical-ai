@@ -96,6 +96,11 @@ class AdmissionMedicationOrder(Base):
     manual_unit_price = Column(Float, nullable=True)  # per-strip/unit price entered at order time — only used when medicine_id is null (not in catalog), since there's no HospitalMedicine row to price from
     is_out_of_stock = Column(Boolean, default=False, nullable=False)  # flagged by pharmacy at the counter — never touches billing/stock, those already happened at order time
     substitute_for_id = Column(Integer, ForeignKey("admission_medication_orders.id"), nullable=True)  # set on the replacement order once pharmacy substitutes an out-of-stock one
+    stock_allocations = Column(Text, nullable=True)  # JSON: which batches the units came from when pharmacy sent it
+    substitution_status = Column(String, nullable=True)  # None | "auto" | "pending_approval" | "approved" | "rejected" (set on the replacement order)
+    repeat_auth_status = Column(String, nullable=True)  # None | "pending" | "authorized" (Schedule X repeat)
+    repeat_authorized_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    repeat_authorized_at = Column(DateTime, nullable=True)
     order_batch_id = Column(String, nullable=True, index=True)  # shared across every medicine submitted in the same "Advise Medicine(s)" action — lets one notification cover the whole batch instead of one per medicine
     created_at = Column(DateTime, default=now_ist_naive)
 

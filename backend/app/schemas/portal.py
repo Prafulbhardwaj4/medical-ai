@@ -143,6 +143,8 @@ class AppointmentOut(BaseModel):
     needs_no_show_response: bool = False
     no_show_reschedule_deadline: Optional[datetime] = None
     mass_reschedule_notice: bool = False
+    cancelled_by: Optional[str] = None
+    hospital_phone: Optional[str] = None  # shown on cancelled bookings so the patient can call
 
     class Config:
         from_attributes = True
@@ -370,6 +372,7 @@ class VisitDetailOut(BaseModel):
     invoice_total: Optional[float]
     tests: List[VisitTestOut]
     feedback_given: bool = False
+    feedback_allowed: bool = False
 
 class CompleteRegisterIn(BaseModel):
     phone: str

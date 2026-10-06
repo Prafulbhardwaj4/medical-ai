@@ -1,7 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pydantic import BaseModel
 
 from app.database import get_db
@@ -27,10 +27,20 @@ class AttendanceMark(BaseModel):
     location: Optional[str] = None  # doctor only, status == "present" — "in_cabin" / "on_rounds"
 
 def get_today_attendance(db: Session, doctor_id: int):
-    return db.query(AttendanceRecord).filter(
+    record = db.query(AttendanceRecord).filter(
         AttendanceRecord.doctor_id == doctor_id,
         AttendanceRecord.date == ist_today()
     ).first()
+    if record:
+        return record
+    # A shift that started before midnight and is still open (night duty) keeps counting
+    # as today's attendance, so staff are not locked out at 00:00.
+    return db.query(AttendanceRecord).filter(
+        AttendanceRecord.doctor_id == doctor_id,
+        AttendanceRecord.date == ist_today() - timedelta(days=1),
+        AttendanceRecord.status.in_(["present", "on_break", "away_emergency"]),
+        AttendanceRecord.shift_started_at > now_ist_naive() - timedelta(hours=18),
+    ).order_by(AttendanceRecord.id.desc()).first()
 
 def parse_client_datetime(s: Optional[str]):
     """Parses a browser .toISOString() value into a naive IST datetime, this app's storage convention."""
@@ -56,7 +66,20 @@ def auto_close_stale_shifts(db: Session, hospital_id: int):
     for rec in stale:
         rec.status = "off_duty"
         rec.auto_marked = 1
-    if stale:
+
+    # Shifts from an earlier day that nobody closed (including away_emergency, which is
+    # never closed by hand): close them after 18 hours so they cannot stay "present" forever.
+    overnight_cutoff = now - timedelta(hours=18)
+    forgotten = db.query(AttendanceRecord).filter(
+        AttendanceRecord.hospital_id == hospital_id,
+        AttendanceRecord.date < ist_today(),
+        AttendanceRecord.status.in_(["present", "on_break", "away_emergency"]),
+        AttendanceRecord.shift_started_at < overnight_cutoff,
+    ).all()
+    for rec in forgotten:
+        rec.status = "off_duty"
+        rec.auto_marked = 1
+    if stale or forgotten:
         db.commit()
 
     # Same lazy-on-read pattern as above: catch anyone idling mid-shift
@@ -130,6 +153,8 @@ def mark_attendance(
     auto_close_stale_shifts(db, current_doctor.hospital_id)
     record = get_today_attendance(db, current_doctor.id)
     expected_off_duty_at = parse_client_datetime(payload.expected_off_duty_at)
+    if expected_off_duty_at and expected_off_duty_at <= now_ist_naive():
+        raise HTTPException(status_code=400, detail="Off-duty time must be later than the current time.")
 
     if status == "present":
         if record:
@@ -142,7 +167,7 @@ def mark_attendance(
             # else: preserve whatever off-duty time was set at shift start —
             # a room/location change or resuming from break isn't a new shift.
             record.auto_marked = 0
-            record.doctor_location = location
+            record.doctor_location = location or (record.doctor_location if not starting_fresh_shift else None)
             # shift_started_at deliberately NOT touched here — it stays pinned to
             # whenever they first arrived today, even if they toggle present/break/off_duty again
             if payload.room_id is not None:
@@ -202,8 +227,6 @@ def attendance_today(
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "doctor", "nurse", "assistant", "receptionist", "lab", "pharmacy", "radiology"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    auto_close_stale_shifts(db, current_doctor.hospital_id)
-
     staff = db.query(Doctor).filter(
         Doctor.hospital_id == current_doctor.hospital_id,
         Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.nurse, UserRole.assistant, UserRole.receptionist, UserRole.lab, UserRole.pharmacy, UserRole.radiology]),
@@ -257,8 +280,6 @@ def attendance_history(
     if current_doctor.role.value not in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    auto_close_stale_shifts(db, current_doctor.hospital_id)
-
     try:
         start = datetime.strptime(from_date, "%Y-%m-%d").date() if from_date else (ist_today() - __import__("datetime").timedelta(days=30))
         end = datetime.strptime(to_date, "%Y-%m-%d").date() if to_date else ist_today()
@@ -284,8 +305,8 @@ def attendance_history(
     if role and role != "all":
         records = [r for r in records if staff.get(r.doctor_id) and staff[r.doctor_id].role.value == role]
 
-    records.sort(key=lambda r: (r.date, staff[r.doctor_id].name if r.doctor_id in staff else ""), reverse=False)
-    records.sort(key=lambda r: r.date, reverse=True)  # date desc is primary; name asc (just set) is the stable secondary key
+    records.sort(key=lambda r: staff[r.doctor_id].name if r.doctor_id in staff else "")
+    records.sort(key=lambda r: r.date, reverse=True)  # date desc, then name asc (stable)
 
     return [
         {
@@ -306,7 +327,6 @@ def my_attendance_status(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
-    auto_close_stale_shifts(db, current_doctor.hospital_id)
     record = get_today_attendance(db, current_doctor.id)
     if not record:
         return {"status": "not_marked", "room_id": None, "location": None, "coverage": None, "active_consultation_id": current_doctor.active_consultation_id}

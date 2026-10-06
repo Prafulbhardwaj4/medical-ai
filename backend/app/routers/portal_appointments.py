@@ -76,6 +76,21 @@ def _reassign_late_arrival_slot(db: Session, appt: Appointment, hospital_id: int
     return True
 
 
+def _hospital_contact_phone(hospital) -> str:
+    """The hospital's mobile number from Admin > Settings (contact numbers). Falls back to the
+    first number of any kind, then to the old single phone field."""
+    import json
+    if not hospital:
+        return None
+    try:
+        nums = json.loads(hospital.contact_numbers) if hospital.contact_numbers else []
+    except Exception:
+        nums = []
+    mobiles = [n.get("number") for n in nums if isinstance(n, dict) and n.get("type") == "mobile" and n.get("number")]
+    anyone = [n.get("number") for n in nums if isinstance(n, dict) and n.get("number")]
+    return (mobiles[0] if mobiles else (anyone[0] if anyone else None)) or hospital.phone
+
+
 def _to_out(a: Appointment, db: Session) -> AppointmentOut:
     hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
     doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
@@ -95,6 +110,8 @@ def _to_out(a: Appointment, db: Session) -> AppointmentOut:
         needs_no_show_response=a.no_show_detected_at is not None and a.no_show_reason is None,
         no_show_reschedule_deadline=a.no_show_reschedule_deadline,
         mass_reschedule_notice=a.mass_reschedule_notice,
+        cancelled_by=a.cancelled_by,
+        hospital_phone=_hospital_contact_phone(hospital) if a.status == AppointmentStatus.cancelled else None,
     )
 
 
@@ -228,6 +245,18 @@ def book_appointment(
             DoctorUnavailability.doctor_id == slot.doctor_id, DoctorUnavailability.date == slot.slot_date
         ).first():
             raise HTTPException(status_code=400, detail="This doctor is unavailable on this date. Please pick another date or doctor.")
+
+        _held = db.query(Appointment).filter(
+            Appointment.account_id == account.id,
+            Appointment.status == AppointmentStatus.booked,
+            Appointment.payment_status == "unpaid",
+            Appointment.requested_time >= now_ist_naive(),
+        ).count()
+        if _held >= settings.PORTAL_MAX_UNPAID_HOLDS_PER_ACCOUNT:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You already have {_held} unpaid bookings on hold. Pay at the hospital or cancel one before booking another.",
+            )
 
         _check_no_duplicate_active_booking(db, account, body.profile_link_id, body.new_patient_name, slot.doctor_id)
 
@@ -821,6 +850,7 @@ def cancel_appointment(
             slot.booked_count -= 1
 
     appt.status = AppointmentStatus.cancelled
+    appt.cancelled_by = "patient"
     db.commit()
     db.refresh(appt)
     return _to_out(appt, db)

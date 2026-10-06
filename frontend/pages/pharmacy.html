@@ -690,7 +690,7 @@
         <h2>Substitute Medicine</h2>
         <button class="modal-close" onclick="closeAdmSubstituteModal()">×</button>
       </div>
-      <p style="font-size:12.5px;color:var(--slate-light);margin-bottom:10px">Replacing <strong id="adm-sub-original-name"></strong>. This bills and deducts stock for the substitute, and reverses the original's charge. The admitting doctor will be notified.</p>
+      <p style="font-size:12.5px;color:var(--slate-light);margin-bottom:10px">Replacing <strong id="adm-sub-original-name"></strong>. Same medicine and same strength is swapped straight away. A different salt or strength goes to the admitting doctor for approval first.</p>
       <input class="form-control" id="adm-sub-search" placeholder="Search catalog…" oninput="searchAdmSubstitute()" style="margin-bottom:10px" />
       <div id="adm-sub-results" style="max-height:220px;overflow-y:auto;margin-bottom:10px"></div>
       <div class="err-msg" id="adm-sub-err"></div>
@@ -718,6 +718,8 @@
         onclick="markRxDispensed()">Mark Dispensed</button>
       <button class="btn btn-outline" id="rx-bill-btn" style="width:100%" onclick="generateBillFromPharmacy()">Generate
         Bill</button>
+      <button class="btn btn-outline" id="rx-reverse-btn" style="width:100%;margin-top:8px;display:none"
+        onclick="reverseOutsideDispense()">Undo "dispensed elsewhere" mark</button>
     </div>
   </div>
 
@@ -1170,16 +1172,19 @@
       document.getElementById('adm-med-patient').textContent = `${first.patient_name} — ${first.ward}, Bed ${first.bed_number}`;
       document.getElementById('adm-med-list').innerHTML = items.map(i => {
         const orderer = i.prescriber_name ? `${{ nurse: 'Nurse', assistant: 'Assistant' }[i.prescriber_role] || ''} ${i.prescriber_name}`.trim() : 'Unrecorded';
-        const actionHtml = i.is_out_of_stock
+        const actionHtml = i.awaiting_authorization
+          ? '<span style="color:var(--slate);font-size:12.5px;font-weight:600">Schedule X repeat: awaiting doctor authorization</span>'
+          : i.is_out_of_stock
           ? `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
                <span style="color:var(--danger);font-weight:600;font-size:13px">Out of stock</span>
-               <button class="btn btn-outline btn-sm" onclick="openAdmSubstituteModal(${i.id}, ${jsArg(i.medicine_name)})">Add Substitute</button>
+               ${i.substitution_pending
+                 ? '<span style="color:var(--slate);font-size:12.5px">Substitute sent: awaiting doctor approval</span>'
+                 : `<button class="btn btn-outline btn-sm" onclick="openAdmSubstituteModal(${i.id}, ${jsArg(i.medicine_name)})">Add Substitute</button>`}
              </div>`
           : i.dispensed_at
             ? '<span class="badge badge-green">Sent</span>'
             : `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
                  <button class="btn btn-primary btn-sm" onclick="dispenseAdmissionMed(${i.id})">Mark Sent</button>
-                 <button class="btn btn-outline btn-sm" onclick="markAdmissionOutOfStock(${i.id})">Out of Stock</button>
                </div>`;
         return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px">
@@ -1250,17 +1255,6 @@
       } catch (e) { toast(e.message, "error"); }
     }
 
-    async function markAdmissionOutOfStock(orderId) {
-      if (!confirm("Mark this medicine out of stock? You can then add a substitute.")) return;
-      try {
-        await api("POST", `/pharmacy/admission-orders/${orderId}/mark-out-of-stock`, {});
-        toast("Marked out of stock — add a substitute.", "success");
-        const admissionId = admissionPharmQueueData.find(i => i.id === orderId)?.admission_id;
-        await loadAdmissionPharmQueue();
-        if (admissionId) openAdmissionMedModal(admissionId);
-      } catch (e) { toast(e.message, "error"); }
-    }
-
     let admSubOrderId = null;
     let admSubSearchTimeout = null;
 
@@ -1301,8 +1295,10 @@
       const err = document.getElementById('adm-sub-err');
       err.textContent = '';
       try {
-        await api("POST", `/pharmacy/admission-orders/${admSubOrderId}/substitute`, { medicine_id: catalogId, medicine_name: name });
-        toast("Substituted — the admitting doctor has been notified", "success");
+        const subRes = await api("POST", `/pharmacy/admission-orders/${admSubOrderId}/substitute`, { medicine_id: catalogId, medicine_name: name });
+        toast(subRes.status === "pending_approval"
+          ? "Sent to the admitting doctor for approval. Do not send it until approved."
+          : "Substituted. The admitting doctor has been notified", "success");
         const admissionId = admissionPharmQueueData.find(i => i.id === admSubOrderId)?.admission_id;
         closeAdmSubstituteModal();
         await loadAdmissionPharmQueue();
@@ -1466,6 +1462,7 @@
         renderMedicineOrders();
         document.getElementById('rx-modal-err').textContent = '';
         updateRxActionButtons(rx.is_dispensed);
+        document.getElementById('rx-reverse-btn').style.display = rx.dispensed_outside ? '' : 'none';
 
         document.getElementById('modal-prescription').classList.add('open');
       } catch (e) { toast(e.message, "error"); }
@@ -1899,6 +1896,20 @@
       document.getElementById('modal-prescription').classList.remove('open');
       currentRxToken = null;
       currentRxHash = null;
+    }
+
+    async function reverseOutsideDispense() {
+      if (!currentRxToken) return;
+      const reason = prompt("This prescription was marked dispensed through the public QR link (a pharmacy outside the hospital).\n\nReason for undoing it:");
+      if (reason === null) return;
+      try {
+        const res = await api("POST", `/pharmacy/prescription/${currentRxToken}/reverse-outside-dispense`, { reason });
+        toast(res.message, 'success');
+        loadQueue();
+        openPrescription(currentRxToken);
+      } catch (e) {
+        document.getElementById('rx-modal-err').textContent = e.message;
+      }
     }
 
     async function markRxDispensed() {

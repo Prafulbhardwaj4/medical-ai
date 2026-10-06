@@ -1258,6 +1258,9 @@
               <div style="font-weight:500">${sanitize(a.patient_name || 'Patient')}</div>
               <div style="font-size:12.5px;color:var(--slate);margin-top:2px">${sanitize(a.hospital_name || 'Hospital')}${a.doctor_name ? ' · ' + sanitize(a.doctor_name) : ''}</div>
               <div style="font-size:12px;color:var(--slate-light);margin-top:2px">${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
+              ${a.status === 'cancelled' ? (a.cancelled_by === 'patient'
+                ? `<div style="font-size:12.5px;color:var(--slate);margin-top:6px">You cancelled this appointment.</div>`
+                : `<div style="font-size:12.5px;color:var(--danger);margin-top:6px;font-weight:600">Rejected / cancelled by hospital.<span style="font-weight:400;color:var(--slate)"> For more information, contact the hospital${a.hospital_phone ? ': <a href="tel:' + sanitize(a.hospital_phone) + '">' + sanitize(a.hospital_phone) + '</a>' : '.'}</span></div>`) : ''}
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span class="badge ${statusBadge[a.status] || 'badge-grey'}">${a.status}</span>
@@ -1269,9 +1272,24 @@
               ${(a.no_show_reschedule_deadline && new Date(a.no_show_reschedule_deadline) > new Date()) ? `<button class="btn btn-outline btn-sm" onclick="openRescheduleModal(${a.id})">Reschedule</button>` : ''}
               ${(a.status === 'confirmed' && !a.no_show_detected_at && new Date(a.requested_time).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === todayStr) ? `<button class="btn btn-outline btn-sm" onclick="openRescheduleModal(${a.id})">Running late today?</button>` : ''}
               ${(a.status === 'booked' || a.status === 'confirmed') ? `<button class="btn btn-outline btn-sm" onclick="cancelAppt(${a.id})">Cancel</button>` : ''}
+              <button class="btn btn-outline btn-sm" onclick="reportIssue(${a.id}, ${a.hospital_id}, '${a.no_show_detected_at ? 'checkin' : 'other'}')">Report an issue</button>
             </div>
           </div>`).join('');
       } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+    }
+
+    async function reportIssue(appointmentId, hospitalId, context) {
+      const msg = await promptModal("Tell us what went wrong (for example: you were marked as a no-show but you were there):");
+      if (msg === null) return;
+      try {
+        await api("POST", "/portal/appointments/report-issue", {
+          context,
+          hospital_id: hospitalId,
+          appointment_id: appointmentId,
+          message: (msg || "").trim().slice(0, 500) || null
+        });
+        toast("Reported. The hospital team has been alerted.", "success");
+      } catch (e) { toast(e.message, "error"); }
     }
 
     async function cancelAppt(id) {
