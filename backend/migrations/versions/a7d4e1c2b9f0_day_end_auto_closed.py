@@ -3,7 +3,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = 'a7d4e1c2b9f0'
-down_revision = 'z0f1a2b3c4d5'  # <-- set to the single head shown by `alembic heads` before running
+down_revision = 'c7d3f2b9e4a1'  # <-- set to the single head shown by `alembic heads` before running
 # NOTE: in the zip, `alembic heads` shows 5 heads, and revision ids a9b8c7d6e5f4 and
 # f1a2b3c4d5e6 are each used by two different files. Fix that before merging.
 
