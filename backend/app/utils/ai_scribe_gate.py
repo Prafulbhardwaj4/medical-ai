@@ -6,7 +6,7 @@ billing cycle has rolled past cycle-end — into one status check, so no
 caller can accidentally enforce only one of the three.
 """
 from app.models.ai_scribe_topup import AiScribeTopup
-from app.utils.billing_cycle import AI_SCRIBE_TIER_CAPS, is_unlimited, has_ai_scribe_at_all, is_ai_scribe_period_active
+from app.utils.billing_cycle import AI_SCRIBE_TIER_CAPS, effective_ai_scribe_cap, is_unlimited, has_ai_scribe_at_all, is_ai_scribe_period_active
 from app.utils.timezone import now_ist_naive
 
 
@@ -41,13 +41,13 @@ def get_ai_scribe_status(db, hospital):
         # or it has rolled past cycle-end — either way, AI Scribe is off
         # until a super admin sets/renews the cycle (item 4).
         reason = "cycle_not_started" if not hospital.billing_cycle_start else "cycle_ended"
-        cap = AI_SCRIBE_TIER_CAPS.get(hospital.tier)
+        cap = effective_ai_scribe_cap(hospital)
         return {"allowed": False, "reason": reason, "used": hospital.ai_scribe_consultations_used, "cap": cap, "topup_remaining": 0, "total_remaining": 0}
 
     if is_unlimited(hospital.tier):
         return {"allowed": True, "reason": None, "used": hospital.ai_scribe_consultations_used, "cap": None, "topup_remaining": 0, "total_remaining": None}
 
-    cap = AI_SCRIBE_TIER_CAPS[hospital.tier]
+    cap = effective_ai_scribe_cap(hospital)
     used = hospital.ai_scribe_consultations_used
     tier_remaining = max(0, cap - used)
 
@@ -71,7 +71,7 @@ def consume_ai_scribe_credit(db, hospital):
     if is_unlimited(hospital.tier):
         return
 
-    cap = AI_SCRIBE_TIER_CAPS.get(hospital.tier, 0)
+    cap = effective_ai_scribe_cap(hospital) or 0
     if hospital.ai_scribe_consultations_used < cap:
         hospital.ai_scribe_consultations_used += 1
         db.commit()

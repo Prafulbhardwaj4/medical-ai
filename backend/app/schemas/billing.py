@@ -3,7 +3,7 @@ from typing import Optional
 
 class RefundIn(BaseModel):
     patient_id: int
-    source_type: str  # "appointment" | "pharmacy" | "ipd_deposit" | "opd_charge" | "tpa" | "other"
+    source_type: str  # "appointment" | "pharmacy" | "ipd_deposit" | "opd_charge" | "other"
     source_id: Optional[int] = None
     amount: float
     channel: str  # "cash" | "card" | "upi" | "online"

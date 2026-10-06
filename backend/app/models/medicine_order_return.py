@@ -8,7 +8,9 @@ class MedicineOrderReturn(Base):
     money side is a real Refund (cash/card/upi/online), unlike IPD returns
     which just credit the running admission bill. Never restocks: disposition
     is always returned_to_supplier or sent_to_disposal — see AdmissionMedicationReturn
-    for the same rule on the IPD side."""
+    for the same rule on the IPD side. (A third value, "never_dispensed", is a refund of
+    an order that was paid but never handed over: no stock was ever deducted, so nothing
+    moves in stock either.)"""
     __tablename__ = "medicine_order_returns"
 
     id = Column(Integer, primary_key=True, index=True)

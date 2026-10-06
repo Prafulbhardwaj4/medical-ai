@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List
@@ -7,11 +7,11 @@ from app.database import get_db
 from app.models.consultation import Consultation
 from app.models.patient import Patient
 from app.models.doctor import Doctor, UserRole
-from app.utils.ai_scribe_gate import get_ai_scribe_status, consume_ai_scribe_credit
+from app.utils.ai_scribe_gate import get_ai_scribe_status, consume_ai_scribe_credit, has_ai_scribe_at_all, has_ai_scribe_at_all
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem, StructureRequest
 from app.utils.auth import get_current_doctor, now_ist_naive, ist_day_bounds, ist_today, decode_access_token, is_token_blacklisted
 from app.utils.audit import log_action
-# from app.services.whisper import transcribe_audio
+from app.utils.tier_gate import hospital_has_tier
 from app.services.groq_service import structure_transcript, match_tests_to_catalog, match_radiology_to_catalog
 from app.services.pdf_service import generate_prescription_pdf
 from app.services.sarvam_stream import stream_transcribe
@@ -27,7 +27,6 @@ from app.models.test_order import TestOrder
 from app.models.medicine_order import MedicineOrder
 from app.models.hospital_medicine import HospitalMedicine
 from app.utils.inventory import deduct_stock_fefo, calculate_prescribed_quantity, expired_units_by_medicine, line_total
-from app.utils.notify import sync_stock_notifications
 from app.schemas.consultation import ConfirmPrescriptionPayload
 from app.config import settings
 from sqlalchemy import exists, func
@@ -78,133 +77,6 @@ def get_active_draft(current_doctor: Doctor = Depends(get_current_doctor), db: S
         "url_token": patient.url_token if patient else None
     }
 
-@router.get("/analytics")
-def get_analytics(
-    current_doctor: Doctor = Depends(get_current_doctor),
-    db: Session = Depends(get_db)
-):
-    from sqlalchemy import func
-    import json
-
-    # Scope by hospital for admin/super_admin, by doctor for doctor/sub_admin
-    if current_doctor.role.value in ["admin", "super_admin"]:
-        hospital_doctor_ids = [
-            d.id for d in db.query(Doctor).filter(
-                Doctor.hospital_id == current_doctor.hospital_id
-            ).all()
-        ]
-        base = db.query(Consultation).filter(
-            Consultation.doctor_id.in_(hospital_doctor_ids),
-            Consultation.token_number != None,
-            Consultation.is_voided == False
-        )
-        patients = db.query(Patient).filter(
-            Patient.hospital_id == current_doctor.hospital_id
-        ).all()
-        total_patients = len(patients)
-    else:
-        base = db.query(Consultation).filter(
-            Consultation.doctor_id == current_doctor.id,
-            Consultation.token_number != None,
-            Consultation.is_voided == False
-        )
-        patients = db.query(Patient).filter(
-            Patient.hospital_id == current_doctor.hospital_id
-        ).all()
-        total_patients = len(patients)
-
-    total_consultations = base.count()
-
-    # Load only fields needed for JSON parsing — no full ORM objects
-    all_consultations = base.with_entities(
-        Consultation.created_at,
-        Consultation.diagnosis,
-        Consultation.medicines,
-        Consultation.tests
-    ).order_by(Consultation.created_at).all()
-
-    daily_counts = {}
-    for c in all_consultations:
-        day = c.created_at.strftime("%d %b")
-        daily_counts[day] = daily_counts.get(day, 0) + 1
-
-    # Age + gender distribution via DB aggregation
-    age_groups = {"0-12": 0, "13-25": 0, "26-40": 0, "41-60": 0, "60+": 0}
-    gender_counts = {}
-    for p in patients:
-        if p.age <= 12: age_groups["0-12"] += 1
-        elif p.age <= 25: age_groups["13-25"] += 1
-        elif p.age <= 40: age_groups["26-40"] += 1
-        elif p.age <= 60: age_groups["41-60"] += 1
-        else: age_groups["60+"] += 1
-        g = p.gender.capitalize()
-        gender_counts[g] = gender_counts.get(g, 0) + 1
-
-
-    # Top diagnoses
-    diagnosis_counts = {}
-    for c in all_consultations:
-        if c.diagnosis:
-            d = c.diagnosis.strip().lower().capitalize()
-            diagnosis_counts[d] = diagnosis_counts.get(d, 0) + 1
-    top_diagnoses = sorted(diagnosis_counts.items(), key=lambda x: x[1], reverse=True)[:8]
-
-    # Top medicines + OTC vs Rx
-    medicine_counts = {}
-    otc_count = 0
-    rx_count = 0
-    for c in all_consultations:
-        meds = json.loads(c.medicines or "[]")
-        for m in meds:
-            name = m.get("name", "").strip().capitalize()
-            if name:
-                medicine_counts[name] = medicine_counts.get(name, 0) + 1
-            if m.get("schedule") == "otc":
-                otc_count += 1
-            else:
-                rx_count += 1
-    top_medicines = sorted(medicine_counts.items(), key=lambda x: x[1], reverse=True)[:8]
-
-    # Tests ordered — normalize away a trailing " test"/" tests" suffix and casing
-    # differences so "CBC" and "CBC Test" (or "cbc test") count as the same test
-    # instead of splitting into separate rows.
-    test_counts = {}
-    for c in all_consultations:
-        tests = json.loads(c.tests or "[]")
-        for t in tests:
-            t = t.strip()
-            if not t:
-                continue
-            lowered = t.lower()
-            for suffix in (" tests", " test"):
-                if lowered.endswith(suffix):
-                    t = t[:-len(suffix)].strip()
-                    break
-            if not t:
-                continue
-            key = t.lower()
-            display = t if t.isupper() else t.capitalize()
-            if key not in test_counts:
-                test_counts[key] = {"display": display, "count": 0}
-            test_counts[key]["count"] += 1
-    top_tests = sorted(test_counts.values(), key=lambda x: x["count"], reverse=True)[:6]
-    top_tests = [(v["display"], v["count"]) for v in top_tests]
-
-    return {
-        "summary": {
-            "total_consultations": total_consultations,
-            "total_patients": total_patients,
-            "otc_medicines": otc_count,
-            "rx_medicines": rx_count
-        },
-        "daily_consultations": daily_counts,
-        "age_groups": age_groups,
-        "gender_distribution": gender_counts,
-        "top_diagnoses": [{"name": k, "count": v} for k, v in top_diagnoses],
-        "top_medicines": [{"name": k, "count": v} for k, v in top_medicines],
-        "top_tests": [{"name": k, "count": v} for k, v in top_tests]
-    }
-
 @router.post("/draft/{patient_id}")
 def create_draft_consultation(
     patient_id: int,
@@ -225,13 +97,26 @@ def create_draft_consultation(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
+    _day_start, _day_end = ist_day_bounds()
     consultation = db.query(Consultation).filter(
         Consultation.patient_id == patient_id,
         Consultation.doctor_id == current_doctor.id,
-        Consultation.token_number == None
-    ).first()
+        Consultation.token_number == None,
+        Consultation.is_voided == False,
+        Consultation.created_at >= _day_start,  # never resurrect an abandoned draft from an earlier day
+    ).order_by(desc(Consultation.created_at)).first()
 
     if not consultation:
+        # Same gate as the live-recording path: a new consultation must trace back
+        # to a paid token for today with THIS doctor.
+        _paid = db.query(Checkin).filter(
+            Checkin.patient_id == patient_id,
+            Checkin.doctor_id == current_doctor.id,
+            Checkin.visit_date == ist_today(),
+            Checkin.is_paid == True,  # noqa: E712
+        ).first()
+        if not _paid:
+            raise HTTPException(status_code=400, detail="No paid token found for this patient with you today. A consultation can't be started without one.")
         consultation = Consultation(patient_id=patient_id, doctor_id=current_doctor.id)
         db.add(consultation)
         db.commit()
@@ -242,93 +127,46 @@ def create_draft_consultation(
 
     return {"consultation_id": consultation.id}
 
+def _ws_ticket_key() -> str:
+    # Derived key: a ticket can never be decoded as a normal login token.
+    return settings.SECRET_KEY + ":ws-ticket"
 
-@router.post("/transcribe/{patient_id}")
-@limiter.limit("10/minute")
-async def transcribe(
-    request: Request,
+
+@router.post("/ws-ticket/{patient_id}")
+def create_ws_ticket(
     patient_id: int,
-    audio: UploadFile = File(...),
+    current_doctor: Doctor = Depends(get_current_doctor),
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    from jose import jwt as _jwt
+    from datetime import timedelta as _td
     patient = db.query(Patient).filter(
-        Patient.id == patient_id,
-        Patient.hospital_id == current_doctor.hospital_id
+        Patient.id == patient_id, Patient.hospital_id == current_doctor.hospital_id
     ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-
-    audio_bytes = await audio.read()
-
-    ALLOWED_AUDIO_TYPES = [
-        "audio/webm",
-        "audio/webm;codecs=opus",
-        "audio/ogg",
-        "audio/ogg;codecs=opus",
-        "audio/m4a",
-        "audio/mpeg",
-        "audio/wav",
-        "audio/mp4"
-    ]
-    MAX_AUDIO_SIZE = 25 * 1024 * 1024  # 25MB
-
-    if audio.content_type not in ALLOWED_AUDIO_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid file type: {audio.content_type}. Allowed: webm, m4a, mp3, wav")
-
-    if len(audio_bytes) > MAX_AUDIO_SIZE:
-        raise HTTPException(status_code=400, detail="Audio file too large. Max 25MB allowed.")
-
-    if not audio_bytes:
-        raise HTTPException(status_code=400, detail="Empty audio file")
-
-    # try:
-    #     transcript = await transcribe_audio(audio_bytes, audio.filename or "recording.webm")
-    # except Exception as e:
-    #     raise HTTPException(status_code=502, detail=f"Whisper transcription failed: {str(e)}")
-
-    # Reuse existing unconfirmed draft if one exists, else create new
-    consultation = db.query(Consultation).filter(
-        Consultation.patient_id == patient_id,
-        Consultation.doctor_id == current_doctor.id,
-        Consultation.token_number == None
-    ).first()
-
-    if consultation:
-        consultation.raw_transcript = transcript
-    else:
-        consultation = Consultation(
-            patient_id=patient_id,
-            doctor_id=current_doctor.id,
-            raw_transcript=transcript
-        )
-        db.add(consultation)
-
-    db.commit()
-    db.refresh(consultation)
-
-    current_doctor.active_consultation_id = consultation.id
-    db.commit()
-
-    return {
-        "consultation_id": consultation.id,
-        "transcript": transcript
-    }
+    ticket = _jwt.encode(
+        {"sub": str(current_doctor.id), "pid": patient_id, "typ": "ws_ticket",
+         "exp": datetime.utcnow() + _td(seconds=30)},
+        _ws_ticket_key(), algorithm=settings.ALGORITHM,
+    )
+    return {"ticket": ticket}
 
 
 @router.websocket("/ws/transcribe/{patient_id}")
 async def websocket_transcribe(
     websocket: WebSocket,
     patient_id: int,
-    token: str,
+    ticket: str,
     db: Session = Depends(get_db)
 ):
-    payload = decode_access_token(token)
-    if not payload:
+    from jose import jwt as _jwt, JWTError as _JWTError
+    try:
+        payload = _jwt.decode(ticket, _ws_ticket_key(), algorithms=[settings.ALGORITHM])
+    except _JWTError:
         await websocket.close(code=4001)
         return
-
-    if is_token_blacklisted(token, db):
+    if payload.get("typ") != "ws_ticket" or payload.get("pid") != patient_id:
         await websocket.close(code=4001)
         return
 
@@ -474,7 +312,8 @@ async def websocket_transcribe(
             transcript_text = full_transcript.strip()
 
             if consultation:
-                consultation.raw_transcript = transcript_text
+                _earlier = (consultation.raw_transcript or "").strip()
+                consultation.raw_transcript = (_earlier + "\n" + transcript_text).strip() if _earlier else transcript_text
             else:
                 consultation = Consultation(
                     patient_id=patient_id,
@@ -497,10 +336,12 @@ async def websocket_transcribe(
             except Exception:
                 pass
         except Exception as e:
+            import logging as _lg
+            _lg.getLogger(__name__).exception("Transcript save failed")
             try:
                 await websocket.send_json({
                     "type": "error",
-                    "message": f"Failed to save: {str(e)}"
+                    "message": "Failed to save the transcript. Please try again."
                 })
             except Exception:
                 pass
@@ -516,17 +357,8 @@ async def websocket_transcribe(
         except Exception:
             pass
 
+_CLINICAL_READ_ROLES = ("doctor", "nurse", "assistant", "admin", "sub_admin")
 
-@router.get("/test-catalog")
-def get_test_catalog(
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    items = db.query(TestCatalogItem).filter(
-        TestCatalogItem.hospital_id == current_doctor.hospital_id,
-        TestCatalogItem.is_active == True
-    ).all()
-    return [{"id": i.id, "name": i.name, "fee": i.fee} for i in items]
 
 @router.get("/history/{patient_id}", response_model=List[ConsultationHistoryItem])
 def get_history(
@@ -534,6 +366,8 @@ def get_history(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    if current_doctor.role.value not in _CLINICAL_READ_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized to view clinical history")
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
         Patient.hospital_id == current_doctor.hospital_id
@@ -563,6 +397,8 @@ def get_history(
         ])
 
     result = []
+    from app.utils.audit import log_record_access
+    log_record_access(db, current_doctor, "patient_history_viewed", "patient", patient.id, patient.name)
     for c, doctor in consultations:
         medicine_statuses = {}
         orders = db.query(MedicineOrder).filter(MedicineOrder.consultation_id == c.id).all()
@@ -619,6 +455,8 @@ def get_prescription_pdf(
     current_doctor: Doctor = Depends(get_current_doctor),
     db: Session = Depends(get_db)
 ):
+    if current_doctor.role.value not in _CLINICAL_READ_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized to view prescriptions")
     consultation = db.query(Consultation).join(
         Patient, Consultation.patient_id == Patient.id
     ).filter(
@@ -634,6 +472,8 @@ def get_prescription_pdf(
     prescribing_doctor = db.query(Doctor).filter(Doctor.id == consultation.doctor_id).first()
 
     safe_token = os.path.basename(token_number)
+    from app.utils.audit import log_record_access
+    log_record_access(db, current_doctor, "prescription_pdf_downloaded", "consultation", consultation.id, f"{patient.name} · {safe_token}")
     pdf_path = generate_prescription_pdf(prescribing_doctor, patient, consultation, safe_token, consultation.verify_hash or "")
 
     return FileResponse(pdf_path, media_type="application/pdf", filename=f"{safe_token}.pdf", headers={"Cache-Control": "no-store"})
@@ -651,6 +491,9 @@ def verify_prescription(request: Request, token_number: str, hash: str, db: Sess
 
     if consultation.verify_hash != hash:
         return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
+
+    if consultation.is_voided:
+        return {"valid": False, "reason": "This prescription has been cancelled by the hospital — do not dispense"}
 
     patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
     doctor = db.query(DoctorModel).filter(DoctorModel.id == consultation.doctor_id).first()
@@ -715,13 +558,14 @@ def mark_dispensed(
         mo.dispensed_at = now_ist_naive()
     db.commit()
 
+    _prescriber = db.query(DoctorModel).filter(DoctorModel.id == consultation.doctor_id).first()
     log_action(
         db, None,
         action="prescription_dispensed",
         target_type="consultation",
         target_id=consultation.id,
         target_label=consultation.token_number + " (dispensed outside — no hospital stock deducted)",
-        hospital_id=None
+        hospital_id=_prescriber.hospital_id if _prescriber else None
     )
 
     return {"message": "Marked as dispensed", "dispensed_at": consultation.dispensed_at.isoformat()}
@@ -762,6 +606,8 @@ async def structure(
         db.commit()
 
     if payload.transcript and payload.transcript.strip():
+        if len(payload.transcript) > 60000:
+            raise HTTPException(status_code=400, detail="Transcript is too long. Please shorten it and try again.")
         consultation.raw_transcript = payload.transcript.strip()
         db.commit()
 
@@ -770,7 +616,11 @@ async def structure(
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     ai_scribe_status = get_ai_scribe_status(db, hospital)
-    if not ai_scribe_status["allowed"]:
+    already_paid = bool(consultation.ai_scribe_credit_consumed)
+    # Re-structuring a consultation that already consumed a credit is free, so a
+    # doctor who edits the transcript isn't blocked by (or charged against) the cap.
+    # Foundation / cycle-ended still block.
+    if not ai_scribe_status["allowed"] and not (already_paid and ai_scribe_status["reason"] == "cap_reached"):
         # 402, not 400/403 — a distinct status the frontend checks for
         # specifically, to fall back to manual entry instead of showing a
         # generic error (item 2: "same as Foundation", not a broken screen).
@@ -781,7 +631,8 @@ async def structure(
         .filter(
             Consultation.patient_id == consultation.patient_id,
             Consultation.id != consultation_id,
-            Consultation.diagnosis != None
+            Consultation.diagnosis != None,
+            Consultation.is_voided == False
         )
         .order_by(desc(Consultation.created_at))
         .limit(3)
@@ -798,9 +649,13 @@ async def structure(
     try:
         structured = await structure_transcript(consultation.raw_transcript, history_text)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI structuring failed: {str(e)}")
+        import logging as _lg
+        _lg.getLogger(__name__).exception("AI structuring failed")
+        raise HTTPException(status_code=502, detail="AI structuring is temporarily unavailable. Please try again in a moment.")
 
-    consume_ai_scribe_credit(db, hospital)  # only counts against the cap once structuring actually succeeds
+    if not already_paid:
+        consume_ai_scribe_credit(db, hospital)  # only counts against the cap once structuring actually succeeds
+        consultation.ai_scribe_credit_consumed = True
 
     consultation.chief_complaint = structured.get("chief_complaint", "")
     consultation.diagnosis = structured.get("diagnosis", "")
@@ -840,7 +695,7 @@ async def structure(
     # re-search/re-click it as a radiology chip too.
     matched_radiology = []
     raw_imaging = structured.get("imaging", [])
-    if raw_imaging:
+    if raw_imaging and hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
         radiology_items = db.query(RadiologyTemplate).filter(
             RadiologyTemplate.hospital_id == current_doctor.hospital_id,
             RadiologyTemplate.is_active == True
@@ -919,6 +774,11 @@ def confirm_prescription(
         ).first()
         if referral:
             referral.status = "consulted"
+        if todays_checkin.portal_appointment_id:
+            from app.models.portal import Appointment as _PortalAppt, AppointmentStatus as _PortalApptStatus
+            _ap = db.query(_PortalAppt).filter(_PortalAppt.id == todays_checkin.portal_appointment_id).first()
+            if _ap and _ap.status == _PortalApptStatus.confirmed:
+                _ap.status = _PortalApptStatus.completed
     else:
         # No check-in exists for today — this happens when a doctor opens a
         # patient directly from their own patient list instead of the queue.
@@ -952,6 +812,27 @@ def confirm_prescription(
         except Exception:
             pass
 
+    try:
+        _meds_for_allergy = json.loads(consultation.medicines or "[]")
+    except Exception:
+        _meds_for_allergy = []
+    _conflicts = _allergy_conflicts(db, consultation.patient_id, _meds_for_allergy)
+    if _conflicts:
+        _why = (payload.allergy_override_reason or "").strip()
+        if len(_why) < 5:
+            raise HTTPException(status_code=409, detail={
+                "message": "Allergy warning: " + "; ".join(f"{c['medicine']} (patient allergic to {c['allergen']})" for c in _conflicts),
+                "allergy_conflict": _conflicts,
+            })
+        log_action(
+            db, current_doctor,
+            action="allergy_warning_overridden",
+            target_type="consultation",
+            target_id=consultation.id,
+            target_label=f"Patient ID {consultation.patient_id}",
+            details="; ".join(f"{c['medicine']} vs {c['allergen']} ({c['severity']})" for c in _conflicts) + f". Reason: {_why}"
+        )
+
     if payload.recommended_test_ids:
         test_items = db.query(TestCatalogItem).filter(
             TestCatalogItem.id.in_(payload.recommended_test_ids),
@@ -984,7 +865,7 @@ def confirm_prescription(
                 clinical_indication=indication,
             ))
 
-    if payload.recommended_radiology_template_ids:
+    if payload.recommended_radiology_template_ids and hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
         radiology_templates = db.query(RadiologyTemplate).filter(
             RadiologyTemplate.id.in_(payload.recommended_radiology_template_ids),
             RadiologyTemplate.hospital_id == current_doctor.hospital_id
@@ -1164,7 +1045,9 @@ def confirm_prescription(
         pdf_path = generate_prescription_pdf(current_doctor, patient, consultation, token_number, verify_hash)
         consultation.pdf_path = pdf_path
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+        import logging as _lg
+        _lg.getLogger(__name__).exception("Prescription PDF generation failed")
+        raise HTTPException(status_code=500, detail="Could not generate the prescription PDF. Please try again.")
 
     if current_doctor.active_consultation_id == consultation.id:
         current_doctor.active_consultation_id = None
@@ -1204,7 +1087,21 @@ def update_consultation(
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
 
+    if consultation.is_voided:
+        raise HTTPException(status_code=400, detail="This prescription was voided and can no longer be edited.")
+
     was_confirmed = consultation.token_number is not None
+    if was_confirmed:
+        _visit_today = db.query(Checkin.id).filter(
+            Checkin.patient_id == consultation.patient_id,
+            Checkin.doctor_id == consultation.doctor_id,
+            Checkin.visit_date == ist_today()
+        ).first()
+        if not _visit_today:
+            raise HTTPException(
+                status_code=400,
+                detail="A confirmed prescription can only be edited on the day of the visit. Please start a new consultation."
+            )
     old_medicines = json.loads(consultation.medicines or "[]") if was_confirmed else []
 
     new_values = {
@@ -1299,18 +1196,11 @@ def update_consultation(
                 HospitalMedicine.is_active == True
             ).all()
 
-            def _match(name, brand):
-                name_l = (name or "").strip().lower()
-                brand_l = (brand or "").strip().lower()
-                for cm in catalog_medicines:
-                    if name_l and (name_l == (cm.generic_name or "").strip().lower() or name_l == (cm.brand_name or "").strip().lower()):
-                        return cm
-                    if brand_l and brand_l == (cm.brand_name or "").strip().lower():
-                        return cm
-                return None
-
             for med in newly_added:
-                matched = _match(med.get("name", ""), med.get("brand_name", ""))
+                matched = _match_catalog_for_edit(
+                    db, current_doctor.hospital_id, catalog_medicines,
+                    med.get("name", ""), med.get("brand_name", ""), med.get("dosage", "")
+                )
                 quantity = calculate_prescribed_quantity(matched, med.get("times_per_day"), med.get("duration_days"))
                 order = MedicineOrder(
                     consultation_id=consultation.id,
@@ -1375,8 +1265,49 @@ def update_consultation(
             all_ids = list(old_test_ids) + [t.id for t in test_items]
             consultation.recommended_test_ids = json.dumps(all_ids)
 
+    # Tests the doctor REMOVED during this edit: cancel those not yet at the lab,
+    # refund the paid ones, keep the ordered_tests snapshot in step.
+    if was_confirmed and "recommended_test_ids" in payload.__fields_set__:
+        _keep_ids = set(payload.recommended_test_ids or [])
+        _removed = db.query(TestOrder).filter(
+            TestOrder.consultation_id == consultation.id,
+            TestOrder.status.in_(["payment_pending", "paid"]),
+            ~TestOrder.test_id.in_(_keep_ids) if _keep_ids else True,
+        ).all()
+        if _removed:
+            _chk = db.query(Checkin).filter(
+                Checkin.patient_id == consultation.patient_id,
+                Checkin.doctor_id == consultation.doctor_id,
+                Checkin.visit_date == ist_today()
+            ).order_by(desc(Checkin.created_at)).first()
+            try:
+                _snap = json.loads(consultation.ordered_tests or "[]")
+            except Exception:
+                _snap = []
+            for _o in _removed:
+                _was_paid = _o.status == "paid"
+                _o.status = "cancelled"
+                _o.queued_at = None
+                if _chk and (_o.price or 0) > 0:
+                    _chk.test_fee = max((_chk.test_fee or 0) - _o.price, 0)
+                if _was_paid and (_o.price or 0) > 0:
+                    _r = Refund(
+                        patient_id=consultation.patient_id, hospital_id=current_doctor.hospital_id,
+                        source_type="test", source_id=_o.id, amount=_o.price,
+                        channel=_o.payment_method if _o.payment_method in ("cash", "card", "upi") else "cash",
+                        status="pending",
+                        reason=f"Prescription changed after payment, before the test was done: {_o.test_name}. Confirm refund channel with patient.",
+                    )
+                    db.add(_r)
+                    refunds_created.append(_r)
+                for _s in _snap:
+                    if _s.get("test_id") == _o.test_id:
+                        _s["status"] = "cancelled"
+            consultation.ordered_tests = json.dumps(_snap)
+        consultation.recommended_test_ids = json.dumps(list(payload.recommended_test_ids or []))
+
     new_radiology_orders = []
-    if was_confirmed and payload.recommended_radiology_template_ids:
+    if was_confirmed and payload.recommended_radiology_template_ids and hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
         old_radiology_ids = set(json.loads(consultation.recommended_radiology_template_ids or "[]"))
         new_radiology_ids = [tid for tid in payload.recommended_radiology_template_ids if tid not in old_radiology_ids]
         if new_radiology_ids:
@@ -1493,9 +1424,92 @@ def update_consultation(
     }
 
 
+from pydantic import BaseModel as _BM, Field as _F
+
+
+class VoidConsultationIn(_BM):
+    reason: str = _F(..., min_length=5, max_length=300)
+
+def _allergy_conflicts(db, patient_id, medicines):
+    """Soft allergy check: an active recorded allergen that appears in a prescribed
+    medicine's name/brand (or vice versa). Names only, so it can warn but never prove safety."""
+    from app.models.patient_allergy import PatientAllergy
+    allergies = db.query(PatientAllergy).filter(
+        PatientAllergy.patient_id == patient_id, PatientAllergy.is_active == True  # noqa: E712
+    ).all()
+    out = []
+    for a in allergies:
+        al = (a.allergen or "").strip().lower()
+        if len(al) < 3:
+            continue
+        for m in medicines:
+            for nm in ((m.get("name") or ""), (m.get("brand_name") or "")):
+                n = nm.strip().lower()
+                if n and (al in n or (len(n) >= 3 and n in al)):
+                    out.append({"medicine": nm.strip(), "allergen": a.allergen, "severity": a.severity})
+                    break
+    return out
+
+
+def _match_catalog_for_edit(db, hospital_id, catalog_medicines, name, brand, dosage):
+    """Same rules as confirm_prescription's match_catalog (brand first, then strength-aware).
+    Never falls back to the first generic-name hit with a different strength."""
+    _expired = expired_units_by_medicine(db, hospital_id=hospital_id)
+
+    def _sellable(cm):
+        return ((cm.stock_quantity or 0) - _expired.get(cm.id, 0)) > 0
+
+    def _sp(s):
+        if not s:
+            return ""
+        s = s.strip().lower().replace(" ", "")
+        m = re.match(r"(\d+(?:\.\d+)?)(mg|mcg|g|ml|iu|%)", s)
+        return m.group(0) if m else s
+
+    name_l = (name or "").strip().lower()
+    brand_l = (brand or "").strip().lower()
+    candidates = []
+    for cm in catalog_medicines:
+        g = (cm.generic_name or "").strip().lower()
+        b = (cm.brand_name or "").strip().lower()
+        legacy = [x.strip().lower() for x in (cm.brand_names or "").split(",") if x.strip()]
+        n_ok = name_l and (name_l == g or name_l in legacy or name_l == b or g in name_l)
+        b_ok = brand_l and (brand_l == b or brand_l in legacy or brand_l == g)
+        if n_ok or b_ok:
+            candidates.append(cm)
+    if not candidates:
+        return None
+    if brand_l:
+        for cm in candidates:
+            if (cm.brand_name or "").strip().lower() == brand_l:
+                return cm
+    d = _sp(dosage)
+    if d:
+        same = [cm for cm in candidates if _sp(cm.strength) == d]
+        if not same:
+            return None
+        stocked = [cm for cm in same if _sellable(cm)]
+        if stocked:
+            return stocked[0]
+        for cm in same:
+            if not cm.brand_name:
+                return cm
+        return same[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    stocked = [cm for cm in candidates if _sellable(cm)]
+    if stocked:
+        return stocked[0]
+    for cm in candidates:
+        if not cm.brand_name:
+            return cm
+    return candidates[0]
+
+
 @router.post("/void/{consultation_id}")
 def void_consultation(
     consultation_id: int,
+    body: VoidConsultationIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
@@ -1507,6 +1521,17 @@ def void_consultation(
     ).first()
     if not consultation:
         raise HTTPException(status_code=404, detail="Consultation not found")
+    if consultation.is_voided:
+        raise HTTPException(status_code=400, detail="This consultation is already voided")
+    _handed_over = consultation.is_dispensed or db.query(MedicineOrder).filter(
+        MedicineOrder.consultation_id == consultation.id,
+        MedicineOrder.status == "dispensed"
+    ).first()
+    if _handed_over:
+        raise HTTPException(
+            status_code=400,
+            detail="Medicines from this prescription were already handed over. It cannot be voided. Use the pharmacy return/refund flow instead."
+        )
 
     consultation.is_voided = True
 
@@ -1518,18 +1543,52 @@ def void_consultation(
     # Already-paid lines are left alone — voiding doesn't refund; that's a
     # separate, explicit action.
     excluded_count = 0
+    refunded_total = 0.0
     for order in db.query(TestOrder).filter(
         TestOrder.consultation_id == consultation.id,
         TestOrder.status == "payment_pending"
     ).all():
         order.included = False
         excluded_count += 1
+    # Paid but not yet processed by the lab: cancel and refund.
+    for order in db.query(TestOrder).filter(
+        TestOrder.consultation_id == consultation.id,
+        TestOrder.status == "paid"
+    ).all():
+        order.status = "cancelled"
+        order.queued_at = None
+        excluded_count += 1
+        if (order.price or 0) > 0:
+            db.add(Refund(
+                patient_id=consultation.patient_id, hospital_id=current_doctor.hospital_id,
+                source_type="test", source_id=order.id, amount=order.price,
+                channel=order.payment_method if order.payment_method in ("cash", "card", "upi") else "cash",
+                status="pending",
+                reason=f"Prescription voided before the test was done: {order.test_name}. Confirm refund channel with patient.",
+            ))
+            refunded_total += order.price
     for order in db.query(MedicineOrder).filter(
         MedicineOrder.consultation_id == consultation.id,
         MedicineOrder.status == "advised"
     ).all():
         order.included = False
         excluded_count += 1
+    # Paid but never handed over: cancel and refund.
+    for order in db.query(MedicineOrder).filter(
+        MedicineOrder.consultation_id == consultation.id,
+        MedicineOrder.status == "paid"
+    ).all():
+        order.status = "cancelled"
+        excluded_count += 1
+        _amt = line_total(order.unit_price, (order.billed_quantity or order.quantity or 0))
+        if _amt > 0:
+            db.add(Refund(
+                patient_id=consultation.patient_id, hospital_id=current_doctor.hospital_id,
+                source_type="pharmacy", source_id=order.id, amount=_amt, channel="cash",
+                status="pending",
+                reason=f"Prescription voided before dispensing: {order.medicine_name} was paid for but never handed over. Confirm refund channel with patient.",
+            ))
+            refunded_total += _amt
 
     db.commit()
 
@@ -1539,7 +1598,9 @@ def void_consultation(
         target_type="consultation",
         target_id=consultation.id,
         target_label=consultation.token_number or f"Draft #{consultation.id}",
-        details=f"Patient ID: {consultation.patient_id}" + (f" — {excluded_count} unpaid line(s) excluded" if excluded_count else "")
+        details=f"Patient ID: {consultation.patient_id}. Reason: {body.reason}"
+                + (f". {excluded_count} line(s) cancelled/excluded" if excluded_count else "")
+                + (f", Rs.{refunded_total:.2f} refund(s) pending" if refunded_total else "")
     )
 
     return {"message": "Consultation voided"}
@@ -1550,17 +1611,15 @@ def admin_dashboard(
     db: Session = Depends(get_db)
 ):
     import json
-    from datetime import datetime, timedelta
-    from sqlalchemy import func, case
-    from app.models.hospital import Hospital
-
-
+    from datetime import timedelta
+    from sqlalchemy import func, case, and_
 
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    hospital_id = current_doctor.hospital_id
     hospital_doctors = db.query(DoctorModel).filter(
-        DoctorModel.hospital_id == current_doctor.hospital_id,
+        DoctorModel.hospital_id == hospital_id,
         DoctorModel.role.in_(["doctor", "sub_admin"])
     ).all()
     doctor_ids = [d.id for d in hospital_doctors]
@@ -1571,120 +1630,72 @@ def admin_dashboard(
     week_start = now - timedelta(days=7)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    # DB-level counts instead of loading all into memory
-    total_consults = db.query(Consultation).filter(
-        Consultation.doctor_id.in_(doctor_ids),
-        Consultation.token_number != None,
-        Consultation.is_voided == False
-    ).count()
+    # Counts and totals are exact, all-time, and computed in the database.
+    # Only the medicine/test/diagnosis/demographic breakdowns need the JSON
+    # text of each consultation, so those read a bounded window (last 180
+    # days) instead of every consultation the hospital ever had.
+    STATS_WINDOW_DAYS = 180
+    stats_start = now - timedelta(days=STATS_WINDOW_DAYS)
 
-    today_count = db.query(Consultation).filter(
+    confirmed = [
         Consultation.doctor_id.in_(doctor_ids),
-        Consultation.token_number != None,
-        Consultation.is_voided == False,
-        Consultation.created_at >= today_start
-    ).count()
+        Consultation.token_number != None,  # noqa: E711
+        Consultation.is_voided == False,  # noqa: E712
+    ]
 
-    week_count = db.query(Consultation).filter(
+    def _count_if(cond):
+        return func.coalesce(func.sum(case((cond, 1), else_=0)), 0)
+
+    total_consults, today_n, week_n, month_n = db.query(
+        func.count(Consultation.id),
+        _count_if(Consultation.created_at >= today_start),
+        _count_if(Consultation.created_at >= week_start),
+        _count_if(Consultation.created_at >= month_start),
+    ).filter(*confirmed).one()
+
+    voided_consults = db.query(func.count(Consultation.id)).filter(
         Consultation.doctor_id.in_(doctor_ids),
-        Consultation.token_number != None,
-        Consultation.is_voided == False,
-        Consultation.created_at >= week_start
-    ).count()
-
-    month_count = db.query(Consultation).filter(
-        Consultation.doctor_id.in_(doctor_ids),
-        Consultation.token_number != None,
-        Consultation.is_voided == False,
-        Consultation.created_at >= month_start
-    ).count()
-
-    voided_consults = db.query(Consultation).filter(
-        Consultation.doctor_id.in_(doctor_ids),
-        Consultation.is_voided == True
-    ).count()
-
+        Consultation.is_voided == True  # noqa: E712
+    ).scalar() or 0
     total_attempted = total_consults + voided_consults
 
-    # Load only what's needed for JSON parsing (medicines/tests/diagnosis)
-    all_consults = db.query(Consultation).filter(
-        Consultation.doctor_id.in_(doctor_ids),
-        Consultation.token_number != None,
-        Consultation.is_voided == False
-    ).with_entities(
-        Consultation.id,
-        Consultation.patient_id,
-        Consultation.doctor_id,
-        Consultation.created_at,
-        Consultation.token_number,
-        Consultation.diagnosis,
-        Consultation.medicines,
-        Consultation.tests
-    ).all()
+    # Per-patient consultation count + last consultation (one grouped query)
+    per_patient = {
+        pid: (cnt, last_at) for pid, cnt, last_at in db.query(
+            Consultation.patient_id, func.count(Consultation.id), func.max(Consultation.created_at)
+        ).filter(*confirmed).group_by(Consultation.patient_id).all()
+    }
+    new_patient_visits = sum(1 for cnt, _ in per_patient.values() if cnt == 1)
+    returning_patient_visits = sum(1 for cnt, _ in per_patient.values() if cnt > 1)
 
-    today_consults = [c for c in all_consults if c.created_at >= today_start]
-    week_consults = [c for c in all_consults if c.created_at >= week_start]
-    month_consults = [c for c in all_consults if c.created_at >= month_start]
-
-    # All patients
-    all_patients = db.query(Patient).filter(
-        Patient.hospital_id == current_doctor.hospital_id
-    ).all()
-    patient_map = {p.id: p for p in all_patients}
-    new_patients_month = [p for p in all_patients if p.created_at >= month_start]
-
-    # New vs returning patients
-    # A patient is "returning" if they have more than 1 consultation
-    patient_consult_count = {}
-    for c in all_consults:
-        patient_consult_count[c.patient_id] = patient_consult_count.get(c.patient_id, 0) + 1
-    new_patient_visits = sum(1 for count in patient_consult_count.values() if count == 1)
-    returning_patient_visits = sum(1 for count in patient_consult_count.values() if count > 1)
-
-    # Check-ins, for last-visit fallback (covers patients who checked in but haven't been consulted yet)
-    all_checkins = db.query(Checkin).filter(
-        Checkin.hospital_id == current_doctor.hospital_id
-    ).all()
-    patient_checkins = {}
-    for chk in all_checkins:
-        existing = patient_checkins.get(chk.patient_id)
-        if not existing or chk.created_at > existing.created_at:
-            patient_checkins[chk.patient_id] = chk
-
-    # Check-in counts per patient (a check-in counts as a visit even before consultation)
-    patient_checkin_count = {}
-    for chk in all_checkins:
-        patient_checkin_count[chk.patient_id] = patient_checkin_count.get(chk.patient_id, 0) + 1
-
-    # Build a map of patient_id -> most recent checkin's doctor_id
-    from app.models.checkin import Checkin as CheckinModel
+    # Per-patient check-in count + latest check-in (and who it was with)
+    ci_sub = db.query(
+        Checkin.patient_id.label("pid"),
+        func.count(Checkin.id).label("cnt"),
+        func.max(Checkin.created_at).label("last_at"),
+    ).filter(Checkin.hospital_id == hospital_id).group_by(Checkin.patient_id).subquery()
+    ci_stats = {r.pid: (r.cnt, r.last_at) for r in db.query(ci_sub).all()}
     latest_checkin_doctor = {}
-    recent_checkins = db.query(CheckinModel).filter(
-        CheckinModel.hospital_id == current_doctor.hospital_id
-    ).order_by(CheckinModel.created_at.desc()).all()
-    for chk in recent_checkins:
-        if chk.patient_id not in latest_checkin_doctor:
-            latest_checkin_doctor[chk.patient_id] = chk.doctor_id
+    for pid, did in db.query(Checkin.patient_id, Checkin.doctor_id).join(
+        ci_sub, and_(Checkin.patient_id == ci_sub.c.pid, Checkin.created_at == ci_sub.c.last_at)
+    ).filter(Checkin.hospital_id == hospital_id).all():
+        latest_checkin_doctor[pid] = did
 
-    # Patients list
+    # Patients: only the columns this page uses
+    patient_rows = db.query(
+        Patient.id, Patient.patient_uid, Patient.name, Patient.age, Patient.gender,
+        Patient.blood_group, Patient.phone, Patient.created_at
+    ).filter(Patient.hospital_id == hospital_id).order_by(Patient.created_at.desc()).all()
+    patient_map = {p.id: p for p in patient_rows}
+    new_patients_month = sum(1 for p in patient_rows if p.created_at and p.created_at >= month_start)
+
     patients_list = []
-    for p in sorted(all_patients, key=lambda x: x.created_at, reverse=True):
-        last_checkin = patient_checkins.get(p.id)
-        doctor = doctor_map.get(last_checkin.doctor_id) if last_checkin else None
-        consult_count = max(patient_consult_count.get(p.id, 0), patient_checkin_count.get(p.id, 0))
-        last_consult = max(
-            [c for c in all_consults if c.patient_id == p.id],
-            key=lambda c: c.created_at,
-            default=None
-        )
-
-        candidates = []
-        if last_consult:
-            candidates.append(last_consult.created_at)
-        if last_checkin:
-            candidates.append(last_checkin.created_at)
+    for p in patient_rows:
+        consult_cnt, last_consult_at = per_patient.get(p.id, (0, None))
+        checkin_cnt, last_checkin_at = ci_stats.get(p.id, (0, None))
+        doctor = doctor_map.get(latest_checkin_doctor.get(p.id))
+        candidates = [t for t in (last_consult_at, last_checkin_at) if t]
         last_visit_dt = max(candidates) if candidates else None
-
         patients_list.append({
             "patient_uid": p.patient_uid,
             "name": p.name,
@@ -1693,33 +1704,41 @@ def admin_dashboard(
             "blood_group": p.blood_group or "—",
             "phone": p.phone,
             "doctor": f"{doctor.title} {doctor.name}" if doctor else "—",
-            "total_visits": consult_count,
+            "total_visits": max(consult_cnt, checkin_cnt),
             "last_visit": last_visit_dt.strftime("%d %b %Y") if last_visit_dt else "—",
             "registered": p.created_at.strftime("%d %b %Y")
         })
 
-    # Per doctor stats
+    # Per doctor stats (one grouped query)
+    doc_rows = {
+        r.doctor_id: r for r in db.query(
+            Consultation.doctor_id,
+            func.count(Consultation.id).label("total"),
+            _count_if(Consultation.created_at >= today_start).label("today"),
+            _count_if(Consultation.created_at >= week_start).label("week"),
+            func.max(Consultation.created_at).label("last_at"),
+        ).filter(*confirmed).group_by(Consultation.doctor_id).all()
+    }
     doctor_stats = []
     for d in hospital_doctors:
-        d_consults = [c for c in all_consults if c.doctor_id == d.id]
-        d_today = [c for c in today_consults if c.doctor_id == d.id]
-        d_week = [c for c in week_consults if c.doctor_id == d.id]
-        last_consult = max(d_consults, key=lambda c: c.created_at) if d_consults else None
+        r = doc_rows.get(d.id)
         doctor_stats.append({
             "id": d.id,
             "name": f"{d.title} {d.name}",
             "specialization": d.specialization,
             "is_active": d.is_active,
-            "total_consultations": len(d_consults),
-            "today_consultations": len(d_today),
-            "week_consultations": len(d_week),
-            "last_active": last_consult.created_at.isoformat() if last_consult else None
+            "total_consultations": r.total if r else 0,
+            "today_consultations": r.today if r else 0,
+            "week_consultations": r.week if r else 0,
+            "last_active": r.last_at.isoformat() if r and r.last_at else None
         })
 
-    # Recent consultations
-    recent_consults = sorted(all_consults, key=lambda c: c.created_at, reverse=True)[:20]
+    # Recent consultations: who/when only, no clinical content (item 1.7)
+    recent_rows = db.query(
+        Consultation.token_number, Consultation.patient_id, Consultation.doctor_id, Consultation.created_at
+    ).filter(*confirmed).order_by(Consultation.created_at.desc()).limit(20).all()
     recent_list = []
-    for c in recent_consults:
+    for c in recent_rows:
         patient = patient_map.get(c.patient_id)
         doctor = doctor_map.get(c.doctor_id)
         recent_list.append({
@@ -1727,96 +1746,105 @@ def admin_dashboard(
             "patient_name": patient.name if patient else "—",
             "patient_uid": patient.patient_uid if patient else "—",
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "—",
-            "diagnosis": c.diagnosis or "—",
             "date": c.created_at.strftime("%d %b %Y %I:%M %p")
         })
 
-    # Medicine stats
+    # Breakdowns that need the JSON text: bounded window only
+    window_rows = db.query(
+        Consultation.patient_id, Consultation.created_at, Consultation.diagnosis,
+        Consultation.medicines, Consultation.tests
+    ).filter(*confirmed, Consultation.created_at >= stats_start).all()
+
+    def _loads(raw):
+        try:
+            return json.loads(raw or "[]")
+        except (ValueError, TypeError):
+            return []
+
     medicine_counts = {}
     medicine_diagnosis = {}
     otc_count = 0
     rx_count = 0
-    for c in all_consults:
-        meds = json.loads(c.medicines or "[]")
-        for m in meds:
-            name = m.get("name", "").strip().capitalize()
+    test_counts = {}
+    diagnosis_counts = {}
+    daily_counts = {}
+    age_diagnosis = {}
+    gender_diagnosis = {}
+
+    def _age_group(age):
+        if age <= 12: return "0-12"
+        if age <= 25: return "13-25"
+        if age <= 40: return "26-40"
+        if age <= 60: return "41-60"
+        return "60+"
+
+    for c in window_rows:
+        diag = c.diagnosis.strip().capitalize() if c.diagnosis else None
+        for m in _loads(c.medicines):
+            if not isinstance(m, dict):
+                continue
+            name = (m.get("name") or "").strip().capitalize()
             if name:
                 medicine_counts[name] = medicine_counts.get(name, 0) + 1
-                if c.diagnosis:
-                    diag = c.diagnosis.strip().capitalize()
-                    if name not in medicine_diagnosis:
-                        medicine_diagnosis[name] = {}
+                if diag:
+                    medicine_diagnosis.setdefault(name, {})
                     medicine_diagnosis[name][diag] = medicine_diagnosis[name].get(diag, 0) + 1
             if m.get("schedule") == "otc":
                 otc_count += 1
             else:
                 rx_count += 1
+        for t in _loads(c.tests):
+            if isinstance(t, str) and t.strip():
+                t = t.strip().capitalize()
+                test_counts[t] = test_counts.get(t, 0) + 1
+        if diag:
+            diagnosis_counts[diag] = diagnosis_counts.get(diag, 0) + 1
+            patient = patient_map.get(c.patient_id)
+            if patient:
+                ag = _age_group(patient.age)
+                age_diagnosis.setdefault(ag, {})
+                age_diagnosis[ag][diag] = age_diagnosis[ag].get(diag, 0) + 1
+                g = patient.gender.capitalize()
+                gender_diagnosis.setdefault(g, {})
+                gender_diagnosis[g][diag] = gender_diagnosis[g].get(diag, 0) + 1
+        day = c.created_at.strftime("%d %b")
+        daily_counts[day] = daily_counts.get(day, 0) + 1
 
     top_medicines_detailed = []
     for name, count in sorted(medicine_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
         diag_map = medicine_diagnosis.get(name, {})
         top_diag = max(diag_map.items(), key=lambda x: x[1])[0] if diag_map else "—"
-        top_medicines_detailed.append({
-            "name": name,
-            "count": count,
-            "top_diagnosis": top_diag
-        })
-
-    # Test stats
-    test_counts = {}
-    for c in all_consults:
-        tests = json.loads(c.tests or "[]")
-        for t in tests:
-            t = t.strip().capitalize()
-            if t:
-                test_counts[t] = test_counts.get(t, 0) + 1
+        top_medicines_detailed.append({"name": name, "count": count, "top_diagnosis": top_diag})
     top_tests = sorted(test_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-
-    # Diagnosis stats
-    diagnosis_counts = {}
-    for c in all_consults:
-        if c.diagnosis:
-            d = c.diagnosis.strip().capitalize()
-            diagnosis_counts[d] = diagnosis_counts.get(d, 0) + 1
     top_diagnoses = sorted(diagnosis_counts.items(), key=lambda x: x[1], reverse=True)[:10]
 
-    # Demographics
+    # Demographics (patients table only)
     age_groups = {"0-12": 0, "13-25": 0, "26-40": 0, "41-60": 0, "60+": 0}
     gender_counts = {}
     blood_groups = {}
-    age_diagnosis = {}
-    gender_diagnosis = {}
-
-    for p in all_patients:
-        if p.age <= 12: ag = "0-12"
-        elif p.age <= 25: ag = "13-25"
-        elif p.age <= 40: ag = "26-40"
-        elif p.age <= 60: ag = "41-60"
-        else: ag = "60+"
-        age_groups[ag] += 1
+    for p in patient_rows:
+        age_groups[_age_group(p.age)] += 1
         g = p.gender.capitalize()
         gender_counts[g] = gender_counts.get(g, 0) + 1
         if p.blood_group:
             bg = p.blood_group.strip().upper()
             blood_groups[bg] = blood_groups.get(bg, 0) + 1
 
-    for c in all_consults:
-        patient = patient_map.get(c.patient_id)
-        if not patient or not c.diagnosis:
-            continue
-        diag = c.diagnosis.strip().capitalize()
-        if patient.age <= 12: ag = "0-12"
-        elif patient.age <= 25: ag = "13-25"
-        elif patient.age <= 40: ag = "26-40"
-        elif patient.age <= 60: ag = "41-60"
-        else: ag = "60+"
-        if ag not in age_diagnosis:
-            age_diagnosis[ag] = {}
-        age_diagnosis[ag][diag] = age_diagnosis[ag].get(diag, 0) + 1
-        g = patient.gender.capitalize()
-        if g not in gender_diagnosis:
-            gender_diagnosis[g] = {}
-        gender_diagnosis[g][diag] = gender_diagnosis[g].get(diag, 0) + 1
+    # Same counter ai_scribe_gate.py enforces, so this page and the real limit agree.
+    _hosp = db.query(Hospital).filter(Hospital.id == hospital_id).first() if hospital_id else None
+    if _hosp and has_ai_scribe_at_all(_hosp.tier):
+        _sc = get_ai_scribe_status(db, _hosp)
+        ai_scribe_block = {
+            "included": True,
+            "used": _sc["used"],
+            "cap": _sc["cap"],  # None = unlimited
+            "topup_remaining": _sc["topup_remaining"],
+            "total_remaining": _sc["total_remaining"],
+            "allowed": _sc["allowed"],
+            "reason": _sc["reason"],
+        }
+    else:
+        ai_scribe_block = {"included": False}
 
     age_patterns = []
     for ag in ["0-12", "13-25", "26-40", "41-60", "60+"]:
@@ -1831,29 +1859,23 @@ def admin_dashboard(
 
     gender_patterns = []
     for g in ["Male", "Female", "Other"]:
-        total = gender_counts.get(g, 0)
         diags = gender_diagnosis.get(g, {})
         top = max(diags.items(), key=lambda x: x[1]) if diags else ("—", 0)
         gender_patterns.append({
             "gender": g,
-            "total_patients": total,
+            "total_patients": gender_counts.get(g, 0),
             "top_diagnosis": top[0],
             "cases": top[1]
         })
 
-    daily_counts = {}
-    for c in all_consults:
-        day = c.created_at.strftime("%d %b")
-        daily_counts[day] = daily_counts.get(day, 0) + 1
-
     return {
         "overview": {
-            "total_consultations": len(all_consults),
-            "today_consultations": len(today_consults),
-            "week_consultations": len(week_consults),
-            "month_consultations": len(month_consults),
-            "total_patients": len(all_patients),
-            "new_patients_month": len(new_patients_month),
+            "total_consultations": total_consults,
+            "today_consultations": today_n,
+            "week_consultations": week_n,
+            "month_consultations": month_n,
+            "total_patients": len(patient_rows),
+            "new_patients_month": new_patients_month,
             "total_doctors": len(hospital_doctors),
             "active_doctors": len([d for d in hospital_doctors if d.is_active]),
             "otc_medicines": otc_count,
@@ -1861,7 +1883,8 @@ def admin_dashboard(
             "voided_consultations": voided_consults,
             "void_rate": round(voided_consults / total_attempted * 100, 1) if total_attempted > 0 else 0,
             "new_patient_visits": new_patient_visits,
-            "returning_patient_visits": returning_patient_visits
+            "returning_patient_visits": returning_patient_visits,
+            "stats_window_days": STATS_WINDOW_DAYS
         },
         "doctor_stats": doctor_stats,
         "recent_consultations": recent_list,
@@ -1876,7 +1899,8 @@ def admin_dashboard(
             "age_patterns": age_patterns,
             "gender_patterns": gender_patterns
         },
-        "daily_consultations": daily_counts
+        "daily_consultations": daily_counts,
+        "ai_scribe": ai_scribe_block
     }
 
 @router.get("/patient-feedback/{patient_id}")
@@ -1920,6 +1944,11 @@ def admin_consultations(
     from datetime import datetime
     if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Admin view = who, when and billing only. No diagnosis, medicines or notes.
+    # Page size is capped at 100 rows.
+    page = max(page, 1)
+    limit = min(max(limit, 1), 100)
 
     doctor_id_query = db.query(DoctorModel).filter(
         DoctorModel.role.in_([UserRole.doctor, UserRole.sub_admin])
@@ -1969,7 +1998,6 @@ def admin_consultations(
         .outerjoin(VisitFeedback, VisitFeedback.checkin_id == Checkin.id)
         .with_entities(
             Consultation.token_number,
-            Consultation.diagnosis,
             Consultation.created_at,
             Consultation.is_voided,
             Patient.name.label("patient_name"),
@@ -1992,7 +2020,6 @@ def admin_consultations(
             "patient_name": c.patient_name or "—",
             "patient_uid": c.patient_uid or "—",
             "doctor_name": f"{c.doctor_title} {c.doctor_name}" if c.doctor_name else "—",
-            "diagnosis": c.diagnosis or "—",
             "date": c.created_at.strftime("%d %b %Y %I:%M %p"),
             "is_voided": c.is_voided,
             "feedback_rating": c.feedback_rating,

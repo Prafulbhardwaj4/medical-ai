@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Enum, Float
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Enum, Float, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
 from app.utils.timezone import now_ist_naive
@@ -36,6 +36,11 @@ class Doctor(Base):
     password_changed_at = Column(DateTime, nullable=True)  # UTC naive; tokens issued before this are rejected
     is_hiv_authorized = Column(Boolean, default=False, nullable=False)  # explicitly granted by admin — tighter access than the general "lab" role (Phase 6 item 21)
 
+    totp_secret_enc = Column(String, nullable=True)   # super admin 2FA secret, encrypted (see utils/totp.py)
+    totp_enabled = Column(Boolean, default=False, nullable=False)
+    totp_backup_codes = Column(Text, nullable=True)   # JSON list of hashes; plain codes are shown once
+    totp_last_step = Column(Integer, nullable=True)   # blocks code replay
+
     role = Column(Enum(UserRole, native_enum=False), default=UserRole.doctor, nullable=False)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -59,7 +64,7 @@ class Doctor(Base):
 
     @property
     def hospital_tier(self):
-        return self.hospital.tier if self.hospital else "growth"
+        return self.hospital.tier if self.hospital else "foundation"
 
     @property
     def default_consultation_fee(self):

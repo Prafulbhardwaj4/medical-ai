@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from app.utils.rate_limit import limiter
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -75,6 +76,21 @@ def _reassign_late_arrival_slot(db: Session, appt: Appointment, hospital_id: int
     return True
 
 
+def _hospital_contact_phone(hospital) -> str:
+    """The hospital's mobile number from Admin > Settings (contact numbers). Falls back to the
+    first number of any kind, then to the old single phone field."""
+    import json
+    if not hospital:
+        return None
+    try:
+        nums = json.loads(hospital.contact_numbers) if hospital.contact_numbers else []
+    except Exception:
+        nums = []
+    mobiles = [n.get("number") for n in nums if isinstance(n, dict) and n.get("type") == "mobile" and n.get("number")]
+    anyone = [n.get("number") for n in nums if isinstance(n, dict) and n.get("number")]
+    return (mobiles[0] if mobiles else (anyone[0] if anyone else None)) or hospital.phone
+
+
 def _to_out(a: Appointment, db: Session) -> AppointmentOut:
     hospital = db.query(Hospital).filter(Hospital.id == a.hospital_id).first()
     doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
@@ -94,6 +110,8 @@ def _to_out(a: Appointment, db: Session) -> AppointmentOut:
         needs_no_show_response=a.no_show_detected_at is not None and a.no_show_reason is None,
         no_show_reschedule_deadline=a.no_show_reschedule_deadline,
         mass_reschedule_notice=a.mass_reschedule_notice,
+        cancelled_by=a.cancelled_by,
+        hospital_phone=_hospital_contact_phone(hospital) if a.status == AppointmentStatus.cancelled else None,
     )
 
 
@@ -122,6 +140,20 @@ def _release_abandoned_holds(db: Session, slot: DoctorSlot) -> None:
             slot.booked_count -= 1
     if stale:
         db.flush()
+
+
+def _ensure_slot_bookable(db: Session, slot: DoctorSlot, hospital_id: int) -> None:
+    """Same hospital, not already over, and the doctor isn't on leave that day."""
+    from app.models.doctor_availability import DoctorUnavailability
+    if slot.hospital_id != hospital_id:
+        raise HTTPException(status_code=404, detail="Slot not found")
+    _start = datetime.combine(slot.slot_date, datetime.strptime(slot.slot_time, "%H:%M").time())
+    if _start + timedelta(minutes=slot.window_minutes or 0) <= now_ist_naive():
+        raise HTTPException(status_code=400, detail="That time slot has already passed")
+    if db.query(DoctorUnavailability).filter(
+        DoctorUnavailability.doctor_id == slot.doctor_id, DoctorUnavailability.date == slot.slot_date
+    ).first():
+        raise HTTPException(status_code=400, detail="The doctor is not available on that date. Please pick another day.")
 
 
 ACTIVE_APPOINTMENT_STATUSES = (AppointmentStatus.booked, AppointmentStatus.pending_review, AppointmentStatus.confirmed)
@@ -157,9 +189,11 @@ def book_appointment(
     db: Session = Depends(get_db),
 ):
     if body.profile_link_id:
-        owned = any(p.id == body.profile_link_id for p in account.profiles)
-        if not owned:
+        _link = next((p for p in account.profiles if p.id == body.profile_link_id), None)
+        if not _link:
             raise HTTPException(status_code=403, detail="This profile does not belong to your account")
+        if not _link.patient or _link.patient.hospital_id != body.hospital_id:
+            raise HTTPException(status_code=400, detail="This patient is not registered at the selected hospital")
     else:
         if not (body.new_patient_name or "").strip():
             raise HTTPException(status_code=400, detail="Please enter the patient's name — this hospital hasn't seen this account before")
@@ -172,6 +206,9 @@ def book_appointment(
         appt_type = AppointmentType(body.type)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid appointment type")
+
+    if appt_type != AppointmentType.scheduled:
+        raise HTTPException(status_code=400, detail="Only scheduled appointments can be booked online right now")
 
     doctor_id = body.doctor_id
     requested_time = body.requested_time
@@ -190,6 +227,14 @@ def book_appointment(
         if not slot:
             raise HTTPException(status_code=404, detail="Slot not found")
 
+        if body.doctor_id and body.doctor_id != slot.doctor_id:
+            raise HTTPException(status_code=400, detail="Selected doctor does not match this slot")
+
+        _slot_start = datetime.combine(slot.slot_date, datetime.strptime(slot.slot_time, "%H:%M").time())
+        _slot_end = _slot_start + timedelta(minutes=slot.window_minutes or 0)
+        if _slot_end <= now_ist_naive():
+            raise HTTPException(status_code=400, detail="This time slot has already passed. Please pick a later one.")
+
         _release_abandoned_holds(db, slot)
 
         if slot.booked_count >= slot.capacity:
@@ -200,6 +245,18 @@ def book_appointment(
             DoctorUnavailability.doctor_id == slot.doctor_id, DoctorUnavailability.date == slot.slot_date
         ).first():
             raise HTTPException(status_code=400, detail="This doctor is unavailable on this date. Please pick another date or doctor.")
+
+        _held = db.query(Appointment).filter(
+            Appointment.account_id == account.id,
+            Appointment.status == AppointmentStatus.booked,
+            Appointment.payment_status == "unpaid",
+            Appointment.requested_time >= now_ist_naive(),
+        ).count()
+        if _held >= settings.PORTAL_MAX_UNPAID_HOLDS_PER_ACCOUNT:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You already have {_held} unpaid bookings on hold. Pay at the hospital or cancel one before booking another.",
+            )
 
         _check_no_duplicate_active_booking(db, account, body.profile_link_id, body.new_patient_name, slot.doctor_id)
 
@@ -296,7 +353,15 @@ def mark_paid(
     'Expected Today' view or get auto-matched at check-in.
     NOTE: when this is wired to a real gateway, the caller also needs to
     pass payment_method through the same way collect_payment_at_reception
-    does — it's never set here today, only payment_status is."""
+    does — it's never set here today, only payment_status is.
+
+    DISABLED until a real payment gateway exists: any portal account could mark
+    its own appointment paid without paying. Pay-at-hospital through reception's
+    collect-payment is the only payment path for now."""
+    raise HTTPException(
+        status_code=503,
+        detail="Online payment is not available yet. Please pay at the hospital reception.",
+    )
     appt = next((a for a in account.appointments if a.id == appointment_id), None)
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
@@ -396,7 +461,9 @@ def submit_no_show_reason(
 
 
 @router.post("/report-issue")
+@limiter.limit("10/hour")
 def report_issue(
+    request: Request,
     body: ReportIssueIn,
     account: PatientAccount = Depends(get_current_patient_account),
     db: Session = Depends(get_db),
@@ -413,9 +480,17 @@ def report_issue(
         raise HTTPException(status_code=400, detail="Invalid context")
 
     from app.models.hospital import Hospital
-    hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id).first()
+    hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id, Hospital.is_active == True).first()  # noqa: E712
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
+
+    # Only an account that actually has a link to this hospital (a patient record
+    # or a booking there) may raise a critical alert on it.
+    _linked = any(a.hospital_id == hospital.id for a in account.appointments) or any(
+        p.patient and p.patient.hospital_id == hospital.id for p in account.profiles
+    )
+    if not _linked:
+        raise HTTPException(status_code=403, detail="You have no visit or booking at this hospital")
 
     appt = None
     if body.appointment_id:
@@ -483,6 +558,13 @@ def request_reschedule(
     else:
         raise HTTPException(status_code=400, detail="Reschedule isn't available for this appointment right now")
 
+    _req_slot = db.query(DoctorSlot).filter(DoctorSlot.id == body.new_slot_id).first()
+    if not _req_slot:
+        raise HTTPException(status_code=404, detail="Slot not found")
+    _ensure_slot_bookable(db, _req_slot, appt.hospital_id)
+    if _req_slot.booked_count >= _req_slot.capacity:
+        raise HTTPException(status_code=400, detail="That slot is already full")
+
     appt.reschedule_kind = kind
     appt.requested_reschedule_slot_id = body.new_slot_id
     appt.status = AppointmentStatus.pending_review
@@ -506,7 +588,9 @@ def request_reschedule(
 
 
 @router.post("/family-booking-request")
+@limiter.limit("10/hour")
 def request_family_booking(
+    request: Request,
     body: FamilyBookingRequestIn,
     account: PatientAccount = Depends(get_current_patient_account),
     db: Session = Depends(get_db),
@@ -521,9 +605,20 @@ def request_family_booking(
     if phone == account.phone:
         raise HTTPException(status_code=400, detail="That's your own account — book under one of your existing profiles instead")
 
+    if body.type != "scheduled":
+        raise HTTPException(status_code=400, detail="Only scheduled appointments can be requested right now")
+
+    # Same reply whether or not the number has an account, so this can't be used
+    # to find out who is registered.
+    _sent = {"message": "Sent — if that number has a portal account, they'll see this the next time they open their portal"}
     target = db.query(PatientAccount).filter(PatientAccount.phone == phone).first()
     if not target:
-        raise HTTPException(status_code=404, detail="No portal account found with that phone number")
+        return _sent
+    from app.models.portal import CrossBookingRequest as _CBR
+    if db.query(_CBR).filter(
+        _CBR.requesting_account_id == account.id, _CBR.target_account_id == target.id, _CBR.status == "pending"
+    ).first():
+        return _sent
 
     hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id, Hospital.is_active == True).first()  # noqa: E712
     if not hospital:
@@ -688,6 +783,7 @@ def self_serve_mass_reschedule(
         raise HTTPException(status_code=404, detail="Slot not found")
     if new_slot.doctor_id != appt.doctor_id:
         raise HTTPException(status_code=400, detail="Please pick a slot with the same doctor")
+    _ensure_slot_bookable(db, new_slot, appt.hospital_id)
     if new_slot.booked_count >= new_slot.capacity:
         raise HTTPException(status_code=400, detail="That slot is already full")
 
@@ -723,6 +819,13 @@ def cancel_appointment(
     if appt.status in (AppointmentStatus.completed, AppointmentStatus.cancelled):
         raise HTTPException(status_code=400, detail=f"Cannot cancel a {appt.status.value} appointment")
 
+    from app.models.checkin import Checkin as _Checkin
+    if db.query(_Checkin).filter(_Checkin.portal_appointment_id == appt.id).first():
+        raise HTTPException(
+            status_code=400,
+            detail="Your token for today is already generated. Please ask the hospital reception to cancel it."
+        )
+
     if appt.payment_status == "paid":
         now = now_ist_naive()
         hours_since_booking = (now - appt.created_at).total_seconds() / 3600
@@ -747,6 +850,7 @@ def cancel_appointment(
             slot.booked_count -= 1
 
     appt.status = AppointmentStatus.cancelled
+    appt.cancelled_by = "patient"
     db.commit()
     db.refresh(appt)
     return _to_out(appt, db)

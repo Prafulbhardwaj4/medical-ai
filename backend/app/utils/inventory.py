@@ -137,6 +137,7 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int, round
         or_(MedicineBatch.expiry_date == None, MedicineBatch.expiry_date >= ist_today()),  # noqa: E711
     ).order_by(MedicineBatch.expiry_date.asc().nullslast()).all()
 
+    allocations = []
     for batch in batches:
         if remaining <= 0:
             break
@@ -144,6 +145,7 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int, round
         batch.quantity -= take
         remaining -= take
         deducted_from_batches += take
+        allocations.append({"batch_id": batch.id, "batch_number": batch.batch_number, "quantity": take})
 
     medicine.stock_quantity = max(0, (medicine.stock_quantity or 0) - min(quantity_needed, sellable_before))
 
@@ -151,5 +153,58 @@ def deduct_stock_fefo(db: Session, medicine_id: int, quantity_needed: int, round
         "medicine_id": medicine_id,
         "medicine_name": medicine.generic_name,
         "deducted_from_batches": deducted_from_batches,
+        "allocations": allocations,  # which batches the units came from (stored per dispense, see MedicineOrderBatch)
         "shortfall": remaining  # >0 means batch records under-counted actual stock (legacy/untracked stock consumed)
     }
+
+
+def ipd_units_needed(order, medicine) -> int:
+    """Raw units an admitted-patient medicine order needs. order.quantity is in packs/strips."""
+    return int(order.quantity or 0) * int(medicine.pack_size or 1)
+
+
+def ipd_out_of_stock(db: Session, order, medicine=None) -> bool:
+    """Live check, never a hand-set flag: True when in-date stock cannot cover this whole
+    order. Expired batches do not count, so "only expired stock left" is out of stock.
+    Untracked stock (stock_quantity is NULL) is never out of stock."""
+    if getattr(order, "sourced_outside", False) or not order.medicine_id:
+        return False
+    if medicine is None:
+        medicine = db.query(HospitalMedicine).filter(HospitalMedicine.id == order.medicine_id).first()
+    if not medicine:
+        return False
+    sellable = sellable_stock(db, medicine)
+    if sellable is None:
+        return False
+    return sellable < ipd_units_needed(order, medicine)
+
+
+def restock_to_batches(db: Session, medicine: HospitalMedicine, allocations, units: int, already_restocked: int = 0) -> None:
+    """Puts returned units back into the SAME batches they were taken from at send time.
+    `allocations` is the list stored when the order was sent. `already_restocked` is how many
+    units of this order were put back by earlier returns, so a batch is never over-filled.
+    The aggregate always goes up by `units`; any part not covered by a recorded batch
+    (legacy stock) only raises the aggregate."""
+    if units <= 0:
+        return
+    medicine.stock_quantity = (medicine.stock_quantity or 0) + units
+    skip = max(0, already_restocked)
+    remaining = units
+    for al in (allocations or []):
+        qty = int(al.get("quantity") or 0)
+        if skip >= qty:
+            skip -= qty
+            continue
+        usable = qty - skip
+        skip = 0
+        put = min(usable, remaining)
+        if put <= 0:
+            break
+        batch = db.query(MedicineBatch).filter(
+            MedicineBatch.id == al.get("batch_id"), MedicineBatch.medicine_id == medicine.id
+        ).first()
+        if batch:
+            batch.quantity += put
+        remaining -= put
+        if remaining <= 0:
+            break

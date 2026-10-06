@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -18,9 +19,11 @@ from app.schemas.portal import DashboardStatsOut, ProfileSummaryOut, VisitOut, V
 from app.utils.portal_auth import get_current_patient_account
 from app.utils.auth import get_current_doctor
 from app.utils.timezone import now_ist_naive
+from app.utils.ref_ranges import pick_range_text, row_fields, flag_for_row
 from app.services.pdf_service import generate_prescription_pdf, generate_invoice_pdf, generate_combined_test_report_pdf
 import json
 import os
+from datetime import timedelta
 
 router = APIRouter(prefix="/portal/dashboard", tags=["portal-dashboard"])
 
@@ -33,6 +36,34 @@ def _owned_patient_ids(account: PatientAccount) -> set:
     return {link.patient_id for link in account.profiles if link.relation != "pending_confirmation"}
 
 
+def _confirmed_visits_query(db: Session, patient_ids: set):
+    """One definition of "a visit" for the whole dashboard: a check-in whose consultation
+    is confirmed (has a token) and not voided. Counts and lists both come from this."""
+    return db.query(Checkin, Consultation).join(
+        Consultation,
+        and_(Consultation.token_number == Checkin.token_number, Consultation.patient_id == Checkin.patient_id),
+    ).filter(
+        Checkin.patient_id.in_(patient_ids),
+        Consultation.token_number != None,  # noqa: E711
+        Consultation.is_voided == False,  # noqa: E712
+    )
+
+
+def _feedback_allowed(db: Session, checkin: Checkin) -> bool:
+    """Feedback opens once the consultation is confirmed and its fee is paid. It no longer
+    depends on an invoice being finalized, which hospitals without OPD invoices never do."""
+    if checkin.is_finalized:
+        return True
+    if not checkin.is_paid:
+        return False
+    return db.query(Consultation.id).filter(
+        Consultation.token_number == checkin.token_number,
+        Consultation.patient_id == checkin.patient_id,
+        Consultation.token_number != None,  # noqa: E711
+        Consultation.is_voided == False,  # noqa: E712
+    ).first() is not None
+
+
 @router.get("/stats", response_model=DashboardStatsOut)
 def get_stats(account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
     from datetime import timedelta
@@ -41,15 +72,13 @@ def get_stats(account: PatientAccount = Depends(get_current_patient_account), db
     if not patient_ids:
         return DashboardStatsOut(profile_count=0, consultation_count=0, visit_count_total=0, visit_count_last_30_days=0)
 
-    consultation_count = db.query(Consultation).filter(
-        Consultation.patient_id.in_(patient_ids), Consultation.is_voided == False  # noqa: E712
-    ).count()
-    visit_count_total = db.query(Checkin).filter(Checkin.patient_id.in_(patient_ids)).count()
+    # Every number below comes from the same "confirmed, non-voided" definition the visit list uses.
+    base = _confirmed_visits_query(db, patient_ids)
+    visit_count_total = base.count()
+    consultation_count = base.with_entities(func.count(func.distinct(Consultation.id))).scalar() or 0
 
     thirty_days_ago = now_ist_naive().date() - timedelta(days=30)
-    visit_count_30d = db.query(Checkin).filter(
-        Checkin.patient_id.in_(patient_ids), Checkin.visit_date >= thirty_days_ago
-    ).count()
+    visit_count_30d = base.filter(Checkin.visit_date >= thirty_days_ago).count()
 
     return DashboardStatsOut(
         profile_count=len(patient_ids),
@@ -299,21 +328,23 @@ def download_admission_report_pdf(
         except Exception:
             result_data = {}
 
+        _g = patient.gender
         if catalog_item and catalog_item.is_panel:
             params = db.query(TestCatalogParameter).filter(
                 TestCatalogParameter.test_catalog_item_id == catalog_item.id,
                 TestCatalogParameter.is_active == True  # noqa: E712
             ).order_by(TestCatalogParameter.display_order).all()
-            # Fall back to whichever gender's range is actually filled in.
+            # Never a silent female default: unknown sex shows "range not available" (utils/ref_ranges.py).
             rows = [{
                 "name": p.name, "unit": p.unit or "",
-                "range": ((p.reference_range_male if is_male else p.reference_range_female) or p.reference_range_male or p.reference_range_female) or "",
+                "range": pick_range_text(_g, p.reference_range_male, p.reference_range_female),
+                "flag": flag_for_row(result_data.get(p.name, ""), row_fields(_g, p)),
                 "value": result_data.get(p.name, "")
             } for p in params if result_data.get(p.name)]
         else:
-            range_str = ((catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) or catalog_item.reference_range_male or catalog_item.reference_range_female) if catalog_item else ""
+            range_str = pick_range_text(_g, catalog_item.reference_range_male, catalog_item.reference_range_female) if catalog_item else ""
             unit = catalog_item.unit if catalog_item else ""
-            rows = [{"name": order.test_name, "unit": unit or "", "range": range_str or "", "value": result_data.get("value", "")}]
+            rows = [{"name": order.test_name, "unit": unit or "", "range": range_str or "", "flag": flag_for_row(result_data.get("value", ""), row_fields(_g, catalog_item)) if catalog_item else "", "value": result_data.get("value", "")}]
 
         tests_payload.append({"test_name": order.test_name, "rows": rows, "notes": result_data.get("notes", ""), "report_reference": order.report_reference})
 
@@ -366,80 +397,59 @@ def set_sourced_outside(admission_id: int, order_id: int, body: dict, account: P
 
 
 @router.get("/visits", response_model=list[VisitOut])
-def list_all_visits(account: PatientAccount = Depends(get_current_patient_account), db: Session = Depends(get_db)):
-    """Flat list of visits across every linked profile — used for the
-    searchable/filterable Health Records view."""
-    out = []
-    for link in account.profiles:
-        patient = link.patient
-        if not patient:
-            continue
-        hospital = db.query(Hospital).filter(Hospital.id == patient.hospital_id).first()
-        checkins = db.query(Checkin).filter(Checkin.patient_id == patient.id).order_by(Checkin.visit_date.desc()).all()
-        for c in checkins:
-            h = db.query(Hospital).filter(Hospital.id == c.hospital_id).first() or hospital
-            doctor = db.query(Doctor).filter(Doctor.id == c.doctor_id).first()
-            consultation = db.query(Consultation).filter(
-                Consultation.token_number == c.token_number, Consultation.is_voided == False  # noqa: E712
-            ).first()
-            if not consultation:
-                continue
-            test_count = db.query(TestOrder).filter(TestOrder.consultation_id == consultation.id).count() if consultation else 0
-            out.append(VisitOut(
-                checkin_id=c.id, token_number=c.token_number,
-                visit_date=c.visit_date.isoformat(),
-                hospital_name=h.name if h else "Unknown hospital",
-                doctor_name=f"{doctor.title} {doctor.name}" if doctor else None,
-                patient_name=patient.name,
-                has_prescription=consultation is not None,
-                has_invoice=c.invoice_id is not None,
-                test_count=test_count,
-            ))
-    out.sort(key=lambda v: v.visit_date, reverse=True)
-    return out
-
-
-@router.get("/profiles/{profile_link_id}/visits", response_model=list[VisitOut])
-def list_visits(
-    profile_link_id: int,
+def list_all_visits(
+    limit: int = 100,
+    offset: int = 0,
     account: PatientAccount = Depends(get_current_patient_account),
     db: Session = Depends(get_db),
 ):
-    link = next((p for p in account.profiles if p.id == profile_link_id and p.relation != "pending_confirmation"), None)
-    if not link or not link.patient:
-        raise HTTPException(status_code=404, detail="Profile not found — confirm it under your profile menu first if it's a recently linked record")
+    """Flat list of visits across every CONFIRMED profile link (pending links are excluded,
+    like every other endpoint) - used for the searchable/filterable Health Records view.
+    Paged: limit (max 200) and offset."""
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    patient_ids = _owned_patient_ids(account)
+    if not patient_ids:
+        return []
 
-    patient = link.patient
-    checkins = (
-        db.query(Checkin)
-        .filter(Checkin.patient_id == patient.id)
-        .order_by(Checkin.visit_date.desc(), Checkin.created_at.desc())
-        .all()
+    rows = _confirmed_visits_query(db, patient_ids).order_by(
+        Checkin.visit_date.desc(), Checkin.id.desc()
+    ).offset(offset).limit(limit).all()
+    if not rows:
+        return []
+
+    # Batch lookups instead of several queries per visit.
+    hospitals = {h.id: h for h in db.query(Hospital).filter(Hospital.id.in_({c.hospital_id for c, _ in rows})).all()}
+    doctor_ids = {c.doctor_id for c, _ in rows if c.doctor_id}
+    doctors = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_(doctor_ids)).all()} if doctor_ids else {}
+    patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_(patient_ids)).all()}
+    consultation_ids = [k.id for _, k in rows]
+    test_counts = dict(
+        db.query(TestOrder.consultation_id, func.count(TestOrder.id))
+        .filter(TestOrder.consultation_id.in_(consultation_ids))
+        .group_by(TestOrder.consultation_id).all()
     )
 
     out = []
-    for c in checkins:
-        hospital = db.query(Hospital).filter(Hospital.id == c.hospital_id).first()
-        doctor = db.query(Doctor).filter(Doctor.id == c.doctor_id).first()
-        consultation = db.query(Consultation).filter(
-            Consultation.token_number == c.token_number, Consultation.is_voided == False  # noqa: E712
-        ).first()
-        if not consultation:
-            continue
-        test_count = db.query(TestOrder).filter(TestOrder.consultation_id == consultation.id).count() if consultation else 0
-
+    for c, k in rows:
+        h = hospitals.get(c.hospital_id)
+        doctor = doctors.get(c.doctor_id)
+        patient = patients.get(c.patient_id)
+        try:
+            has_meds = bool(json.loads(k.medicines or "[]"))
+        except Exception:
+            has_meds = False
         out.append(VisitOut(
             checkin_id=c.id, token_number=c.token_number,
             visit_date=c.visit_date.isoformat(),
-            hospital_name=hospital.name if hospital else "Unknown hospital",
+            hospital_name=h.name if h else "Unknown hospital",
             doctor_name=f"{doctor.title} {doctor.name}" if doctor else None,
-            patient_name=patient.name,
-            has_prescription=consultation is not None,
+            patient_name=patient.name if patient else "Unknown",
+            has_prescription=has_meds,  # a tests-only visit is listed, just without a prescription
             has_invoice=c.invoice_id is not None,
-            test_count=test_count,
+            test_count=test_counts.get(k.id, 0),
         ))
     return out
-
 
 @router.get("/visits/{checkin_id}", response_model=VisitDetailOut)
 def get_visit_detail(
@@ -482,6 +492,7 @@ def get_visit_detail(
         invoice_total=invoice.grand_total if invoice else None,
         tests=tests,
         feedback_given=feedback_given,
+        feedback_allowed=_feedback_allowed(db, checkin),
     )
 
 
@@ -498,8 +509,8 @@ def submit_visit_feedback(
     checkin = db.query(Checkin).filter(Checkin.id == checkin_id).first()
     if not checkin or checkin.patient_id not in _owned_patient_ids(account):
         raise HTTPException(status_code=404, detail="Visit not found")
-    if not checkin.is_finalized:
-        raise HTTPException(status_code=400, detail="Feedback is only available once the visit is complete")
+    if not _feedback_allowed(db, checkin):
+        raise HTTPException(status_code=400, detail="Feedback opens once your consultation is complete and the consultation fee is paid")
 
     from app.models.feedback import VisitFeedback
     existing = db.query(VisitFeedback).filter(VisitFeedback.checkin_id == checkin_id).first()
@@ -611,20 +622,23 @@ def download_consultation_test_report(
         except Exception:
             result_data = {}
 
+        _g = patient.gender
         if catalog_item and catalog_item.is_panel:
             params = db.query(TestCatalogParameter).filter(
                 TestCatalogParameter.test_catalog_item_id == catalog_item.id,
                 TestCatalogParameter.is_active == True  # noqa: E712
             ).order_by(TestCatalogParameter.display_order).all()
+            # Never a silent female default: unknown sex shows "range not available" (utils/ref_ranges.py).
             rows = [{
                 "name": p.name, "unit": p.unit or "",
-                "range": ((p.reference_range_male if is_male else p.reference_range_female) or p.reference_range_male or p.reference_range_female) or "",
+                "range": pick_range_text(_g, p.reference_range_male, p.reference_range_female),
+                "flag": flag_for_row(result_data.get(p.name, ""), row_fields(_g, p)),
                 "value": result_data.get(p.name, "")
             } for p in params if result_data.get(p.name)]  # untested subtests excluded, not just blanked
         else:
-            range_str = ((catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) or catalog_item.reference_range_male or catalog_item.reference_range_female) if catalog_item else ""
+            range_str = pick_range_text(_g, catalog_item.reference_range_male, catalog_item.reference_range_female) if catalog_item else ""
             unit = catalog_item.unit if catalog_item else ""
-            rows = [{"name": order.test_name, "unit": unit or "", "range": range_str or "", "value": result_data.get("value", "")}]
+            rows = [{"name": order.test_name, "unit": unit or "", "range": range_str or "", "flag": flag_for_row(result_data.get("value", ""), row_fields(_g, catalog_item)) if catalog_item else "", "value": result_data.get("value", "")}]
 
         tests_payload.append({"test_name": order.test_name, "rows": rows, "notes": result_data.get("notes", ""), "report_reference": order.report_reference})
 
@@ -710,7 +724,7 @@ def download_invoice_pdf(
             # Item 2 fix: same Payment Summary block the staff-side discharge
             # invoice already shows — patient's own portal copy of this
             # exact invoice was silently missing it.
-            _items, _subtotal, _gst_total, _charges_total, deposit_paid, _tpa_covered, _balance = _settlement_summary(db, admission)
+            _items, _subtotal, _gst_total, _charges_total, deposit_paid, _balance = _settlement_summary(db, admission)
             refund_due = max(-_balance, 0)
 
     if not invoice.verify_hash:

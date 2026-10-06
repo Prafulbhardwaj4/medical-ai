@@ -28,5 +28,6 @@ class MedicineOrder(Base):
     repeat_authorized_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)
     repeat_authorized_at = Column(DateTime, nullable=True)
     billed_quantity = Column(Integer, nullable=True)  # actually charged/dispensed qty, capped by stock at payment time
+    shortfall_quantity = Column(Integer, nullable=True)  # units wanted but not billable at payment (stock ran short) - to be supplied/billed later
     substitute_for_id = Column(Integer, ForeignKey("medicine_orders.id"), nullable=True)
     created_at = Column(DateTime, default=now_ist_naive)

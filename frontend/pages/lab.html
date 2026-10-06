@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lab — MedScribe</title>
-  <link rel="stylesheet" href="../css/style.css?v=4" />
+  <link rel="stylesheet" href="../css/style.css" />
   <script src="../js/custom-select.js" defer></script>
   <style>
     /* Tab sections (Home / Pending) - only the active one shows, on both
@@ -867,12 +867,12 @@
   </div>
 
   <div id="toast"></div>
-  <script src="../js/api.js?v=4"></script>
+  <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
-  <script src="../js/chat-widget.js?v=1"></script>
-  <script src="../js/suggestion-widget.js?v=1"></script>
-  <script src="../js/tutorial.js?v=2"></script>
+  <script src="../js/chat-widget.js"></script>
+  <script src="../js/suggestion-widget.js"></script>
+  <script src="../js/tutorial.js"></script>
   <script>
     if (!requireAuth()) throw new Error("Not authenticated");
     if (getDoctor()?.role !== 'lab') window.location.href = 'login.html';
@@ -1047,7 +1047,7 @@
               ${v.order_ids.map((oid, i) => `
                 <div class="lr-test-row">
                   <span class="lr-test-row-name">${sanitize(v.test_names[i] || '')}</span>
-                  <a href="#" onclick="openEditReportModal(${oid}, '${sanitize(v.test_names[i] || '').replace(/'/g, "\\'")}');return false;">Edit</a>
+                  <a href="#" onclick="openEditReportModal(${oid}, ${jsArg(v.test_names[i] || '')});return false;">Edit</a>
                 </div>
               `).join('')}
             </div>
@@ -1464,7 +1464,6 @@
       const btn = document.getElementById('patient-tests-top-action');
       const hasPaid = group.tests.some(t => t.status === 'paid' && !t._deferred);
       const hasProcessing = group.tests.some(t => t.status === 'processing');
-      const awaitingVerification = group.tests.filter(t => t.status === 'result_entered');
       const releasedTests = group.tests.filter(t => t.status === 'verified_released');
       if (hasPaid) {
         btn.style.display = '';
@@ -1480,30 +1479,6 @@
         btn.onclick = () => downloadReport(releasedTests.map(t => t.id));
       } else {
         btn.style.display = 'none';
-      }
-    }
-
-    async function verifyAndReleaseTests(orderIds) {
-      const btn = document.getElementById('patient-tests-top-action');
-      btn.disabled = true;
-      try {
-        for (const id of orderIds) {
-          const order = findQueueOrder(id);
-          const detail = order && order.test_id != null ? testDetailCache[order.test_id] : null;
-          let isNotifiable = false;
-          if (detail && detail.notifiable_disease_id) {
-            isNotifiable = confirm("This test is linked to an IDSP notifiable disease. Is this a confirmed notifiable finding?");
-          }
-          await api("POST", `/lab/orders/${id}/verify`, { is_idsp_notifiable: isNotifiable });
-          if (order) order.status = 'verified_released';
-        }
-        toast('Verified and released', 'success');
-        renderBothQueues();
-        refreshOpenPatientModal();
-      } catch (e) {
-        toast(e.message, 'error');
-      } finally {
-        btn.disabled = false;
       }
     }
 
@@ -1768,6 +1743,7 @@
       document.getElementById('modal-bulk-results').classList.add('open');
 
       const isMale = (group.tests[0].patient_gender || '').toLowerCase() === 'male';
+      const pGender = group.tests[0].patient_gender || '';
       bulkResultOrders = [];
 
       for (const t of processingTests) {
@@ -1780,13 +1756,15 @@
             orderId: t.id,
             testName: t.test_name,
             mode: 'panel',
+            notifiable: !!(detail && detail.notifiable_disease_id),
             // Fall back to whichever gender's range is actually filled in —
             // if the hospital only entered one (e.g. only Male), showing
             // nothing for the other gender was hiding a range that does
             // exist, not correctly reflecting "no range set at all".
             params: detail.parameters.map(p => ({
               id: p.id, name: p.name, unit: p.unit,
-              range: (isMale ? p.reference_range_male : p.reference_range_female) || p.reference_range_male || p.reference_range_female
+              range: labPickRange(pGender, p.reference_range_male, p.reference_range_female),
+              flagAttrs: labFlagAttrs(labBounds(pGender, p), p)
             }))
           });
         } else {
@@ -1794,8 +1772,10 @@
             orderId: t.id,
             testName: t.test_name,
             mode: 'single',
+            notifiable: !!(detail && detail.notifiable_disease_id),
             unit: detail ? detail.unit : '',
-            range: detail ? ((isMale ? detail.reference_range_male : detail.reference_range_female) || detail.reference_range_male || detail.reference_range_female) : ''
+            range: detail ? labPickRange(pGender, detail.reference_range_male, detail.reference_range_female) : '',
+            flagAttrs: detail ? labFlagAttrs(labBounds(pGender, detail), detail) : ''
           });
         }
       }
@@ -1803,6 +1783,11 @@
       bodyEl.innerHTML = bulkResultOrders.map(test => `
         <div class="bulk-test-block">
           <h3>${sanitize(test.testName)}</h3>
+          ${test.notifiable ? `
+            <label style="display:flex;align-items:center;gap:8px;margin:4px 0 10px;font-size:13px;color:var(--danger,#b91c1c);font-weight:600">
+              <input type="checkbox" id="bulk-idsp-${test.orderId}" />
+              Positive / confirmed case of a notifiable disease (include in IDSP report)
+            </label>` : ''}
           ${test.mode === 'panel'
             ? test.params.map(p => `
               <div class="bulk-param-row">
@@ -1810,7 +1795,8 @@
                   <strong>${sanitize(p.name)}</strong>${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}
                   <span class="range-text">${p.range ? 'Reference: ' + sanitize(p.range) : 'No reference range set'}</span>
                 </div>
-                <input class="form-control" id="bulk-val-${test.orderId}-${p.id}" placeholder="Value" />
+                <input class="form-control" id="bulk-val-${test.orderId}-${p.id}" placeholder="Value" ${p.flagAttrs} oninput="labLiveFlag(this)" />
+                <span class="lab-flag" style="min-width:70px;font-size:12px;font-weight:700"></span>
               </div>
             `).join('')
             : `
@@ -1819,12 +1805,63 @@
                   <strong>Result</strong>${test.unit ? ' (' + sanitize(test.unit) + ')' : ''}
                   <span class="range-text">${test.range ? 'Reference: ' + sanitize(test.range) : 'No reference range set'}</span>
                 </div>
-                <input class="form-control" id="bulk-val-${test.orderId}-single" placeholder="Value" />
+                <input class="form-control" id="bulk-val-${test.orderId}-single" placeholder="Value" ${test.flagAttrs} oninput="labLiveFlag(this)" />
+                <span class="lab-flag" style="min-width:70px;font-size:12px;font-weight:700"></span>
               </div>
             `
           }
+          <div style="margin-top:8px">
+            <label style="font-size:12px;color:var(--slate)">Lab remarks (optional, printed on the report)</label>
+            <textarea class="form-control" id="bulk-notes-${test.orderId}" rows="2" maxlength="500" placeholder="e.g. Sample slightly haemolysed"></textarea>
+          </div>
         </div>
       `).join('');
+    }
+
+    // ---- Reference range + High/Low helpers (mirror the server rules in utils/ref_ranges.py) ----
+    function labPickRange(gender, m, f) {
+      const g = (gender || '').trim().toLowerCase();
+      m = (m || '').trim(); f = (f || '').trim();
+      if (g === 'male') return m || f;
+      if (g === 'female') return f || m;
+      if (m && m === f) return m;
+      return (m || f) ? 'Range not available for this patient (sex not recorded)' : '';
+    }
+    function labBounds(gender, o) {
+      const g = (gender || '').trim().toLowerCase();
+      const has = (lo, hi) => (lo != null || hi != null);
+      const hm = has(o.ref_low_male, o.ref_high_male), hf = has(o.ref_low_female, o.ref_high_female);
+      if (!hm && !hf) return { lo: null, hi: null, st: 'none' };
+      const M = { lo: o.ref_low_male ?? null, hi: o.ref_high_male ?? null, st: 'ok' };
+      const F = { lo: o.ref_low_female ?? null, hi: o.ref_high_female ?? null, st: 'ok' };
+      if (g === 'male') return hm ? M : F;
+      if (g === 'female') return hf ? F : M;
+      if (hm && hf && M.lo === F.lo && M.hi === F.hi) return M;
+      return { lo: null, hi: null, st: 'na' };
+    }
+    function labFlagAttrs(b, o) {
+      return `data-lo="${b.lo ?? ''}" data-hi="${b.hi ?? ''}" data-st="${b.st}" data-cl="${o.critical_low ?? ''}" data-ch="${o.critical_high ?? ''}"`;
+    }
+    function labLiveFlag(el) {
+      const out = el.nextElementSibling;
+      if (!out) return;
+      const m = String(el.value || '').replace(/,/g, '').match(/-?\d+\.?\d*/);
+      let text = '', color = '';
+      if (m) {
+        const v = parseFloat(m[0]);
+        const num = k => (el.dataset[k] === undefined || el.dataset[k] === '') ? null : parseFloat(el.dataset[k]);
+        const cl = num('cl'), ch = num('ch'), lo = num('lo'), hi = num('hi');
+        if (cl !== null && v < cl) { text = 'CRITICAL LOW'; color = '#b91c1c'; }
+        else if (ch !== null && v > ch) { text = 'CRITICAL HIGH'; color = '#b91c1c'; }
+        else if (el.dataset.st === 'na') { text = 'range not available for this patient'; color = '#64748b'; }
+        else if (el.dataset.st === 'ok') {
+          if (lo !== null && v < lo) { text = 'LOW'; color = '#1e40af'; }
+          else if (hi !== null && v > hi) { text = 'HIGH'; color = '#b45309'; }
+          else { text = 'Normal'; color = '#065f46'; }
+        }
+      }
+      out.textContent = text;
+      out.style.color = color;
     }
 
     function closeBulkResultsModal() {
@@ -1840,7 +1877,7 @@
       const review = [];
       const payloads = [];
       const skipped = [];
-      const NUM_RE = /^-?\d+(\.\d+)?$/;
+      const NUM_RE = /^(<=|>=|<|>)?\s*-?(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/;
 
       for (const test of bulkResultOrders) {
         if (test.mode === 'panel') {
@@ -1861,12 +1898,17 @@
             const val = document.getElementById(`bulk-val-${test.orderId}-${p.id}`).value.trim();
             review.push({ test: test.testName, param: p.name, value: val || null, unit: p.unit });
           }
-          payloads.push({ orderId: test.orderId, results });
+          const _panelNote = (document.getElementById(`bulk-notes-${test.orderId}`) || {}).value;
+          if (_panelNote && _panelNote.trim()) results.notes = _panelNote.trim();
+          payloads.push({ orderId: test.orderId, results, idsp: test.notifiable ? !!(document.getElementById(`bulk-idsp-${test.orderId}`) || {}).checked : undefined });
         } else {
           const val = document.getElementById(`bulk-val-${test.orderId}-single`).value.trim();
           if (!val) { skipped.push(test.testName); continue; }  // not ready yet — comes back next time
           if (test.unit && !NUM_RE.test(val)) { errEl.textContent = `${test.testName} must be a number.`; return null; }
-          payloads.push({ orderId: test.orderId, results: { value: val } });
+          const _singleResults = { value: val };
+          const _singleNote = (document.getElementById(`bulk-notes-${test.orderId}`) || {}).value;
+          if (_singleNote && _singleNote.trim()) _singleResults.notes = _singleNote.trim();
+          payloads.push({ orderId: test.orderId, results: _singleResults, idsp: test.notifiable ? !!(document.getElementById(`bulk-idsp-${test.orderId}`) || {}).checked : undefined });
           review.push({ test: test.testName, param: null, value: val, unit: test.unit });
         }
       }
@@ -1903,19 +1945,18 @@
 
       try {
         const payloads = bulkResultsDraft.payloads;
-        let stillAwaitingVerification = false;
         for (const p of payloads) {
-          await api("POST", `/lab/orders/${p.orderId}/result`, { results: p.results });
+          await api("POST", `/lab/orders/${p.orderId}/result`, { results: p.results, ...(p.idsp !== undefined ? { is_idsp_notifiable: p.idsp } : {}) });
           // The backend auto-skips straight to verified_released when this
           // tech is the only lab-role staff at the hospital — read back what
           // it actually did instead of assuming 'result_entered' happened.
           const statusResult = await api("PATCH", `/lab/orders/${p.orderId}/status`, { status: 'result_entered' });
           const order = findQueueOrder(p.orderId);
           if (order) order.status = statusResult.status;
-          if (statusResult.status === 'result_entered') stillAwaitingVerification = true;
+
         }
         renderBothQueues();
-        toast(stillAwaitingVerification ? 'Results saved — awaiting independent verification before release' : 'Results saved and released.', 'success');
+        toast('Results saved and released.', 'success');
         document.getElementById('modal-results-confirm').classList.remove('open');
         closeBulkResultsModal();
         refreshOpenPatientModal();
@@ -1953,28 +1994,30 @@
           editReportMode = 'panel';
           editReportParams = detail.parameters;
           bodyEl.innerHTML = detail.parameters.map(p => {
-            const range = isMale ? p.reference_range_male : p.reference_range_female;
+            const range = labPickRange(current.patient_gender, p.reference_range_male, p.reference_range_female);
             return `
             <div class="bulk-param-row">
               <div class="bulk-param-meta">
                 <strong>${sanitize(p.name)}</strong>${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}
                 <span class="range-text">${range ? 'Reference: ' + sanitize(range) : 'No reference range set'}</span>
               </div>
-              <input class="form-control" id="edit-val-${p.id}" value="${sanitize(current.results[p.name] ?? '')}" placeholder="Value" />
+              <input class="form-control" id="edit-val-${p.id}" value="${sanitize(current.results[p.name] ?? '')}" placeholder="Value" ${labFlagAttrs(labBounds(current.patient_gender, p), p)} oninput="labLiveFlag(this)" />
+              <span class="lab-flag" style="min-width:70px;font-size:12px;font-weight:700"></span>
             </div>
           `;
           }).join('');
         } else {
           editReportMode = 'single';
           editReportParams = [];
-          const range = detail ? (isMale ? detail.reference_range_male : detail.reference_range_female) : '';
+          const range = detail ? labPickRange(current.patient_gender, detail.reference_range_male, detail.reference_range_female) : '';
           bodyEl.innerHTML = `
             <div class="bulk-param-row">
               <div class="bulk-param-meta">
                 <strong>Result</strong>${detail?.unit ? ' (' + sanitize(detail.unit) + ')' : ''}
                 <span class="range-text">${range ? 'Reference: ' + sanitize(range) : 'No reference range set'}</span>
               </div>
-              <input class="form-control" id="edit-val-single" value="${sanitize(current.results.value ?? '')}" placeholder="Value" />
+              <input class="form-control" id="edit-val-single" value="${sanitize(current.results.value ?? '')}" placeholder="Value" ${detail ? labFlagAttrs(labBounds(current.patient_gender, detail), detail) : ''} oninput="labLiveFlag(this)" />
+              <span class="lab-flag" style="min-width:70px;font-size:12px;font-weight:700"></span>
             </div>
           `;
         }
@@ -1991,7 +2034,7 @@
     async function saveReportEdit() {
       const errEl = document.getElementById('edit-report-err');
       errEl.textContent = '';
-      const NUM_RE = /^-?\d+(\.\d+)?$/;
+      const NUM_RE = /^(<=|>=|<|>)?\s*-?(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/;
       const results = {};
 
       if (editReportMode === 'panel') {
@@ -2008,11 +2051,14 @@
         results.value = val;
       }
 
+      const amendReason = await promptModal("Why are you correcting this released report? (printed on the report as an amendment)", "");
+      if (amendReason === null) return;
+      if (amendReason.trim().length < 3) { errEl.textContent = "A reason is required to correct a released report."; return; }
       const btn = document.getElementById('btn-save-report-edit');
       btn.disabled = true;
       btn.textContent = 'Saving…';
       try {
-        await api("POST", `/lab/orders/${editReportOrderId}/result`, { results });
+        await api("POST", `/lab/orders/${editReportOrderId}/result`, { results, reason: amendReason.trim() });
         toast('Report corrected.', 'success');
         closeEditReportModal();
       } catch (e) {

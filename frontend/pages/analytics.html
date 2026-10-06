@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MedScribe — Admin Dashboard</title>
-    <link rel="stylesheet" href="../css/style.css?v=4" />
+    <link rel="stylesheet" href="../css/style.css" />
     <script src="../js/custom-select.js" defer></script>
     <style>
         .section-grid-2 {
@@ -239,6 +239,11 @@
                         <div class="stat-value" id="stat-total">—</div>
                         <div class="stat-sub" id="stat-month">— this month</div>
                     </div>
+                    <div class="stat-card" id="scribe-card" style="display:none">
+                        <div class="stat-label">AI Scribe Usage</div>
+                        <div class="stat-value" id="stat-scribe">—</div>
+                        <div class="stat-sub" id="stat-scribe-sub"></div>
+                    </div>
                 </div>
                 <div class="section-grid-2" style="margin-bottom:20px">
                     <div class="card">
@@ -423,7 +428,7 @@
                 </div>
                 <div class="stats-row" style="margin-bottom:20px">
                     <div class="stat-card">
-                        <div class="stat-label">Collected Today</div>
+                        <div class="stat-label">Collected Today (net)</div>
                         <div class="stat-value" id="stat-collected-today">—</div>
                         <div class="stat-sub" id="stat-paid-count">—</div>
                     </div>
@@ -433,9 +438,19 @@
                         <div class="stat-sub" id="stat-unpaid-count">—</div>
                     </div>
                     <div class="stat-card">
+                        <div class="stat-label">Billed Today</div>
+                        <div class="stat-value" id="stat-billed-today">—</div>
+                        <div class="stat-sub">invoices dated today</div>
+                    </div>
+                    <div class="stat-card">
                         <div class="stat-label">Collected in Last 30 Days</div>
                         <div class="stat-value" id="stat-collected-30d">—</div>
-                        <div class="stat-sub" id="stat-collected-30d-count">—</div>
+                        <div class="stat-sub" id="stat-collected-30d-count">after refunds &amp; waivers</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Billed in Last 30 Days</div>
+                        <div class="stat-value" id="stat-billed-30d">—</div>
+                        <div class="stat-sub" id="stat-billed-30d-count">—</div>
                     </div>
                 </div>
                 <div class="card" style="margin-bottom:20px">
@@ -458,11 +473,19 @@
                         <p style="color:var(--slate)">Loading…</p>
                     </div>
                 </div>
-                <div class="card" style="margin-bottom:20px" id="tpa-receivables-card">
+                <div class="card" style="margin-bottom:20px" id="pending-refunds-card">
                     <div class="card-header">
-                        <h2>TPA Receivables</h2>
+                        <h2>Pending Online Refunds</h2>
                     </div>
-                    <div id="tpa-receivables-list">
+                    <div id="pending-refunds-list">
+                        <p style="color:var(--slate)">Loading…</p>
+                    </div>
+                </div>
+                <div class="card" style="margin-bottom:20px" id="patient-feedback-card">
+                    <div class="card-header">
+                        <h2>Patient Feedback</h2>
+                    </div>
+                    <div id="patient-feedback-list">
                         <p style="color:var(--slate)">Loading…</p>
                     </div>
                 </div>
@@ -542,6 +565,16 @@
                         <input class="form-control" id="hd-gstin" maxlength="15" placeholder="e.g. 07AAAAA0000A1Z5" />
                     </div>
                     <div style="max-width:600px;margin-bottom:14px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Hospital registration number <span
+                                style="color:var(--slate-light);font-weight:400">(optional — printed on every report and bill)</span></label>
+                        <input class="form-control" id="hd-reg-no" maxlength="60" />
+                    </div>
+                    <div style="max-width:600px;margin-bottom:14px">
+                        <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Drug licence number <span
+                                style="color:var(--slate-light);font-weight:400">(optional — printed on invoices)</span></label>
+                        <input class="form-control" id="hd-drug-lic" maxlength="60" />
+                    </div>
+                    <div style="max-width:600px;margin-bottom:14px">
                         <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Contact
                             Numbers <span style="color:var(--slate-light);font-weight:400">(shown on invoices, test
                                 reports & prescriptions)</span></label>
@@ -566,7 +599,7 @@
                         <div style="display:flex;align-items:center;gap:14px">
                             <img id="hd-logo-preview"
                                 style="display:none;max-height:48px;max-width:120px;border:1px solid var(--smoke-mid);border-radius:4px" />
-                            <input type="file" accept="image/*" id="hd-logo-file" class="file-input-styled"
+                            <input type="file" accept="image/png,image/jpeg" id="hd-logo-file" class="file-input-styled"
                                 onchange="onLogoFileChosen(this)" />
                             <button class="btn btn-outline btn-sm" id="hd-logo-remove-btn" style="display:none"
                                 onclick="removeLogo()">Remove</button>
@@ -671,12 +704,12 @@
     </div>
 
     <div id="toast"></div>
-    <script src="../js/api.js?v=4"></script>
-    <script src="../js/nav-admin.js?v=1"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/nav-admin.js"></script>
     <script src="../js/tier-catalog.js"></script>
     <script src="../js/upgrade-gate.js"></script>
-    <script src="../js/chat-widget.js?v=1"></script>
-    <script src="../js/suggestion-widget.js?v=1"></script>
+    <script src="../js/chat-widget.js"></script>
+    <script src="../js/suggestion-widget.js"></script>
     <script>
         const doc = getDoctor();
         renderAdminNav('overview', { inPage: true });
@@ -867,6 +900,7 @@
                 const b = await api("GET", "/admin/billing/today");
                 document.getElementById('stat-collected-today').textContent = `Rs.${b.total_collected.toFixed(2)}`;
                 document.getElementById('stat-paid-count').textContent = `${b.paid_count} paid`;
+                document.getElementById('stat-billed-today').textContent = `Rs.${(b.billed || 0).toFixed(2)}`;
                 document.getElementById('stat-unpaid-today').textContent = `Rs.${b.unpaid_amount.toFixed(2)}`;
                 document.getElementById('stat-unpaid-count').textContent = `${b.unpaid_count} unpaid`;
             } catch (e) {
@@ -875,30 +909,47 @@
             loadCollected30Days();
             loadBillingHistory();
             loadPendingWaivers();
-            loadTpaReceivables();
+            loadPendingRefunds();
+            loadPatientFeedback();
             loadDuplicatePatients();
         }
 
-        async function loadTpaReceivables() {
-            const el = document.getElementById('tpa-receivables-list');
-            if (typeof isFoundationTier === 'function' && isFoundationTier()) {
-                // Admissions endpoints are Growth+ (server returns 403 below that).
-                el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">TPA receivables come with IPD / Admissions (Growth plan and above).</p>';
-                return;
-            }
+        async function loadPendingRefunds() {
+            const el = document.getElementById('pending-refunds-list');
             try {
-                const cases = await api("GET", "/admissions/tpa-receivables");
-                if (!cases.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No open TPA receivables.</p>'; return; }
-                const total = cases.reduce((s, c) => s + (c.claim_submitted_amount || 0), 0);
-                el.innerHTML = `<p style="font-size:13px;color:var(--slate);margin-bottom:10px">Total awaiting settlement: <strong>Rs.${total.toFixed(2)}</strong></p>` + cases.map(c => `
+                const rows = await api("GET", "/refunds/pending");
+                if (!rows.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No refunds awaiting settlement.</p>'; return; }
+                el.innerHTML = rows.map(r => `
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
                         <div style="flex:1;min-width:200px">
-                            <strong>${sanitize(c.patient_name || '—')}</strong> (${sanitize(c.patient_uid || '—')}) — Rs.${(c.claim_submitted_amount || 0).toFixed(2)}
-                            <div style="font-size:12px;color:var(--slate)">${sanitize(c.insurer_name)}${c.policy_number ? ' · ' + sanitize(c.policy_number) : ''} · claimed ${c.claim_submitted_at ? new Date(c.claim_submitted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</div>
+                            <strong>${sanitize(r.patient_name || 'Unlinked patient')}</strong> — Rs.${Number(r.amount).toFixed(2)}
+                            <div style="font-size:12px;color:var(--slate)">${sanitize(r.source_type)}${r.reason ? ' · ' + sanitize(r.reason) : ''} · ${r.processed_at ? new Date(r.processed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}</div>
                         </div>
-                        <a class="btn btn-outline btn-sm" href="admission-detail.html?id=${c.admission_id}">View Admission</a>
+                        <button class="btn btn-primary btn-sm" onclick="markRefundSettled(${r.id})">Mark Settled</button>
                     </div>`).join('');
-            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
+        }
+
+        async function markRefundSettled(refundId) {
+            if (!confirm("Confirm this refund has reached the patient?")) return;
+            try {
+                await api("PATCH", `/refunds/${refundId}/mark-settled`, {});
+                toast("Refund marked settled.", "success");
+                loadPendingRefunds();
+            } catch (e) { toast(e.message, "error"); }
+        }
+
+        async function loadPatientFeedback() {
+            const el = document.getElementById('patient-feedback-list');
+            try {
+                const rows = await api("GET", "/portal/dashboard/hospital-feedback");
+                if (!rows.length) { el.innerHTML = '<p style="color:var(--slate-light);padding:8px 0">No patient feedback yet.</p>'; return; }
+                el.innerHTML = rows.map(r => `
+                    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+                        <strong>${sanitize(r.patient_name)}</strong> — ${'★'.repeat(Number(r.rating) || 0)}
+                        ${r.comment ? `<div style="font-size:13px;color:var(--slate);margin-top:2px">${sanitize(r.comment)}</div>` : ''}
+                    </div>`).join('');
+            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
         }
 
         async function loadPendingWaivers() {
@@ -954,7 +1005,7 @@
                 try {
                     const results = await api("GET", `/patients?search=${encodeURIComponent(val)}&limit=6`);
                     resultsEl.innerHTML = results.map(p => `
-                        <div style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-top:4px;cursor:pointer" onclick='selectDupCandidate("${which}", ${p.id}, ${JSON.stringify(p.name)}, ${JSON.stringify(p.phone)}, ${JSON.stringify(p.patient_uid)})'>
+                        <div style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-top:4px;cursor:pointer" onclick='selectDupCandidate("${which}", ${p.id}, ${jsArg(p.name)}, ${jsArg(p.phone)}, ${jsArg(p.patient_uid)})'>
                             <strong>${sanitize(p.name)}</strong> <span style="color:var(--slate);font-size:12px">${sanitize(p.phone)} · ${sanitize(p.patient_uid)}</span>
                         </div>`).join('') || '<p style="font-size:12px;color:var(--slate-light)">No matches</p>';
                 } catch (e) { }
@@ -1047,12 +1098,15 @@
                 from.setDate(from.getDate() - 29);
                 const params = new URLSearchParams({ from_date: from.toISOString().slice(0, 10), to_date: to.toISOString().slice(0, 10) });
                 const data = await api("GET", `/billing/revenue-history/daily?${params.toString()}`);
-                const total = data.days.reduce((s, d) => s + d.total, 0);
+                const billed = data.days.reduce((s, d) => s + d.total, 0);
+                const collected = data.days.reduce((s, d) => s + (d.collected || 0), 0);
                 const count = data.days.reduce((s, d) => s + d.invoice_count, 0);
-                document.getElementById('stat-collected-30d').textContent = `Rs.${total.toFixed(2)}`;
-                document.getElementById('stat-collected-30d-count').textContent = `${count} invoice${count !== 1 ? 's' : ''}`;
+                document.getElementById('stat-collected-30d').textContent = `Rs.${collected.toFixed(2)}`;
+                document.getElementById('stat-billed-30d').textContent = `Rs.${billed.toFixed(2)}`;
+                document.getElementById('stat-billed-30d-count').textContent = `${count} invoice${count !== 1 ? 's' : ''}`;
             } catch (e) {
                 document.getElementById('stat-collected-30d').textContent = '—';
+                document.getElementById('stat-billed-30d').textContent = '—';
             }
         }
 
@@ -1277,6 +1331,8 @@
                 document.getElementById('hd-state').value = h.state || '';
                 document.getElementById('hd-address').value = h.address || '';
                 document.getElementById('hd-gstin').value = h.gstin || '';
+                document.getElementById('hd-reg-no').value = h.clinical_establishment_reg_no || '';
+                document.getElementById('hd-drug-lic').value = h.drug_licence_no || '';
                 hdContactNumbers = Array.isArray(h.contact_numbers) ? h.contact_numbers.map(c => ({
                     type: c.type,
                     number: c.type === 'mobile' ? (c.number || '').replace(/\D/g, '').slice(-10) : c.number
@@ -1374,6 +1430,8 @@
                 const payload = {
                     address: document.getElementById('hd-address').value.trim(),
                     gstin: document.getElementById('hd-gstin').value.trim(),
+                    clinical_establishment_reg_no: document.getElementById('hd-reg-no').value.trim(),
+                    drug_licence_no: document.getElementById('hd-drug-lic').value.trim(),
                     contact_numbers: hdContactNumbers.map(c => ({ type: c.type, number: c.type === 'mobile' ? c.number : c.number.trim() })),
                     emails: hdEmails.map(e => e.trim()),
                     consultation_gst_percent: gstRateField('hd-gst-consultation'),
@@ -1508,6 +1566,21 @@
                 document.getElementById("stat-total").textContent = ov.total_consultations;
                 document.getElementById("stat-month").textContent = `${ov.month_consultations} this month`;
 
+                const sc = d.ai_scribe;
+                const scribeCard = document.getElementById("scribe-card");
+                if (sc && sc.included) {
+                    scribeCard.style.display = "";
+                    document.getElementById("stat-scribe").textContent =
+                        sc.cap === null ? `${sc.used} (Unlimited)` : `${sc.used} / ${sc.cap}`;
+                    let sub = sc.cap === null ? "this cycle" : `${sc.total_remaining} left`;
+                    if (sc.topup_remaining) sub += ` (incl. ${sc.topup_remaining} top-up)`;
+                    if (!sc.allowed && sc.reason === "cycle_ended") sub = "Billing cycle ended";
+                    if (!sc.allowed && sc.reason === "cycle_not_started") sub = "Billing cycle not started";
+                    document.getElementById("stat-scribe-sub").textContent = sub;
+                } else {
+                    scribeCard.style.display = "none";
+                }
+
                 document.getElementById("visit-type-summary").innerHTML = `
           ${statItem('New Patients (1 visit)', ov.new_patient_visits)}
           ${statItem('Returning Patients (2+ visits)', ov.returning_patient_visits)}
@@ -1537,9 +1610,8 @@
             <td data-label="Token" style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}${c.is_voided ? ' <span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626">Voided</span>' : ''}</td>
             <td data-label="Patient"><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
             <td data-label="Doctor" style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
-            <td data-label="Diagnosis">${sanitize(c.diagnosis)}</td>
           </tr>`).join('');
-                    document.getElementById("today-activity").innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis'], rows);
+                    document.getElementById("today-activity").innerHTML = makeTable(['Token', 'Patient', 'Doctor'], rows);
                 }
             }
 
@@ -1664,14 +1736,13 @@
           <td data-label="Token" style="font-family:monospace;font-size:12px;white-space:nowrap">${sanitize(c.token)}${c.is_voided ? ' <span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;background:#fee2e2;color:#dc2626">Voided</span>' : ''}</td>
           <td data-label="Patient"><div style="font-weight:600">${sanitize(c.patient_name)}</div><div style="color:var(--slate);font-size:12px">${sanitize(c.patient_uid)}</div></td>
           <td data-label="Doctor" style="color:var(--slate);white-space:nowrap">${sanitize(c.doctor_name)}</td>
-          <td data-label="Diagnosis">${sanitize(c.diagnosis)}</td>
           <td data-label="Date" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(c.date)}</td>
           <td data-label="Feedback" style="white-space:nowrap">
             ${c.feedback_rating ? `${c.feedback_rating}/5 stars` : '<span style="color:var(--slate-light)">No feedback</span>'}
-            ${c.feedback_rating ? `<button class="btn btn-outline btn-sm" style="margin-left:8px" onclick='openFeedbackNotesModal(${JSON.stringify(c.patient_name)}, ${JSON.stringify(c.feedback_comment)})'>Notes</button>` : ''}
+            ${c.feedback_rating ? `<button class="btn btn-outline btn-sm" style="margin-left:8px" onclick='openFeedbackNotesModal(${jsArg(c.patient_name)}, ${jsArg(c.feedback_comment)})'>Notes</button>` : ''}
           </td>
         </tr>`).join('');
-                table.innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Diagnosis', 'Date', 'Feedback'], rows);
+                table.innerHTML = makeTable(['Token', 'Patient', 'Doctor', 'Date', 'Feedback'], rows);
                 pagination.innerHTML = `
           <span style="color:var(--slate);font-size:13px">Page ${data.page} of ${data.pages} · ${data.total} total</span>
           <div style="display:flex;gap:8px">
@@ -1696,7 +1767,7 @@
         }
 
         loadDashboard();
-        api("GET", "/billing/day-end-summary", null, false, true).catch(() => { }); // silently sweeps up any past day nobody closed — no click required
+        /* day-end catch-up now runs in the scheduler */ // silently sweeps up any past day nobody closed — no click required
 
         // ── Revenue History (admin) ─────────────────────────────
         let revenueHistoryMode = 'daily';
@@ -1809,13 +1880,13 @@
                         const data = await api("GET", `/billing/revenue-history/monthly?from_month=${month}&to_month=${month}`);
                         const m = data.months[0];
                         renderRevenueHistory(
-                            m ? [{ label: formatMonthLabel(data.from_month), total: m.total, count: m.invoice_count }] : [],
+                            m ? [{ label: formatMonthLabel(data.from_month), total: m.total, collected: m.collected || 0, count: m.invoice_count }] : [],
                             "Selected month"
                         );
                     } else {
                         const data = await api("GET", "/billing/revenue-history/monthly");
                         renderRevenueHistory(
-                            data.months.map(m => ({ label: formatMonthLabel(m.month), total: m.total, count: m.invoice_count })),
+                            data.months.map(m => ({ label: formatMonthLabel(m.month), total: m.total, collected: m.collected || 0, count: m.invoice_count })),
                             "Past 18 months"
                         );
                     }
@@ -1830,8 +1901,9 @@
                     const data = await api("GET", `/billing/revenue-history/daily?${params.toString()}`);
                     const total = data.days.reduce((s, d) => s + d.total, 0);
                     const count = data.days.reduce((s, d) => s + d.invoice_count, 0);
+                    const collected = data.days.reduce((s, d) => s + (d.collected || 0), 0);
                     renderRevenueHistory(
-                        [{ label: `${formatDayLabel(data.from_date)} – ${formatDayLabel(data.to_date)}`, total, count }],
+                        [{ label: `${formatDayLabel(data.from_date)} – ${formatDayLabel(data.to_date)}`, total, collected, count }],
                         "Selected range, totaled"
                     );
                 }
@@ -1893,7 +1965,10 @@
             const label = new Date(rhCalSelectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
             side.innerHTML = `
                 <p style="font-size:12px;color:var(--slate-light);margin-bottom:6px">${label}</p>
-                <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin-bottom:4px">Rs.${(d ? d.total : 0).toFixed(2)}</div>
+                <p style="font-size:11px;color:var(--slate-light);margin-bottom:2px">Collected (net of refunds &amp; waivers)</p>
+                <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin-bottom:8px">Rs.${(d ? (d.collected || 0) : 0).toFixed(2)}</div>
+                <p style="font-size:11px;color:var(--slate-light);margin-bottom:2px">Billed (invoices dated this day)</p>
+                <div style="font-size:1.1rem;font-weight:700;color:var(--slate);margin-bottom:4px">Rs.${(d ? d.total : 0).toFixed(2)}</div>
                 <p style="font-size:12.5px;color:var(--slate)">${d ? d.invoice_count : 0} invoice${d && d.invoice_count === 1 ? '' : 's'}</p>
             `;
         }
@@ -1912,14 +1987,16 @@
                 return;
             }
             const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+            const grandCollected = rows.reduce((s, r) => s + (r.collected || 0), 0);
             const totalCount = rows.reduce((s, r) => s + r.count, 0);
             const bodyRows = rows.map(r => `
-                <tr><td data-label="Period">${r.label}</td><td data-label="Invoices">${r.count}</td><td data-label="Revenue">Rs.${r.total.toFixed(2)}</td></tr>
+                <tr><td data-label="Period">${r.label}</td><td data-label="Invoices">${r.count}</td><td data-label="Billed">Rs.${r.total.toFixed(2)}</td><td data-label="Collected">Rs.${(r.collected || 0).toFixed(2)}</td></tr>
             `).join('') + (rows.length > 1
-                    ? `<tr style="font-weight:600"><td data-label="Period">Total</td><td data-label="Invoices">${totalCount}</td><td data-label="Revenue">Rs.${grandTotal.toFixed(2)}</td></tr>`
+                    ? `<tr style="font-weight:600"><td data-label="Period">Total</td><td data-label="Invoices">${totalCount}</td><td data-label="Billed">Rs.${grandTotal.toFixed(2)}</td><td data-label="Collected">Rs.${grandCollected.toFixed(2)}</td></tr>`
                     : '');
             listEl.innerHTML = `<p style="color:var(--slate);font-size:12px;margin-bottom:10px">${boundNote}</p>` +
-                makeTable(["Period", "Invoices", "Revenue"], bodyRows);
+                `<p style="color:var(--slate-light);font-size:11.5px;margin-bottom:8px">Billed = invoices dated in the period (before tax). Collected = money received in the period, minus refunds and approved waivers.</p>` +
+                makeTable(["Period", "Invoices", "Billed", "Collected"], bodyRows);
         }
     </script>
 

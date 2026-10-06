@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, Field, validator
 from datetime import datetime, date
 from typing import Optional, Dict, List
 
@@ -15,6 +15,18 @@ class PatientCreate(BaseModel):
     name: str
     phone: str
     age: int
+    date_of_birth: Optional[date] = None
+
+    @validator("date_of_birth")
+    def validate_dob(cls, v):
+        if v is None:
+            return v
+        today = date.today()
+        if v > today:
+            raise ValueError("Date of birth can't be in the future")
+        if (today - v).days > 365 * 120:
+            raise ValueError("Date of birth looks wrong")
+        return v
     blood_group: Optional[str] = None
     gender: str
     abha_number: Optional[str] = None
@@ -71,16 +83,6 @@ class PatientCreate(BaseModel):
         return v
 
 
-class EmergencyIntakeIn(BaseModel):
-    name: Optional[str] = None
-    approx_age: Optional[int] = None
-    approx_gender: Optional[str] = None
-    doctor_id: int
-    reason: str
-    destination: str  # "ward" | "cabin"
-    consultation_fee: Optional[float] = None
-
-
 class PatientOut(BaseModel):
     id: int
     patient_uid: str
@@ -88,6 +90,7 @@ class PatientOut(BaseModel):
     name: str
     phone: str
     age: int
+    date_of_birth: Optional[date] = None
     blood_group: Optional[str] = None
     gender: str
     abha_number: Optional[str] = None
@@ -119,15 +122,16 @@ class PatientSummary(BaseModel):
 
 class AdditionalDoctorIn(BaseModel):
     doctor_id: int
-    consultation_fee: Optional[float] = None  # reception can override per doctor; falls back to that doctor's own default, same as the primary
+    consultation_fee: Optional[float] = Field(default=None, ge=0, le=100000)  # reception can override per doctor; falls back to that doctor's own default, same as the primary
 
 class CheckinCreate(BaseModel):
     issue_category: str
     doctor_id: int
     send_to_nurse: Optional[bool] = True
-    consultation_fee: Optional[float] = None
-    test_fee: Optional[float] = None
+    consultation_fee: Optional[float] = Field(default=None, ge=0, le=100000)
+    test_fee: Optional[float] = Field(default=None, ge=0, le=1000000)
     force: Optional[bool] = False  # bypass the already-admitted warning once reception has confirmed
+    duplicate_reason: Optional[str] = Field(default=None, max_length=200)  # required to issue a 2nd token to the same patient + doctor on the same day
     additional_doctors: Optional[List[AdditionalDoctorIn]] = None  # item 7 — one visit, multiple doctors, one Add Doctor step before Generate Token
 
 class CheckinOut(BaseModel):
@@ -162,9 +166,9 @@ class NurseTaskComplete(BaseModel):
     data: Dict[str, str] = {}
 
 class AddOpdChargeIn(BaseModel):
-    description: str
-    amount: float
-    quantity: int = 1
+    description: str = Field(..., min_length=1, max_length=200)
+    amount: float = Field(..., gt=0, le=1000000)
+    quantity: int = Field(1, ge=1, le=1000)
 
 class PaymentMethodIn(BaseModel):
     payment_method: str  # "cash" | "card" | "upi"
@@ -176,8 +180,23 @@ class PaymentMethodIn(BaseModel):
         return v
 
 
+class ReasonIn(BaseModel):
+    reason: str
+
+    @validator("reason")
+    def valid_reason(cls, v):
+        v = (v or "").strip()
+        if len(v) < 5:
+            raise ValueError("A reason of at least 5 characters is required")
+        if len(v) > 300:
+            raise ValueError("Reason is too long (300 characters max)")
+        return v
+
+
 class CollectAppointmentPaymentIn(PaymentMethodIn):
     fee_amount: Optional[float] = None
+    late_choice: Optional[str] = None   # "next_slot" | "walk_in": required only when the payment is past the grace window
+    slot_id: Optional[int] = None       # the new slot, when late_choice == "next_slot"
 
 
 class DoctorLite(BaseModel):

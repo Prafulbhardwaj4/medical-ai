@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>Receptionist — MedScribe</title>
-  <link rel="stylesheet" href="../css/style.css?v=4" />
+  <link rel="stylesheet" href="../css/style.css" />
   <script src="../js/custom-select.js" defer></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
@@ -748,10 +748,6 @@
 
       <div class="mobile-section active" id="section-home">
 
-        <div id="day-end-reminder-banner"
-          style="display:none;background:#d97706;color:#fff;padding:12px 16px;border-radius:var(--radius);margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        </div>
-
         <div class="card">
 
           <!-- STEP 1: Search / Select / New -->
@@ -1004,6 +1000,36 @@
           </p>
           <div id="expected-today-list">
             <p style="color:var(--slate-light);font-size:13px">Loading...</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px" id="noshow-card">
+          <div class="card-header" style="flex-wrap:wrap;gap:10px">
+            <h2>No-shows to handle <span class="badge badge-teal" id="noshow-count" style="margin-left:8px">0</span></h2>
+          </div>
+          <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
+            Patients who paid but did not come. Nothing is cancelled automatically. Choose Rebook (new day, same doctor, no new charge) or Refund.
+          </p>
+          <div id="noshow-list"><p style="color:var(--slate-light);font-size:13px">Loading...</p></div>
+        </div>
+
+        <div class="modal-overlay" id="modal-noshow-rebook">
+          <div class="modal" style="max-width:520px;width:92vw">
+            <div class="modal-header">
+              <h2>Rebook no-show</h2>
+              <button class="modal-close" onclick="closeModal('modal-noshow-rebook')">&times;</button>
+            </div>
+            <p id="nsr-info" style="font-size:13px;color:var(--slate);margin-bottom:10px"></p>
+            <div class="form-group">
+              <label>New date</label>
+              <input type="date" class="form-control" id="nsr-date" onchange="loadNoShowSlots()">
+            </div>
+            <div id="nsr-slots"><p style="color:var(--slate-light);font-size:13px">Pick a date to see slots.</p></div>
+            <div class="form-group" style="margin-top:10px">
+              <label>Note (optional)</label>
+              <input type="text" class="form-control" id="nsr-note" maxlength="200">
+            </div>
+            <button class="btn btn-primary" style="width:100%" id="nsr-confirm" onclick="confirmNoShowRebook()" disabled>Rebook</button>
           </div>
         </div>
 
@@ -1516,7 +1542,6 @@
           <option value="pharmacy">Pharmacy return (OPD)</option>
           <option value="ipd_deposit">IPD deposit balance</option>
           <option value="opd_charge">OPD charge reversal</option>
-          <option value="tpa">TPA overpayment</option>
           <option value="other">Other</option>
         </select>
       </div>
@@ -1585,12 +1610,12 @@
 
   <div id="toast"></div>
 
-  <script src="../js/api.js?v=4"></script>
+  <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
-  <script src="../js/chat-widget.js?v=1"></script>
-  <script src="../js/suggestion-widget.js?v=1"></script>
-  <script src="../js/tutorial.js?v=2"></script>
+  <script src="../js/chat-widget.js"></script>
+  <script src="../js/suggestion-widget.js"></script>
+  <script src="../js/tutorial.js"></script>
   <script>
     let expectedTodayFilterLoaded = false;
     if (!requireAuth()) throw new Error("Not authenticated");
@@ -2059,7 +2084,7 @@
               <strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber" style="margin-left:6px">Checked in today</span>' : ''} ${p.currently_admitted ? '<span class="badge badge-red" style="margin-left:6px">Already admitted</span>' : ''}
               <div style="font-size:0.82rem;color:var(--slate)">${p.patient_uid} · ${p.phone} · ${p.age}y</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick='selectExistingPatient(${JSON.stringify(p)})'>Select</button>
+            <button class="btn btn-primary btn-sm" onclick='selectExistingPatient(${jsArg(p)})'>Select</button>
           </div>
         `).join('');
       } catch (e) { toast(e.message, "error"); }
@@ -2584,7 +2609,7 @@
     }
 
     let _tokenGenerationInFlight = false;
-    async function generateToken(force) {
+    async function generateToken(force, duplicateReason) {
       if (_tokenGenerationInFlight) return;
       const btn = document.getElementById('btn-generate-token');
       const doctorId = document.getElementById('doc-select').value;
@@ -2604,6 +2629,7 @@
           send_to_nurse: true,
           consultation_fee: billingOn ? (parseFloat(document.getElementById('consultation-fee').value) || null) : null,
           force: !!force,
+          duplicate_reason: duplicateReason || null,
           additional_doctors: additionalDoctorsPayload.length ? additionalDoctorsPayload : null,
         });
         currentCheckinId = result.checkin_id;
@@ -2626,6 +2652,14 @@
             btn.disabled = false;
             btn.innerHTML = 'Generate Token';
             return generateToken(true);
+          }
+        } else if (e.data && e.data.needs_duplicate_reason) {
+          const _dupWhy = await promptModal(`${e.data.message}\n\nReason for a second token (min 5 characters):`);
+          if (_dupWhy && _dupWhy.trim().length >= 5) {
+            _tokenGenerationInFlight = false;
+            btn.disabled = false;
+            btn.innerHTML = 'Generate Token';
+            return generateToken(force, _dupWhy.trim());
           }
         } else {
           toast(e.message, "error");
@@ -3217,7 +3251,9 @@
             await api("PATCH", `/patients/checkin/${checkinId}/mark-paid`, { payment_method: method });
           } else {
             if (!(await confirmModal('Mark the consultation fee as unpaid?', { danger: true, okLabel: 'Mark Unpaid' }))) { renderPaymentToggleBody(); return; }
-            await api("PATCH", `/patients/checkin/${checkinId}/mark-unpaid`, {});
+            const _why = await promptModal('Reason for marking unpaid (required, min 5 characters):');
+            if (!_why || _why.trim().length < 5) { toast('A reason of at least 5 characters is required.', 'error'); renderPaymentToggleBody(); return; }
+            await api("PATCH", `/patients/checkin/${checkinId}/mark-unpaid`, { reason: _why.trim() });
           }
           if (doctorEntry) doctorEntry.buckets.consultation.status = turningOn ? 'paid' : 'unpaid';
         } else if (kind === 'tests') {
@@ -3228,7 +3264,9 @@
             toast(`Rs.${Number(result.charged).toFixed(2)} collected.`, 'success');
           } else {
             if (!(await confirmModal('Mark tests as unpaid? Only tests not yet started at the lab can be reverted.', { danger: true, okLabel: 'Mark Unpaid' }))) { renderPaymentToggleBody(); return; }
-            await api("POST", `/patients/${row.patient_id}/revert-test-payment`, {});
+            const _why2 = await promptModal('Reason for reverting test payment (required, min 5 characters):');
+            if (!_why2 || _why2.trim().length < 5) { toast('A reason of at least 5 characters is required.', 'error'); renderPaymentToggleBody(); return; }
+            await api("POST", `/patients/${row.patient_id}/revert-test-payment`, { reason: _why2.trim() });
           }
           row.doctors[0].buckets.tests.status = turningOn ? 'paid' : 'unpaid';
         } else if (kind === 'radiology') {
@@ -3490,7 +3528,9 @@
       const body = document.getElementById('day-end-body');
       const modes = ['cash', 'card', 'upi'];
       const modeLabel = { cash: 'Cash', card: 'Card', upi: 'UPI' };
-      const catLabel = { consultation: 'Consultation', tests: 'Tests', pharmacy: 'Pharmacy', opd_charges: 'Ad-hoc Charges', ipd_deposits: 'IPD Deposits', ipd_topups: 'IPD Top-ups', ipd_settlements: 'IPD Settlements' };
+      const catLabel = { consultation: 'Consultation', tests: 'Tests', pharmacy: 'Pharmacy', opd_charges: 'Ad-hoc Charges', ipd_deposits: 'IPD Deposits', ipd_topups: 'IPD Top-ups', ipd_settlements: 'IPD Settlements', waivers: 'Waivers / Discounts' };
+
+      const totalsHtml = `<div class="bill-row" style="font-weight:600"><span>Collected (net of refunds &amp; waivers)</span><span>₹${(summary.collected_net || 0).toFixed(2)}</span></div><div class="bill-row" style="font-size:12.5px"><span>Billed (invoices dated this day)</span><span>₹${(summary.billed || 0).toFixed(2)}</span></div>`;
 
       const breakdownHtml = modes.map(m => {
         const cats = summary.by_mode[m] || {};
@@ -3505,7 +3545,10 @@
       // already closed (a past day) or still in progress (today).
       if (summary.already_closed) {
         body.innerHTML = `
-          <p style="color:var(--teal);font-weight:600;margin-bottom:10px">Closed for ${summary.date}.</p>
+          ${summary.auto_closed
+            ? `<p style="color:var(--amber,#b7791f);font-weight:600;margin-bottom:10px">Auto-closed for ${summary.date} — cash was not counted, so no variance is recorded.</p>`
+            : `<p style="color:var(--teal);font-weight:600;margin-bottom:10px">Closed for ${summary.date}.</p>`}
+          ${totalsHtml}
           ${breakdownHtml}
           ${summary.close.notes ? `<p style="font-size:12.5px;color:var(--slate);margin-top:8px">${sanitize(summary.close.notes)}</p>` : ''}`;
         return;
@@ -3514,6 +3557,7 @@
       body.innerHTML = `
         <p style="font-size:12.5px;color:var(--slate);margin-bottom:8px">Today's collections so far — closes automatically at midnight.</p>
         ${Object.keys(summary.refunds_by_channel || {}).filter(ch => summary.refunds_by_channel[ch] > 0).map(ch => `<p style="font-size:12.5px;color:var(--slate)">${ch.toUpperCase()} refunds today: −₹${summary.refunds_by_channel[ch].toFixed(2)} (already netted out below)</p>`).join('')}
+        ${totalsHtml}
         ${breakdownHtml}`;
     }
 
@@ -4136,8 +4180,8 @@
           <td data-label="Last Visit">${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
           <td data-label="">
             <div class="row-actions">
-              <button class="btn btn-outline btn-sm" onclick='openEditPatient(${JSON.stringify(p)})'>Edit</button>
-              <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, "${p.name.replace(/"/g, "&quot;")}")'>Select</button>
+              <button class="btn btn-outline btn-sm" onclick='openEditPatient(${jsArg(p)})'>Edit</button>
+              <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, ${jsArg(p.name)})'>Select</button>
             </div>
           </td>
         </tr>
@@ -4175,15 +4219,15 @@
       const primaryId = parseInt(document.getElementById('mg-primary-id').value, 10);
       if (!primaryId) { errEl.textContent = "Enter a valid patient ID."; return; }
       const ok = await confirmDialog(
-        "Have you confirmed with the patient by phone that these are the same person? This can't be undone.",
-        "Yes, Merge"
+        "This flags the two records as duplicates. The merge only happens after phone confirmation and an admin's approval (Analytics → Merge Requests). Continue?",
+        "Flag as duplicate"
       );
       if (!ok) return;
       try {
-        const res = await api("POST", "/patients/merge", {
-          primary_patient_id: primaryId, duplicate_patient_id: mergeDuplicateId, phone_confirmed: true,
+        await api("POST", "/patients/merge-requests", {
+          primary_patient_id: primaryId, duplicate_patient_id: mergeDuplicateId,
         });
-        toast(res.message, "success");
+        toast("Flagged. An admin will review and complete the merge.", "success");
         closeMergeModal();
         loadAllPatients();
       } catch (e) { errEl.textContent = e.message; }
@@ -4271,7 +4315,7 @@
       const list = document.getElementById("avail-doctor-list");
       if (!doctors.length) { list.innerHTML = `<p style="color:var(--slate-light)">No doctors found.</p>`; return; }
       list.innerHTML = doctors.map(d => `
-        <div class="avail-doctor-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick="openAvailModal(${d.id}, '${(d.title + ' ' + d.name).replace(/'/g, "\\'")}')">
+        <div class="avail-doctor-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick='openAvailModal(${d.id}, ${jsArg((d.title || "") + " " + d.name)})'>
           <div>
             <div style="font-weight:600;color:var(--navy)">${d.title} ${d.name}</div>
             <div style="font-size:12.5px;color:var(--slate-light)">${d.specialization || 'No specialization on file'}</div>
@@ -4598,7 +4642,94 @@
       } catch (e) { /* filter just stays at "All doctors" if this fails */ }
     }
 
+    let noShowRebook = { id: null, doctorId: null, hospitalId: null, slotId: null };
+
+    async function loadNoShows() {
+      const el = document.getElementById("noshow-list");
+      if (!el) return;
+      try {
+        const data = await api("GET", "/portal-appointments-staff/no-shows");
+        document.getElementById("noshow-count").textContent = data.count;
+        if (!data.count) { el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No no-shows waiting.</p>'; return; }
+        el.innerHTML = data.appointments.map(a => `
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-weight:600">${sanitize(a.patient_name)} <span style="font-weight:400;color:var(--slate-light)">${sanitize(a.patient_uid || '')}</span></div>
+              <div style="font-size:12.5px;color:var(--slate)">${sanitize(a.doctor_name)} &middot; was booked ${new Date(a.requested_time).toLocaleString()} &middot; paid Rs.${(a.fee_amount || 0).toFixed(2)}${a.no_show_reason ? ' &middot; ' + sanitize(a.no_show_reason.replace('_', ' ')) : ''}</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary btn-sm" onclick="openNoShowRebook(${a.id}, ${a.doctor_id || 0}, ${a.hospital_id}, ${jsArg(a.patient_name)})">Rebook</button>
+              <button class="btn btn-outline btn-sm" onclick="noShowRefund(${a.id}, ${jsArg(a.patient_name)})">Refund</button>
+            </div>
+          </div>`).join('');
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger);font-size:13px">${e.message}</p>`;
+      }
+    }
+
+    async function noShowRefund(id, name) {
+      if (!confirm(`Cancel ${name}'s booking and refund the fee they paid? This cannot be undone.`)) return;
+      try {
+        const res = await api("POST", `/portal-appointments-staff/${id}/no-show/refund`, { percent: 100 });
+        toast(res.message, "success");
+        loadExpectedToday();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    function openNoShowRebook(id, doctorId, hospitalId, name) {
+      noShowRebook = { id, doctorId, hospitalId, slotId: null };
+      document.getElementById("nsr-info").textContent = `Rebook ${name}. The fee already paid carries over, no new charge.`;
+      const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+      const dateEl = document.getElementById("nsr-date");
+      dateEl.min = tomorrow.toISOString().slice(0, 10);
+      dateEl.value = "";
+      document.getElementById("nsr-note").value = "";
+      document.getElementById("nsr-slots").innerHTML = '<p style="color:var(--slate-light);font-size:13px">Pick a date to see slots.</p>';
+      document.getElementById("nsr-confirm").disabled = true;
+      document.getElementById("modal-noshow-rebook").classList.add("open");
+    }
+
+    async function loadNoShowSlots() {
+      const date = document.getElementById("nsr-date").value;
+      const box = document.getElementById("nsr-slots");
+      noShowRebook.slotId = null;
+      document.getElementById("nsr-confirm").disabled = true;
+      if (!date) return;
+      box.innerHTML = '<p style="color:var(--slate)">Loading slots…</p>';
+      try {
+        const data = await api("GET", `/portal/hospitals/${noShowRebook.hospitalId}/doctors/${noShowRebook.doctorId}/slots?date=${date}`);
+        if (data.doctor_unavailable) { box.innerHTML = '<p style="color:var(--danger)">This doctor is unavailable on this date.</p>'; return; }
+        const periods = [["morning", "Morning"], ["afternoon", "Afternoon"], ["evening", "Evening"]];
+        if (!periods.some(([k]) => (data[k] || []).length)) { box.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No slots on this date.</p>'; return; }
+        box.innerHTML = periods.map(([k, label]) => (data[k] || []).length ? `
+          <div class="slot-period-title">${label}</div>
+          <div class="slot-grid">${data[k].map(s => `
+            <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick="pickNoShowSlot(${s.id}, this)"`}><span class="dot"></span>${s.time}</div>`).join('')}
+          </div>` : '').join('');
+      } catch (e) { box.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; }
+    }
+
+    function pickNoShowSlot(slotId, el) {
+      noShowRebook.slotId = slotId;
+      document.querySelectorAll("#nsr-slots .slot-chip").forEach(c => c.classList.remove("selected"));
+      el.classList.add("selected");
+      document.getElementById("nsr-confirm").disabled = false;
+    }
+
+    async function confirmNoShowRebook() {
+      if (!noShowRebook.slotId) return;
+      try {
+        const res = await api("POST", `/portal-appointments-staff/${noShowRebook.id}/no-show/rebook`, {
+          slot_id: noShowRebook.slotId, note: document.getElementById("nsr-note").value.trim() || null,
+        });
+        toast(res.message, "success");
+        closeModal("modal-noshow-rebook");
+        loadExpectedToday();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
     async function loadExpectedToday() {
+      loadNoShows();
       const el = document.getElementById("expected-today-list");
       const filterSel = document.getElementById("expected-today-doctor-filter");
       const doctorId = filterSel.value;
@@ -4637,13 +4768,27 @@
                    internal "booking's job is done" state, not the patient's visit
                    being done, so it's never shown verbatim here. -->
               ${a.status !== 'completed' ? `<span class="badge badge-teal">${a.status}</span>` : ''}
-              ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${JSON.stringify(a)})'>Collect Payment</button>` : ''}
+              ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${jsArg(a)})'>Collect Payment</button>` : ''}
               ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
+              ${(!a.arrived_at && a.payment_status === 'paid' && a.status === 'confirmed') ? `<button class="btn btn-outline btn-sm" onclick="markPortalArrived(${a.id}, this)">Mark Arrived</button>` : ''}
               ${(a.arrived_at && a.doctor_id && coverageByDoctor[a.doctor_id] === false) ? `<button class="btn btn-outline btn-sm" onclick="notifyDoctorNoAssistant(${a.doctor_id}, this)">Notify Doctor</button>` : ''}
             </div>
           </div>`).join('');
       } catch (e) {
         el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+      }
+    }
+
+    async function markPortalArrived(appointmentId, btn) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
+      btn.disabled = true;
+      try {
+        await api("POST", `/portal-appointments-staff/${appointmentId}/mark-arrived`);
+        toast("Marked arrived.", "success");
+        await loadExpectedToday();
+      } catch (e) {
+        toast(e.message, "error");
+        btn.disabled = false;
       }
     }
 
@@ -4662,6 +4807,80 @@
     }
 
     let pendingCollectPaymentId = null;
+
+    // ---- Late payment: reception chooses a new slot or the walk-in queue ----
+    let lateChoiceResolve = null;
+    let lateChoiceCtx = { hospitalId: null, doctorId: null, slotId: null };
+
+    function ensureLatePaymentModal() {
+      if (document.getElementById('modal-late-payment')) return;
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="modal-late-payment">
+          <div class="modal" style="max-width:520px;width:92vw">
+            <div class="modal-header">
+              <h2>Late payment</h2>
+              <button class="modal-close" onclick="finishLateChoice(null)">&times;</button>
+            </div>
+            <p id="lp-info" style="font-size:13px;color:var(--slate);margin-bottom:12px"></p>
+            <button class="btn btn-outline" style="width:100%;margin-bottom:14px" onclick="finishLateChoice({ late_choice: 'walk_in' })">
+              Patient is here now: put in the walk-in queue
+            </button>
+            <div style="font-size:13px;font-weight:600;margin-bottom:6px">Or give the next available slot</div>
+            <input type="date" class="form-control" id="lp-date" onchange="loadLateSlots()">
+            <div id="lp-slots" style="margin-top:8px"><p style="color:var(--slate-light);font-size:13px">Pick a date to see slots.</p></div>
+            <button class="btn btn-primary" style="width:100%;margin-top:12px" id="lp-confirm" disabled
+              onclick="finishLateChoice({ late_choice: 'next_slot', slot_id: lateChoiceCtx.slotId })">Use this slot</button>
+          </div>
+        </div>`);
+    }
+
+    function askLateChoice(t) {
+      ensureLatePaymentModal();
+      return new Promise(resolve => {
+        lateChoiceResolve = resolve;
+        lateChoiceCtx = { hospitalId: t.hospital_id, doctorId: t.doctor_id, slotId: null };
+        document.getElementById('lp-info').textContent =
+          `The booked slot (${new Date(t.slot_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}) was more than ${t.grace_minutes} minutes ago, so it cannot be kept.`;
+        const dateEl = document.getElementById('lp-date');
+        dateEl.min = new Date().toISOString().slice(0, 10);
+        dateEl.value = new Date().toISOString().slice(0, 10);
+        document.getElementById('lp-confirm').disabled = true;
+        document.getElementById('modal-late-payment').classList.add('open');
+        loadLateSlots();
+      });
+    }
+
+    function finishLateChoice(v) {
+      document.getElementById('modal-late-payment').classList.remove('open');
+      if (lateChoiceResolve) { lateChoiceResolve(v); lateChoiceResolve = null; }
+    }
+
+    async function loadLateSlots() {
+      const date = document.getElementById('lp-date').value;
+      const box = document.getElementById('lp-slots');
+      lateChoiceCtx.slotId = null;
+      document.getElementById('lp-confirm').disabled = true;
+      if (!date) return;
+      box.innerHTML = '<p style="color:var(--slate)">Loading slots…</p>';
+      try {
+        const data = await api("GET", `/portal/hospitals/${lateChoiceCtx.hospitalId}/doctors/${lateChoiceCtx.doctorId}/slots?date=${date}`);
+        if (data.doctor_unavailable) { box.innerHTML = '<p style="color:var(--danger)">This doctor is unavailable on this date.</p>'; return; }
+        const periods = [['morning', 'Morning'], ['afternoon', 'Afternoon'], ['evening', 'Evening']];
+        if (!periods.some(([k]) => (data[k] || []).length)) { box.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No slots on this date.</p>'; return; }
+        box.innerHTML = periods.map(([k, label]) => (data[k] || []).length ? `
+          <div class="slot-period-title">${label}</div>
+          <div class="slot-grid">${data[k].map(s => `
+            <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick="pickLateSlot(${s.id}, this)"`}><span class="dot"></span>${s.time}</div>`).join('')}
+          </div>` : '').join('');
+      } catch (e) { box.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; }
+    }
+
+    function pickLateSlot(slotId, el) {
+      lateChoiceCtx.slotId = slotId;
+      document.querySelectorAll('#lp-slots .slot-chip').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      document.getElementById('lp-confirm').disabled = false;
+    }
 
     function openCollectPaymentConfirm(a) {
       if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
@@ -4689,6 +4908,115 @@
       if (!method) return;
       collectAppointmentPayment(id, method, fee);
     });
+
+    // ---- Patient arrived -> (if late) walk-in or new slot -> payment LAST ----
+    let laResolve = null;
+    let laCtx = { hospitalId: null, doctorId: null, slotId: null };
+
+    async function markUnpaidArrived(a, btn) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
+      btn.disabled = true;
+      try {
+        const t = await api("POST", `/portal-appointments-staff/${a.id}/arrived-before-payment`);
+        if (t.late) {
+          await runLateArrival(a, t);
+        } else {
+          toast("Arrived on time. Now collect payment.", "success");
+          loadPendingReview();
+        }
+      } catch (e) { toast(e.message, "error"); btn.disabled = false; }
+    }
+
+    async function reopenLateArrival(a) {
+      try {
+        await runLateArrival(a, { hospital_id: a.hospital_id, doctor_id: a.doctor_id, slot_time: a.requested_time, grace_minutes: a.grace_minutes });
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function runLateArrival(a, t) {
+      const choice = await askLateArrival(t);
+      if (!choice) {
+        toast("Patient arrived late. Nothing collected. Choose walk-in or a new slot to continue.", "info");
+        loadPendingReview();
+        return;
+      }
+      const res = await api("POST", `/portal-appointments-staff/${a.id}/late-arrival`, choice);
+      toast(res.message, "success");
+      await loadPendingReview();
+      openCollectPaymentConfirm({ ...a, requested_time: res.requested_time });  // payment comes last
+    }
+
+    function ensureLateArrivalModal() {
+      if (document.getElementById('modal-late-arrival')) return;
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal-overlay" id="modal-late-arrival">
+          <div class="modal" style="max-width:520px;width:92vw">
+            <div class="modal-header">
+              <h2>Patient arrived late</h2>
+              <button class="modal-close" onclick="finishLateArrival(null)">&times;</button>
+            </div>
+            <p id="la-info" style="font-size:13px;color:var(--slate);margin-bottom:12px"></p>
+            <button class="btn btn-outline" style="width:100%;margin-bottom:14px" onclick="finishLateArrival({ late_choice: 'walk_in' })">
+              Walk-in queue (patient is here now)
+            </button>
+            <div style="font-size:13px;font-weight:600;margin-bottom:6px">Or give the next available slot</div>
+            <input type="date" class="form-control" id="la-date" onchange="loadLateArrivalSlots()">
+            <div id="la-slots" style="margin-top:8px"><p style="color:var(--slate-light);font-size:13px">Pick a date to see slots.</p></div>
+            <button class="btn btn-primary" style="width:100%;margin-top:12px" id="la-confirm" disabled
+              onclick="finishLateArrival({ late_choice: 'next_slot', slot_id: laCtx.slotId })">Use this slot</button>
+            <p style="font-size:12px;color:var(--slate-light);margin-top:10px">Payment is collected after you choose. Closing this window collects nothing.</p>
+          </div>
+        </div>`);
+    }
+
+    function askLateArrival(t) {
+      ensureLateArrivalModal();
+      return new Promise(resolve => {
+        laResolve = resolve;
+        laCtx = { hospitalId: t.hospital_id, doctorId: t.doctor_id, slotId: null };
+        document.getElementById('la-info').textContent =
+          `The booked slot (${new Date(t.slot_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}) cannot be kept: the patient arrived more than ${t.grace_minutes} minutes late.`;
+        const today = new Date().toISOString().slice(0, 10);
+        const dateEl = document.getElementById('la-date');
+        dateEl.min = today;
+        dateEl.value = today;
+        document.getElementById('la-confirm').disabled = true;
+        document.getElementById('modal-late-arrival').classList.add('open');
+        loadLateArrivalSlots();
+      });
+    }
+
+    function finishLateArrival(v) {
+      document.getElementById('modal-late-arrival').classList.remove('open');
+      if (laResolve) { laResolve(v); laResolve = null; }
+    }
+
+    async function loadLateArrivalSlots() {
+      const date = document.getElementById('la-date').value;
+      const box = document.getElementById('la-slots');
+      laCtx.slotId = null;
+      document.getElementById('la-confirm').disabled = true;
+      if (!date) return;
+      box.innerHTML = '<p style="color:var(--slate)">Loading slots…</p>';
+      try {
+        const data = await api("GET", `/portal/hospitals/${laCtx.hospitalId}/doctors/${laCtx.doctorId}/slots?date=${date}`);
+        if (data.doctor_unavailable) { box.innerHTML = '<p style="color:var(--danger)">This doctor is unavailable on this date.</p>'; return; }
+        const periods = [['morning', 'Morning'], ['afternoon', 'Afternoon'], ['evening', 'Evening']];
+        if (!periods.some(([k]) => (data[k] || []).length)) { box.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No slots on this date.</p>'; return; }
+        box.innerHTML = periods.map(([k, label]) => (data[k] || []).length ? `
+          <div class="slot-period-title">${label}</div>
+          <div class="slot-grid">${data[k].map(s => `
+            <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick="pickLateArrivalSlot(${s.id}, this)"`}><span class="dot"></span>${s.time}</div>`).join('')}
+          </div>` : '').join('');
+      } catch (e) { box.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; }
+    }
+
+    function pickLateArrivalSlot(slotId, el) {
+      laCtx.slotId = slotId;
+      document.querySelectorAll('#la-slots .slot-chip').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      document.getElementById('la-confirm').disabled = false;
+    }
 
     async function collectAppointmentPayment(id, method, feeAmount) {
       try {
@@ -4731,7 +5059,11 @@
             </div>
             ${a.reason === 'awaiting_payment' ? `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-              <button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${JSON.stringify(a)})'>Collect Payment</button>
+              ${!a.arrived_at
+                ? `<button class="btn btn-primary btn-sm" onclick='markUnpaidArrived(${jsArg(a)}, this)'>Patient arrived</button>`
+                : a.late_unresolved
+                  ? `<span class="badge badge-red">Arrived late</span><button class="btn btn-primary btn-sm" onclick='reopenLateArrival(${jsArg(a)})'>Walk-in queue / new slot</button>`
+                  : `<span class="badge badge-green">Arrived</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${jsArg(a)})'>Collect Payment</button>`}
             </div>
             ` : `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">

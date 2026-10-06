@@ -86,6 +86,9 @@ def convert_appointment_to_checkin(db: Session, appt, patient):
             break
         except IntegrityError:
             db.rollback()
+            _already = db.query(Checkin).filter(Checkin.portal_appointment_id == appt.id).first()
+            if _already:
+                return _already
             if attempt == max_token_attempts - 1:
                 raise
             token = generate_token_number(db, appt.hospital_id, hospital_code)
@@ -102,7 +105,8 @@ def convert_appointment_to_checkin(db: Session, appt, patient):
         ))
         appt.reschedule_balance_due = None
 
-    appt.status = AppointmentStatus.completed  # booking's job is done — the real visit now lives on the Checkin
+    # The appointment stays "confirmed" until the doctor actually confirms the consultation
+    # (see confirm_prescription), so "I've arrived", reschedule and no-show detection keep working.
     db.commit()
     db.refresh(checkin)
     return checkin
@@ -134,7 +138,14 @@ def sweep_todays_online_checkins(db: Session, hospital_id: int) -> None:
         Appointment.requested_time < today_end,
     ).all()
 
+    import logging
     for appt in appts:
-        link = db.query(PatientProfileLink).filter(PatientProfileLink.id == appt.profile_link_id).first()
-        if link and link.patient:
-            convert_appointment_to_checkin(db, appt, link.patient)
+        if not appt.doctor_id:
+            continue  # a check-in needs a doctor; doctorless bookings stay for reception to handle
+        try:
+            link = db.query(PatientProfileLink).filter(PatientProfileLink.id == appt.profile_link_id).first()
+            if link and link.patient:
+                convert_appointment_to_checkin(db, appt, link.patient)
+        except Exception:
+            db.rollback()
+            logging.getLogger(__name__).exception("Online check-in sweep failed for appointment %s", appt.id)

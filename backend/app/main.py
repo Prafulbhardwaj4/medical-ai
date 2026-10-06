@@ -43,9 +43,11 @@ from app.routers import suggestions as suggestions_router
 from app.routers import referrals as referrals_router
 from app.routers import tutorials
 from app.routers import plan_inquiries as plan_inquiries_router
+from app.routers import consents as consents_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 from app.models.captcha_challenge import CaptchaChallenge
+from app.models.medicine_order_batch import MedicineOrderBatch
 from app.models.audit_log import AuditLog
 from app.models.checkin import Checkin
 from app.models.attendance import AttendanceRecord
@@ -64,7 +66,6 @@ from app.models.notification import Notification
 from app.models.chat_message import ChatMessage
 from app.models.opd_charge import OpdCharge
 from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
-from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
 from app.models.day_end_close import DayEndClose
 from app.config import settings, validate_startup_secrets, _is_production
@@ -200,7 +201,10 @@ from app.utils.rate_limit import limiter
 app = FastAPI(
     title="MedScribe API",
     version="0.1.0",
-    swagger_ui_parameters={"persistAuthorization": True}
+    swagger_ui_parameters={"persistAuthorization": True},
+    docs_url=None if _is_production(settings) else "/docs",
+    redoc_url=None if _is_production(settings) else "/redoc",
+    openapi_url=None if _is_production(settings) else "/openapi.json",
 )
 
 app.state.limiter = limiter
@@ -209,8 +213,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.on_event("startup")
 async def _start_midnight_scheduler():
-    from app.scheduler import midnight_close_loop
+    from app.scheduler import midnight_close_loop, lab_escalation_loop
     asyncio.create_task(midnight_close_loop())
+    asyncio.create_task(lab_escalation_loop())
 
 # Single source of truth for CORS: the middleware AND the 500 handler below both
 # use these, so they can't drift.
@@ -255,6 +260,18 @@ async def log_requests(request: Request, call_next):
         raise
     elapsed_ms = int((time.perf_counter() - start) * 1000)
     logger.info("RES %s %s status=%s duration_ms=%s", request.method, request.url.path, response.status_code, elapsed_ms)
+    return response
+
+
+@app.middleware("http")
+async def no_store_authenticated_get(request: Request, call_next):
+    # Patient data must never sit in a browser/proxy cache on a shared device.
+    # Only authenticated GET/HEAD; public endpoints and responses that already
+    # set their own Cache-Control (e.g. PDF downloads) are left alone.
+    response = await call_next(request)
+    if request.method in ("GET", "HEAD") and request.headers.get("authorization") \
+            and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -309,6 +326,7 @@ app.include_router(suggestions_router.router)
 app.include_router(referrals_router.router)
 app.include_router(tutorials.router)
 app.include_router(plan_inquiries_router.router)
+app.include_router(consents_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
 

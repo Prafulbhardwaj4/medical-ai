@@ -16,7 +16,7 @@ from app.models.test_catalog import TestCatalogItem
 from app.models.test_order import TestOrder
 from app.models.checkin import Checkin
 import os
-from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate, PaymentMethodIn, PatientMergeIn
+from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate, PaymentMethodIn, PatientMergeIn, ReasonIn
 from sqlalchemy import or_
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
 from app.utils.timezone import now_ist_naive
@@ -27,7 +27,6 @@ from app.models.medicine_order import MedicineOrder
 from app.models.opd_charge import OpdCharge
 from app.models.admission import Admission
 from app.models.admission_deposit import AdmissionDepositTopupRequest
-from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
 from app.models.opd_referral import OpdReferral
 from app.models.admission_referral import AdmissionReferral
@@ -37,9 +36,20 @@ from app.models.patient_merge_request import PatientMergeRequest
 from app.models.portal import PatientProfileLink, InviteStatus
 from app.schemas.patient import MergeRequestIn, MergeConfirmIn, PatientAllergyIn
 from app.models.patient_allergy import PatientAllergy
+from app.models.credit_debit_note import CreditDebitNote
+from app.models.cross_hospital_referral import CrossHospitalReferral
 from app.models.radiology_order import RadiologyOrder
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+
+FRONT_DESK_ROLES = ("receptionist", "admin", "sub_admin")
+CLINICAL_FRONT_ROLES = ("receptionist", "admin", "sub_admin", "doctor", "nurse", "assistant")
+
+
+def _require_roles(current_doctor: Doctor, roles) -> None:
+    if current_doctor.role.value not in roles:
+        raise HTTPException(status_code=403, detail="Not authorized for this action")
 
 
 @router.get("/lookup")
@@ -51,13 +61,15 @@ def unified_patient_lookup(
     """§1 — single reception entry point: search by phone/UID/token and see which
     situations apply to the patient(s) found, instead of hunting across separate screens."""
     q = query.strip()
-    if not q:
-        return []
+    if len(q) < 3:
+        return []  # one or two characters would match half the hospital
 
     patients_found = {}
 
     by_phone_uid = db.query(Patient).filter(
         Patient.hospital_id == current_doctor.hospital_id,
+        Patient.merged_into_id.is_(None),
+        Patient.is_active == True,
         or_(Patient.phone.like(f"%{q}%"), Patient.patient_uid.ilike(f"%{q}%"))
     ).limit(10).all()
     for p in by_phone_uid:
@@ -67,7 +79,7 @@ def unified_patient_lookup(
         Checkin.hospital_id == current_doctor.hospital_id, Checkin.token_number.ilike(f"%{q}%")
     ).order_by(Checkin.created_at.desc()).limit(5).all()
     for c in by_token:
-        p = db.query(Patient).filter(Patient.id == c.patient_id).first()
+        p = db.query(Patient).filter(Patient.id == c.patient_id, Patient.merged_into_id.is_(None), Patient.is_active == True).first()
         if p:
             patients_found[p.id] = p
 
@@ -94,8 +106,6 @@ def unified_patient_lookup(
             situations.append("active_admission")
             if db.query(AdmissionDepositTopupRequest).filter(AdmissionDepositTopupRequest.admission_id == active_admission.id, AdmissionDepositTopupRequest.status == "pending").count():
                 situations.append("pending_topup_request")
-            if db.query(AdmissionTpaCase).filter(AdmissionTpaCase.admission_id == active_admission.id, AdmissionTpaCase.status.in_(["pending", "query_raised"])).count():
-                situations.append("open_tpa_case")
 
         if db.query(Refund).filter(Refund.patient_id == p.id, Refund.hospital_id == current_doctor.hospital_id, Refund.status == "pending").count():
             situations.append("refund_settling")
@@ -192,6 +202,7 @@ def create_patient(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     hospital_code = hospital.hospital_code if hospital else "GEN"
 
@@ -225,7 +236,8 @@ def create_patient(
         url_token=generate_url_token(db),
         name=payload.name,
         phone=payload.phone,
-        age=payload.age,
+        age=_age_from_dob(payload.date_of_birth, payload.age),
+        date_of_birth=payload.date_of_birth,
         blood_group=payload.blood_group,
         gender=payload.gender,
         abha_number=payload.abha_number,
@@ -325,6 +337,10 @@ def merge_duplicate_patients(
     otherwise)."""
     if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    raise HTTPException(
+        status_code=410,
+        detail="This one-step merge has been retired. Flag the duplicate for review, confirm by phone, then an admin executes it."
+    )
     if not body.phone_confirmed:
         raise HTTPException(status_code=400, detail="Please confirm this with the patient by phone before merging")
     if body.primary_patient_id == body.duplicate_patient_id:
@@ -379,6 +395,8 @@ def list_patients(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    page = max(page, 1)
+    limit = min(max(limit, 1), 200)
     offset = (page - 1) * limit
     query = db.query(Patient).filter(Patient.hospital_id == current_doctor.hospital_id, Patient.merged_into_id.is_(None), Patient.is_active == True)
     if search:
@@ -563,18 +581,6 @@ def doctor_coverage_status(
     covered = is_doctor_covered_and_present(db, current_doctor.hospital_id, doctor_id)
     return {"covered": covered}
 
-@router.get("/hospital-nurses")
-def hospital_nurses(
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    nurses = db.query(Doctor).filter(
-        Doctor.hospital_id == current_doctor.hospital_id,
-        Doctor.role == UserRole.nurse,
-        Doctor.is_active == True
-    ).all()
-    return [{"id": n.id, "name": n.name} for n in nurses]
-
 @router.get("/resolve/{token}")
 def resolve_patient_token(
     token: str,
@@ -684,7 +690,7 @@ def checkin_today(
         "checkin_id": checkin.id,
         "consultation_fee": checkin.consultation_fee,
         "test_fee": checkin.test_fee,
-        "total_fee": (checkin.consultation_fee or 0) + (checkin.test_fee or 0),
+        "total_fee": (checkin.consultation_fee or 0),  # tests are billed from lab orders, not Checkin.test_fee
         "is_paid": checkin.is_paid,
         "is_consulted": db.query(Consultation).filter(
             Consultation.token_number == checkin.token_number
@@ -698,6 +704,7 @@ def requeue_checkin(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
         Checkin.hospital_id == current_doctor.hospital_id,
@@ -779,7 +786,7 @@ def get_checkin_slip(
         "checked_in_at": checkin.created_at.isoformat() if checkin.created_at else None,
         "nurse_name": f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
         "checkin_id": checkin.id,
-        "total_fee": (checkin.consultation_fee or 0) + (checkin.test_fee or 0),
+        "total_fee": (checkin.consultation_fee or 0),
         "is_paid": checkin.is_paid
     }
 
@@ -844,6 +851,7 @@ def send_to_nurse(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
         Patient.hospital_id == current_doctor.hospital_id
@@ -851,10 +859,13 @@ def send_to_nurse(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    checkin = db.query(Checkin).filter(
+    _q = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
         Checkin.visit_date == ist_today()
-    ).order_by(desc(Checkin.created_at)).first()
+    )
+    if current_doctor.role.value == "doctor":
+        _q = _q.filter(Checkin.doctor_id == current_doctor.id)  # multi-doctor visit: act on MY check-in
+    checkin = _q.order_by(desc(Checkin.created_at)).first()
     if not checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today.")
 
@@ -884,6 +895,7 @@ def send_to_nurse_postconsult(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
         Patient.hospital_id == current_doctor.hospital_id
@@ -891,10 +903,13 @@ def send_to_nurse_postconsult(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    checkin = db.query(Checkin).filter(
+    _q = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
         Checkin.visit_date == ist_today()
-    ).order_by(desc(Checkin.created_at)).first()
+    )
+    if current_doctor.role.value == "doctor":
+        _q = _q.filter(Checkin.doctor_id == current_doctor.id)
+    checkin = _q.order_by(desc(Checkin.created_at)).first()
     if not checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today.")
 
@@ -931,11 +946,8 @@ def refer_to_doctor(
     doctor (its own token, its own queue slot) so it flows through the exact
     same queue mechanism everything else does, tagged as a referral.
 
-    ASSUMPTION FLAGGED, not silently decided: this referral checkin carries
-    consultation_fee=0 / is_paid=True — no new fee, since it's a continuation
-    of the same paid OPD visit, not a fresh registration. If your hospitals
-    actually want to charge a second consultation fee for a referral, tell me
-    and I'll flip this to require payment like a normal checkin does.
+    Referrals are fee-free: the referral check-in carries consultation_fee=0 and
+    is marked paid, because it continues the same paid OPD visit.
     """
     if current_doctor.role.value != "doctor":
         raise HTTPException(status_code=403, detail="Only a doctor can refer a patient")
@@ -965,15 +977,21 @@ def refer_to_doctor(
     if not origin_checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today under you for this patient.")
 
+    _already_referred = db.query(OpdReferral.id).join(
+        Checkin, Checkin.id == OpdReferral.checkin_id
+    ).filter(
+        OpdReferral.patient_id == patient.id,
+        OpdReferral.referred_to_doctor_id == to_doctor.id,
+        Checkin.visit_date == ist_today(),
+    ).first()
+    if _already_referred:
+        raise HTTPException(status_code=400, detail="This patient was already referred to that doctor today.")
+
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
-    # Same fee resolution as a normal check-in — a referral isn't a
-    # discounted/free consult, it's a regular visit with the receiving
-    # doctor, just arriving via referral instead of the front desk.
-    referral_fee = to_doctor.consultation_fee
-    if referral_fee is None and hospital:
-        referral_fee = hospital.default_consultation_fee
+    # Fee-free referral: continuation of the same paid OPD visit.
+    referral_fee = 0
 
     referral_checkin = Checkin(
         hospital_id=current_doctor.hospital_id,
@@ -985,10 +1003,23 @@ def refer_to_doctor(
         visit_date=ist_today(),
         consultation_fee=referral_fee,
         test_fee=0,
-        is_paid=False
+        is_paid=True,
+        paid_at=now_ist_naive()
     )
     db.add(referral_checkin)
     db.flush()
+
+    # Same visit: share the visit group, and carry the vitals over so the nurse does not repeat them.
+    if not origin_checkin.visit_group_id:
+        origin_checkin.visit_group_id = origin_checkin.id
+    referral_checkin.visit_group_id = origin_checkin.visit_group_id
+    if origin_checkin.vitals_status == "done" and origin_checkin.vitals_data:
+        referral_checkin.vitals_status = "done"
+        referral_checkin.vitals_data = origin_checkin.vitals_data
+        referral_checkin.vitals_recorded_by = origin_checkin.vitals_recorded_by
+        referral_checkin.vitals_recorded_at = origin_checkin.vitals_recorded_at
+    elif origin_checkin.vitals_status in ("pending", "sent_back"):
+        referral_checkin.vitals_status = "pending"  # same group, so one set of vitals fans out to both
 
     referral = OpdReferral(
         hospital_id=current_doctor.hospital_id,
@@ -1019,6 +1050,7 @@ def send_back_for_vitals(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     """Mid-consultation recheck request — patient re-enters the SAME nurse
     (checkin.nurse_id is untouched) with priority over fresh vitals-pending
     patients, and the consultation stays open (nothing here confirms it)."""
@@ -1029,10 +1061,13 @@ def send_back_for_vitals(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    checkin = db.query(Checkin).filter(
+    _q = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
         Checkin.visit_date == ist_today()
-    ).order_by(desc(Checkin.created_at)).first()
+    )
+    if current_doctor.role.value == "doctor":
+        _q = _q.filter(Checkin.doctor_id == current_doctor.id)
+    checkin = _q.order_by(desc(Checkin.created_at)).first()
     if not checkin:
         raise HTTPException(status_code=400, detail="No check-in found for today.")
 
@@ -1041,7 +1076,10 @@ def send_back_for_vitals(
         raise HTTPException(status_code=400, detail="Say what needs to be rechecked.")
 
     if not checkin.nurse_id:
-        checkin.nurse_id = pick_random_nurse(db, current_doctor.hospital_id, current_doctor.id)
+        # Pick from nurses covering the doctor this check-in belongs to, and store the
+        # nurse's id (this line used to assign the whole nurse object to the id column).
+        _nurse = pick_random_nurse(db, current_doctor.hospital_id, checkin.doctor_id)
+        checkin.nurse_id = _nurse.id if _nurse else None
 
     checkin.vitals_status = "sent_back"
     checkin.vitals_recheck_request = note
@@ -1079,6 +1117,9 @@ def get_hospital_radiology_templates(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     from app.models.radiology_template import RadiologyTemplate
+    from app.utils.tier_gate import hospital_has_tier
+    if not hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
+        return []
     items = db.query(RadiologyTemplate).filter(
         RadiologyTemplate.hospital_id == current_doctor.hospital_id,
         RadiologyTemplate.is_active == True
@@ -1110,7 +1151,7 @@ def get_hospital_medicines(
         for m in items
     ]
 
-@router.get("/{patient_id}", response_model=PatientOut)
+@router.get("/{patient_id:int}", response_model=PatientOut)
 def get_patient(
     patient_id: int,
     db: Session = Depends(get_db),
@@ -1124,6 +1165,15 @@ def get_patient(
         raise HTTPException(status_code=404, detail="Patient not found")
     return patient
 
+def _age_from_dob(dob, fallback_age):
+    """Whole years from date of birth (IST today); falls back to the typed age."""
+    if not dob:
+        return fallback_age
+    from app.utils.timezone import ist_today
+    t = ist_today()
+    return max(0, t.year - dob.year - ((t.month, t.day) < (dob.month, dob.day)))
+
+
 @router.put("/{patient_id}", response_model=PatientOut)
 def update_patient(
     patient_id: int,
@@ -1131,15 +1181,19 @@ def update_patient(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
         Patient.hospital_id == current_doctor.hospital_id
     ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    _fields = ("name", "phone", "age", "blood_group", "gender", "abha_number", "address")
+    _before = {k: getattr(patient, k) for k in _fields}
     patient.name = payload.name
     patient.phone = payload.phone
-    patient.age = payload.age
+    patient.age = _age_from_dob(payload.date_of_birth, payload.age)
+    patient.date_of_birth = payload.date_of_birth
     patient.blood_group = payload.blood_group
     patient.gender = payload.gender
     patient.abha_number = payload.abha_number
@@ -1147,12 +1201,17 @@ def update_patient(
     db.commit()
     db.refresh(patient)
 
+    _changes = [f"{k}: {_before[k]!r} -> {getattr(patient, k)!r}" for k in _fields if _before[k] != getattr(patient, k)]
+    if _before["phone"] != patient.phone:
+        _auto_link_portal_profile(db, patient)
+
     log_action(
         db, current_doctor,
         action="patient_updated",
         target_type="patient",
         target_id=patient.id,
-        target_label=f"{patient.name} ({patient.patient_uid})"
+        target_label=f"{patient.name} ({patient.patient_uid})",
+        details="; ".join(_changes)[:1500] or "no field changes"
     )
 
     return patient
@@ -1229,6 +1288,7 @@ def checkin_patient(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, CLINICAL_FRONT_ROLES)
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
         Patient.hospital_id == current_doctor.hospital_id
@@ -1256,10 +1316,35 @@ def checkin_patient(
     doctor = db.query(Doctor).filter(
         Doctor.id == payload.doctor_id,
         Doctor.hospital_id == current_doctor.hospital_id,
+        Doctor.is_active == True,  # noqa: E712
         Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
     ).first()
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Doctor not found or no longer active")
+
+    # Same patient, same doctor, same day, not yet seen: almost always a double click or a
+    # second desk. Needs an explicit reason so we don't create two tokens and two fees.
+    _ds, _de = ist_day_bounds()
+    _open_same = db.query(Checkin).filter(
+        Checkin.patient_id == patient.id,
+        Checkin.doctor_id == doctor.id,
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == ist_today(),
+    ).first()
+    if _open_same:
+        _seen = db.query(Consultation.id).filter(
+            Consultation.patient_id == patient.id,
+            Consultation.doctor_id == doctor.id,
+            Consultation.token_number != None,
+            Consultation.is_voided == False,
+            Consultation.created_at >= _ds, Consultation.created_at < _de,
+        ).first()
+        if not _seen and not (payload.duplicate_reason or "").strip():
+            raise HTTPException(status_code=409, detail={
+                "message": f"{patient.name} already has token {_open_same.token_number} with this doctor today. Give a reason to issue another one.",
+                "existing_token": _open_same.token_number,
+                "needs_duplicate_reason": True,
+            })
 
     nurse = None
     if payload.send_to_nurse:
@@ -1278,11 +1363,15 @@ def checkin_patient(
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     token = generate_token_number(db, current_doctor.hospital_id, hospital.hospital_code)
 
-    consultation_fee = payload.consultation_fee
-    if consultation_fee is None:
-        consultation_fee = doctor.consultation_fee
-    if consultation_fee is None and hospital:
-        consultation_fee = hospital.default_consultation_fee
+    _standard_fee = doctor.consultation_fee
+    if _standard_fee is None and hospital:
+        _standard_fee = hospital.default_consultation_fee
+    consultation_fee = payload.consultation_fee if payload.consultation_fee is not None else _standard_fee
+    _override_note = ""
+    if payload.consultation_fee is not None and payload.consultation_fee != _standard_fee:
+        _override_note += f" · consultation fee OVERRIDDEN to Rs.{payload.consultation_fee:.2f} (standard Rs.{(_standard_fee or 0):.2f})"
+    if payload.test_fee:
+        _override_note += f" · test fee Rs.{payload.test_fee:.2f} entered at check-in"
 
     # generate_token_number's check-then-generate isn't airtight under real
     # concurrency — the DB's unique constraint on token_number is the actual
@@ -1327,7 +1416,7 @@ def checkin_patient(
         target_type="patient",
         target_id=patient.id,
         target_label=f"{patient.name} ({patient.patient_uid})",
-        details=f"Token {token} → {doctor.title} {doctor.name} ({payload.issue_category})" + (
+        details=f"Token {token} → {doctor.title} {doctor.name} ({payload.issue_category})" + _override_note + (
             " · vitals reused from within the last 4 hours" if reused_vitals else
             (f" · sent to {nurse.title} {nurse.name} for vitals" if nurse else "")
         )
@@ -1340,6 +1429,7 @@ def checkin_patient(
             extra_doctor = db.query(Doctor).filter(
                 Doctor.id == extra.doctor_id,
                 Doctor.hospital_id == current_doctor.hospital_id,
+                Doctor.is_active == True,  # noqa: E712
                 Doctor.role.in_([UserRole.doctor, UserRole.sub_admin])
             ).first()
             if not extra_doctor or extra_doctor.id == doctor.id:
@@ -1384,7 +1474,7 @@ def checkin_patient(
                 except IntegrityError:
                     db.rollback()
                     if attempt == max_token_attempts - 1:
-                        continue
+                        raise HTTPException(status_code=500, detail="Could not issue the additional doctor's token - please try again")
                     suffix_n += 100  # collision on the suffixed token — jump the suffix rather than issuing an unrelated token number
                     extra_token = f"{token}-{suffix_n}"
             db.refresh(extra_checkin)
@@ -1436,6 +1526,7 @@ def mark_visit_group_paid(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     """Pay for every checkin in a multi-doctor visit in one action (item 7) —
     reception collects one combined amount instead of paying each doctor's
     checkin separately."""
@@ -1447,14 +1538,25 @@ def mark_visit_group_paid(
         raise HTTPException(status_code=404, detail="Visit group not found")
 
     total = 0.0
+    newly_paid = 0
     for c in members:
         if not c.is_paid:
             c.is_paid = True
             c.paid_at = now_ist_naive()
             c.payment_method = body.payment_method
-        total += (c.consultation_fee or 0) + (c.test_fee or 0)
+            newly_paid += 1
+            total += (c.consultation_fee or 0)
+    if newly_paid == 0:
+        raise HTTPException(status_code=400, detail="This visit is already paid")
     db.commit()
-    return {"paid_checkins": len(members), "total_collected": total}
+    log_action(
+        db, current_doctor,
+        action="visit_group_payment_collected",
+        target_type="visit_group",
+        target_id=visit_group_id,
+        details=f"{newly_paid} check-in(s) paid via {body.payment_method}, Rs.{total:.2f}",
+    )
+    return {"paid_checkins": newly_paid, "total_collected": total}
 
 
 @router.patch("/checkin/{checkin_id}/mark-paid")
@@ -1464,12 +1566,15 @@ def mark_checkin_paid(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
         Checkin.hospital_id == current_doctor.hospital_id
     ).first()
     if not checkin:
         raise HTTPException(status_code=404, detail="Check-in not found")
+    if checkin.is_paid:
+        raise HTTPException(status_code=400, detail="This check-in is already marked paid")
 
     checkin.is_paid = True
     checkin.paid_at = now_ist_naive()
@@ -1483,7 +1588,7 @@ def mark_checkin_paid(
         target_type="patient",
         target_id=checkin.patient_id,
         target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),
-        details=f"Token {checkin.token_number} · Rs.{(checkin.consultation_fee or 0) + (checkin.test_fee or 0):.2f}"
+        details=f"Token {checkin.token_number} · Rs.{(checkin.consultation_fee or 0):.2f}"
     )
     return {"is_paid": True, "paid_at": checkin.paid_at.isoformat()}
 
@@ -1491,9 +1596,11 @@ def mark_checkin_paid(
 @router.patch("/checkin/{checkin_id}/mark-unpaid")
 def mark_checkin_unpaid(
     checkin_id: int,
+    body: ReasonIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
         Checkin.hospital_id == current_doctor.hospital_id
@@ -1501,12 +1608,24 @@ def mark_checkin_unpaid(
     if not checkin:
         raise HTTPException(status_code=404, detail="Check-in not found")
 
+    if not checkin.is_paid:
+        raise HTTPException(status_code=400, detail="This check-in is not marked paid")
+    if checkin.is_finalized:
+        raise HTTPException(status_code=400, detail="An invoice was already generated for this visit. Issue a credit note / refund instead of marking it unpaid.")
+    _tok = checkin.token_number
+    _started = db.query(Consultation).filter(
+        Consultation.patient_id == checkin.patient_id,
+        or_(Consultation.token_number == _tok, Consultation.token_number.like(f"{_tok}-%")),
+        or_(Consultation.is_voided == False, Consultation.is_voided.is_(None)),  # noqa: E712
+    ).first()
+    if _started:
+        raise HTTPException(status_code=400, detail="The consultation has already started for this visit. Use the refund flow instead of marking it unpaid.")
+
+    _old_method = checkin.payment_method
+    _old_paid_at = checkin.paid_at
     checkin.is_paid = False
     checkin.paid_at = None
     checkin.payment_method = None
-    if checkin.is_finalized:
-        checkin.is_finalized = False
-        checkin.invoice_id = None
     db.commit()
 
     patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
@@ -1516,7 +1635,7 @@ def mark_checkin_unpaid(
         target_type="patient",
         target_id=checkin.patient_id,
         target_label=f"{patient.name} ({patient.patient_uid})" if patient else str(checkin.patient_id),
-        details=f"Token {checkin.token_number} — consultation fee marked unpaid"
+        details=f"Token {checkin.token_number} — consultation fee Rs.{(checkin.consultation_fee or 0):.2f} marked unpaid (was {_old_method}, paid {_old_paid_at}). Reason: {body.reason}"
     )
     return {"is_paid": False}
 
@@ -1524,9 +1643,11 @@ def mark_checkin_unpaid(
 @router.post("/{patient_id}/revert-test-payment")
 def revert_test_payment(
     patient_id: int,
+    body: ReasonIn,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     todays_checkin = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
         Checkin.hospital_id == current_doctor.hospital_id,
@@ -1555,14 +1676,19 @@ def revert_test_payment(
     if not orders:
         raise HTTPException(status_code=400, detail="No paid tests to revert for today's visit — they may already be in progress at the lab")
 
+    if todays_checkin.is_finalized:
+        raise HTTPException(status_code=400, detail="An invoice was already generated for this visit. Cancel the test and refund it instead of reverting payment.")
+
+    # paid_at is cleared below, so the money drops out of "collected" on its own;
+    # a Refund row here would be subtracted a second time at day-end. The audit
+    # entry (who, why, amount, original method) is the reversal record.
+    _amount = sum((o.price or 0) for o in orders)
+    _methods = ",".join(sorted({o.payment_method or "?" for o in orders}))
     for o in orders:
         o.status = "payment_pending"
         o.paid_at = None
         o.queued_at = None
-
-    if todays_checkin.is_finalized:
-        todays_checkin.is_finalized = False
-        todays_checkin.invoice_id = None
+        o.payment_method = None
 
     db.commit()
 
@@ -1571,7 +1697,8 @@ def revert_test_payment(
         action="test_payment_reverted",
         target_type="patient",
         target_id=patient_id,
-        target_label=f"{len(orders)} test(s) reverted to unpaid"
+        target_label=f"{len(orders)} test(s) reverted to unpaid",
+        details=f"Rs.{_amount:.2f} (was {_methods}). Reason: {body.reason}"
     )
     return {"reverted": len(orders)}
 
@@ -1654,8 +1781,7 @@ def todays_queue(
         Checkin.hospital_id == current_doctor.hospital_id,
         Checkin.doctor_id == current_doctor.id,
         Checkin.visit_date == ist_today(),
-        Checkin.is_paid == True,
-        or_(Checkin.emergency_status.is_(None), Checkin.emergency_status != "holding")
+        Checkin.is_paid == True
     ).order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
 
     patient_ids = [c.patient_id for c in checkins]
@@ -1777,94 +1903,6 @@ def skip_next_patient(
     checkin.up_next_skip = True
     db.commit()
     return {"ok": True}
-
-
-@router.get("/assistant-queue")
-def assistant_queue(
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """Combined walk-in + online queue across every doctor the assistant is
-    currently covering (today's AttendanceCoverage doctor_ids) — not one
-    doctor's queue like /queue/today, since an assistant stands in front of
-    a cabin and may be covering several doctors' patients at once. Excludes
-    already-consulted patients; includes vitals_status so the assistant can
-    see Vitals Pending / Sent Back for More Vitals / Vitals Recorded at a
-    glance without touching the vitals themselves."""
-    if current_doctor.role.value not in ("nurse", "assistant"):
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    from app.models.attendance import AttendanceRecord
-    from app.models.attendance_coverage import AttendanceCoverage
-    from app.utils.portal_checkin import sweep_todays_online_checkins
-    try:
-        sweep_todays_online_checkins(db, current_doctor.hospital_id)
-    except Exception:
-        db.rollback()
-
-    my_record = db.query(AttendanceRecord).filter(
-        AttendanceRecord.doctor_id == current_doctor.id,
-        AttendanceRecord.hospital_id == current_doctor.hospital_id,
-        AttendanceRecord.date == ist_today(),
-        AttendanceRecord.status.in_(["present", "on_break"])
-    ).first()
-    if not my_record:
-        return {"covering_doctor_ids": [], "walk_in": [], "online": []}
-
-    covering_doctor_ids = [
-        row.doctor_id for row in db.query(AttendanceCoverage).filter(
-            AttendanceCoverage.attendance_record_id == my_record.id,
-            AttendanceCoverage.doctor_id.isnot(None)
-        ).all()
-    ]
-    if not covering_doctor_ids:
-        return {"covering_doctor_ids": [], "walk_in": [], "online": []}
-
-    checkins = db.query(Checkin).filter(
-        Checkin.hospital_id == current_doctor.hospital_id,
-        Checkin.doctor_id.in_(covering_doctor_ids),
-        Checkin.visit_date == ist_today(),
-        Checkin.is_paid == True
-    ).order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
-
-    token_numbers = [c.token_number for c in checkins]
-    confirmed_tokens = set(
-        t[0] for t in db.query(Consultation.token_number)
-        .filter(Consultation.token_number.in_(token_numbers)).all()
-    )
-    checkins = [c for c in checkins if c.token_number not in confirmed_tokens]
-
-    patients = {p.id: p for p in db.query(Patient).filter(Patient.id.in_([c.patient_id for c in checkins])).all()}
-    doctors = {d.id: d for d in db.query(Doctor).filter(Doctor.id.in_(covering_doctor_ids)).all()}
-
-    walk_in, online = [], []
-    for c in checkins:
-        p = patients.get(c.patient_id)
-        if not p:
-            continue
-        d = doctors.get(c.doctor_id)
-        row = {
-            "checkin_id": c.id,
-            "patient_id": p.id,
-            "patient_name": p.name,
-            "patient_uid": p.patient_uid,
-            "age": p.age,
-            "gender": p.gender,
-            "token_number": c.token_number,
-            "issue_category": c.issue_category,
-            "doctor_id": d.id if d else None,
-            "doctor_name": f"{d.title} {d.name}" if d else "—",
-            "created_at": c.created_at.isoformat(),
-            "is_emergency": c.is_emergency,
-            "is_returned": c.is_returned,
-            "vitals_status": c.vitals_status,
-            "source": c.source,
-            "booked_time": c.booked_time.isoformat() if c.booked_time else None,
-        }
-        (online if c.source == "online" else walk_in).append(row)
-
-    return {"covering_doctor_ids": covering_doctor_ids, "walk_in": walk_in, "online": online}
-
 
 @router.get("/reception/pending-payments")
 def reception_pending_payments(
@@ -2152,6 +2190,7 @@ def collect_test_payment_anyday(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     """Used from the search-based pending-tasks modal — collects payment for
     included, non-expired payment_pending tests regardless of what day they
     were ordered on."""
@@ -2222,6 +2261,7 @@ def collect_opd_charges(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     today_start, today_end = ist_day_bounds()
 
     charges = db.query(OpdCharge).filter(
@@ -2261,6 +2301,7 @@ def collect_opd_charges_anyday(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     charges = db.query(OpdCharge).filter(
         OpdCharge.patient_id == patient_id,
         OpdCharge.hospital_id == current_doctor.hospital_id,
@@ -2424,6 +2465,7 @@ def toggle_test_order_include(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     order = db.query(TestOrder).filter(
         TestOrder.id == order_id,
         TestOrder.hospital_id == current_doctor.hospital_id
@@ -2445,6 +2487,7 @@ def collect_test_payment(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     today_start, today_end = ist_day_bounds()
 
     voided_consultation_ids = [
@@ -2496,6 +2539,7 @@ def mark_test_order_paid(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     order = db.query(TestOrder).filter(
         TestOrder.id == order_id,
         TestOrder.hospital_id == current_doctor.hospital_id
@@ -2525,6 +2569,52 @@ def mark_test_order_paid(
     )
 
     return {"id": order.id, "status": order.status, "paid_at": order.paid_at.isoformat()}
+
+@router.post("/test-orders/{order_id}/cancel")
+def cancel_test_order(
+    order_id: int,
+    body: ReasonIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    """Cancel ONE test that has not reached the lab yet. If it was paid, a
+    completed refund record (source_type 'test') is created."""
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
+    order = db.query(TestOrder).filter(
+        TestOrder.id == order_id,
+        TestOrder.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Test order not found")
+    if order.status not in ("payment_pending", "paid"):
+        raise HTTPException(status_code=400, detail="Only tests that have not reached the lab yet can be cancelled")
+
+    refunded = 0.0
+    if order.status == "paid" and (order.price or 0) > 0:
+        _channel = order.payment_method if order.payment_method in ("cash", "card", "upi") else "cash"
+        db.add(Refund(
+            patient_id=order.patient_id, hospital_id=order.hospital_id,
+            source_type="test", source_id=order.id, amount=order.price,
+            channel=_channel, status="completed",
+            reason=f"Test cancelled: {order.test_name}. {body.reason}"[:250],
+            processed_by=current_doctor.id,
+        ))
+        refunded = order.price
+
+    order.status = "cancelled"
+    order.queued_at = None
+    db.commit()
+
+    log_action(
+        db, current_doctor,
+        action="test_order_cancelled",
+        target_type="patient",
+        target_id=order.patient_id,
+        target_label=order.test_name,
+        details=f"Refund Rs.{refunded:.2f}. Reason: {body.reason}"
+    )
+    return {"cancelled": True, "refunded": refunded}
+
 
 @router.get("/{patient_id}/test-orders")
 def get_patient_test_orders(
@@ -2662,6 +2752,8 @@ def download_prescription_staff(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    if current_doctor.role.value == "lab":
+        raise HTTPException(status_code=403, detail="Not authorized to view prescriptions")
     consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
     if not consultation:
         raise HTTPException(status_code=404, detail="Prescription not found")
@@ -2682,6 +2774,9 @@ def download_prescription_staff(
         consultation.verify_hash or ""
     )
     consultation.pdf_path = pdf_path
+    from app.utils.audit import stage_action
+    stage_action(db, current_doctor, "prescription_pdf_downloaded", "consultation", consultation.id,
+                 f"{patient.name} · {consultation.token_number or consultation.id}")
     db.commit()
 
     from fastapi.responses import FileResponse
@@ -2806,8 +2901,11 @@ def execute_merge_request(request_id: int, db: Session = Depends(get_db), curren
         raise HTTPException(status_code=400, detail="Cannot execute a merge while either patient has an active admission")
 
     # Straightforward repoints — no uniqueness constraints on patient_id in any of these.
-    for model in (Admission, AdmissionReferral, Checkin, Consultation, VisitFeedback, Invoice, MedicineOrder, OpdCharge, OpdReferral, Refund, TestOrder, InviteStatus):
+    for model in (Admission, AdmissionReferral, Checkin, Consultation, VisitFeedback, Invoice, MedicineOrder, OpdCharge, OpdReferral, Refund, TestOrder, InviteStatus, PatientAllergy, CreditDebitNote):
         db.query(model).filter(model.patient_id == duplicate_id).update({model.patient_id: primary_id}, synchronize_session=False)
+    db.query(CrossHospitalReferral).filter(CrossHospitalReferral.origin_patient_id == duplicate_id).update(
+        {CrossHospitalReferral.origin_patient_id: primary_id}, synchronize_session=False
+    )
 
     # patient_profile_links has a unique constraint on patient_id — only
     # repoint if the primary doesn't already have its own portal link;

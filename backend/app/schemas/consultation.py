@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional, List, Literal, Dict
 from app.schemas.admission import RadiologyFormFIn
@@ -53,6 +53,7 @@ class ConsultationOut(BaseModel):
         from_attributes = True
 
 class ConfirmPrescriptionPayload(BaseModel):
+    allergy_override_reason: Optional[str] = Field(default=None, max_length=300)
     recommended_test_ids: Optional[List[int]] = []
     test_priorities: Optional[Dict[int, str]] = {}
     recommended_radiology_template_ids: Optional[List[int]] = []

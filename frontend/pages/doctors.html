@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Manage Staff — MedScribe</title>
-  <link rel="stylesheet" href="../css/style.css?v=4" />
+  <link rel="stylesheet" href="../css/style.css" />
   <script src="../js/custom-select.js" defer></script>
   <style>
     @media (max-width: 700px) {
@@ -325,12 +325,12 @@
   </div>
 
   <div id="toast"></div>
-  <script src="../js/api.js?v=4"></script>
-  <script src="../js/nav-admin.js?v=1"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/nav-admin.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
-  <script src="../js/chat-widget.js?v=1"></script>
-  <script src="../js/suggestion-widget.js?v=1"></script>
+  <script src="../js/chat-widget.js"></script>
+  <script src="../js/suggestion-widget.js"></script>
   <script>
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
@@ -624,19 +624,19 @@
       const doctor = getDoctor();
       const fee = document.getElementById('d-fee').value.trim();
       const room = document.getElementById('d-room')?.value.trim() || '';
-      const params = new URLSearchParams({
+      const createBody = {
         hospital_id: doctor.hospital_id,
         name, email, phone: "+91" + phone, specialization, title,
         registration_number: reg, role, room_number: room
-      });
+      };
       if (fee && needsSpecialization && doctor.billing_enabled) {
-        params.set('consultation_fee', fee);
+        createBody.consultation_fee = Number(fee);
       }
 
       const roleLabels = { doctor: 'Doctor', sub_admin: 'Sub Admin', receptionist: 'Receptionist', nurse: 'Nurse', lab: 'Lab Staff', pharmacy: 'Pharmacist' };
 
       try {
-        const created = await api('POST', `/admin/doctors?${params.toString()}`);
+        const created = await api('POST', '/admin/doctors', createBody);
         toast(`${roleLabels[role] || 'Staff'} account created successfully.`, 'success');
         closeModal();
         loadDoctors();
@@ -758,15 +758,13 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
 
-      const params = new URLSearchParams({
-        name, email, phone: '+91' + phone, specialization, title
-      });
-      if (fee) params.append('consultation_fee', fee);
-      if (professionalFee) params.append('professional_fee_per_admission', professionalFee);
-      if (role) params.append('role', role);
+      const editBody = { name, email, phone: '+91' + phone, specialization, title };
+      if (fee) editBody.consultation_fee = Number(fee);
+      if (professionalFee) editBody.professional_fee_per_admission = Number(professionalFee);
+      if (role) editBody.role = role;
 
       try {
-        await api('PATCH', `/admin/accounts/${id}?${params.toString()}`);
+        await api('PATCH', `/admin/accounts/${id}`, editBody);
         toast('Staff updated successfully.', 'success');
         closeEditModal();
         loadDoctors();

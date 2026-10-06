@@ -190,6 +190,27 @@ def verify_password_setup_token(token: str):
         return None
     return int(payload["sub"])
 
+TOTP_PENDING_EXPIRE_MINUTES = 5
+
+def create_totp_pending_token(doctor_id: int) -> str:
+    """Issued after the Super Admin's password + captcha passed, before the 2FA code.
+    Has a 'type' claim, so get_current_doctor refuses it as a login."""
+    now = datetime.utcnow()
+    return jwt.encode(
+        {"type": "totp_pending", "sub": str(doctor_id), "iat": now,
+         "exp": now + timedelta(minutes=TOTP_PENDING_EXPIRE_MINUTES)},
+        settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
+
+def verify_totp_pending_token(token: str):
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        return None
+    if payload.get("type") != "totp_pending" or not payload.get("sub"):
+        return None
+    return int(payload["sub"])
+
 def decode_access_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -244,5 +265,9 @@ def get_current_doctor(
     if doctor.role.value != "super_admin":
         hospital = db.query(Hospital).filter(Hospital.id == doctor.hospital_id).first()
         if not hospital or not hospital.is_active:
-            raise credentials_exception
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="This hospital's account is deactivated. Please contact MedScribe support.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     return doctor

@@ -19,5 +19,10 @@ class HospitalLead(Base):
     hospital_name = Column(String, nullable=False)
     location = Column(String, nullable=True)
     note = Column(Text, nullable=True)
-    status = Column(String, default="new", nullable=False)  # new | contacted
+    status = Column(String, default="new", nullable=False)  # new | contacted | converted | closed
+    follow_up_notes = Column(Text, nullable=True)
+    owner = Column(String, nullable=True)
+    next_follow_up_at = Column(DateTime, nullable=True)
+    contacted_at = Column(DateTime, nullable=True)
+    converted_hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)
     created_at = Column(DateTime, default=now_ist_naive, nullable=False)

@@ -395,6 +395,13 @@
         </svg>
         Saved Address
       </button>
+      <button class="profile-menu-item" onclick="openChangePassword()">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        Change Password
+      </button>
       <button class="profile-menu-item danger" onclick="confirmDeactivateAccount()">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round"
@@ -586,10 +593,10 @@
     </div>
   </div>
 
-  <script src="../js/suggestion-widget.js?v=1"></script>
+  <script src="../js/suggestion-widget.js"></script>
   <script src="../js/api.js"></script>
-  <script src="../js/tutorial.js?v=2"></script>
-  <script src="../js/patient-appointment-demo.js?v=2"></script> 
+  <script src="../js/tutorial.js"></script>
+  <script src="../js/patient-appointment-demo.js"></script> 
   <script>
     if (!requireAuth()) { }
     if (getDoctor()?.role !== 'patient') redirectByRole(getDoctor()?.role);
@@ -750,7 +757,7 @@
           if (!hospitals.length) { area.innerHTML = `<p style="color:var(--slate-light)">No hospitals found in ${sanitize(state.city)}.</p>`; return; }
           searchableFullWidthList(
             area, hospitals,
-            (h) => `<div class="select-row-card" onclick='pickHospital(${h.id}, ${JSON.stringify(h.name)})'>
+            (h) => `<div class="select-row-card" onclick='pickHospital(${h.id}, ${jsArg(h.name)})'>
                       <div><div class="src-name">${sanitize(h.name)}</div>${h.address ? `<div class="src-sub">${sanitize(h.address)}</div>` : ''}</div>
                     </div>`,
             (h, q) => h.name.toLowerCase().includes(q),
@@ -791,7 +798,7 @@
               (d.name.toLowerCase().includes(q) || (d.specialization || '').toLowerCase().includes(q))
             );
             document.getElementById("doc-list").innerHTML = filtered.length ? filtered.map(d => `
-              <div class="select-row-card" onclick='pickDoctor(${d.id}, ${JSON.stringify(d.name)}, ${d.consultation_fee || 0})'>
+              <div class="select-row-card" onclick='pickDoctor(${d.id}, ${jsArg(d.name)}, ${d.consultation_fee || 0})'>
                 <div>
                   <div class="src-name">${sanitize(d.name)}</div>
                   <div class="src-sub">${sanitize(d.specialization || 'General')}${d.room_number ? ' · Room ' + sanitize(d.room_number) : ''}</div>
@@ -1015,7 +1022,7 @@
             <div class="slot-period-title">${label}</div>
             <div class="slot-grid">
               ${grouped[key].map(s => `
-                <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick='pickSlot(${s.id}, ${JSON.stringify(s.time)})'`}>
+                <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick='pickSlot(${s.id}, ${jsArg(s.time)})'`}>
                   <span class="dot"></span>${s.time}
                 </div>`).join('')}
             </div>` : '').join('');
@@ -1251,6 +1258,9 @@
               <div style="font-weight:500">${sanitize(a.patient_name || 'Patient')}</div>
               <div style="font-size:12.5px;color:var(--slate);margin-top:2px">${sanitize(a.hospital_name || 'Hospital')}${a.doctor_name ? ' · ' + sanitize(a.doctor_name) : ''}</div>
               <div style="font-size:12px;color:var(--slate-light);margin-top:2px">${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
+              ${a.status === 'cancelled' ? (a.cancelled_by === 'patient'
+                ? `<div style="font-size:12.5px;color:var(--slate);margin-top:6px">You cancelled this appointment.</div>`
+                : `<div style="font-size:12.5px;color:var(--danger);margin-top:6px;font-weight:600">Rejected / cancelled by hospital.<span style="font-weight:400;color:var(--slate)"> For more information, contact the hospital${a.hospital_phone ? ': <a href="tel:' + sanitize(a.hospital_phone) + '">' + sanitize(a.hospital_phone) + '</a>' : '.'}</span></div>`) : ''}
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span class="badge ${statusBadge[a.status] || 'badge-grey'}">${a.status}</span>
@@ -1262,9 +1272,24 @@
               ${(a.no_show_reschedule_deadline && new Date(a.no_show_reschedule_deadline) > new Date()) ? `<button class="btn btn-outline btn-sm" onclick="openRescheduleModal(${a.id})">Reschedule</button>` : ''}
               ${(a.status === 'confirmed' && !a.no_show_detected_at && new Date(a.requested_time).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) === todayStr) ? `<button class="btn btn-outline btn-sm" onclick="openRescheduleModal(${a.id})">Running late today?</button>` : ''}
               ${(a.status === 'booked' || a.status === 'confirmed') ? `<button class="btn btn-outline btn-sm" onclick="cancelAppt(${a.id})">Cancel</button>` : ''}
+              <button class="btn btn-outline btn-sm" onclick="reportIssue(${a.id}, ${a.hospital_id}, '${a.no_show_detected_at ? 'checkin' : 'other'}')">Report an issue</button>
             </div>
           </div>`).join('');
       } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+    }
+
+    async function reportIssue(appointmentId, hospitalId, context) {
+      const msg = await promptModal("Tell us what went wrong (for example: you were marked as a no-show but you were there):");
+      if (msg === null) return;
+      try {
+        await api("POST", "/portal/appointments/report-issue", {
+          context,
+          hospital_id: hospitalId,
+          appointment_id: appointmentId,
+          message: (msg || "").trim().slice(0, 500) || null
+        });
+        toast("Reported. The hospital team has been alerted.", "success");
+      } catch (e) { toast(e.message, "error"); }
     }
 
     async function cancelAppt(id) {

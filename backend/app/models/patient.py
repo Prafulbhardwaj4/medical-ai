@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Date
 from sqlalchemy.orm import relationship
 from app.database import Base
 from app.utils.timezone import now_ist_naive
@@ -13,6 +13,7 @@ class Patient(Base):
     name = Column(String, nullable=False)
     phone = Column(String, nullable=False)
     age = Column(Integer, nullable=False)
+    date_of_birth = Column(Date, nullable=True)  # optional; when set, age is derived from it (pediatric dosing, age bands)
     blood_group = Column(String, nullable=True)
     gender = Column(String, nullable=False)
     address = Column(String, nullable=True)

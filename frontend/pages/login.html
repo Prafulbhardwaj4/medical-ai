@@ -83,7 +83,7 @@
           </button>
 
           <div style="text-align:right;margin-top:14px">
-            <span onclick="openForgotPasswordModal()" style="font-size:13px;color:var(--teal, #14b8a6);cursor:pointer;font-weight:500">Forgot password?</span>
+            <span style="font-size:13px;color:var(--slate-light, #94a3b8)">Forgot password? Ask your hospital admin to reset it.</span>
           </div>
 
           <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--slate-light)">
@@ -120,6 +120,28 @@
           <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-staff-newpw" onclick="doStaffSetPassword()">
             Set Password &amp; Sign In
           </button>
+        </div>
+
+        <!-- SUPER ADMIN TWO-FACTOR -->
+        <div id="form-totp" style="display:none">
+          <div id="totp-setup-box" style="display:none;text-align:center;margin-bottom:16px">
+            <p style="color:var(--slate);font-size:13px">Set up two-factor sign-in. Scan this QR code with an authenticator app (Google Authenticator, Authy, Microsoft Authenticator), then enter the 6-digit code it shows.</p>
+            <img id="totp-qr" alt="QR code" style="width:200px;height:200px;margin:8px auto;display:block" />
+            <p style="font-size:12px;color:var(--slate-light);word-break:break-all">Can't scan? Enter this key manually: <strong id="totp-secret"></strong></p>
+          </div>
+          <p id="totp-login-hint" style="color:var(--slate);font-size:13px;text-align:center;margin-bottom:12px">Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
+          <div class="form-group">
+            <label class="form-label">Authentication code</label>
+            <input class="form-control" id="totp-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="123456" />
+          </div>
+          <div class="err-msg" id="totp-err"></div>
+          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-totp" onclick="doTotpSubmit()">Verify &amp; Sign In</button>
+        </div>
+
+        <div id="form-totp-backup" style="display:none">
+          <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Save these backup codes somewhere safe now. Each works once if you lose your phone. They will not be shown again.</p>
+          <pre id="totp-backup-list" style="background:var(--smoke);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:14px;line-height:1.7;text-align:center"></pre>
+          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" onclick="finishTotpSetup()">I have saved these codes</button>
         </div>
 
         <!-- SET PASSWORD / REGISTER FORM (patients, first login only) -->
@@ -160,12 +182,16 @@
   <script>
     // Redirect if already logged in
     if (getToken()) redirectByRole(getDoctor()?.role);
+    else { try { if (localStorage.getItem("ms_portal_token")) redirectByRole("patient"); } catch (e) { } }
 
     let pendingPatientPhone = null;
     let currentCaptchaToken = null;
     let pendingStaffEmail = null;
     let pendingStaffOldPassword = null;
     let pendingSetupToken = null;
+    let pendingTotpToken = null;
+    let totpMode = null;
+    let totpSession = null;
 
     async function loadCaptcha() {
       const box = document.getElementById("captcha-image-box");
@@ -250,6 +276,10 @@
           const json = await res.json();
           if (!res.ok) {
             throw new Error(json.detail || "Login failed");
+          }
+          if (json.status === "totp_required" || json.status === "totp_setup_required") {
+            await showTotpStep(json.status, json.totp_token);
+            return;
           }
           if (json.status === "needs_password_change") {
             pendingStaffEmail = identifier;
@@ -376,9 +406,87 @@
       }
     }
 
+    async function showTotpStep(status, token) {
+      pendingTotpToken = token;
+      totpMode = status === "totp_setup_required" ? "setup" : "login";
+      document.getElementById("form-login").style.display = "none";
+      document.getElementById("form-totp").style.display = "block";
+      document.getElementById("totp-err").textContent = "";
+      document.getElementById("totp-code").value = "";
+      const box = document.getElementById("totp-setup-box");
+      const hint = document.getElementById("totp-login-hint");
+      if (totpMode === "setup") {
+        box.style.display = "block";
+        hint.style.display = "none";
+        const res = await fetch(`${BASE}/auth/totp/setup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ totp_token: token })
+        });
+        const json = await res.json();
+        if (!res.ok) { document.getElementById("totp-err").textContent = json.detail || "Could not start two-factor setup."; return; }
+        document.getElementById("totp-qr").src = json.qr_data_uri;
+        document.getElementById("totp-secret").textContent = json.secret;
+      } else {
+        box.style.display = "none";
+        hint.style.display = "block";
+      }
+      document.getElementById("totp-code").focus();
+    }
+
+    async function doTotpSubmit() {
+      const err = document.getElementById("totp-err");
+      const btn = document.getElementById("btn-totp");
+      err.textContent = "";
+      const code = document.getElementById("totp-code").value.trim();
+      if (!code) { err.textContent = "Enter the code from your authenticator app."; return; }
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const res = await fetch(`${BASE}${totpMode === "setup" ? "/auth/totp/confirm" : "/auth/login/totp"}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ totp_token: pendingTotpToken, code })
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.detail || "Verification failed");
+        if (json.backup_codes && json.backup_codes.length) {
+          totpSession = json;
+          document.getElementById("totp-backup-list").textContent = json.backup_codes.join("\n");
+          document.getElementById("form-totp").style.display = "none";
+          document.getElementById("form-totp-backup").style.display = "block";
+          return;
+        }
+        proceedAfterTotp(json);
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Verify & Sign In";
+      }
+    }
+
+    function proceedAfterTotp(json) {
+      if (json.status === "needs_password_change") {
+        pendingStaffEmail = document.getElementById("login-id").value.trim();
+        pendingStaffOldPassword = document.getElementById("login-password").value;
+        pendingSetupToken = json.setup_token;
+        document.getElementById("form-totp").style.display = "none";
+        document.getElementById("form-totp-backup").style.display = "none";
+        document.getElementById("form-staff-newpw").style.display = "block";
+        return;
+      }
+      saveSession(json.access_token, json.doctor);
+      redirectByRole(json.doctor.role);
+    }
+
+    function finishTotpSetup() { proceedAfterTotp(totpSession); }
+
     document.addEventListener("keydown", e => {
       if (e.key !== "Enter") return;
       if (document.getElementById("form-register").style.display !== "none") doRegister();
+      else if (document.getElementById("form-totp-backup").style.display !== "none") finishTotpSetup();
+      else if (document.getElementById("form-totp").style.display !== "none") doTotpSubmit();
       else if (document.getElementById("form-staff-newpw").style.display !== "none") doStaffSetPassword();
       else doLogin();
     });

@@ -95,15 +95,53 @@ def generate_accession_number(db: Session, hospital_id: int, hospital_code: str)
     today = ist_today()
     prefix = hospital_code.replace("-", "")[:4].upper()
     date_part = today.strftime("%d%m%y")
-    while True:
-        count = db.query(TestOrder).filter(
-            TestOrder.hospital_id == hospital_id,
-            TestOrder.accessioned_at.isnot(None),
-            TestOrder.accessioned_at >= datetime.combine(today, datetime.min.time()),
-        ).count() + 1
+    count = db.query(TestOrder).filter(
+        TestOrder.hospital_id == hospital_id,
+        TestOrder.accessioned_at.isnot(None),
+        TestOrder.accessioned_at >= datetime.combine(today, datetime.min.time()),
+    ).count() + 1
+    # Uniqueness is checked platform-wide (two hospitals can share a 4-letter prefix),
+    # so on a collision move the counter forward instead of retrying the same number.
+    for _ in range(500):
         number = f"ULR-{prefix}-{date_part}-{count:04d}"
         if not db.query(TestOrder).filter(TestOrder.accession_number == number).first():
             return number
+        count += 1
+    raise HTTPException(status_code=500, detail="Could not generate a sample number. Please try again.")
+
+
+def _parse_lab_value(raw):
+    """'12.5' -> ('', 12.5); '<0.5' -> ('<', 0.5); '>1,000' -> ('>', 1000.0); text -> None."""
+    import re
+    m = re.fullmatch(r"\s*(<=|>=|<|>)?\s*(-?\d[\d,]*\.?\d*)\s*", str(raw if raw is not None else ""))
+    if not m:
+        return None
+    try:
+        return (m.group(1) or "", float(m.group(2).replace(",", "")))
+    except ValueError:
+        return None
+
+
+def _critical_sides(cmp_, val, lo, hi):
+    """Which critical limits a comparator-style value definitely crosses."""
+    out = []
+    if lo is not None:
+        if (cmp_ == "" and val < lo) or (cmp_ == "<" and val <= lo) or (cmp_ == "<=" and val < lo):
+            out.append("low")
+    if hi is not None:
+        if (cmp_ == "" and val > hi) or (cmp_ == ">" and val >= hi) or (cmp_ == ">=" and val > hi):
+            out.append("high")
+    return out
+
+
+from app.utils.ref_ranges import pick_range_text, row_fields, flag_for_row  # noqa: E402
+
+
+def _pick_range(gender, male_r, female_r):
+    """Reference range for the patient's sex. If sex isn't male/female, only show a
+    range when both sexes share it; otherwise say it's unavailable (no silent female default).
+    Single implementation lives in utils/ref_ranges.py so lab, portal and PDFs agree."""
+    return pick_range_text(gender, male_r, female_r)
 
 
 def _check_critical_breach(db: Session, order: TestOrder, results: dict) -> list:
@@ -113,7 +151,10 @@ def _check_critical_breach(db: Session, order: TestOrder, results: dict) -> list
     the single 'value' key. Non-numeric entries are silently skipped rather
     than erroring — free-text results (e.g. 'Negative') just can't be
     threshold-checked."""
-    test = db.query(TestCatalogItem).filter(TestCatalogItem.id == order.test_id).first() if order.test_id else None
+    test = db.query(TestCatalogItem).filter(
+        TestCatalogItem.id == order.test_id,
+        TestCatalogItem.hospital_id == order.hospital_id
+    ).first() if order.test_id else None
     if not test:
         return []
 
@@ -128,26 +169,26 @@ def _check_critical_breach(db: Session, order: TestOrder, results: dict) -> list
             p = param_by_name.get(name)
             if not p or (p.critical_low is None and p.critical_high is None):
                 continue
-            try:
-                val = float(raw_val)
-            except (TypeError, ValueError):
+            parsed = _parse_lab_value(raw_val)
+            if parsed is None:
                 continue
-            if p.critical_low is not None and val < p.critical_low:
-                breaches.append(f"{name} {val} (critical low — threshold <{p.critical_low})")
-            if p.critical_high is not None and val > p.critical_high:
-                breaches.append(f"{name} {val} (critical high — threshold >{p.critical_high})")
+            cmp_, val = parsed
+            for side in _critical_sides(cmp_, val, p.critical_low, p.critical_high):
+                if side == "low":
+                    breaches.append(f"{name} {cmp_}{val} (critical low — threshold <{p.critical_low})")
+                else:
+                    breaches.append(f"{name} {cmp_}{val} (critical high — threshold >{p.critical_high})")
     else:
         if test.critical_low is not None or test.critical_high is not None:
             raw_val = (results or {}).get("value")
-            try:
-                val = float(raw_val)
-            except (TypeError, ValueError):
-                val = None
-            if val is not None:
-                if test.critical_low is not None and val < test.critical_low:
-                    breaches.append(f"{test.name} {val} (critical low — threshold <{test.critical_low})")
-                if test.critical_high is not None and val > test.critical_high:
-                    breaches.append(f"{test.name} {val} (critical high — threshold >{test.critical_high})")
+            parsed = _parse_lab_value(raw_val)
+            if parsed is not None:
+                cmp_, val = parsed
+                for side in _critical_sides(cmp_, val, test.critical_low, test.critical_high):
+                    if side == "low":
+                        breaches.append(f"{test.name} {cmp_}{val} (critical low — threshold <{test.critical_low})")
+                    else:
+                        breaches.append(f"{test.name} {cmp_}{val} (critical high — threshold >{test.critical_high})")
 
     return breaches
 
@@ -215,11 +256,13 @@ class VerifyReleaseIn(BaseModel):
 
 class ResultIn(BaseModel):
     results: dict
+    reason: Optional[str] = None  # required when correcting an already-released report
+    is_idsp_notifiable: Optional[bool] = None  # set from the result-entry screen for notifiable-disease tests
 
 
 def _escalate_unacknowledged_critical_results(db: Session, hospital_id: int) -> None:
-    """No background scheduler in this codebase — same lazy-sweep pattern
-    used for online-booking review deadlines. First escalates to
+    """Runs from scheduler.lab_escalation_loop every 2 minutes (and still on queue load).
+    First escalates to
     nurse/ward coverage if the ordering doctor hasn't acknowledged within
     LAB_CRITICAL_ACK_MINUTES, then to admin directly if still unacknowledged
     LAB_CRITICAL_ESCALATION_GRACE_MINUTES after that."""
@@ -577,9 +620,13 @@ def get_admission_lab_queue(
 
     today_start, today_end = ist_day_bounds()
 
-    orders = db.query(TestOrder).filter(
+    # Uncollected tests of a discharged patient never show (discharge also
+    # cancels them). Samples already in the lab stay so results can be finished.
+    from app.models.admission import Admission as _Adm
+    orders = db.query(TestOrder).join(_Adm, TestOrder.admission_id == _Adm.id).filter(
         TestOrder.hospital_id == current_doctor.hospital_id,
         TestOrder.admission_id.isnot(None),
+        or_(_Adm.status == "admitted", TestOrder.status != "paid"),
         or_(
             TestOrder.status.in_(["paid", "sample_collected", "processing", "result_entered"]),
             and_(
@@ -647,6 +694,8 @@ def get_lab_test_detail(
             "reference_range_female": p.reference_range_female or "",
             "critical_low": p.critical_low,
             "critical_high": p.critical_high,
+            "ref_low_male": p.ref_low_male, "ref_high_male": p.ref_high_male,
+            "ref_low_female": p.ref_low_female, "ref_high_female": p.ref_high_female,
         } for p in rows]
 
     return {
@@ -658,6 +707,8 @@ def get_lab_test_detail(
         "reference_range_female": test.reference_range_female or "",
         "critical_low": test.critical_low,
         "critical_high": test.critical_high,
+        "ref_low_male": test.ref_low_male, "ref_high_male": test.ref_high_male,
+        "ref_low_female": test.ref_low_female, "ref_high_female": test.ref_high_female,
         "fasting_required": test.fasting_required,
         "required_tube": test.required_tube,
         "notifiable_disease_id": test.notifiable_disease_id,
@@ -925,6 +976,17 @@ def update_order_status(
         raise HTTPException(status_code=404, detail="Test order not found")
     _require_hiv_access(db, order, current_doctor)
 
+    _ALLOWED_NEXT = {
+        "paid": {"sample_collected"},
+        "sample_collected": {"processing", "result_entered"},
+        "processing": {"result_entered"},
+    }
+    if status not in _ALLOWED_NEXT.get(order.status, set()):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Can't move this test from '{order.status}' to '{status}'. Refresh the queue to see its current state."
+        )
+
     if status == "result_entered" and not order.result_data:
         raise HTTPException(status_code=400, detail="Save the test results before marking this order's entry complete")
 
@@ -941,6 +1003,11 @@ def update_order_status(
             order.fasting_confirmed = payload.fasting_confirmed
         if payload.drawn_from_iv_line is not None:
             order.drawn_from_iv_line = payload.drawn_from_iv_line
+        if order.admission_id is not None:
+            from app.models.admission import Admission as _Adm
+            _adm = db.query(_Adm).filter(_Adm.id == order.admission_id).first()
+            if not _adm or _adm.status != "admitted":
+                raise HTTPException(status_code=400, detail="This patient has been discharged — the sample can no longer be collected or billed")
         if order.admission_id is not None and order.price:
             # Running-bill charge happens here, at sample collection —
             # not at order time (see order_admission_test in admissions.py).
@@ -980,6 +1047,14 @@ def update_order_status(
         release_hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
         order.report_reference = next_report_number(db, release_hospital, "lab")
         order.verify_hash = generate_verify_hash(order.id, order.hospital_id, kind="lab_report")
+
+        # Tell the ordering doctor the report is ready (never for HIV tests: names stay confidential).
+        if order.consultation_id and not _is_hiv_order(db, order):
+            _cons = db.query(Consultation).filter(Consultation.id == order.consultation_id).first()
+            _pat = db.query(Patient).filter(Patient.id == order.patient_id).first()
+            if _cons and _pat:
+                from app.utils.notify import notify_report_released
+                notify_report_released(db, order.hospital_id, order.id, _pat.name, _cons.doctor_id, order.test_name)
 
     db.commit()
 
@@ -1069,6 +1144,25 @@ def get_order_current_result(
     }
 
 
+def _build_result_snapshot(db: Session, order: TestOrder, patient) -> str:
+    """Freeze parameter names, units and the patient's reference range as of now."""
+    is_male = (getattr(patient, "gender", "") or "").lower() == "male"
+
+    def _rng(o):
+        return _pick_range(getattr(patient, "gender", ""), o.reference_range_male, o.reference_range_female)
+
+    item = db.query(TestCatalogItem).filter(TestCatalogItem.id == order.test_id).first() if order.test_id else None
+    if item and item.is_panel:
+        params = db.query(TestCatalogParameter).filter(
+            TestCatalogParameter.test_catalog_item_id == item.id,
+            TestCatalogParameter.is_active == True  # noqa: E712
+        ).order_by(TestCatalogParameter.display_order).all()
+        snap = {"panel": True, "rows": [{"name": p.name, "unit": p.unit or "", "range": _rng(p), **row_fields(getattr(patient, "gender", ""), p)} for p in params]}
+    else:
+        snap = {"panel": False, "rows": [{"name": order.test_name, "unit": (item.unit if item else "") or "", "range": _rng(item) if item else "", **(row_fields(getattr(patient, "gender", ""), item) if item else {})}]}
+    return json.dumps(snap)
+
+
 @router.post("/orders/{order_id}/result")
 def save_order_result(
     order_id: int,
@@ -1087,6 +1181,11 @@ def save_order_result(
         raise HTTPException(status_code=404, detail="Test order not found")
     _require_hiv_access(db, order, current_doctor)
 
+    if order.status not in ("sample_collected", "processing", "result_entered", "verified_released"):
+        raise HTTPException(status_code=400, detail=f"Results can't be entered while the test is '{order.status}'. Collect the sample first.")
+    if not payload.results or not any(str(v).strip() for v in payload.results.values()):
+        raise HTTPException(status_code=400, detail="Enter at least one result value before saving")
+
     old_results = {}
     if order.result_data:
         try:
@@ -1096,14 +1195,26 @@ def save_order_result(
 
     was_already_completed = order.status == "verified_released"
     changed_fields = [k for k in payload.results if old_results.get(k) != payload.results.get(k)]
+    _amend_reason = (payload.reason or "").strip()
+    if was_already_completed and changed_fields and len(_amend_reason) < 3:
+        raise HTTPException(status_code=400, detail="Please give a reason for correcting a released report")
 
     order.result_data = json.dumps(payload.results)
+    if was_already_completed and changed_fields:
+        order.amended_at = now_ist_naive()
+        order.amended_by = current_doctor.id
+        order.amendment_reason = _amend_reason[:300]
+    if not order.result_snapshot:
+        _pt = db.query(Patient).filter(Patient.id == order.patient_id).first()
+        order.result_snapshot = _build_result_snapshot(db, order, _pt)
 
     # Critical-value check (Phase 1) — recomputed on every save so a
     # correction that clears a breach un-flags it, and a newly-entered
     # breach on an edit still gets caught.
     was_critical = order.is_critical
     breaches = _check_critical_breach(db, order, payload.results)
+    if payload.is_idsp_notifiable is not None:
+        order.is_idsp_notifiable = bool(payload.is_idsp_notifiable)
     order.is_critical = bool(breaches)
     order.critical_note = "; ".join(breaches) if breaches else None
     if breaches and not was_critical:
@@ -1392,22 +1503,24 @@ def get_patient_reports(
                 # Fall back to whichever gender's range is actually filled
                 # in — a range entered under just one gender shouldn't read
                 # as "no range set" for a patient of the other gender.
-                gender_range = (p.reference_range_male if is_male else p.reference_range_female) or ""
-                fallback_range = p.reference_range_female if is_male else p.reference_range_male
+                gender_range = _pick_range(patient.gender, p.reference_range_male, p.reference_range_female)
+                fallback_range = ""
                 rows.append({
                     "name": p.name,
                     "value": raw_results.get(p.name, ""),
                     "unit": p.unit or "",
                     "range": gender_range or fallback_range or "",
+                    "flag": flag_for_row(raw_results.get(p.name, ""), row_fields(patient.gender, p)),
                 })
         elif raw_results:
-            gender_range = (catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) if catalog_item else ""
-            fallback_range = (catalog_item.reference_range_female if is_male else catalog_item.reference_range_male) if catalog_item else ""
+            gender_range = _pick_range(patient.gender, catalog_item.reference_range_male, catalog_item.reference_range_female) if catalog_item else ""
+            fallback_range = ""
             rows.append({
                 "name": o.test_name,
                 "value": raw_results.get("value", ""),
                 "unit": (catalog_item.unit if catalog_item else "") or "",
                 "range": gender_range or fallback_range or "",
+                "flag": flag_for_row(raw_results.get("value", ""), row_fields(patient.gender, catalog_item)) if catalog_item else "",
             })
 
         v["tests"].append({
@@ -1544,7 +1657,25 @@ def get_combined_test_report(
         except Exception:
             result_data = {}
 
-        if catalog_item and catalog_item.is_panel:
+        _snap = None
+        if order.result_snapshot:
+            try:
+                _snap = json.loads(order.result_snapshot)
+            except Exception:
+                _snap = None
+
+        if _snap:
+            if _snap.get("panel"):
+                rows = [{"name": r["name"], "unit": r.get("unit", ""), "range": r.get("range", ""),
+                         "flag": flag_for_row(result_data.get(r["name"], ""), r),
+                         "value": result_data.get(r["name"], "")}
+                        for r in _snap["rows"] if result_data.get(r["name"])]
+            else:
+                _r0 = _snap["rows"][0]
+                rows = [{"name": _r0["name"], "unit": _r0.get("unit", ""), "range": _r0.get("range", ""),
+                         "flag": flag_for_row(result_data.get("value", ""), _r0),
+                         "value": result_data.get("value", "")}]
+        elif catalog_item and catalog_item.is_panel:
             params = db.query(TestCatalogParameter).filter(
                 TestCatalogParameter.test_catalog_item_id == catalog_item.id,
                 TestCatalogParameter.is_active == True
@@ -1553,19 +1684,21 @@ def get_combined_test_report(
             rows = [{
                 "name": p.name,
                 "unit": p.unit or "",
-                "range": ((p.reference_range_male if is_male else p.reference_range_female) or p.reference_range_male or p.reference_range_female) or "",
+                "range": _pick_range(patient.gender, p.reference_range_male, p.reference_range_female),
+                "flag": flag_for_row(result_data.get(p.name, ""), row_fields(patient.gender, p)),
                 "value": result_data.get(p.name, "")
             } for p in params if result_data.get(p.name)]  # untested subtests are excluded from the final report entirely
         else:
             range_str = ""
             unit = ""
             if catalog_item:
-                range_str = ((catalog_item.reference_range_male if is_male else catalog_item.reference_range_female) or catalog_item.reference_range_male or catalog_item.reference_range_female) or ""
+                range_str = _pick_range(patient.gender, catalog_item.reference_range_male, catalog_item.reference_range_female)
                 unit = catalog_item.unit or ""
             rows = [{
                 "name": order.test_name,
                 "unit": unit,
                 "range": range_str,
+                "flag": flag_for_row(result_data.get("value", ""), row_fields(patient.gender, catalog_item)) if catalog_item else "",
                 "value": result_data.get("value", "")
             }]
 
@@ -1573,6 +1706,8 @@ def get_combined_test_report(
             "test_name": order.test_name,
             "rows": rows,
             "notes": result_data.get("notes", ""),
+            "amended_at": order.amended_at,
+            "amendment_reason": order.amendment_reason,
             "fasting_confirmed": order.fasting_confirmed,
             "drawn_from_iv_line": order.drawn_from_iv_line,
             "sample_condition_caveat": order.sample_condition_caveat,
@@ -1605,7 +1740,7 @@ def get_combined_test_report(
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
 
 
-@router.get("/verify/{order_id}")
+@router.get("/verify/{order_id:int}")
 @limiter.limit("10/minute")
 def verify_lab_report(request: Request, order_id: int, hash: str, db: Session = Depends(get_db)):
     """Public, unauthenticated — item 1, same pattern as billing.py's

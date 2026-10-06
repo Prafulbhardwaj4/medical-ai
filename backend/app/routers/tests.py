@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
+from app.utils.rate_limit import limiter
+
+MAX_TEST_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional
@@ -69,6 +72,8 @@ def serialize_parameter(p: TestCatalogParameter):
         "display_order": p.display_order,
         "critical_low": p.critical_low,
         "critical_high": p.critical_high,
+        "ref_low_male": p.ref_low_male, "ref_high_male": p.ref_high_male,
+        "ref_low_female": p.ref_low_female, "ref_high_female": p.ref_high_female,
     }
 
 
@@ -96,6 +101,8 @@ def serialize(t: TestCatalogItem, db: Session = None):
         "aliases": t.aliases or "",
         "critical_low": t.critical_low,
         "critical_high": t.critical_high,
+        "ref_low_male": t.ref_low_male, "ref_high_male": t.ref_high_male,
+        "ref_low_female": t.ref_low_female, "ref_high_female": t.ref_high_female,
         "fasting_required": t.fasting_required,
         "required_tube": t.required_tube or "",
         "is_irreplaceable_sample": t.is_irreplaceable_sample,
@@ -160,15 +167,17 @@ def deactivate_notifiable_disease(
 def list_tests(
     category: Optional[str] = None,
     search: Optional[str] = None,
+    include_inactive: bool = False,
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_admin(current_doctor)
 
     query = db.query(TestCatalogItem).filter(
-        TestCatalogItem.hospital_id == current_doctor.hospital_id,
-        TestCatalogItem.is_active == True
+        TestCatalogItem.hospital_id == current_doctor.hospital_id
     )
+    if not include_inactive:
+        query = query.filter(TestCatalogItem.is_active == True)
 
     if category:
         query = query.filter(TestCatalogItem.category == category)
@@ -186,9 +195,7 @@ def create_test(
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_admin(current_doctor)
-
-    if payload.price is None:
-        raise HTTPException(status_code=400, detail="Price is required")
+    _check_test_payload(payload, db, current_doctor.hospital_id)
 
     is_panel = bool(payload.is_panel)
     if is_panel and (not payload.parameters or len(payload.parameters) == 0):
@@ -267,8 +274,7 @@ def update_test(
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    if payload.price is None:
-        raise HTTPException(status_code=400, detail="Price is required")
+    _check_test_payload(payload, db, current_doctor.hospital_id, exclude_id=test.id)
 
     is_panel = bool(payload.is_panel)
     if is_panel and (not payload.parameters or len(payload.parameters) == 0):
@@ -331,6 +337,74 @@ def update_test(
     return serialize(test, db)
 
 
+def _check_test_payload(payload, db, hospital_id, exclude_id=None):
+    from sqlalchemy import func
+    name = (payload.test_name or "").strip()
+    if not name or len(name) > 150:
+        raise HTTPException(status_code=400, detail="Test name is required (150 characters max)")
+    if payload.price is None:
+        raise HTTPException(status_code=400, detail="Price is required")
+    if payload.price < 0 or payload.price > 1_000_000:
+        raise HTTPException(status_code=400, detail="Price must be between 0 and 10,00,000")
+    if payload.critical_low is not None and payload.critical_high is not None \
+            and payload.critical_low >= payload.critical_high:
+        raise HTTPException(status_code=400, detail="Critical low must be less than critical high")
+    q = db.query(TestCatalogItem.id).filter(
+        TestCatalogItem.hospital_id == hospital_id,
+        TestCatalogItem.is_active == True,
+        func.lower(TestCatalogItem.name) == name.lower(),
+    )
+    if exclude_id:
+        q = q.filter(TestCatalogItem.id != exclude_id)
+    if q.first():
+        raise HTTPException(status_code=409, detail=f"A test named '{name}' already exists")
+    seen = set()
+    for p in (payload.parameters or []):
+        pn = (p.name or "").strip().lower()
+        if not pn:
+            continue
+        if pn in seen:
+            raise HTTPException(status_code=400, detail=f"Parameter '{p.name.strip()}' is listed twice in this panel")
+        seen.add(pn)
+        if p.critical_low is not None and p.critical_high is not None and p.critical_low >= p.critical_high:
+            raise HTTPException(status_code=400, detail=f"Parameter '{p.name.strip()}': critical low must be less than critical high")
+
+
+@router.patch("/{test_id}/reactivate")
+def reactivate_test(
+    test_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    from sqlalchemy import func
+    require_admin(current_doctor)
+    test = db.query(TestCatalogItem).filter(
+        TestCatalogItem.id == test_id,
+        TestCatalogItem.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    if test.is_active:
+        return {"id": test.id, "is_active": True}
+    if db.query(TestCatalogItem.id).filter(
+        TestCatalogItem.hospital_id == current_doctor.hospital_id,
+        TestCatalogItem.is_active == True,
+        func.lower(TestCatalogItem.name) == (test.name or "").lower(),
+    ).first():
+        raise HTTPException(status_code=409, detail="Another active test already has this name")
+    test.is_active = True
+    db.commit()
+    log_action(
+        db, current_doctor,
+        action="test_reactivated",
+        target_type="test_catalog_item",
+        target_id=test.id,
+        target_label=test.name,
+        hospital_id=current_doctor.hospital_id
+    )
+    return {"id": test.id, "is_active": True}
+
+
 @router.delete("/{test_id}")
 def deactivate_test(
     test_id: int,
@@ -384,14 +458,20 @@ def _extract_text_from_excel(content: bytes) -> str:
 
 
 @router.post("/upload")
+@limiter.limit("10/hour")
 async def upload_tests(
+    request: Request,
     file: UploadFile = File(...),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
     require_admin(current_doctor)
 
     filename = (file.filename or "").lower()
-    content = await file.read()
+    if filename.endswith(".xls"):
+        raise HTTPException(status_code=400, detail="Old .xls files are not supported. Open it in Excel, choose Save As .xlsx, and upload that.")
+    content = await file.read(MAX_TEST_UPLOAD_BYTES + 1)
+    if len(content) > MAX_TEST_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="File is too large (max 10 MB)")
 
     if filename.endswith(".pdf"):
         raw_text = _extract_text_from_pdf(content)
@@ -406,7 +486,9 @@ async def upload_tests(
     try:
         extracted = await extract_tests(raw_text)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Extraction failed: {str(e)}")
+        import logging as _lg
+        _lg.getLogger(__name__).exception("Test extraction failed")
+        raise HTTPException(status_code=502, detail="Could not read this file. Please try again or use a different file.")
 
     return {"tests": extracted}
 
@@ -420,11 +502,24 @@ def bulk_confirm_tests(
     require_admin(current_doctor)
 
     created = []
+    _taken_names = {
+        (n or "").lower() for (n,) in db.query(TestCatalogItem.name).filter(
+            TestCatalogItem.hospital_id == current_doctor.hospital_id,
+            TestCatalogItem.is_active == True
+        ).all()
+    }
     for item in payload.tests:
         if not item.test_name or not item.test_name.strip():
             continue
 
         is_panel = bool(item.is_panel)
+
+        _nm = item.test_name.strip()
+        if len(_nm) > 150 or _nm.lower() in _taken_names:
+            continue  # blank/too long, already in the catalog, or repeated in this file
+        if item.price is not None and (item.price < 0 or item.price > 1_000_000):
+            continue
+        _taken_names.add(_nm.lower())
 
         test = TestCatalogItem(
             hospital_id=current_doctor.hospital_id,
@@ -437,6 +532,12 @@ def bulk_confirm_tests(
             reference_range_female="" if is_panel else (item.reference_range_female or "").strip(),
             unit="" if is_panel else (item.unit or "").strip(),
             turnaround_hours=item.turnaround_hours,
+            critical_low=None if is_panel else item.critical_low,
+            critical_high=None if is_panel else item.critical_high,
+            fasting_required=bool(item.fasting_required),
+            required_tube=(item.required_tube or "").strip() or None,
+            is_irreplaceable_sample=bool(item.is_irreplaceable_sample),
+            is_nabl_accredited=bool(item.is_nabl_accredited),
             is_active=True
         )
         db.add(test)

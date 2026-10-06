@@ -17,7 +17,7 @@ class Refund(Base):
     # Patient row created by reception.
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
-    source_type = Column(String, nullable=False)  # appointment | pharmacy | ipd_deposit | opd_charge | tpa | other
+    source_type = Column(String, nullable=False)  # appointment | pharmacy | ipd_deposit | opd_charge | other
     source_id = Column(Integer, nullable=True)
     amount = Column(Float, nullable=False)
     channel = Column(String, nullable=False)  # cash | card | upi | online

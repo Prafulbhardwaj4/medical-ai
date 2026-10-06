@@ -13,11 +13,12 @@ from app.models.opd_charge import OpdCharge
 from app.schemas.billing import RefundIn
 from app.utils.auth import get_current_doctor
 from app.utils.receipts import next_note_number
+from app.utils.audit import log_action
 from app.utils.timezone import now_ist_naive
 
 router = APIRouter(prefix="/refunds", tags=["refunds"])
 
-VALID_SOURCE_TYPES = {"appointment", "pharmacy", "ipd_deposit", "opd_charge", "tpa", "other"}
+VALID_SOURCE_TYPES = {"appointment", "pharmacy", "ipd_deposit", "opd_charge", "test", "other"}
 VALID_CHANNELS = {"cash", "card", "upi", "online"}
 
 
@@ -115,18 +116,24 @@ def create_refund(body: RefundIn, db: Session = Depends(get_db), current_doctor:
     return {"message": "Refund recorded", "id": refund.id, "status": refund.status, "credit_note_number": credit_note_number}
 
 
-@router.get("/patient/{patient_id}")
-def list_patient_refunds(patient_id: int, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
-    refunds = db.query(Refund).filter(
-        Refund.patient_id == patient_id, Refund.hospital_id == current_doctor.hospital_id
-    ).order_by(Refund.processed_at.desc()).all()
-    return [
-        {"id": r.id, "source_type": r.source_type, "source_id": r.source_id, "amount": r.amount,
-         "channel": r.channel, "status": r.status, "reason": r.reason,
-         "processed_at": r.processed_at.isoformat() if r.processed_at else None}
-        for r in refunds
-    ]
-
+@router.get("/pending")
+def list_pending_refunds(db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
+    """Online/portal refunds stay 'pending' until the gateway settlement is confirmed —
+    this is the admin's worklist for confirming them (see mark-settled)."""
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    rows = db.query(Refund).filter(
+        Refund.hospital_id == current_doctor.hospital_id, Refund.status == "pending"
+    ).order_by(Refund.processed_at.asc()).all()
+    out = []
+    for r in rows:
+        p = db.query(Patient).filter(Patient.id == r.patient_id).first() if r.patient_id else None
+        out.append({
+            "id": r.id, "patient_name": p.name if p else None, "patient_uid": p.patient_uid if p else None,
+            "source_type": r.source_type, "amount": r.amount, "reason": r.reason,
+            "processed_at": r.processed_at.isoformat() if r.processed_at else None,
+        })
+    return out
 
 @router.patch("/{refund_id}/mark-settled")
 def mark_refund_settled(refund_id: int, db: Session = Depends(get_db), current_doctor: Doctor = Depends(get_current_doctor)):
@@ -139,4 +146,11 @@ def mark_refund_settled(refund_id: int, db: Session = Depends(get_db), current_d
         raise HTTPException(status_code=400, detail="Only a pending refund can be marked settled")
     refund.status = "completed"
     db.commit()
+    log_action(
+        db, current_doctor,
+        action="refund_settled",
+        target_type="refund",
+        target_id=refund.id,
+        details=f"{refund.source_type} #{refund.source_id}, Rs.{refund.amount:.2f}, pending -> completed",
+    )
     return {"message": "Refund marked settled"}

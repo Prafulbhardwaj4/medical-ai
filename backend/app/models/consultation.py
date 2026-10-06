@@ -27,6 +27,7 @@ class Consultation(Base):
     recommended_radiology_template_ids = Column(Text, nullable=True)  # JSON list of RadiologyTemplate ids — mirrors recommended_test_ids
     ordered_radiology = Column(Text, nullable=True)  # JSON list of {template_id, study_name, price, status} — mirrors ordered_tests
     is_voided = Column(Boolean, default=False)
+    ai_scribe_credit_consumed = Column(Boolean, default=False)  # True once /structure has charged an AI Scribe credit for this consultation — re-structuring is free
 
     has_pending_tests = Column(Boolean, default=False)
     pdf_path = Column(String, nullable=True)

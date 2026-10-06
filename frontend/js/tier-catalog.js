@@ -25,7 +25,6 @@ const TIER_CATALOG = [
       "Pharmacy module",
       "Online appointment booking",
       "Patient Portal",
-      "Radiology / Imaging",
     ],
   },
   {
@@ -83,6 +82,7 @@ const TIER_CATALOG = [
     features: [
       "Everything in Scale",
       "AI Scribe for admitted / IPD patients",
+      "Radiology / Imaging (X-ray, CT, MRI, ultrasound ordering and reports)",
       "Blood Bank / transfusion management",
       "Specialty-specific tools (e.g. orthopaedic)",
       "White-glove onboarding \u2014 we set up every staff account, your full test catalog, and medicine list for you",
@@ -92,7 +92,7 @@ const TIER_CATALOG = [
 
 function tierLabel(key) {
   const t = TIER_CATALOG.find((t) => t.key === key);
-  return t ? t.label : key;
+  return t ? t.label : "Unknown plan";
 }
 
 function tierIndex(key) {

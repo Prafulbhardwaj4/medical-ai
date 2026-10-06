@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Medicine Catalog — MedScribe</title>
-  <link rel="stylesheet" href="../css/style.css?v=4" />
+  <link rel="stylesheet" href="../css/style.css" />
   <script src="../js/custom-select.js" defer></script>
   
   <style>
@@ -486,12 +486,12 @@
   </div>
 
   <div id="toast"></div>
-  <script src="../js/api.js?v=4"></script>
-  <script src="../js/nav-admin.js?v=1"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/nav-admin.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
-  <script src="../js/chat-widget.js?v=1"></script>
-  <script src="../js/suggestion-widget.js?v=1"></script>
+  <script src="../js/chat-widget.js"></script>
+  <script src="../js/suggestion-widget.js"></script>
   <script>
     const doc = getDoctor();
     renderAdminNav('medicine-catalog');
@@ -847,11 +847,11 @@
             </div>
           </div>
           <div class="item-card-actions">
-            <button class="btn btn-add-stock btn-sm" onclick="openAddStockModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">+ Add Stock</button>
-            <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}', ${m.pack_size || 1})">View Batches</button>
-            ${!m.brand_name ? `<button class="btn btn-outline btn-sm" onclick="openAddBrandModal(${m.id}, '${sanitize(m.generic_name).replace(/'/g, "\\'")}')">+ Add Brand</button>` : ''}
+            <button class="btn btn-add-stock btn-sm" onclick="openAddStockModal(${m.id}, ${jsArg(m.generic_name)}, ${m.pack_size || 1})">+ Add Stock</button>
+            <button class="btn btn-outline btn-sm" onclick="openBatchesModal(${m.id}, ${jsArg(m.generic_name)}, ${m.pack_size || 1})">View Batches</button>
+            ${!m.brand_name ? `<button class="btn btn-outline btn-sm" onclick="openAddBrandModal(${m.id}, ${jsArg(m.generic_name)})">+ Add Brand</button>` : ''}
             ${doc.role !== 'pharmacy' ? `
-            <button class="btn btn-outline btn-sm" onclick='openEditModal(${JSON.stringify(m)})'>Edit</button>
+            <button class="btn btn-outline btn-sm" onclick='openEditModal(${jsArg(m)})'>Edit</button>
             <button class="btn btn-outline btn-sm" onclick="deactivateMedicine(${m.id})">Deactivate</button>` : ''}
           </div>
         </div>
@@ -1168,10 +1168,10 @@
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               ${badge}
-              <button class="btn btn-outline btn-sm" onclick='editBatch(${JSON.stringify(b)}, ${medicineId}, "${medicineName.replace(/"/g, "&quot;")}", ${packSize})'>Edit</button>
+              <button class="btn btn-outline btn-sm" onclick='editBatch(${jsArg(b)}, ${medicineId}, ${jsArg(medicineName)}, ${packSize})'>Edit</button>
               ${b.quantity > 0
-                ? `<button class="btn btn-outline btn-sm" onclick="writeOffBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Write off</button>`
-                : `<button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, '${medicineName.replace(/'/g, "\\'")}', ${packSize})">Remove</button>`}
+                ? `<button class="btn btn-outline btn-sm" onclick="writeOffBatch(${b.id}, ${medicineId}, ${jsArg(medicineName)}, ${packSize})">Write off</button>`
+                : `<button class="btn btn-outline btn-sm" onclick="deleteBatch(${b.id}, ${medicineId}, ${jsArg(medicineName)}, ${packSize})">Remove</button>`}
             </div>
           </div>
         `;

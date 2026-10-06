@@ -22,20 +22,30 @@ function formatNotifTimestamp(iso) {
   return d.toLocaleDateString('en-IN', opts);
 }
 
+// Staff and patient-portal sessions live under separate keys so a patient and a
+// staff member sharing one browser can't log each other out. Portal pages read
+// the portal keys; every other page reads the staff keys.
+const _SK_STAFF = { t: "ms_token", d: "ms_doctor" };
+const _SK_PORTAL = { t: "ms_portal_token", d: "ms_portal_doctor" };
+const _IS_PORTAL_PAGE = /\/my-(health|appointments)(\.html)?\/?$/.test(window.location.pathname);
+const _SK = _IS_PORTAL_PAGE ? _SK_PORTAL : _SK_STAFF;
+
 function getToken() {
-  try { return localStorage.getItem("ms_token"); }
+  try { return localStorage.getItem(_SK.t); }
   catch { return null; }
 }
 
 function getDoctor() {
-  try { return JSON.parse(localStorage.getItem("ms_doctor")); }
+  try { return JSON.parse(localStorage.getItem(_SK.d)); }
   catch { return null; }
 }
 
 function saveSession(token, doctor) {
   try {
-    localStorage.setItem("ms_token", token);
-    localStorage.setItem("ms_doctor", JSON.stringify(doctor));
+    const k = doctor && doctor.role === "patient" ? _SK_PORTAL : _SK_STAFF;
+    localStorage.setItem(k.t, token);
+    localStorage.setItem(k.d, JSON.stringify(doctor));
+    localStorage.setItem("ms_refreshed_at", String(Date.now()));
   } catch (e) {
     toast("Storage blocked. Please enable cookies in browser settings.", "error");
   }
@@ -65,14 +75,14 @@ function togglePwVisibility(inputId, iconId) {
 
 function clearSession() {
   try {
-    localStorage.removeItem("ms_token");
-    localStorage.removeItem("ms_doctor");
+    localStorage.removeItem(_SK.t);
+    localStorage.removeItem(_SK.d);
   } catch (e) { }
 }
 
 function requireAuth() {
   try {
-    if (!localStorage.getItem("ms_token")) {
+    if (!localStorage.getItem(_SK.t)) {
       window.location.href = "/pages/login.html";
       return false;
     }
@@ -167,6 +177,43 @@ async function api(method, path, body = null, isFormData = false, silent = false
     if (triggerBtn && !alreadyDisabled) triggerBtn.disabled = false;
   }
 }
+
+// Session keeper (staff only). Renews the token while someone is working so a
+// doctor is never thrown out mid-day, and signs out a shared PC left idle.
+// A page doing long hands-off work (recording) sets window.msKeepSessionAlive.
+(function () {
+  const REFRESH_AFTER_MS = 20 * 60 * 1000;
+  const IDLE_LIMIT_MS = 45 * 60 * 1000;
+  let lastInput = Date.now();
+  ["click", "keydown", "touchstart", "mousemove", "scroll"].forEach((ev) =>
+    window.addEventListener(ev, () => { lastInput = Date.now(); }, { passive: true })
+  );
+
+  async function tick() {
+    const doc = getDoctor();
+    if (!getToken() || !doc || doc.role === "patient") return;
+    const busy = typeof window.msKeepSessionAlive === "function" && window.msKeepSessionAlive();
+    if (!busy && Date.now() - lastInput > IDLE_LIMIT_MS) {
+      try { fetch(BASE + "/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${getToken()}` } }); } catch (e) { }
+      clearSession();
+      window.location.href = "/pages/login.html";
+      return;
+    }
+    const last = Number(localStorage.getItem("ms_refreshed_at")) || 0;
+    if (Date.now() - last < REFRESH_AFTER_MS) return;
+    try {
+      const res = await fetch(BASE + "/auth/refresh", { method: "POST", headers: { Authorization: `Bearer ${getToken()}` } });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.access_token) saveSession(data.access_token, doc);
+      }
+    } catch (e) { /* offline: try again on the next tick */ }
+  }
+
+  setInterval(tick, 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+  window.addEventListener("pageshow", tick);
+})();
 
 // Global error boundary — catches uncaught JS errors and unhandled promise
 // rejections that would otherwise leave the page silently blank (the root
@@ -341,10 +388,20 @@ async function logout() {
   window.location.href = "/pages/login.html";
 }
 
+// Escapes & < > " ' so the result is safe in element text AND in quoted attributes.
 function sanitize(str) {
-  const d = document.createElement("div");
-  d.textContent = str;
-  return d.innerHTML;
+  return String(str === undefined || str === null ? "" : str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+// Safe value for an inline handler: onclick="fn(${jsArg(name)})" or onclick='fn(${jsArg(obj)})'.
+// JSON-encodes, then HTML-entity-escapes & < > ' " so the value survives either attribute quote
+// style (the HTML parser decodes the entities back before the JS runs).
+function jsArg(v) {
+  return JSON.stringify(v === undefined ? null : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function validatePatient(name, phone, age) {
@@ -508,6 +565,46 @@ function ensureDeactivateAccountModal() {
       </div>
     </div>`;
   document.body.appendChild(wrap.firstElementChild);
+}
+
+function openChangePassword() {
+  closeProfileMenu();
+  const overlay = _createOverlayModal("Change password", 420);
+  const body = overlay.querySelector(".generic-modal-body");
+  body.innerHTML = `
+    <input type="password" class="form-control" id="cp-old" placeholder="Current password" autocomplete="current-password" style="margin-bottom:10px" />
+    <input type="password" class="form-control" id="cp-new" placeholder="New password (8+ characters, 1 number, 1 capital)" autocomplete="new-password" style="margin-bottom:10px" />
+    <input type="password" class="form-control" id="cp-new2" placeholder="Repeat new password" autocomplete="new-password" style="margin-bottom:8px" />
+    <div id="cp-err" style="color:#c0392b;font-size:13px;min-height:18px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline btn-sm" id="cp-cancel">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="cp-save">Change password</button>
+    </div>`;
+  const errEl = body.querySelector("#cp-err");
+  body.querySelector("#cp-cancel").addEventListener("click", () => overlay.remove());
+  body.querySelector("#cp-save").addEventListener("click", async () => {
+    const oldP = body.querySelector("#cp-old").value;
+    const newP = body.querySelector("#cp-new").value;
+    const newP2 = body.querySelector("#cp-new2").value;
+    errEl.textContent = "";
+    if (!oldP || !newP) { errEl.textContent = "Fill in all the fields."; return; }
+    if (newP.length < 8 || !/\d/.test(newP) || !/[A-Z]/.test(newP)) {
+      errEl.textContent = "New password needs 8+ characters, 1 number and 1 capital letter."; return;
+    }
+    if (newP !== newP2) { errEl.textContent = "The two new passwords don't match."; return; }
+    const btn = body.querySelector("#cp-save");
+    btn.disabled = true;
+    try {
+      const data = await api("POST", "/portal/auth/change-password", { old_password: oldP, new_password: newP });
+      if (data && data.access_token) saveSession(data.access_token, data.doctor);
+      overlay.remove();
+      if (typeof toast === "function") toast("Password changed.", "success");
+    } catch (e) {
+      errEl.textContent = e.message;
+      btn.disabled = false;
+    }
+  });
+  body.querySelector("#cp-old").focus();
 }
 
 function confirmDeactivateAccount() {
@@ -802,13 +899,16 @@ function _renderReportsVisitsHtml(visits, opts) {
                 </thead>
                 <tbody>
                   ${t.results.map(row => {
-                    const out = _isOutOfRange(row.value, row.range);
-                    const valueColor = out ? "#ef4444" : (row.value ? "#065f46" : "inherit");
+                    // Server-computed flag (structured numeric range) wins; old free-text parsing is the fallback.
+                    const fl = row.flag || (_isOutOfRange(row.value, row.range) ? "X" : "");
+                    const out = ["H", "L", "CH", "CL", "X"].includes(fl);
+                    const flagTxt = { H: " H", L: " L", CH: " H (CRITICAL)", CL: " L (CRITICAL)" }[fl] || "";
+                    const valueColor = (fl === "CH" || fl === "CL") ? "#b91c1c" : (out ? "#ef4444" : (row.value ? "#065f46" : "inherit"));
                     const valueWeight = out ? "700" : "600";
                     return `
                     <tr style="border-top:1px solid var(--border)">
                       <td style="padding:5px 8px 5px 0">${row.name}</td>
-                      <td style="padding:5px 8px;font-weight:${valueWeight};color:${valueColor}">${row.value}</td>
+                      <td style="padding:5px 8px;font-weight:${valueWeight};color:${valueColor}">${row.value}${flagTxt}</td>
                       <td style="padding:5px 8px;color:var(--slate)">${row.unit || '—'}</td>
                       <td style="padding:5px 0 5px 8px;color:var(--slate)">${row.range || '—'}</td>
                     </tr>
@@ -1194,3 +1294,13 @@ async function editOffDutyTime(containerId) {
 async function markAttendanceCommon(status, room_id, extra, alreadyActive) {
   return api("POST", "/doctors/attendance", { status, room_id, ...(extra || {}) });
 }
+
+// "New version available" banner. Injected here so every page that loads
+// api.js gets it without a per-page edit (see js/update-check.js).
+(function () {
+  if (window.__msUpdateCheck) return;
+  const s = document.createElement("script");
+  s.src = "/js/update-check.js";
+  s.async = true;
+  document.head.appendChild(s);
+})();

@@ -1,6 +1,6 @@
 // nav-admin.js
 // Single source of truth for the admin-role sidebar, bottom-nav, and mobile "More" menu.
-// Any admin page that needs nav just includes this file + api.js + auth.js, keeps three
+// Any admin page that needs nav just includes this file + api.js, keeps two
 // empty containers in its HTML (#app-sidebar, #app-bottom-nav, #app-mobile-menu-body),
 // and calls renderAdminNav('KEY') once `doc` is available.
 //

@@ -14,7 +14,9 @@ class Hospital(Base):
     hospital_type = Column(String, default="private", nullable=False)
     billing_enabled = Column(Boolean, default=True, nullable=False)
     default_consultation_fee = Column(Float, nullable=True)
-    gstin = Column(String, nullable=True)  # optional — hospital adds this later if/when they need GST on invoices
+    gstin = Column(String, nullable=True)
+    clinical_establishment_reg_no = Column(String, nullable=True)  # state Clinical Establishments Act registration - printed on every document
+    drug_licence_no = Column(String, nullable=True)  # in-house pharmacy licence - printed on invoices  # optional — hospital adds this later if/when they need GST on invoices
     consultation_gst_percent = Column(Float, nullable=True)  # blank = no GST on consultation fee
     test_gst_percent = Column(Float, nullable=True)  # blank = no GST on lab tests
     room_gst_percent = Column(Float, nullable=True)  # blank = no GST on the taxable-excess portion of room charges
@@ -31,11 +33,12 @@ class Hospital(Base):
     contact_numbers = Column(Text, nullable=True)  # JSON list of {"type": "mobile"|"landline", "number": str} — mobile numbers stored pre-formatted as "+91XXXXXXXXXX", landline stored exactly as entered (no fixed pattern)
     emails = Column(Text, nullable=True)  # JSON list of email strings
     logo_base64 = Column(Text, nullable=True)  # optional — full data URI; stored in-DB since Render's disk is ephemeral
-    tier = Column(String, nullable=False, default="growth")  # "foundation" | "growth" | "scale" | "enterprise" — manually set by super admin, gates feature access
+    tier = Column(String, nullable=False, default="foundation")  # "foundation" | "growth" | "scale" | "enterprise" — manually set by super admin, gates feature access
     pcpndt_registration_number = Column(String, nullable=True)  # Registration No. under PC&PNDT Act, 1994 — required on every Form F (item 2 of the statutory form); only relevant to hospitals doing ultrasound
 
     # --- Billing cycle / AI Scribe usage ---
     billing_cycle_start = Column(DateTime, nullable=True)  # anchor date for the current cycle — set on the hospital's first login, then re-anchored on renewal (rolls +1mo) or reactivation (resets to reactivation date)
+    billing_period = Column(String, default="monthly")  # "monthly" | "yearly" — yearly = 12-month cycle, AI Scribe cap pooled across the year
     ai_scribe_consultations_used = Column(Integer, default=0, nullable=False)  # resets to 0 every cycle roll (renewal or reactivation)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=now_ist_naive)

@@ -54,6 +54,28 @@ def vitals_queue(
     )
     if not include_done:
         query = query.filter(Checkin.is_returned == False)
+
+    if current_doctor.role.value == "nurse":
+        from sqlalchemy import or_
+        from app.models.attendance import AttendanceRecord
+        from app.models.attendance_coverage import AttendanceCoverage
+        _live = ["present", "on_break"]
+        _base = db.query(AttendanceCoverage.doctor_id).join(
+            AttendanceRecord, AttendanceCoverage.attendance_record_id == AttendanceRecord.id
+        ).filter(
+            AttendanceRecord.hospital_id == current_doctor.hospital_id,
+            AttendanceRecord.date == ist_today(),
+            AttendanceRecord.status.in_(_live),
+            AttendanceCoverage.doctor_id.isnot(None),
+        )
+        covered_by_anyone = {r[0] for r in _base.all()}
+        my_covered = {r[0] for r in _base.filter(AttendanceRecord.doctor_id == current_doctor.id).all()}
+        if covered_by_anyone:
+            _conds = [Checkin.nurse_id == current_doctor.id, Checkin.doctor_id.is_(None),
+                      ~Checkin.doctor_id.in_(covered_by_anyone)]
+            if my_covered:
+                _conds.append(Checkin.doctor_id.in_(my_covered))
+            query = query.filter(or_(*_conds))
     checkins = query.order_by(func.coalesce(Checkin.queue_priority_time, Checkin.created_at).asc()).all()
 
     # Rechecks jump the fresh-vitals-pending line — the doctor's already mid-turn
@@ -139,6 +161,34 @@ def vitals_queue(
         })
     return result
 
+_VITALS_LIMITS = {
+    "Pulse": (30, 220), "Temperature": (90, 110), "SpO2": (50, 100),
+    "Respiratory Rate": (8, 60), "Weight": (1, 300), "Height": (30, 250),
+    "Blood Sugar (GRBS)": (20, 600),
+}
+
+
+def _validate_vitals(data: dict) -> None:
+    import re
+    if len(data) > 20:
+        raise HTTPException(status_code=400, detail="Too many vitals fields")
+    for k, v in data.items():
+        if len(k) > 40 or len(v) > 40:
+            raise HTTPException(status_code=400, detail="A vitals field is too long")
+        if k == "Blood Pressure":
+            m = re.fullmatch(r"(\d{2,3})/(\d{2,3})", v)
+            if not m or not (50 <= int(m.group(1)) <= 300 and 20 <= int(m.group(2)) <= 200):
+                raise HTTPException(status_code=400, detail="Blood Pressure must look like 120/80")
+        elif k in _VITALS_LIMITS:
+            try:
+                n = float(v)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"{k} must be a number")
+            lo, hi = _VITALS_LIMITS[k]
+            if not (lo <= n <= hi):
+                raise HTTPException(status_code=400, detail=f"{k} must be between {lo} and {hi}")
+
+
 @router.post("/vitals/{checkin_id}")
 def submit_vitals(
     checkin_id: int,
@@ -160,6 +210,7 @@ def submit_vitals(
     data = {k.strip(): v.strip() for k, v in payload.data.items() if k.strip() and v.strip()}
     if not data:
         raise HTTPException(status_code=400, detail="At least one vitals field is required")
+    _validate_vitals(data)
 
     was_recheck = checkin.vitals_status == "sent_back"
 
@@ -314,6 +365,8 @@ def complete_post_consult(
     data = {k.strip(): v.strip() for k, v in payload.data.items() if k.strip() and v.strip()}
     if not data:
         raise HTTPException(status_code=400, detail="Notes are required to confirm this task was completed")
+    if checkin.post_consult_status != "pending":
+        raise HTTPException(status_code=400, detail="This task is not pending (already completed or never requested)")
 
     checkin.post_consult_data = json.dumps(data)
     checkin.post_consult_status = "done"
@@ -343,13 +396,16 @@ def add_opd_charge(
     """Ad-hoc OPD charge (dressing, injection, etc.) — goes straight to the
     bill, no approval gate, same principle as IPD's Other Charges."""
     _require_nurse(current_doctor)
+    from app.routers.attendance import require_present
+    require_present(db, current_doctor)
 
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
-        Checkin.hospital_id == current_doctor.hospital_id
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == ist_today()
     ).first()
     if not checkin:
-        raise HTTPException(status_code=404, detail="Check-in not found")
+        raise HTTPException(status_code=404, detail="Today's check-in not found")
     if not payload.description.strip():
         raise HTTPException(status_code=400, detail="Description is required")
     if payload.amount <= 0:

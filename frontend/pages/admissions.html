@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Admissions</title>
-  <link rel="stylesheet" href="../css/style.css?v=4" />
+  <link rel="stylesheet" href="../css/style.css" />
   <script src="../js/custom-select.js" defer></script>
   <style>
     .ward-card {
@@ -772,9 +772,9 @@
   <script src="../js/nav-admin.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
-  <script src="../js/chat-widget.js?v=1"></script>
-  <script src="../js/suggestion-widget.js?v=1"></script>
-  <script src="../js/tutorial.js?v=2"></script>
+  <script src="../js/chat-widget.js"></script>
+  <script src="../js/suggestion-widget.js"></script>
+  <script src="../js/tutorial.js"></script>
   <script>
     if (!requireAuth()) { }
     if (blockPageIfFoundation("IPD / Admissions")) throw new Error("tier-locked");
@@ -1071,7 +1071,7 @@
                   <div style="font-size:12px;color:var(--slate-light)">${sanitize(r.room_number)}</div>
                 </div>
                 ${isAdminTier ? `<div style="display:flex;gap:6px;flex-shrink:0">
-                  <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick='openManageWardsModal();editWardType(${JSON.stringify(w)})'>Edit</button>
+                  <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick='openManageWardsModal();editWardType(${jsArg(w)})'>Edit</button>
                 </div>` : ''}
               </div>
               <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin:4px 0">${r.occupied}/${r.beds_count}</div>
@@ -1259,8 +1259,8 @@
             <div style="font-size:12px;color:var(--slate-light)"><span class="badge badge-grey" style="text-transform:capitalize">${sanitize((w.category || 'general').replace('_', ' '))}</span> · ${(w.rooms || []).length} room${(w.rooms || []).length === 1 ? '' : 's'}, ${w.total_beds} beds · ₹${w.daily_charge}/day · ₹${w.default_deposit || 0} default deposit${w.is_icu ? ' · <strong>ICU (GST-exempt)</strong>' : ''}${w.is_emergency_ward ? ' · <strong>🚨 Emergency Ward</strong>' : ''}</div>
           </div>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-outline btn-sm" onclick='editWardType(${JSON.stringify(w)})'>Edit</button>
-            <button class="btn btn-outline btn-sm" onclick='confirmDeleteWardType(${w.id}, ${JSON.stringify(w.name)})'>Delete</button>
+            <button class="btn btn-outline btn-sm" onclick='editWardType(${jsArg(w)})'>Edit</button>
+            <button class="btn btn-outline btn-sm" onclick='confirmDeleteWardType(${w.id}, ${jsArg(w.name)})'>Delete</button>
           </div>
         </div>
       `).join('');
@@ -1383,7 +1383,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
           <div><strong>${sanitize(r.room_number)}</strong>${r.room_type === 'private' ? ' (Private)' : ''} — ${r.beds_count} bed${r.beds_count === 1 ? '' : 's'}</div>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick='editRoomFromPanel(${JSON.stringify(r)})'>Edit</button>
+            <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick='editRoomFromPanel(${jsArg(r)})'>Edit</button>
             <button class="btn btn-outline btn-sm" style="padding:2px 8px" onclick="deleteRoomFromPanel(${r.id})">Delete</button>
           </div>
         </div>
@@ -1661,7 +1661,7 @@
         return;
       }
       el.innerHTML = referrals.map(r => `
-        <div class="select-row-card" style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer" onclick='selectAdmitPatient(${r.patient_id}, ${JSON.stringify(r.patient_name)}, ${r.referral_id}, ${r.referred_by})'>
+        <div class="select-row-card" style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer" onclick='selectAdmitPatient(${r.patient_id}, ${jsArg(r.patient_name)}, ${r.referral_id}, ${r.referred_by})'>
           <div style="font-weight:600">${sanitize(r.patient_name)}</div>
           <div style="font-size:12px;color:var(--slate-light)">${sanitize(r.patient_uid || '')} · ${sanitize(r.phone || '')}</div>
           <div style="font-size:12px;color:var(--teal);margin-top:4px">Sent by ${sanitize(r.referred_by_name)}${r.reason ? ' — ' + sanitize(r.reason) : ''}</div>

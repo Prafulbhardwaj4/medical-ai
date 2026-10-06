@@ -46,6 +46,25 @@ TIER_MONTHLY_PRICE = {
     "enterprise": 0,      # quotation-based — no fixed number to sum without per-hospital custom pricing storage
 }
 
+# Yearly plans: the AI Scribe allowance is one pool for the whole 12-month cycle
+# (12 x monthly cap) plus the advertised yearly bonus (tier-catalog.js yearlyBenefit).
+AI_SCRIBE_YEARLY_BONUS = {"growth": 2000, "scale": 5000}
+
+
+def cycle_months(hospital) -> int:
+    return 12 if getattr(hospital, "billing_period", "monthly") == "yearly" else 1
+
+
+def effective_ai_scribe_cap(hospital):
+    """None = unlimited, 0 = no AI Scribe, otherwise the cap for the CURRENT cycle."""
+    base = AI_SCRIBE_TIER_CAPS.get(hospital.tier, 0)
+    if not base:
+        return base
+    if cycle_months(hospital) == 12:
+        return base * 12 + AI_SCRIBE_YEARLY_BONUS.get(hospital.tier, 0)
+    return base
+
+
 GRACE_DAYS = 3           # days after cycle-end that non-AI-Scribe services keep working
 RENEW_WINDOW_LEAD_DAYS = 2  # days before cycle-end that the Renew button activates
 
@@ -58,7 +77,7 @@ def get_billing_cycle_info(hospital):
         return None
 
     cycle_start = hospital.billing_cycle_start
-    cycle_end = cycle_start + relativedelta(months=1)
+    cycle_end = cycle_start + relativedelta(months=cycle_months(hospital))
     grace_end = cycle_end + timedelta(days=GRACE_DAYS)              # last moment non-Scribe services work
     deactivation_at = grace_end + timedelta(days=1)                  # deactivation begins the day after grace ends
     renew_window_start = cycle_end - timedelta(days=RENEW_WINDOW_LEAD_DAYS)

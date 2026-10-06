@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from datetime import datetime, timedelta
@@ -34,6 +34,7 @@ from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 from app.services.pdf_service import generate_invoice_pdf, generate_credit_debit_note_pdf
 from app.utils.timezone import ist_today, ist_day_bounds, ist_date, now_ist_naive
+from app.utils.money_totals import collection_entries, collected_summary, collected_by_day, billed_total
 from app.utils.receipts import next_receipt_number, next_note_number, generate_verify_hash
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -70,15 +71,17 @@ def request_upgrade_nudge(
     with super admin yet. target_doctor_id is left None so every admin/
     sub_admin at the hospital sees it (see notifications.py's admin
     visibility rule)."""
+    if body.tier not in [t["key"] for t in TIER_CATALOG_PY]:
+        raise HTTPException(status_code=400, detail="Invalid plan")
     tier_label = next((t["label"] for t in TIER_CATALOG_PY if t["key"] == body.tier), body.tier)
-    role_label = current_doctor.role.value.replace("_", " ").title()
+    role_labels = current_doctor.role.value.replace("_", " ").title()
     db.add(Notification(
         hospital_id=current_doctor.hospital_id,
         source_key=f"upgrade_nudge:{current_doctor.id}:{now_ist_naive().isoformat()}",
         type="upgrade_request_internal",
         severity="info",
         title="Staff requested a plan upgrade",
-        message=f"{current_doctor.title} {current_doctor.name} ({role_label}) wants to upgrade this hospital to the {tier_label} plan.",
+        message=f"{current_doctor.title} {current_doctor.name} ({role_labels}) wants to upgrade this hospital to the {tier_label} plan.",
         target_doctor_id=None,
         link_type="upgrade",
     ))
@@ -96,6 +99,16 @@ def request_upgrade(
     the real lead that reaches super admin's Upgrade Requests tab."""
     if current_doctor.role.value not in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if body.tier not in [t["key"] for t in TIER_CATALOG_PY]:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    if len((body.message or "")) > 1000:
+        raise HTTPException(status_code=400, detail="Message is too long")
+    if db.query(UpgradeRequest).filter(
+        UpgradeRequest.hospital_id == current_doctor.hospital_id,
+        UpgradeRequest.requested_tier == body.tier,
+        UpgradeRequest.status.in_(["new", "contacted"]),
+    ).first():
+        raise HTTPException(status_code=400, detail="You already have an open request for this plan — our team will reach out shortly")
 
     db.add(UpgradeRequest(
         hospital_id=current_doctor.hospital_id,
@@ -640,6 +653,9 @@ def _apply_waiver_charge(db: Session, waiver: WaiverRequest, actor: Doctor):
     """Creates the actual negative bill line once a waiver is approved
     (immediately for auto-approved ones, or on manual admin approval)."""
     if waiver.admission_id:
+        _adm = db.query(Admission).filter(Admission.id == waiver.admission_id).first()
+        if not _adm or _adm.status != "admitted":
+            raise HTTPException(status_code=400, detail="This admission is already discharged — a waiver can no longer be added to its closed bill")
         charge = AdmissionCharge(
             admission_id=waiver.admission_id, charge_type="other",
             description=f"Waiver/Discount — {waiver.reason}",
@@ -854,15 +870,22 @@ def revenue_history_daily(
     for inv in invoices:
         d = ist_date(inv.generated_at)
         if d not in buckets:
-            buckets[d] = {"total": 0.0, "invoice_count": 0}
-        buckets[d]["total"] += inv.subtotal if inv.subtotal is not None else inv.grand_total  # pre-tax revenue; GST collected isn't hospital revenue
+            buckets[d] = {"total": 0.0, "invoice_count": 0, "collected": 0.0}
+        buckets[d]["total"] += inv.subtotal if inv.subtotal is not None else inv.grand_total  # BILLED: pre-tax invoice value by invoice date
         buckets[d]["invoice_count"] += 1
+
+    # COLLECTED: by payment date, net of refunds and waivers (same helper as day-end)
+    for d, amt in collected_by_day(db, current_doctor.hospital_id, range_start, range_end).items():
+        if d not in buckets:
+            buckets[d] = {"total": 0.0, "invoice_count": 0, "collected": 0.0}
+        buckets[d]["collected"] = amt
 
     return {
         "from_date": from_d.isoformat(),
         "to_date": to_d.isoformat(),
         "days": [
-            {"date": d.isoformat(), "total": round(v["total"], 2), "invoice_count": v["invoice_count"]}
+            {"date": d.isoformat(), "total": round(v["total"], 2), "billed": round(v["total"], 2),
+             "collected": round(v["collected"], 2), "invoice_count": v["invoice_count"]}
             for d, v in sorted(buckets.items())
         ]
     }
@@ -896,6 +919,56 @@ def _clamp_monthly_range(from_month: str, to_month: str):
         from_d = to_d
     return from_d, to_d
 
+def _csv_response(rows, filename):
+    import csv, io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    for r in rows:
+        # Guard against spreadsheet formula injection from text cells.
+        w.writerow([("'" + c) if isinstance(c, str) and c[:1] in ("=", "+", "-", "@") else c for c in r])
+    return Response(
+        content="\ufeff" + buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/revenue-history/daily/export")
+def export_revenue_history_daily(
+    from_date: str = None,
+    to_date: str = None,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    data = revenue_history_daily(from_date, to_date, db, current_doctor)
+    rows = [["Date", "Billed (pre-tax, by invoice date)", "Collected (by payment date, net of refunds and waivers)", "Invoices"]]
+    rows += [[d["date"], d["billed"], d["collected"], d["invoice_count"]] for d in data["days"]]
+    return _csv_response(rows, f"billed-{data['from_date']}-to-{data['to_date']}.csv")
+
+
+@router.get("/day-end-summary/export")
+def export_day_end_summary(
+    date: str = None,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    data = day_end_summary(date, db, current_doctor)
+    rows = [["Date", "Section", "Item", "Amount (Rs)"]]
+    for mode, cats in (data.get("by_mode") or {}).items():
+        for cat, amt in (cats or {}).items():
+            rows.append([data["date"], f"Collected - {mode}", cat, amt])
+    for ch, amt in (data.get("refunds_by_channel") or {}).items():
+        rows.append([data["date"], "Refunds paid back", ch, -abs(amt)])
+    for mode, amt in (data.get("system_totals") or {}).items():
+        rows.append([data["date"], "Net system total (after refunds)", mode, amt])
+    cl = data.get("close")
+    if cl:
+        rows.append([data["date"], "Counted at close", "cash", cl.get("counted_cash")])
+        rows.append([data["date"], "Counted at close", "card", cl.get("counted_card")])
+        rows.append([data["date"], "Counted at close", "upi", cl.get("counted_upi")])
+    return _csv_response(rows, f"day-end-{data['date']}.csv")
+
+
 @router.get("/revenue-history/monthly")
 def revenue_history_monthly(
     from_month: str = None,   # "YYYY-MM"
@@ -923,18 +996,29 @@ def revenue_history_monthly(
         d = ist_date(inv.generated_at)
         key = (d.year, d.month)
         if key not in buckets:
-            buckets[key] = {"total": 0.0, "invoice_count": 0}
-        buckets[key]["total"] += inv.subtotal if inv.subtotal is not None else inv.grand_total  # pre-tax revenue; GST collected isn't hospital revenue
+            buckets[key] = {"total": 0.0, "invoice_count": 0, "collected": 0.0}
+        buckets[key]["total"] += inv.subtotal if inv.subtotal is not None else inv.grand_total  # BILLED: pre-tax invoice value by invoice date
         buckets[key]["invoice_count"] += 1
+
+    # COLLECTED: by payment date, net of refunds and waivers (same helper as day-end)
+    for d, amt in collected_by_day(db, current_doctor.hospital_id, range_start, range_end).items():
+        key = (d.year, d.month)
+        if key not in buckets:
+            buckets[key] = {"total": 0.0, "invoice_count": 0, "collected": 0.0}
+        buckets[key]["collected"] += amt
 
     return {
         "from_month": f"{from_d.year:04d}-{from_d.month:02d}",
         "to_month": f"{to_d.year:04d}-{to_d.month:02d}",
         "months": [
-            {"month": f"{y:04d}-{m:02d}", "total": round(v["total"], 2), "invoice_count": v["invoice_count"]}
+            {"month": f"{y:04d}-{m:02d}", "total": round(v["total"], 2), "billed": round(v["total"], 2),
+             "collected": round(v["collected"], 2), "invoice_count": v["invoice_count"]}
             for (y, m), v in sorted(buckets.items())
         ]
     }
+
+
+AUTO_CLOSE_NOTE = "[AUTO-CLOSED, NOT COUNTED] No cash count was entered before day rollover. Variance is unknown, not zero."
 
 
 def close_day_for_hospital(db: Session, hospital_id: int, d, closed_by: int = None, note: str = None):
@@ -955,8 +1039,9 @@ def close_day_for_hospital(db: Session, hospital_id: int, d, closed_by: int = No
         hospital_id=hospital_id,
         close_date=d,
         system_cash=totals.get("cash", 0), system_card=totals.get("card", 0), system_upi=totals.get("upi", 0),
-        counted_cash=totals.get("cash", 0), counted_card=totals.get("card", 0), counted_upi=totals.get("upi", 0),
-        notes=note or "Auto-closed by system — no manual count was entered before day rollover.",
+        counted_cash=None, counted_card=None, counted_upi=None,   # not counted: no variance value is stored
+        auto_closed=True,
+        notes=note or AUTO_CLOSE_NOTE,
         closed_by=closed_by,
     ))
     db.commit()
@@ -996,7 +1081,7 @@ def day_end_summary(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     if date is None:  # only auto-catch-up when viewing "today" — avoid recursion when auto-closing past days calls this same function
-        auto_close_past_days(db, current_doctor)
+        pass  # past-day closing now runs in the scheduler, so this GET stays read-only
 
     target_date = datetime.fromisoformat(date).date() if date else ist_today()
     return _day_end_summary_core(db, current_doctor.hospital_id, target_date)
@@ -1017,53 +1102,11 @@ def _day_end_summary_core(db: Session, hospital_id: int, target_date):
         by_mode.setdefault(mode, {})
         by_mode[mode][category] = round(by_mode[mode].get(category, 0) + amount, 2)
 
-    checkins = db.query(Checkin).filter(
-        Checkin.hospital_id == hospital_id, Checkin.is_paid == True,
-        Checkin.paid_at >= day_start, Checkin.paid_at < day_end
-    ).all()
-    for c in checkins:
-        add(c.payment_method, "consultation", c.consultation_fee or 0)
-
-    tests = db.query(TestOrder).filter(
-        TestOrder.hospital_id == hospital_id, TestOrder.status != "payment_pending",
-        TestOrder.paid_at >= day_start, TestOrder.paid_at < day_end
-    ).all()
-    for t in tests:
-        add(t.payment_method, "tests", t.price or 0)
-
-    charges = db.query(OpdCharge).filter(
-        OpdCharge.hospital_id == hospital_id, OpdCharge.status == "paid",
-        OpdCharge.paid_at >= day_start, OpdCharge.paid_at < day_end
-    ).all()
-    for ch in charges:
-        add(ch.payment_method, "opd_charges", (ch.amount or 0) * (ch.quantity or 1))
-
-    # Pharmacy counter collections. Includes orders paid and LATER cancelled (their
-    # refund is netted below, so the original collection must be counted too).
-    # Rows paid before payment_method existed have no mode and can't be placed.
-    medicine_rows = db.query(MedicineOrder).filter(
-        MedicineOrder.hospital_id == hospital_id,
-        MedicineOrder.status.in_(["paid", "dispensed", "cancelled"]),
-        MedicineOrder.paid_at != None,  # noqa: E711
-        MedicineOrder.paid_at >= day_start, MedicineOrder.paid_at < day_end
-    ).all()
-    for mo in medicine_rows:
-        add(mo.payment_method, "pharmacy", line_total(mo.unit_price or 0, (mo.billed_quantity if mo.billed_quantity is not None else mo.quantity) or 0))
-
-    deposits = db.query(AdmissionDeposit).join(Admission, AdmissionDeposit.admission_id == Admission.id).filter(
-        Admission.hospital_id == hospital_id,
-        AdmissionDeposit.collected_at >= day_start, AdmissionDeposit.collected_at < day_end
-    ).all()
-    for d in deposits:
-        category = "ipd_topups" if d.note == "Top-up collected" else "ipd_deposits"
-        add(d.payment_method, category, d.amount or 0)
-
-    settlements = db.query(Invoice).filter(
-        Invoice.hospital_id == hospital_id, Invoice.generated_from == "admission_discharge",
-        Invoice.generated_at >= day_start, Invoice.generated_at < day_end
-    ).all()
-    for inv in settlements:
-        add(inv.payment_method, "ipd_settlements", inv.amount_collected or 0)
+    # Every "money in" line (consultation, tests, charges, pharmacy, IPD,
+    # approved OPD waivers as negatives) comes from the one shared helper, so
+    # day-end, billing_today and revenue history always agree.
+    for e in collection_entries(db, hospital_id, day_start, day_end):
+        add(e["mode"], e["category"], e["amount"])
 
     # Refunds leave through the channel they were issued on, so each one is netted
     # out of that mode's total (previously only cash refunds were netted, so a
@@ -1085,92 +1128,24 @@ def _day_end_summary_core(db: Session, hospital_id: int, target_date):
         DayEndClose.hospital_id == hospital_id, DayEndClose.close_date == target_date
     ).first()
 
+    _money = collected_summary(db, hospital_id, day_start, day_end)
+
     return {
         "date": target_date.isoformat(),
+        "collected_net": _money["net"],   # by payment date, net of refunds and waivers
+        "waivers": _money["waivers"],
+        "billed": billed_total(db, hospital_id, day_start, day_end),   # invoices dated this day
         "by_mode": by_mode,
         "cash_refunds": total_cash_refunds,
         "refunds_by_channel": refunds_by_channel,
         "system_totals": system_totals,
         "already_closed": bool(existing_close),
+        "auto_closed": bool(existing_close and existing_close.auto_closed),
         "close": ({
-            "counted_cash": existing_close.counted_cash, "counted_card": existing_close.counted_card, "counted_upi": existing_close.counted_upi,
+            "counted_cash": None if existing_close.auto_closed else existing_close.counted_cash,
+            "counted_card": None if existing_close.auto_closed else existing_close.counted_card,
+            "counted_upi": None if existing_close.auto_closed else existing_close.counted_upi,
             "notes": existing_close.notes, "closed_at": existing_close.closed_at.isoformat() if existing_close.closed_at else None,
         } if existing_close else None),
     }
 
-
-@router.post("/day-end-close")
-def close_day_end(
-    body: DayEndCloseIn,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    target_date = datetime.fromisoformat(body.date).date() if body.date else ist_today()
-    existing = db.query(DayEndClose).filter(
-        DayEndClose.hospital_id == current_doctor.hospital_id, DayEndClose.close_date == target_date
-    ).first()
-    if existing and current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=400, detail="This day is already closed — only an admin can re-close it")
-
-    summary = day_end_summary(date=body.date, db=db, current_doctor=current_doctor)
-    system_totals = summary["system_totals"]
-
-    close = existing or DayEndClose(hospital_id=current_doctor.hospital_id, close_date=target_date, closed_by=current_doctor.id)
-    if not existing:
-        db.add(close)
-
-    close.system_cash = system_totals.get("cash", 0)
-    close.system_card = system_totals.get("card", 0)
-    close.system_upi = system_totals.get("upi", 0)
-    close.counted_cash = body.counted_cash
-    close.counted_card = body.counted_card
-    close.counted_upi = body.counted_upi
-    close.notes = body.notes
-    close.closed_by = current_doctor.id
-    close.closed_at = now_ist_naive()
-    db.commit()
-
-    return {
-        "message": "Day closed",
-        "variance": {
-            "cash": round(body.counted_cash - close.system_cash, 2),
-            "card": round(body.counted_card - close.system_card, 2),
-            "upi": round(body.counted_upi - close.system_upi, 2),
-        }
-    }
-
-
-@router.get("/checkins/{checkin_id}/preview-slip")
-def preview_slip(
-    checkin_id: int,
-    scope: str = "all",
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    """View-only breakdown by scope (consultation/tests/medicines/all) — does NOT finalize or save anything.
-    Used for 'give them the pieces separately' on difficult patients, without affecting the one-invoice-per-visit lock."""
-    require_billing_staff(current_doctor)
-
-    checkin = db.query(Checkin).filter(
-        Checkin.id == checkin_id,
-        Checkin.hospital_id == current_doctor.hospital_id
-    ).first()
-    if not checkin:
-        raise HTTPException(status_code=404, detail="Visit not found")
-
-    items = gather_invoice_items(db, checkin)
-    if scope != "all":
-        items = [i for i in items if i["type"] == scope.rstrip("s")]  # "tests" -> "test", "medicines" -> "medicine"
-
-    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
-    items, subtotal, gst_total, grand_total = apply_gst(items, hospital)
-
-    return {
-        "items": items,
-        "subtotal": subtotal,
-        "gst_total": gst_total,
-        "total": grand_total
-    }

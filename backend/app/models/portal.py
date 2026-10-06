@@ -147,6 +147,7 @@ class Appointment(Base):
     no_show_detected_at = Column(DateTime, nullable=True)          # set once 1hr-past-slot threshold crosses with no consultation
     no_show_reason = Column(String, nullable=True)                 # "hospital_delay" | "patient_no_show" — patient's MCQ answer
     no_show_reschedule_deadline = Column(DateTime, nullable=True)  # requested_time + 72h once a reason is given
+    cancelled_by = Column(String, nullable=True)  # "patient" when the patient cancelled; anything else is shown as hospital-cancelled
     reschedule_kind = Column(String, nullable=True)                # "no_show" | "same_day" — tags an in-flight pending_review request so accept/decline/expiry know which rules apply
     requested_reschedule_slot_id = Column(Integer, ForeignKey("doctor_slots.id"), nullable=True)
 

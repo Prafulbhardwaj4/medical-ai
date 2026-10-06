@@ -272,6 +272,25 @@ def notify_critical_result(db: Session, hospital_id: int, order_id: int, patient
     ))
 
 
+def notify_report_released(db: Session, hospital_id: int, order_id: int, patient_name: str,
+                           doctor_id: int, test_name: str):
+    """Tells the ordering doctor a lab report is ready. One row per order, so a
+    later correction of the same report updates it in place."""
+    if not doctor_id:
+        return
+    _upsert(
+        db, hospital_id, f"report_released:{order_id}", "report_released", "info",
+        f"Report ready - {patient_name}", f"{test_name} report has been released.",
+        "test_order", order_id,
+    )
+    existing = db.query(Notification).filter(
+        Notification.hospital_id == hospital_id,
+        Notification.source_key == f"report_released:{order_id}",
+    ).first()
+    if existing:
+        existing.target_doctor_id = doctor_id
+
+
 def notify_admission_sample_overdue(db: Session, hospital_id: int, order_id: int, patient_name: str,
                                      test_name: str, ward: str = None, bed_number: str = None):
     """Fired once (see TestOrder.sample_overdue_notified_at) when an
@@ -473,7 +492,7 @@ def sync_idle_staff_notification(db: Session, doctor):
         return
 
     hospital_id = doctor.hospital_id
-    today = date.today()
+    today = ist_today()
 
     attendance = db.query(AttendanceRecord).filter(
         AttendanceRecord.doctor_id == doctor.id,
@@ -565,7 +584,7 @@ def sync_idle_staff_notifications_for_hospital(db: Session, hospital_id: int):
     from app.models.attendance import AttendanceRecord
     from app.models.doctor import Doctor
 
-    today = date.today()
+    today = ist_today()
     staff_ids = [
         r[0] for r in db.query(AttendanceRecord.doctor_id).filter(
             AttendanceRecord.hospital_id == hospital_id,

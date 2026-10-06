@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nurse Station — MedScribe</title>
-  <link rel="stylesheet" href="../css/style.css?v=4" />
+  <link rel="stylesheet" href="../css/style.css" />
   <script src="../js/custom-select.js" defer></script>
   <style>
     /* Mobile tab sections: only one visible at a time on phones, all stacked normally on desktop */
@@ -282,12 +282,12 @@
   </div>
 
   <div id="toast"></div>
-  <script src="../js/api.js?v=4"></script>
+  <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
-  <script src="../js/chat-widget.js?v=1"></script>
-  <script src="../js/suggestion-widget.js?v=1"></script>
-  <script src="../js/tutorial.js?v=2"></script>
+  <script src="../js/chat-widget.js"></script>
+  <script src="../js/suggestion-widget.js"></script>
+  <script src="../js/tutorial.js"></script>
   <script>
     requireAuth();
     fillTopbar();
@@ -467,7 +467,7 @@
     }
 
     function fieldRow(label, value, locked, rule) {
-      const ruleAttr = rule ? ` data-rule='${JSON.stringify(rule).replace(/'/g, "&#39;")}'` : '';
+      const ruleAttr = rule ? ` data-rule='${jsArg(rule).replace(/'/g, "&#39;")}'` : '';
       const unitHtml = `<span style="font-size:12px;color:var(--slate);white-space:nowrap;align-self:center;width:44px;flex:0 0 44px">${rule && rule.unit ? rule.unit : ''}</span>`;
       return `
         <div style="margin-bottom:8px" data-row>
@@ -535,8 +535,8 @@
               <div class="ns-row-sub">${Object.entries(h.data).map(([k,v]) => `${k}: ${v}`).join(' · ')}</div>
             </div>
             ${h.type === 'vitals'
-              ? `<button class="btn btn-outline btn-sm" onclick='openVitalsModal(${h.checkin_id}, ${JSON.stringify(h.patient_name)}, ${JSON.stringify(h.data)})'>Edit</button>`
-              : `<button class="btn btn-outline btn-sm" onclick='openPostConsultModal(${h.checkin_id}, "", ${JSON.stringify(h.data)})'>Edit</button>`}
+              ? `<button class="btn btn-outline btn-sm" onclick='openVitalsModal(${h.checkin_id}, ${jsArg(h.patient_name)}, ${jsArg(h.data)})'>Edit</button>`
+              : `<button class="btn btn-outline btn-sm" onclick='openPostConsultModal(${h.checkin_id}, "", ${jsArg(h.data)})'>Edit</button>`}
           </div>
         `).join('') : `<p style="color:var(--slate-light);padding:12px 0">${q ? 'No matching records.' : 'Nothing recorded yet today.'}</p>`;
     }
@@ -554,7 +554,7 @@
               <div class="ns-row-sub">Token ${v.token_number} · ${v.issue_category} · For ${v.doctor_name}${v.booked_time ? ' · Booked for ' + new Date(toIST(v.booked_time)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : ''}</div>
               ${v.is_recheck && v.recheck_request ? `<div class="ns-row-sub" style="color:var(--danger)">Doctor's note: ${v.recheck_request}</div>` : ''}
             </div>
-            <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openVitalsModal(${v.checkin_id}, ${JSON.stringify(v.patient_name)}, ${JSON.stringify(v.prior_vitals || null)})'>${v.is_recheck ? 'Recheck' : 'Record Vitals'}</button>
+            <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openVitalsModal(${v.checkin_id}, ${jsArg(v.patient_name)}, ${jsArg(v.prior_vitals || null)})'>${v.is_recheck ? 'Recheck' : 'Record Vitals'}</button>
           </div>
         `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No patients waiting for vitals.</p>';
       } catch (e) { toast(e.message, "error"); }
@@ -569,7 +569,7 @@
               <div class="ns-row-sub">Token ${t.token_number} · From ${t.doctor_name}</div>
               <div class="ns-row-note">${t.note || ''}</div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openPostConsultModal(${t.checkin_id}, ${JSON.stringify(t.note || "")}, null, ${t.patient_id})'>Mark Done</button>
+            <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openPostConsultModal(${t.checkin_id}, ${jsArg(t.note || "")}, null, ${t.patient_id})'>Mark Done</button>
           </div>
         `).join('') : '<p style="color:var(--slate-light);padding:12px 0">No pending tasks.</p>';
       } catch (e) { toast(e.message, "error"); }

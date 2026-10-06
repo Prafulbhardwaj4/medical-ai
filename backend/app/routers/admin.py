@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Header
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, Field, EmailStr, Field, validator
 from typing import Optional, List, Literal
 from sqlalchemy.orm import Session
 import json
@@ -19,7 +19,7 @@ from app.models.checkin import Checkin
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from app.utils.ai_scribe_gate import get_ai_scribe_status, has_ai_scribe_at_all
-from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING, AI_SCRIBE_TIER_CAPS
+from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING, AI_SCRIBE_TIER_CAPS, effective_ai_scribe_cap, cycle_months
 from app.models.suggestion import Suggestion
 from app.models.ai_scribe_topup import AiScribeTopup
 from app.models.upgrade_request import UpgradeRequest
@@ -27,13 +27,21 @@ from app.models.hospital_lead import HospitalLead
 from app.models.plan_inquiry import PlanInquiry
 from app.models.portal import PatientProfileLink
 from app.models.audit_log import AuditLog
+from app.models.superadmin_alert_seen import SuperAdminAlertSeen
 from dateutil.relativedelta import relativedelta
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-def require_super_admin(current_doctor: Doctor):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
+from app.utils.roles import require_super_admin, require_roles
+
+
+def _alert_marker(h, kind):
+    """Identifies WHICH occurrence of a computed alert was dismissed, so it comes back
+    in the next billing cycle instead of staying hidden forever."""
+    if kind == "hospital_limit":
+        return h.billing_cycle_start.isoformat() if h.billing_cycle_start else "none"
+    info = get_billing_cycle_info(h)
+    return info["cycle_end"].isoformat() if info else "none"
 
 
 @router.get("/notifications-feed")
@@ -54,6 +62,9 @@ def get_notifications_feed(
     now = now_ist_naive()
     items = []
 
+    seen = {(r.alert_key, r.marker) for r in db.query(SuperAdminAlertSeen).filter(SuperAdminAlertSeen.doctor_id == current_doctor.id).all()}
+    hosp_names = {hid: nm for hid, nm in db.query(Hospital.id, Hospital.name).all()}
+
     for pi in db.query(PlanInquiry).order_by(PlanInquiry.created_at.desc()).limit(50).all():
         items.append({
             "id": f"plan_inquiry-{pi.id}", "notif_type": "plan_inquiry", "severity": "info",
@@ -71,7 +82,7 @@ def get_notifications_feed(
     for ur in db.query(UpgradeRequest).order_by(UpgradeRequest.created_at.desc()).limit(50).all():
         items.append({
             "id": f"upgrade_request-{ur.id}", "notif_type": "upgrade_request", "severity": "info",
-            "title": "New upgrade request", "message": f"{ur.hospital_name} requested an upgrade.",
+            "title": "New upgrade request", "message": f"{hosp_names.get(ur.hospital_id, 'A hospital')} requested an upgrade.",
             "created_at": ur.created_at, "unread": ur.status == "new", "nav_section": "upgrade-requests",
         })
 
@@ -83,7 +94,7 @@ def get_notifications_feed(
         })
 
     for h in db.query(Hospital).filter(Hospital.is_active == True).all():
-        cap = AI_SCRIBE_TIER_CAPS.get(h.tier)
+        cap = effective_ai_scribe_cap(h)
         if cap and h.ai_scribe_consultations_used >= cap:
             items.append({
                 "id": f"hospital_limit-{h.id}", "notif_type": "hospital_limit", "severity": "warning",
@@ -100,10 +111,71 @@ def get_notifications_feed(
                 "created_at": now, "unread": True, "nav_section": "hospitals", "hospital_id": h.id,
             })
 
+    hospital_by_id = {x.id: x for x in db.query(Hospital).filter(Hospital.is_active == True).all()}
+    for it in items:
+        if it["notif_type"] in ("hospital_limit", "billing_cycle"):
+            h_obj = hospital_by_id.get(it["hospital_id"])
+            it["computed"] = True
+            it["unread"] = bool(h_obj) and (it["id"], _alert_marker(h_obj, it["notif_type"])) not in seen
+
     items.sort(key=lambda x: x["created_at"], reverse=True)
     for it in items:
         it["created_at"] = it["created_at"].isoformat()
-    return {"notifications": items, "unread_count": sum(1 for it in items if it["unread"])}
+    unread_rows = (
+        db.query(PlanInquiry).filter(PlanInquiry.status == "new").count()
+        + db.query(HospitalLead).filter(HospitalLead.status == "new").count()
+        + db.query(UpgradeRequest).filter(UpgradeRequest.status == "new").count()
+        + db.query(Suggestion).filter(Suggestion.status == "sent").count()
+    )
+    unread_computed = sum(1 for it in items if it.get("computed") and it["unread"])
+    return {"notifications": items, "unread_count": unread_rows + unread_computed}
+
+class AlertSeenIn(BaseModel):
+    alert_id: str = Field(max_length=60)
+
+
+def _mark_alert_seen(db: Session, doctor: Doctor, alert_id: str):
+    kind, _, hid = alert_id.rpartition("-")
+    if kind not in ("hospital_limit", "billing_cycle") or not hid.isdigit():
+        raise HTTPException(status_code=400, detail="Invalid alert")
+    h = db.query(Hospital).filter(Hospital.id == int(hid)).first()
+    if not h:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    marker = _alert_marker(h, kind)
+    exists = db.query(SuperAdminAlertSeen).filter(
+        SuperAdminAlertSeen.doctor_id == doctor.id,
+        SuperAdminAlertSeen.alert_key == alert_id,
+        SuperAdminAlertSeen.marker == marker,
+    ).first()
+    if not exists:
+        db.add(SuperAdminAlertSeen(doctor_id=doctor.id, alert_key=alert_id, marker=marker))
+
+
+@router.post("/notifications-feed/seen")
+def mark_alert_seen(
+    body: AlertSeenIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    _mark_alert_seen(db, current_doctor, body.alert_id)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/notifications-feed/seen-all")
+def mark_all_alerts_seen(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    feed = get_notifications_feed(db=db, current_doctor=current_doctor)
+    for it in feed["notifications"]:
+        if it.get("computed") and it["unread"]:
+            _mark_alert_seen(db, current_doctor, it["id"])
+    db.commit()
+    return {"ok": True}
+
 
 @router.get("/upgrade-requests")
 def list_upgrade_requests(
@@ -124,6 +196,10 @@ def list_upgrade_requests(
             "contact_name": r.contact_name,
             "contact_phone": r.contact_phone,
             "contact_email": r.contact_email,
+            "follow_up_notes": r.follow_up_notes,
+            "owner": r.owner,
+            "next_follow_up_at": r.next_follow_up_at.date().isoformat() if r.next_follow_up_at else None,
+            "contacted_at": r.contacted_at.isoformat() if r.contacted_at else None,
             "status": r.status,
             "created_at": r.created_at.isoformat() if r.created_at else None,
         })
@@ -141,7 +217,10 @@ def mark_upgrade_request_contacted(
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
     req.status = "contacted" if req.status == "new" else "new"
+    req.contacted_at = now_ist_naive() if req.status == "contacted" else None
     db.commit()
+    log_action(db, current_doctor, action="upgrade_request_status_changed", target_type="upgrade_request", target_id=req.id,
+               target_label=req.requested_tier, details=f"Status set to {req.status}", hospital_id=req.hospital_id)
     return {"id": req.id, "status": req.status}
 
 
@@ -175,6 +254,12 @@ def list_hospital_leads(
             "hospital_name": l.hospital_name,
             "location": l.location,
             "note": l.note,
+            "follow_up_notes": l.follow_up_notes,
+            "owner": l.owner,
+            "next_follow_up_at": l.next_follow_up_at.date().isoformat() if l.next_follow_up_at else None,
+            "contacted_at": l.contacted_at.isoformat() if l.contacted_at else None,
+            "converted_hospital_id": l.converted_hospital_id,
+            "converted_hospital_name": (db.query(Hospital.name).filter(Hospital.id == l.converted_hospital_id).scalar() if l.converted_hospital_id else None),
             "status": l.status,
             "created_at": l.created_at.isoformat() if l.created_at else None,
         })
@@ -191,9 +276,128 @@ def mark_hospital_lead_contacted(
     lead = db.query(HospitalLead).filter(HospitalLead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
+    if lead.status == "converted":
+        raise HTTPException(status_code=400, detail="This lead is already converted")
     lead.status = "contacted" if lead.status == "new" else "new"
+    lead.contacted_at = now_ist_naive() if lead.status == "contacted" else None
     db.commit()
+    log_action(db, current_doctor, action="hospital_lead_status_changed", target_type="hospital_lead", target_id=lead.id,
+               target_label=lead.hospital_name, details=f"Status set to {lead.status}", hospital_id=None)
     return {"id": lead.id, "status": lead.status}
+
+
+class FollowUpIn(BaseModel):
+    status: Optional[Literal["new", "contacted", "closed"]] = None
+    owner: Optional[str] = Field(default=None, max_length=100)
+    next_follow_up_at: Optional[str] = None  # YYYY-MM-DD; empty string clears it
+    follow_up_notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+def _apply_follow_up(db: Session, current_doctor: Doctor, row, body: FollowUpIn, kind: str, label: str, hospital_id=None):
+    data = body.dict(exclude_unset=True)
+    changes = []
+    if data.get("status") and data["status"] != row.status:
+        if row.status == "converted":
+            raise HTTPException(status_code=400, detail="This lead is already converted")
+        changes.append(f"status: {row.status} -> {data['status']}")
+        row.status = data["status"]
+        if row.status == "contacted" and not row.contacted_at:
+            row.contacted_at = now_ist_naive()
+    if "owner" in data:
+        new_owner = (data["owner"] or "").strip() or None
+        if new_owner != row.owner:
+            changes.append(f"owner: {row.owner or '-'} -> {new_owner or '-'}")
+            row.owner = new_owner
+    if "next_follow_up_at" in data:
+        raw = (data["next_follow_up_at"] or "").strip()
+        parsed = None
+        if raw:
+            try:
+                parsed = datetime.strptime(raw, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Follow-up date must be YYYY-MM-DD")
+        old = row.next_follow_up_at.date().isoformat() if row.next_follow_up_at else "-"
+        if (parsed.date().isoformat() if parsed else "-") != old:
+            changes.append(f"next follow-up: {old} -> {raw or '-'}")
+            row.next_follow_up_at = parsed
+    if "follow_up_notes" in data:
+        new_notes = (data["follow_up_notes"] or "").strip() or None
+        if new_notes != row.follow_up_notes:
+            changes.append("notes updated")
+            row.follow_up_notes = new_notes
+    if not changes:
+        return
+    db.commit()
+    log_action(db, current_doctor, action=f"{kind}_follow_up_updated", target_type=kind, target_id=row.id,
+               target_label=label, details="; ".join(changes), hospital_id=hospital_id)
+
+
+@router.patch("/hospital-leads/{lead_id}/follow-up")
+def update_hospital_lead_follow_up(
+    lead_id: int,
+    body: FollowUpIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    lead = db.query(HospitalLead).filter(HospitalLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    _apply_follow_up(db, current_doctor, lead, body, "hospital_lead", lead.hospital_name)
+    return {"id": lead.id, "status": lead.status}
+
+
+@router.patch("/upgrade-requests/{request_id}/follow-up")
+def update_upgrade_request_follow_up(
+    request_id: int,
+    body: FollowUpIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    req = db.query(UpgradeRequest).filter(UpgradeRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    _apply_follow_up(db, current_doctor, req, body, "upgrade_request", req.requested_tier, hospital_id=req.hospital_id)
+    return {"id": req.id, "status": req.status}
+
+
+class LeadToHospitalIn(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=150)
+    address: str = Field(default="", max_length=300)
+    hospital_type: Literal["government", "private"] = "private"
+    tier: Literal["foundation", "growth", "scale", "enterprise"] = "foundation"
+    billing_cycle_start: Optional[str] = None  # YYYY-MM-DD, defaults to today
+
+
+@router.post("/hospital-leads/{lead_id}/create-hospital", status_code=201)
+def create_hospital_from_lead(
+    lead_id: int,
+    body: LeadToHospitalIn,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor)
+):
+    require_super_admin(current_doctor)
+    lead = db.query(HospitalLead).filter(HospitalLead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if lead.converted_hospital_id:
+        raise HTTPException(status_code=400, detail="This lead already has a hospital")
+    created = create_hospital_jwt(
+        name=(body.name or lead.hospital_name).strip(), city=lead.city, state=lead.state, address=body.address,
+        hospital_type=body.hospital_type, tier=body.tier,
+        billing_cycle_start=body.billing_cycle_start or now_ist_naive().strftime("%Y-%m-%d"),
+        db=db, current_doctor=current_doctor,
+    )
+    lead.converted_hospital_id = created["id"]
+    lead.status = "converted"
+    if not lead.contacted_at:
+        lead.contacted_at = now_ist_naive()
+    db.commit()
+    log_action(db, current_doctor, action="hospital_lead_converted", target_type="hospital_lead", target_id=lead.id,
+               target_label=lead.hospital_name, details=f"Hospital #{created['id']} created from this lead",
+               hospital_id=created["id"])
+    return {**created, "lead_id": lead.id}
 
 
 @router.get("/plan-inquiries")
@@ -235,6 +439,8 @@ def mark_plan_inquiry_contacted(
         raise HTTPException(status_code=404, detail="Inquiry not found")
     inquiry.status = "contacted" if inquiry.status == "new" else "new"
     db.commit()
+    log_action(db, current_doctor, action="plan_inquiry_status_changed", target_type="plan_inquiry", target_id=inquiry.id,
+               target_label=inquiry.hospital_name, details=f"Status set to {inquiry.status}", hospital_id=None)
     return {"id": inquiry.id, "status": inquiry.status}
 
 
@@ -243,20 +449,29 @@ def serialize_billing_block(db: Session, hospital: Hospital) -> dict:
     views can never disagree on used/total or renew-button state. Returns
     has_ai_scribe=False for Foundation with everything else null — per
     Praful, Foundation shows no topup/usage UI at all, not a 0/0 counter."""
-    if not has_ai_scribe_at_all(hospital.tier):
-        return {
-            "has_ai_scribe": False,
-            "ai_scribe_used": None, "ai_scribe_cap": None, "ai_scribe_topup_remaining": None, "ai_scribe_total_remaining": None,
-            "billing_cycle_start": None, "billing_cycle_end": None, "grace_end": None, "deactivation_at": None,
-            "renew_window_open": False,
-        }
-
-    status = get_ai_scribe_status(db, hospital)
     cycle = get_billing_cycle_info(hospital)
     now = now_ist_naive()
 
+    if not has_ai_scribe_at_all(hospital.tier):
+        # Foundation: no AI Scribe counter/topup, but the billing cycle,
+        # grace/deactivation dates and Renew still apply (the deactivation
+        # sweep runs for every tier).
+        return {
+            "has_ai_scribe": False,
+            "billing_period": hospital.billing_period,
+            "ai_scribe_used": None, "ai_scribe_cap": None, "ai_scribe_topup_remaining": None, "ai_scribe_total_remaining": None,
+            "billing_cycle_start": hospital.billing_cycle_start.isoformat() if hospital.billing_cycle_start else None,
+            "billing_cycle_end": cycle["cycle_end"].isoformat() if cycle else None,
+            "grace_end": cycle["grace_end"].isoformat() if cycle else None,
+            "deactivation_at": cycle["deactivation_at"].isoformat() if cycle else None,
+            "renew_window_open": is_renew_window_open(hospital, now),
+        }
+
+    status = get_ai_scribe_status(db, hospital)
+
     return {
         "has_ai_scribe": True,
+        "billing_period": hospital.billing_period,
         "ai_scribe_used": status["used"],
         "ai_scribe_cap": status["cap"],  # None = unlimited (Enterprise) — frontend must show "Unlimited", not a fraction
         "ai_scribe_topup_remaining": status["topup_remaining"],
@@ -291,6 +506,14 @@ def validate_fields(name, email, phone):
 VALID_HOSPITAL_TYPES = {"government", "private"}
 VALID_TIERS = {"foundation", "growth", "scale", "enterprise"}
 
+
+def _check_cycle_start_window(parsed):
+    """A cycle start far in the past deactivates the hospital at the next midnight sweep;
+    one far in the future gives free AI Scribe. Both are almost certainly typos."""
+    delta = (parsed.date() - now_ist_naive().date()).days
+    if delta < -7 or delta > 7:
+        raise HTTPException(status_code=400, detail="Billing cycle start must be within 7 days of today")
+
 def generate_doctor_uid(db: Session, hospital_code: str) -> str:
     import secrets, string
     prefix = (hospital_code or "STAF").replace("-", "")[:4].upper()
@@ -302,29 +525,51 @@ def generate_doctor_uid(db: Session, hospital_code: str) -> str:
             return uid
 
 
+class CreateDoctorIn(BaseModel):
+    hospital_id: int
+    name: str = Field(max_length=100)
+    email: str = Field(max_length=150)
+    phone: str = Field(max_length=20)
+    specialization: str = Field(default="", max_length=100)
+    title: str = Field(default="Dr.", max_length=20)
+    registration_number: str = Field(default="", max_length=50)
+    role: str = Field(default="doctor", max_length=20)
+    room_number: str = Field(default="", max_length=30)
+    consultation_fee: Optional[float] = Field(default=None, ge=0, le=1000000)
+    professional_fee_per_admission: Optional[float] = Field(default=None, ge=0, le=10000000)
+
+
 @router.post("/doctors", status_code=201)
 def create_doctor(
-    hospital_id: int,
-    name: str,
-    email: str,
-    phone: str,
-    specialization: str,
-    title: str = "Dr.",
-    registration_number: str = "",
-    role: str = "doctor",
-    room_number: str = "",
-    consultation_fee: float = None,
-    professional_fee_per_admission: float = None,
+    body: CreateDoctorIn,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin", "super_admin"))
 ):
+    # Personal data comes in the JSON body, never the URL, so it stays out of access logs.
+    hospital_id = body.hospital_id
+    name = body.name.strip()
+    email = body.email.strip()
+    phone = body.phone.strip()
+    specialization = body.specialization.strip()
+    title = body.title
+    registration_number = body.registration_number.strip()
+    role = body.role
+    room_number = body.room_number
+    consultation_fee = body.consultation_fee
+    professional_fee_per_admission = body.professional_fee_per_admission
     # Only admin/sub_admin can create doctors
-    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin", "receptionist"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
     
     if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy", "radiology"]:
         raise HTTPException(status_code=400, detail="Invalid role")
+    if role == "doctor" and not registration_number:
+        raise HTTPException(status_code=400, detail="Medical registration number is required for doctors (it is printed on prescriptions)")
 
+    if current_doctor.role.value == "sub_admin" and role != "doctor":
+        raise HTTPException(status_code=403, detail="Sub admin can only create doctor accounts")
+    if role == "radiology":
+        from app.utils.tier_gate import hospital_has_tier
+        if not hospital_has_tier(db, hospital_id, "enterprise"):
+            raise HTTPException(status_code=403, detail="Radiology staff accounts require the Enterprise plan")
     if current_doctor.role.value == "sub_admin" and role != "doctor":
         raise HTTPException(status_code=403, detail="Sub admin can only create doctor accounts")
 
@@ -425,10 +670,8 @@ def reset_staff_password(
 @router.get("/billing/today")
 def billing_today(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin"))
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     from app.models.checkin import Checkin
     from app.models.medicine_order import MedicineOrder
@@ -441,8 +684,37 @@ def billing_today(
     paid = [c for c in checkins if c.is_paid]
     unpaid = [c for c in checkins if not c.is_paid]
 
-    total_collected = sum((c.consultation_fee or 0) + (c.test_fee or 0) for c in paid)
-    total_unpaid = sum((c.consultation_fee or 0) + (c.test_fee or 0) for c in unpaid)
+    from app.models.refund import Refund as _Refund
+    _rs, _re = ist_day_bounds()
+    refunds_today = round(sum((r.amount or 0) for r in db.query(_Refund).filter(
+        _Refund.hospital_id == current_doctor.hospital_id,
+        _Refund.processed_at >= _rs, _Refund.processed_at < _re
+    ).all()), 2)
+
+    from app.models.test_order import TestOrder
+
+    consultation_collected = round(sum((c.consultation_fee or 0) for c in paid), 2)
+    consultation_unpaid = round(sum((c.consultation_fee or 0) for c in unpaid), 2)
+
+    # Test money comes ONLY from lab orders, never from Checkin.test_fee.
+    # admission_id empty = OPD test. IPD tests are billed on the discharge bill.
+    _t_start, _t_end = ist_day_bounds()
+    tests_collected = round(db.query(func.coalesce(func.sum(TestOrder.price), 0)).filter(
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.admission_id.is_(None),
+        TestOrder.status != "payment_pending",
+        TestOrder.paid_at >= _t_start, TestOrder.paid_at < _t_end
+    ).scalar() or 0, 2)
+    tests_unpaid = round(db.query(func.coalesce(func.sum(TestOrder.price), 0)).filter(
+        TestOrder.hospital_id == current_doctor.hospital_id,
+        TestOrder.admission_id.is_(None),
+        TestOrder.status == "payment_pending",
+        TestOrder.included == True,  # noqa: E712
+        TestOrder.created_at >= _t_start, TestOrder.created_at < _t_end
+    ).scalar() or 0, 2)
+
+    total_collected = round(consultation_collected + tests_collected, 2)
+    total_unpaid = round(consultation_unpaid + tests_unpaid, 2)
 
     today_start, today_end = ist_day_bounds()
     medicine_total = db.query(MedicineOrder).filter(
@@ -457,9 +729,21 @@ def billing_today(
         key = m.payment_method or "unspecified"
         pharmacy_by_method[key] = round(pharmacy_by_method.get(key, 0) + line_total(m.unit_price or 0, ((m.billed_quantity if m.billed_quantity is not None else m.quantity) or 0)), 2)
 
+    from app.utils.money_totals import collected_summary, billed_total
+    _money = collected_summary(db, current_doctor.hospital_id, today_start, today_end)
+    billed_today = billed_total(db, current_doctor.hospital_id, today_start, today_end)
+
     return {
-        "total_collected": total_collected + pharmacy_collected,
+        # "Collected" = by payment date, net of refunds and approved waivers.
+        # "Billed" = invoices dated today. Same numbers as day-end and revenue history.
+        "total_collected": _money["net"],
+        "collected": _money["net"],
+        "billed": billed_today,
+        "waivers_today": _money["waivers"],
+        "refunds_today": refunds_today,
         "consultation_and_test_collected": total_collected,
+        "consultation_collected": consultation_collected,
+        "tests_collected": tests_collected,
         "pharmacy_collected": pharmacy_collected,
         "pharmacy_by_method": pharmacy_by_method,
         "paid_count": len(paid),
@@ -471,27 +755,35 @@ def billing_today(
 def update_fee_settings(
     default_consultation_fee: float,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin"))
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
 
+    if not (0 <= default_consultation_fee <= 1_000_000):
+        raise HTTPException(status_code=400, detail="Consultation fee must be between 0 and 10,00,000")
+    _old_fee = hospital.default_consultation_fee
     hospital.default_consultation_fee = default_consultation_fee
     db.commit()
+    log_action(
+        db, current_doctor,
+        action="fee_settings_updated",
+        target_type="hospital",
+        target_id=hospital.id,
+        target_label=hospital.name,
+        details=f"default_consultation_fee: {_old_fee!r} -> {default_consultation_fee!r}",
+        hospital_id=hospital.id,
+    )
     return {"default_consultation_fee": hospital.default_consultation_fee}
 
 
 @router.get("/hospital/details")
 def get_hospital_details(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin"))
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     if not hospital:
@@ -507,6 +799,8 @@ def get_hospital_details(
         # Editable by hospital admin
         "address": hospital.address,
         "gstin": hospital.gstin,
+        "clinical_establishment_reg_no": hospital.clinical_establishment_reg_no,
+        "drug_licence_no": hospital.drug_licence_no,
         "phone": hospital.phone,
         "contact_numbers": json.loads(hospital.contact_numbers) if hospital.contact_numbers else [],
         "emails": json.loads(hospital.emails) if hospital.emails else [],
@@ -549,6 +843,8 @@ class ContactNumberIn(BaseModel):
 class HospitalDetailsUpdate(BaseModel):
     address: Optional[str] = None
     gstin: Optional[str] = None
+    clinical_establishment_reg_no: Optional[str] = Field(default=None, max_length=60)
+    drug_licence_no: Optional[str] = Field(default=None, max_length=60)
     phone: Optional[str] = None
     contact_numbers: Optional[List[ContactNumberIn]] = None
     emails: Optional[List[EmailStr]] = None
@@ -560,9 +856,23 @@ class HospitalDetailsUpdate(BaseModel):
         v = v.strip().upper()
         if not v:
             return None
-        if len(v) != 15:
-            raise ValueError("GSTIN must be exactly 15 characters")
+        if not re.fullmatch(r"(0[1-9]|[12][0-9]|3[0-8])[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]", v):
+            raise ValueError("Enter a valid 15-character GSTIN (e.g. 06ABCDE1234F1Z5)")
         return v
+
+    @validator("consultation_gst_percent", "test_gst_percent", "room_gst_percent", "charge_gst_percent",
+               "waiver_auto_approve_percent", allow_reuse=True)
+    def validate_percent(cls, v):
+        if v is not None and not (0 <= v <= 100):
+            raise ValueError("Percentage must be between 0 and 100")
+        return v
+
+    @validator("waiver_auto_approve_cap", "room_gst_threshold_per_day", allow_reuse=True)
+    def validate_amount(cls, v):
+        if v is not None and not (0 <= v <= 10_000_000):
+            raise ValueError("Amount must be between 0 and 1,00,00,000")
+        return v
+
     logo_base64: Optional[str] = None
     consultation_gst_percent: Optional[float] = None
     test_gst_percent: Optional[float] = None
@@ -584,19 +894,30 @@ class HospitalDetailsUpdate(BaseModel):
 def update_hospital_details(
     payload: HospitalDetailsUpdate,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin"))
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
 
+    _audit_fields = (
+        "address", "gstin", "phone", "consultation_gst_percent", "test_gst_percent", "room_gst_percent",
+        "charge_gst_percent", "room_gst_threshold_per_day", "waiver_auto_approve_cap",
+        "waiver_auto_approve_percent", "hsn_consultation", "hsn_test", "hsn_room", "hsn_charge",
+        "contact_numbers", "emails",
+    )
+    _before = {k: getattr(hospital, k) for k in _audit_fields}
+    _logo_before = bool(hospital.logo_base64)
+
     if payload.address is not None:
         hospital.address = payload.address.strip()
     if payload.gstin is not None:
         hospital.gstin = payload.gstin.strip() or None
+    if payload.clinical_establishment_reg_no is not None:
+        hospital.clinical_establishment_reg_no = payload.clinical_establishment_reg_no.strip() or None
+    if payload.drug_licence_no is not None:
+        hospital.drug_licence_no = payload.drug_licence_no.strip() or None
     if payload.phone is not None:
         hospital.phone = payload.phone.strip() or None
     if payload.contact_numbers is not None:
@@ -608,8 +929,8 @@ def update_hospital_details(
         if not logo:
             hospital.logo_base64 = None
         else:
-            if not logo.startswith("data:image/"):
-                raise HTTPException(status_code=400, detail="Logo must be an image upload")
+            if not (logo.startswith("data:image/png;base64,") or logo.startswith("data:image/jpeg;base64,")):
+                raise HTTPException(status_code=400, detail="Logo must be a PNG or JPEG image")
             if len(logo) > 700_000:
                 raise HTTPException(status_code=400, detail="Logo image is too large (max ~500KB)")
             hospital.logo_base64 = logo
@@ -637,6 +958,20 @@ def update_hospital_details(
         hospital.hsn_charge = payload.hsn_charge or None
 
     db.commit()
+
+    _changes = [f"{k}: {_before[k]!r} -> {getattr(hospital, k)!r}" for k in _audit_fields if _before[k] != getattr(hospital, k)]
+    if _logo_before != bool(hospital.logo_base64):
+        _changes.append(f"logo: {'set' if hospital.logo_base64 else 'removed'}")
+    if _changes:
+        log_action(
+            db, current_doctor,
+            action="hospital_details_updated",
+            target_type="hospital",
+            target_id=hospital.id,
+            target_label=hospital.name,
+            details="; ".join(_changes)[:1800],
+            hospital_id=hospital.id,
+        )
     return {
         "address": hospital.address,
         "gstin": hospital.gstin,
@@ -644,6 +979,8 @@ def update_hospital_details(
         "contact_numbers": json.loads(hospital.contact_numbers) if hospital.contact_numbers else [],
         "emails": json.loads(hospital.emails) if hospital.emails else [],
         "logo_base64": hospital.logo_base64,
+        "clinical_establishment_reg_no": hospital.clinical_establishment_reg_no,
+        "drug_licence_no": hospital.drug_licence_no,
         "consultation_gst_percent": hospital.consultation_gst_percent,
         "test_gst_percent": hospital.test_gst_percent,
         "room_gst_percent": hospital.room_gst_percent,
@@ -712,10 +1049,8 @@ def create_room(
     room_type: str = "General",
     sequence_number: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin"))
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     if not room_number.strip() and not name.strip():
         raise HTTPException(status_code=400, detail="At least a room number or name is required")
@@ -747,10 +1082,8 @@ def update_room_type(
     sequence_number: Optional[int] = None,
     clear_sequence_number: bool = False,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin"))
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     if not room_type.strip():
         raise HTTPException(status_code=400, detail="Room type is required")
@@ -782,10 +1115,8 @@ def update_room_type(
 def delete_room(
     room_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin"))
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     from app.models.room import Room
     room = db.query(Room).filter(
@@ -795,17 +1126,34 @@ def delete_room(
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
 
+    from app.models.attendance import AttendanceRecord
+    from app.utils.timezone import ist_today as _ist_today
+    _in_use = db.query(AttendanceRecord).filter(
+        AttendanceRecord.hospital_id == current_doctor.hospital_id,
+        AttendanceRecord.room_id == room.id,
+        AttendanceRecord.date == _ist_today(),
+        AttendanceRecord.status.in_(["present", "on_break", "away_emergency"]),
+    ).first()
+    if _in_use:
+        raise HTTPException(status_code=400, detail="A doctor is currently marked present in this room. Ask them to go off duty or change room first.")
+
     room.is_active = False
     db.commit()
+    log_action(
+        db, current_doctor,
+        action="room_deleted",
+        target_type="room",
+        target_id=room.id,
+        target_label=room.name or room.room_number or f"Room {room.id}",
+        hospital_id=current_doctor.hospital_id,
+    )
     return {"deleted": True}
 
 @router.get("/doctors")
 def list_doctors(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin", "super_admin"))
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     doctors_query = db.query(Doctor).filter(
         Doctor.role.in_([UserRole.doctor, UserRole.sub_admin, UserRole.receptionist, UserRole.nurse, UserRole.assistant, UserRole.lab, UserRole.pharmacy, UserRole.radiology])
@@ -870,11 +1218,10 @@ def list_doctors(
 @router.patch("/doctors/{doctor_id}/toggle-active")
 def toggle_doctor_active(
     doctor_id: int,
+    confirm: bool = False,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin", "super_admin"))
 ):
-    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     doctor_query = db.query(Doctor).filter(Doctor.id == doctor_id)
     if current_doctor.role.value != "super_admin":
@@ -896,6 +1243,44 @@ def toggle_doctor_active(
     if current_doctor.role.value == "admin" and doctor.role.value in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Cannot deactivate admin or sub admin accounts")
 
+    _warnings = []
+    if doctor.is_active:  # this call would DEACTIVATE
+        from app.models.portal import Appointment, AppointmentStatus
+        from app.models.checkin import Checkin
+        from app.models.doctor_slot import DoctorSlot
+        _today = ist_today()
+        _open_appts = db.query(Appointment).filter(
+            Appointment.doctor_id == doctor.id,
+            Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed, AppointmentStatus.pending_review]),
+            Appointment.requested_time >= datetime.combine(_today, datetime.min.time()),
+        ).count()
+        _waiting = db.query(Checkin).filter(
+            Checkin.doctor_id == doctor.id, Checkin.visit_date == _today,
+            Checkin.is_finalized == False,  # noqa: E712
+        ).count()
+        if _open_appts:
+            _warnings.append(f"{_open_appts} upcoming online appointment(s)")
+        if _waiting:
+            _warnings.append(f"{_waiting} patient(s) in today's queue")
+        if doctor.role.value in ("lab", "pharmacy", "nurse"):
+            _others = db.query(Doctor).filter(
+                Doctor.hospital_id == doctor.hospital_id, Doctor.role == doctor.role,
+                Doctor.is_active == True, Doctor.id != doctor.id,  # noqa: E712
+            ).count()
+            if _others == 0:
+                _warnings.append(f"this is the only active {doctor.role.value} user")
+        if _warnings and not confirm:
+            raise HTTPException(
+                status_code=409,
+                detail={"message": "Deactivating this account affects: " + "; ".join(_warnings) + ". Confirm to continue.", "needs_confirm": True},
+            )
+        # Free their unbooked future slots so patients can't book a deactivated doctor.
+        if doctor.role.value == "doctor":
+            db.query(DoctorSlot).filter(
+                DoctorSlot.doctor_id == doctor.id,
+                DoctorSlot.slot_date >= _today, DoctorSlot.booked_count == 0,
+            ).delete(synchronize_session=False)
+
     doctor.is_active = not doctor.is_active
     db.commit()
 
@@ -904,7 +1289,8 @@ def toggle_doctor_active(
         action="account_activated" if doctor.is_active else "account_deactivated",
         target_type="doctor",
         target_id=doctor.id,
-        target_label=f"{doctor.title} {doctor.name}"
+        target_label=f"{doctor.title} {doctor.name}",
+        details=("Confirmed despite: " + "; ".join(_warnings)) if (_warnings and not doctor.is_active) else None
     )
 
     return {"id": doctor.id, "is_active": doctor.is_active}
@@ -914,12 +1300,10 @@ def toggle_doctor_active(
 def toggle_hiv_authorized(
     doctor_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("admin", "sub_admin", "super_admin"))
 ):
     """Explicit, per-person grant — tighter than the general 'lab' role
     for HIV result access (Phase 6 item 21)."""
-    if current_doctor.role.value not in ["admin", "sub_admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     doctor_query = db.query(Doctor).filter(Doctor.id == doctor_id)
     if current_doctor.role.value != "super_admin":
@@ -1065,61 +1449,6 @@ def create_superadmin(
         "role": superadmin.role.value
     }
 
-@router.post("/create-subadmin", status_code=201)
-def create_subadmin(
-    hospital_id: int,
-    name: str,
-    email: str,
-    phone: str,
-    specialization: str = "",
-    title: str = "Dr.",
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    if current_doctor.role.value not in ["admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    if current_doctor.role.value != "super_admin" and current_doctor.hospital_id != hospital_id:
-        raise HTTPException(status_code=403, detail="Cannot create sub admin for another hospital")
-
-    validate_fields(name, email, phone)
-
-    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
-    if not hospital:
-        raise HTTPException(status_code=404, detail="Hospital not found")
-
-    email = email.lower().strip()
-    existing = db.query(Doctor).filter(Doctor.email == email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    temp_password = generate_temp_password()
-    subadmin = Doctor(
-        title=title,
-        name=name,
-        email=email,
-        phone=phone,
-        specialization=specialization,
-        clinic_name=hospital.name,
-        hashed_password=hash_password(temp_password),
-        must_change_password=True,
-        role=UserRole.sub_admin,
-        hospital_id=hospital_id,
-        is_active=True,
-        created_by=current_doctor.id
-    )
-    db.add(subadmin)
-    db.commit()
-    db.refresh(subadmin)
-    return {
-        "id": subadmin.id,
-        "name": subadmin.name,
-        "email": subadmin.email,
-        "role": subadmin.role.value,
-        "hospital": hospital.name,
-        "temporary_password": temp_password
-    }
-
 @router.get("/hospitals-list")
 def list_hospitals_jwt(
     db: Session = Depends(get_db),
@@ -1149,11 +1478,10 @@ def list_hospitals_jwt(
 def set_hospital_billing_cycle_start(
     hospital_id: int,
     cycle_start_date: str,  # "YYYY-MM-DD" — super admin enters this manually (item 4/6), not derived from any login event
+    reason: str = "",       # required when changing a cycle start that is already set
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -1163,6 +1491,11 @@ def set_hospital_billing_cycle_start(
         parsed = datetime.strptime(cycle_start_date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="cycle_start_date must be YYYY-MM-DD")
+
+    _check_cycle_start_window(parsed)
+    previous_start = hospital.billing_cycle_start
+    if previous_start and len(reason.strip()) < 5:
+        raise HTTPException(status_code=400, detail="A reason (at least 5 characters) is required to change an existing billing cycle start")
 
     hospital.billing_cycle_start = parsed
     hospital.ai_scribe_consultations_used = 0  # setting/resetting the anchor starts a fresh cycle
@@ -1174,7 +1507,7 @@ def set_hospital_billing_cycle_start(
         target_type="hospital",
         target_id=hospital.id,
         target_label=hospital.name,
-        details=f"Billing cycle start set to {cycle_start_date}",
+        details=f"Billing cycle start set to {cycle_start_date}" + (f" (was {previous_start.date().isoformat()}; reason: {reason.strip()})" if previous_start else ""),
         hospital_id=hospital.id
     )
 
@@ -1187,15 +1520,13 @@ def buy_ai_scribe_topup(
     block_size: int,
     payment_collected: bool,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Item 3. The confirmation popup asking whether payment was collected
     lives in the frontend, before this call ever fires — payment_collected
     is sent as part of that confirmation, and this endpoint refuses to
     create anything unless it's explicitly True, so a topup can never be
     granted without that confirmation having happened."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     if block_size not in AI_SCRIBE_TOPUP_PRICING:
         raise HTTPException(status_code=400, detail=f"block_size must be one of {sorted(AI_SCRIBE_TOPUP_PRICING.keys())}")
@@ -1238,12 +1569,39 @@ def buy_ai_scribe_topup(
     return {"id": topup.id, "hospital_id": hospital.id, "block_size": block_size, "price_paid": topup.price_paid, "expires_at": topup.expires_at.isoformat()}
 
 
+@router.patch("/hospitals/{hospital_id}/billing-period")
+def set_hospital_billing_period(
+    hospital_id: int,
+    period: str,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(require_super_admin)
+):
+    period = period.strip().lower()
+    if period not in ("monthly", "yearly"):
+        raise HTTPException(status_code=400, detail="period must be monthly or yearly")
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    previous = hospital.billing_period
+    hospital.billing_period = period
+    db.commit()
+    log_action(
+        db, current_doctor,
+        action="hospital_billing_period_changed",
+        target_type="hospital", target_id=hospital.id, target_label=hospital.name,
+        details=f"{previous} -> {period}",
+        hospital_id=hospital.id
+    )
+    return {"id": hospital.id, "billing_period": hospital.billing_period}
+
+
 @router.post("/hospitals/{hospital_id}/renew")
 def renew_hospital_billing_cycle(
     hospital_id: int,
     confirm: bool,
+    amount: float = None,   # amount actually collected; defaults to the list price for the tier/period
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Item 6. Same pattern as the topup endpoint — the payment-collected
     confirmation popup lives in the frontend, confirm=True is what it sends
@@ -1251,8 +1609,6 @@ def renew_hospital_billing_cycle(
     button being enabled client-side (2-day-before through grace-end) is
     mirrored here server-side so a stale/forced request can't renew outside
     that window either."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
     if not confirm:
         raise HTTPException(status_code=400, detail="Payment must be confirmed before renewing")
 
@@ -1272,8 +1628,23 @@ def renew_hospital_billing_cycle(
     # by exactly one month from the current anchor, not from "now" (item 6:
     # "cycle stays anchored to the original signup date, not the date the
     # button was pressed").
-    hospital.billing_cycle_start = hospital.billing_cycle_start + relativedelta(months=1)
+    from app.models.subscription_payment import SubscriptionPayment
+    from app.utils.billing_cycle import TIER_MONTHLY_PRICE
+    _yearly = {"foundation": 109999, "growth": 350000}
+    _months = cycle_months(hospital)
+    _list_price = _yearly.get(hospital.tier, TIER_MONTHLY_PRICE.get(hospital.tier, 0) * 12) if _months == 12 else TIER_MONTHLY_PRICE.get(hospital.tier, 0)
+    _paid = _list_price if amount is None else amount
+    if _paid < 0 or _paid > 100_000_000:
+        raise HTTPException(status_code=400, detail="Invalid payment amount")
+    _period_start = hospital.billing_cycle_start
+    hospital.billing_cycle_start = hospital.billing_cycle_start + relativedelta(months=_months)
     hospital.ai_scribe_consultations_used = 0
+    db.add(SubscriptionPayment(
+        hospital_id=hospital.id, tier=hospital.tier, billing_period=hospital.billing_period or "monthly",
+        amount=_paid, period_start=_period_start, period_end=hospital.billing_cycle_start,
+        collected_by=current_doctor.id,
+        note=None if amount is None else "Amount entered manually",
+    ))
     db.commit()
 
     log_action(
@@ -1293,11 +1664,12 @@ def renew_hospital_billing_cycle(
 def set_hospital_tier(
     hospital_id: int,
     tier: str,
+    confirm: bool = False,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Plan change must be confirmed")
 
     tier = tier.strip().lower()
     if tier not in VALID_TIERS:
@@ -1327,10 +1699,8 @@ def set_hospital_tier(
 def toggle_hospital_billing(
     hospital_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -1351,14 +1721,28 @@ def toggle_hospital_billing(
 
     return {"id": hospital.id, "billing_enabled": hospital.billing_enabled}
 
+@router.get("/hospitals/{hospital_id}/live-load")
+def hospital_live_load(
+    hospital_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(require_super_admin)
+):
+    """What would be cut off if this hospital were deactivated right now."""
+    admitted = db.query(func.count(Admission.id)).filter(
+        Admission.hospital_id == hospital_id, Admission.status == "admitted"
+    ).scalar() or 0
+    opd_today = db.query(func.count(Checkin.id)).filter(
+        Checkin.hospital_id == hospital_id, Checkin.visit_date == ist_today()
+    ).scalar() or 0
+    return {"admitted_patients": admitted, "opd_checkins_today": opd_today}
+
+
 @router.patch("/hospitals/{hospital_id}/toggle-active")
 def toggle_hospital_active(
     hospital_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -1398,13 +1782,11 @@ def create_hospital_jwt(
     state: str,
     address: str = "",
     hospital_type: str = "private",
-    tier: str = "growth",
+    tier: str = "foundation",
     billing_cycle_start: str = None,  # "YYYY-MM-DD" — required, asked at creation time now instead of set separately after the fact
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital_type = hospital_type.strip().lower()
     if hospital_type not in VALID_HOSPITAL_TYPES:
@@ -1420,6 +1802,14 @@ def create_hospital_jwt(
         parsed_cycle_start = datetime.strptime(billing_cycle_start, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=400, detail="billing_cycle_start must be YYYY-MM-DD")
+
+    _check_cycle_start_window(parsed_cycle_start)
+
+    duplicate = db.query(Hospital).filter(
+        func.lower(Hospital.name) == name.strip().lower(), func.lower(Hospital.city) == city.strip().lower()
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail=f"A hospital named '{duplicate.name}' in {duplicate.city} already exists")
 
     words = name.strip().upper().split()
     code_base = "".join([w[0] for w in words])[:4]
@@ -1446,19 +1836,29 @@ def create_hospital_jwt(
     )
     return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type, "billing_enabled": hospital.billing_enabled}
 
+class CreateAdminIn(BaseModel):
+    hospital_id: int
+    name: str = Field(max_length=100)
+    email: str = Field(max_length=150)
+    phone: str = Field(max_length=20)
+    specialization: str = Field(default="Hospital Admin", max_length=100)
+    title: str = Field(default="Dr.", max_length=20)
+
+
 @router.post("/create-admin-jwt", status_code=201)
 def create_admin_jwt(
-    hospital_id: int,
-    name: str,
-    email: str,
-    phone: str,
-    specialization: str,
-    title: str = "Dr.",
+    body: CreateAdminIn,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Personal data comes in the JSON body, never the URL, so it stays out of access logs.
+    hospital_id = body.hospital_id
+    name = body.name.strip()
+    email = body.email.strip()
+    phone = body.phone.strip()
+    specialization = body.specialization.strip() or "Hospital Admin"
+    title = body.title
 
     validate_fields(name, email, phone)
 
@@ -1470,6 +1870,10 @@ def create_admin_jwt(
     existing = db.query(Doctor).filter(Doctor.email == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+    if not hospital.is_active:
+        raise HTTPException(status_code=400, detail="This hospital is deactivated — activate it before adding an admin")
+    if db.query(Doctor).filter(Doctor.hospital_id == hospital_id, Doctor.phone == phone).first():
+        raise HTTPException(status_code=400, detail="Another account at this hospital already uses that phone number")
 
     temp_password = generate_temp_password()
     admin = Doctor(
@@ -1498,10 +1902,8 @@ def create_admin_jwt(
 @router.get("/stats")
 def superadmin_stats(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     month_start = now_ist_naive().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
@@ -1520,7 +1922,8 @@ def superadmin_stats(
             hospitals_by_tier[h.tier] += 1
 
     return {
-        "total_hospitals": total_hospitals,
+        "total_hospitals": db.query(Hospital).count(),
+        "active_hospitals": total_hospitals,
         "new_hospitals_this_month": new_hospitals_this_month,
         "monthly_revenue": monthly_revenue,
         "hospitals_by_tier": hospitals_by_tier,
@@ -1530,7 +1933,7 @@ def superadmin_stats(
 def platform_growth_analytics(
     trend_interval: str = "monthly",
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Phase 1 — Hospital & growth metrics for the platform-wide Analytics
     tab. Hospital count is small (tens/hundreds of rows), so bucketing is
@@ -1538,15 +1941,12 @@ def platform_growth_analytics(
     revisit if hospital count ever gets large. Patient/consultation-volume
     metrics (later phases) must NOT follow this pattern; those need
     DB-level aggregation."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     if trend_interval not in ("monthly", "weekly"):
         raise HTTPException(status_code=400, detail="trend_interval must be 'monthly' or 'weekly'")
 
     now = now_ist_naive()
     TIER_ORDER = ["foundation", "growth", "scale", "enterprise"]
-    TIER_RANK = {t: i for i, t in enumerate(TIER_ORDER)}
 
     all_hospitals = db.query(Hospital).all()
     total_hospitals = len(all_hospitals)
@@ -1611,13 +2011,11 @@ def platform_growth_analytics(
 def platform_tier_changes(
     filter: str = "all",
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Individual tier-change events, platform-wide — replaces the old
     aggregated upgrades/downgrades chart with a real, filterable, per-event
     list (hospital, address, previous tier -> current tier, date)."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
     if filter not in ("all", "upgrades", "downgrades"):
         raise HTTPException(status_code=400, detail="filter must be one of: all, upgrades, downgrades")
 
@@ -1665,15 +2063,13 @@ def platform_tier_changes(
 def hospital_tier_trail(
     hospital_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Modal data for a hospital clicked from the tier-changes list —
     a curated subset (not the full hospital-detail payload): primary
     admin, total patients, average daily patients since they joined, and
     the full tier trail from onboarding to now, reconstructed from
     AuditLog tier-change events."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -1746,12 +2142,10 @@ def platform_bookings_by_hospital(
     from_date: str = None,
     to_date: str = None,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Online vs walk-in consultation counts, per hospital, platform-wide —
     a real number breakdown rather than a single aggregated chart."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     from app.models.checkin import Checkin
 
@@ -1793,19 +2187,19 @@ def platform_bookings_by_hospital(
 @router.get("/analytics/platform/patients-usage")
 def platform_patients_usage_analytics(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Phase 1 — Patient & usage metrics, platform-wide, as plain totals
     (no trend charts — see chat). Average consultation duration is
     deliberately NOT included: Consultation only stores created_at, no
     start/confirm timestamp pair exists to compute a duration from. Will be
     added once that's tracked (needed for usage-based hospital billing)."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     total_patients = db.query(func.count(Patient.id)).scalar() or 0
     portal_activated = db.query(func.count(func.distinct(PatientProfileLink.patient_id))).scalar() or 0
-    total_consultations = db.query(func.count(Consultation.id)).scalar() or 0
+    total_consultations = db.query(func.count(Consultation.id)).filter(
+        Consultation.token_number != None, Consultation.is_voided == False
+    ).scalar() or 0
     total_admissions = db.query(func.count(Admission.id)).scalar() or 0
     online_count = db.query(func.count(Checkin.id)).filter(Checkin.source == "online").scalar() or 0
     walkin_count = db.query(func.count(Checkin.id)).filter(Checkin.source == "walk_in").scalar() or 0
@@ -1824,7 +2218,7 @@ def platform_patients_usage_analytics(
 @router.get("/analytics/platform/ai-scribe")
 def platform_ai_scribe_analytics(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Phase 1 — AI Scribe / business-critical usage metrics, platform-wide.
 
@@ -1835,8 +2229,6 @@ def platform_ai_scribe_analytics(
     hospitals are excluded from usage totals entirely — consume_ai_scribe_
     credit() never increments any counter for unlimited tiers, so there's
     nothing to sum for them."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     eligible_hospitals = [
         h for h in db.query(Hospital).filter(Hospital.is_active == True).all()
@@ -1850,17 +2242,20 @@ def platform_ai_scribe_analytics(
 
     approaching_or_at_cap = []
     for h in eligible_hospitals:
-        cap = AI_SCRIBE_TIER_CAPS.get(h.tier)
+        # Same status the AI Scribe gate enforces (effective cap incl. yearly
+        # plans + the same used counter), so this page and the real limit agree.
+        status_info = get_ai_scribe_status(db, h)
+        cap = status_info["cap"]
         if not cap:  # unlimited (Enterprise) or 0 — nothing meaningful to flag
             continue
-        pct = (h.ai_scribe_consultations_used / cap) * 100
+        used = status_info["used"]
+        pct = (used / cap) * 100
         if pct >= 80:
-            status_info = get_ai_scribe_status(db, h)
             approaching_or_at_cap.append({
                 "hospital_id": h.id,
                 "hospital_name": h.name,
                 "tier": h.tier,
-                "used": h.ai_scribe_consultations_used,
+                "used": used,
                 "cap": cap,
                 "percent_used": round(pct, 1),
                 "topup_remaining": status_info["topup_remaining"],
@@ -1886,7 +2281,7 @@ def platform_ai_scribe_analytics(
 @router.get("/analytics/platform/business")
 def platform_business_analytics(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Phase 1 — Business/revenue metrics, platform-wide.
 
@@ -1903,8 +2298,6 @@ def platform_business_analytics(
     it can occasionally miscount an edge case (e.g. hospital changed tier
     again later for unrelated reasons) — good enough to act on, not
     perfectly authoritative."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     from app.utils.billing_cycle import TIER_MONTHLY_PRICE
     active_hospitals = db.query(Hospital).filter(Hospital.is_active == True).all()
@@ -1956,10 +2349,8 @@ def update_hospital(
     state: str,
     address: str = "",
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -1981,23 +2372,34 @@ def update_hospital(
     )
     return {"id": hospital.id, "name": hospital.name, "city": hospital.city, "state": hospital.state, "address": hospital.address}
 
+class UpdateAccountIn(BaseModel):
+    name: str = Field(max_length=100)
+    email: str = Field(max_length=150)
+    phone: str = Field(max_length=20)
+    title: Optional[str] = Field(default=None, max_length=20)
+    specialization: str = Field(default="", max_length=100)
+    room_number: str = Field(default="", max_length=30)
+    consultation_fee: Optional[float] = Field(default=None, ge=0, le=1000000)
+    professional_fee_per_admission: Optional[float] = Field(default=None, ge=0, le=10000000)
+    role: Optional[str] = Field(default=None, max_length=20)
+
+
 @router.patch("/accounts/{doctor_id}")
 def update_account(
     doctor_id: int,
-    name: str,
-    email: str,
-    phone: str,
-    title: str = None,
-    specialization: str = "",
-    room_number: str = "",
-    consultation_fee: float = None,
-    professional_fee_per_admission: float = None,
-    role: str = None,
+    body: UpdateAccountIn,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("super_admin", "admin"))
 ):
-    if current_doctor.role.value not in ["super_admin", "admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    name = body.name.strip()
+    email = body.email.strip()
+    phone = body.phone.strip()
+    title = body.title
+    specialization = body.specialization.strip()
+    room_number = body.room_number
+    consultation_fee = body.consultation_fee
+    professional_fee_per_admission = body.professional_fee_per_admission
+    role = body.role
 
     query = db.query(Doctor).filter(Doctor.id == doctor_id)
     if current_doctor.role.value == "admin":
@@ -2012,6 +2414,10 @@ def update_account(
             raise HTTPException(status_code=403, detail="Cannot change role of an admin account")
         if role not in ["doctor", "sub_admin", "receptionist", "nurse", "assistant", "lab", "pharmacy", "radiology"]:
             raise HTTPException(status_code=400, detail="Invalid role")
+        if role == "radiology":
+            from app.utils.tier_gate import hospital_has_tier
+            if not hospital_has_tier(db, account.hospital_id, "enterprise"):
+                raise HTTPException(status_code=403, detail="Radiology staff accounts require the Enterprise plan")
         account.role = UserRole(role)
         if role not in ["doctor", "sub_admin"]:
             account.consultation_fee = None
@@ -2051,10 +2457,8 @@ def update_account(
 def toggle_account_active(
     doctor_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     account = db.query(Doctor).filter(
         Doctor.id == doctor_id,
@@ -2080,10 +2484,8 @@ def toggle_account_active(
 def reset_account_password(
     doctor_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     account = db.query(Doctor).filter(Doctor.id == doctor_id).first()
     if not account:
@@ -2107,58 +2509,6 @@ def reset_account_password(
         hospital_id=account.hospital_id
     )
     return {"id": account.id, "new_password": new_password}
-
-@router.get("/test-catalog")
-def list_test_catalog(
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    if current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    from app.models.test_catalog import TestCatalogItem
-    items = db.query(TestCatalogItem).filter(
-        TestCatalogItem.hospital_id == current_doctor.hospital_id
-    ).all()
-    return [{"id": i.id, "name": i.name, "fee": i.fee, "is_active": i.is_active} for i in items]
-
-@router.post("/test-catalog")
-def create_test_catalog_item(
-    name: str,
-    fee: float,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    if current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    from app.models.test_catalog import TestCatalogItem
-    item = TestCatalogItem(hospital_id=current_doctor.hospital_id, name=name, fee=fee, is_active=True)
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return {"id": item.id, "name": item.name, "fee": item.fee, "is_active": item.is_active}
-
-@router.patch("/test-catalog/{item_id}/toggle-active")
-def toggle_test_catalog_item(
-    item_id: int,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    if current_doctor.role.value not in ["admin", "sub_admin"]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    from app.models.test_catalog import TestCatalogItem
-    item = db.query(TestCatalogItem).filter(
-        TestCatalogItem.id == item_id,
-        TestCatalogItem.hospital_id == current_doctor.hospital_id
-    ).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Test not found")
-
-    item.is_active = not item.is_active
-    db.commit()
-    return {"id": item.id, "is_active": item.is_active}
 
 def _resolve_date_range(range_key: str, from_date: str, to_date: str, now):
     """Shared range resolver for hospital-wise drill-down analytics —
@@ -2192,13 +2542,11 @@ def hospital_staff_patients_analytics(
     from_date: str = None,
     to_date: str = None,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Phase 2 — Staff + Patients volume/patterns for one hospital's
     Analytics tab. Weekly pattern is all-time (not range-scoped) — a
     day-of-week pattern over just 7-30 days isn't a meaningful signal."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
@@ -2281,14 +2629,12 @@ def hospital_booking_behavior_analytics(
     from_date: str = None,
     to_date: str = None,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Phase 2 — Booking behavior for one hospital: online vs walk-in
     ratio, and no-show rate on online bookings. No-show rate denominator is
     completed + no_show only — a cancelled booking is a different outcome,
     not a no-show, so it's excluded rather than silently counted either way."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     from app.models.checkin import Checkin
     from app.models.portal import Appointment, AppointmentStatus
@@ -2314,13 +2660,19 @@ def hospital_booking_behavior_analytics(
     total_checkins = online_checkins + walkin_checkins
 
     # ── No-show rate on online bookings ──
+    # Nothing ever writes AppointmentStatus.no_show. A no-show is recorded by
+    # detect_no_shows as no_show_detected_at (status stays "confirmed", later
+    # "cancelled" when the 72h window expires). So: a no-show = detected and
+    # never completed; resolved = completed + no-show.
+    from sqlalchemy import or_, and_
+    _is_no_show = and_(Appointment.no_show_detected_at.isnot(None), Appointment.status != AppointmentStatus.completed)
     resolved_appointments = (
         db.query(func.count(Appointment.id))
         .filter(
             Appointment.hospital_id == hospital_id,
             Appointment.requested_time >= start,
             Appointment.requested_time < end,
-            Appointment.status.in_([AppointmentStatus.completed, AppointmentStatus.no_show]),
+            or_(Appointment.status == AppointmentStatus.completed, _is_no_show),
         )
         .scalar() or 0
     )
@@ -2330,7 +2682,7 @@ def hospital_booking_behavior_analytics(
             Appointment.hospital_id == hospital_id,
             Appointment.requested_time >= start,
             Appointment.requested_time < end,
-            Appointment.status == AppointmentStatus.no_show,
+            _is_no_show,
         )
         .scalar() or 0
     )
@@ -2355,7 +2707,7 @@ def hospital_booking_behavior_analytics(
 def hospital_clinical_volume_analytics(
     hospital_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Phase 2 — Clinical volume for one hospital: live bed occupancy only.
     OPD/IPD trend charts and the module-usage breakdown were removed per
@@ -2363,8 +2715,6 @@ def hospital_clinical_volume_analytics(
     timestamps exist (needed for usage-based hospital billing). Bed
     occupancy is a live snapshot, not range-scoped — 'currently admitted /
     total beds' doesn't have a meaningful range dimension."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     from app.models.admission_ward_type import AdmissionWardType
 
@@ -2391,7 +2741,7 @@ def hospital_clinical_volume_analytics(
 @router.get("/analytics/platform/comparison")
 def platform_month_over_month_comparison(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Phase 3 — This month vs last month, platform-wide. Uses equal-length
     windows (first N days of each month, where N = days elapsed in the
@@ -2399,8 +2749,6 @@ def platform_month_over_month_comparison(
     comparison stays fair on any day it's checked. MRR is reconstructed
     from tier-change audit history as of the equivalent point last month —
     see the note in the response."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     from app.models.admission import Admission
     from app.utils.billing_cycle import TIER_MONTHLY_PRICE
@@ -2425,8 +2773,14 @@ def platform_month_over_month_comparison(
     patients_this = _window_count(Patient, Patient.created_at, this_month_start, now)
     patients_last = _window_count(Patient, Patient.created_at, last_month_start, last_month_asof)
 
-    opd_this = _window_count(Consultation, Consultation.created_at, this_month_start, now)
-    opd_last = _window_count(Consultation, Consultation.created_at, last_month_start, last_month_asof)
+    def _opd_count(w_start, w_end):
+        return db.query(func.count(Consultation.id)).filter(
+            Consultation.token_number != None, Consultation.is_voided == False,
+            Consultation.created_at >= w_start, Consultation.created_at < w_end
+        ).scalar() or 0
+
+    opd_this = _opd_count(this_month_start, now)
+    opd_last = _opd_count(last_month_start, last_month_asof)
 
     ipd_this = _window_count(Admission, Admission.admission_date, this_month_start, now)
     ipd_last = _window_count(Admission, Admission.admission_date, last_month_start, last_month_asof)
@@ -2468,14 +2822,12 @@ def platform_month_over_month_comparison(
 @router.get("/analytics/platform/alerts")
 def platform_alerts(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
     """Phase 3 — Actionable alerts, platform-wide. Same underlying
     conditions as /admin/notifications-feed's billing/cap checks — this is
     a persistent list view of them for the Analytics tab, not a second
     data source."""
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     now = now_ist_naive()
     stale_cutoff = now - timedelta(days=3)
@@ -2535,10 +2887,8 @@ def platform_alerts(
 def hospital_detail(
     hospital_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_super_admin)
 ):
-    if current_doctor.role.value != "super_admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:

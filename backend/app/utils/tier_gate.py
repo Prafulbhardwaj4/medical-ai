@@ -20,6 +20,12 @@ def tier_at_least(tier: str, minimum: str) -> bool:
     return TIER_ORDER.get(tier, 0) >= TIER_ORDER[minimum]
 
 
+def hospital_has_tier(db: Session, hospital_id: int, minimum: str) -> bool:
+    """Non-raising check for places that must silently skip a feature instead of 403."""
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    return bool(hospital) and tier_at_least(hospital.tier, minimum)
+
+
 def require_tier(minimum: str, feature: str):
     def _dependency(
         current_doctor: Doctor = Depends(get_current_doctor),

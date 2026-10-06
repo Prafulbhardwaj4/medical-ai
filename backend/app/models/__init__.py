@@ -17,7 +17,6 @@ from app.models.admission_room import AdmissionRoom
 from app.models.admission_referral import AdmissionReferral
 from app.models.opd_charge import OpdCharge
 from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
-from app.models.admission_tpa_case import AdmissionTpaCase
 from app.models.refund import Refund
 from app.models.day_end_close import DayEndClose
 from app.models.attendance_coverage import AttendanceCoverage
@@ -29,5 +28,8 @@ from app.models.suggestion import Suggestion
 from app.models.suggestion_reply import SuggestionReply
 from app.models.patient_merge_request import PatientMergeRequest
 from app.models.patient_allergy import PatientAllergy
+from app.models.subscription_payment import SubscriptionPayment
+from app.models.consent_record import ConsentRecord
 from app.models.admission_progress_note import AdmissionProgressNote
 from app.models.cross_hospital_referral import CrossHospitalReferral
+from app.models.superadmin_alert_seen import SuperAdminAlertSeen

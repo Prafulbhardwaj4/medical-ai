@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MedScribe — Consultation</title>
-  <link rel="stylesheet" href="../css/style.css?v=4" />
+  <link rel="stylesheet" href="../css/style.css" />
   <script src="../js/custom-select.js" defer></script>
   <style>
     .section-block {
@@ -367,6 +367,14 @@
           <button class="btn btn-primary btn-sm" id="panel-2-reports-btn" style="display:none" onclick="openReportsModal(patientId)">📋 Reports</button>
         </div>
 
+        <div class="section-block" id="allergy-section">
+          <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+            <span>Allergies</span>
+            <button class="btn btn-outline btn-sm" type="button" onclick="addAllergyFromPanel()">+ Add allergy</button>
+          </div>
+          <div id="allergy-list" style="display:flex;gap:8px;flex-wrap:wrap;font-size:13px">Loading…</div>
+        </div>
+
         <div class="section-block" id="vitals-section">
           <div class="section-title">Vitals <span style="font-weight:400;color:var(--slate)">(if recorded)</span></div>
           <div class="form-row-3" id="vitals-review-fields"></div>
@@ -535,11 +543,11 @@
 
   <div id="toast"></div>
 
-  <script src="../js/api.js?v=4"></script>
+  <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
-  <script src="../js/tutorial.js?v=2"></script>
-  <script src="../js/doctor-demo.js?v=2"></script>
+  <script src="../js/tutorial.js"></script>
+  <script src="../js/doctor-demo.js"></script>
   <script>
     if (!requireAuth()) throw new Error();
     fillTopbar();
@@ -641,6 +649,7 @@
     let timerInterval = null;
     let seconds = 0;
     let isRecording = false;
+    window.msKeepSessionAlive = () => isRecording;
     let matchedTestsFromAI = [];
     let matchedRadiologyFromAI = [];
     let currentStream = null;
@@ -762,9 +771,22 @@
     let wsConnection = null;
     let mediaProcessor = null;
 
+    let _aiConsentRecorded = false;
     async function toggleRecording() {
-      if (!isRecording) await startRecording();
-      else await stopRecording();
+      if (!isRecording) {
+        if (!_aiConsentRecorded) {
+          const ok = await confirmDialog(
+            "Has the patient been informed that this conversation will be recorded and processed by AI to draft the consultation note? (Notice wording: PENDING LEGAL REVIEW)",
+            "Yes, patient informed"
+          );
+          if (!ok) return;
+          try {
+            await api("POST", `/consent/patients/${patientId}`, { purpose: "ai_recording" });
+            _aiConsentRecorded = true;
+          } catch (e) { toast(e.message, "error"); return; }
+        }
+        await startRecording();
+      } else await stopRecording();
     }
 
     let isPaused = false;
@@ -835,8 +857,8 @@
         seconds = 0;
         document.getElementById("transcript").value = "";
 
-        const token = getToken();
-        const wsUrl = `${BASE.replace(/^http/, "ws")}/consultations/ws/transcribe/${patientId}?token=${token}`;
+        const { ticket } = await api("POST", `/consultations/ws-ticket/${patientId}`);
+        const wsUrl = `${BASE.replace(/^http/, "ws")}/consultations/ws/transcribe/${patientId}?ticket=${encodeURIComponent(ticket)}`;
         wsConnection = new WebSocket(wsUrl);
 
         wsConnection.onopen = () => {
@@ -1297,12 +1319,22 @@
         const radiologyFormFPayload = {};
         selectedRadiology.forEach(t => { if (t.form_f) radiologyFormFPayload[t.id] = t.form_f; });
         const clinicalIndication = document.getElementById('test-clinical-indication').value.trim();
-        const data = await api("POST", `/consultations/confirm/${consultationId}`, {
+        const _confirmBody = {
           recommended_test_ids: checkedTestIds, test_priorities: testPriorities,
           recommended_radiology_template_ids: checkedRadiologyIds, radiology_priorities: radiologyPriorities,
           radiology_form_f: radiologyFormFPayload,
           clinical_indication: clinicalIndication || null
-        });
+        };
+        let data;
+        try {
+          data = await api("POST", `/consultations/confirm/${consultationId}`, _confirmBody);
+        } catch (err) {
+          if (!(err.data && err.data.allergy_conflict)) throw err;
+          const why = await promptModal(err.message + "\n\nTo prescribe anyway, enter a reason (min 5 characters):");
+          if (!why || why.trim().length < 5) throw new Error("Not confirmed: allergy warning was not overridden.");
+          _confirmBody.allergy_override_reason = why.trim();
+          data = await api("POST", `/consultations/confirm/${consultationId}`, _confirmBody);
+        }
         window._tokenNumber = data.token_number;
         window._verifyHash = data.verify_hash;
         document.getElementById("token-display").textContent = window._tokenNumber;
@@ -1348,7 +1380,34 @@
     }
 
     // ── Step nav ─────────────────────────────────────────
+    async function loadAllergyPanel() {
+      const box = document.getElementById('allergy-list');
+      if (!box || !patientId) return;
+      try {
+        const rows = (await api("GET", `/patients/${patientId}/allergies`)).filter(a => a.is_active);
+        box.innerHTML = rows.length
+          ? rows.map(a => `<span style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:999px;padding:3px 10px">
+              ${sanitize(a.allergen)} <small>(${sanitize(a.severity)})</small>
+              <a href="javascript:void(0)" title="Retract" onclick="retractAllergyFromPanel(${Number(a.id)})" style="margin-left:6px;color:#991b1b">✕</a></span>`).join('')
+          : '<span style="color:var(--slate)">No known allergies recorded</span>';
+      } catch (e) { box.textContent = 'Could not load allergies'; }
+    }
+    async function addAllergyFromPanel() {
+      const name = await promptModal('Allergen (drug or substance):');
+      if (!name || !name.trim()) return;
+      const reaction = await promptModal('Reaction (optional):');
+      try {
+        await api("POST", `/patients/${patientId}/allergies`, { allergen: name.trim(), reaction: (reaction || '').trim() || null, severity: 'moderate' });
+        loadAllergyPanel();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+    async function retractAllergyFromPanel(id) {
+      try { await api("PATCH", `/patients/${patientId}/allergies/${id}/retract`, {}); loadAllergyPanel(); }
+      catch (e) { toast(e.message, 'error'); }
+    }
+
     function goStep(n) {
+      if (n === 2) loadAllergyPanel();
       [1, 2, 3, 4].forEach(i => {
         document.getElementById(`panel-${i}`).style.display = i === n ? "block" : "none";
         const stepEl = document.getElementById(`step-${i}`);
