@@ -268,6 +268,15 @@ def attendance_today(
         for d in staff
     ]
 
+def _shift_end(r):
+    """When the shift ended. A manual Off Duty stamps created_at; a shift that closed itself keeps
+    the off-duty time the staff member gave at the start."""
+    if r.status != "off_duty":
+        return None
+    t = r.expected_off_duty_at if (r.auto_marked and r.expected_off_duty_at) else r.created_at
+    return t.isoformat() if t else None
+
+
 @router.get("/attendance/history")
 def attendance_history(
     from_date: Optional[str] = None,
@@ -316,6 +325,7 @@ def attendance_history(
             "date": r.date.isoformat(),
             "status": r.status,
             "shift_started_at": r.shift_started_at.isoformat() if r.shift_started_at else None,
+            "shift_ended_at": _shift_end(r),
             "last_updated_at": r.created_at.isoformat() if r.created_at else None,
             "auto_marked": bool(r.auto_marked)
         }

@@ -2250,6 +2250,15 @@ tbody tr:hover {
     margin-left: 5px;
   }
 
+  /* Mobile: brand stays on the left, every header button sits on the right. */
+  .topbar > :first-child {
+    margin-right: auto;
+  }
+
+  #topbar-right-block {
+    margin-left: 0 !important;
+  }
+
   .topbar-brand {
     cursor: pointer;
   }

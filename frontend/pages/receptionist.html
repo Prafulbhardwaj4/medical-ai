@@ -12,8 +12,14 @@
        because the native number-input spinner keeps scroll focus even
        after the page has scrolled past it — drop the spinner entirely. */
     #pb-patient-age::-webkit-outer-spin-button,
-    #pb-patient-age::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-    #pb-patient-age { -moz-appearance: textfield; }
+    #pb-patient-age::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    #pb-patient-age {
+      -moz-appearance: textfield;
+    }
 
     .option-card {
       border: 1.5px solid var(--border);
@@ -85,7 +91,8 @@
     }
 
     :root {
-      --receipt-width: 80mm; /* switch to 58mm here if a hospital's hardware needs it */
+      --receipt-width: 80mm;
+      /* switch to 58mm here if a hospital's hardware needs it */
     }
 
     @media print {
@@ -120,27 +127,32 @@
       font-family: 'Courier New', Courier, monospace;
       text-align: center;
     }
+
     .receipt-slip .r-hospital {
       font-weight: 700;
       font-size: 13px;
       letter-spacing: 0.5px;
     }
+
     .receipt-slip .r-rule {
       border-top: 1px solid #000;
       margin: 8px 0;
     }
+
     .receipt-slip .r-token-label {
       font-size: 10px;
       letter-spacing: 1px;
       text-transform: uppercase;
       margin-bottom: 2px;
     }
+
     .receipt-slip .r-token {
       font-size: 2.2rem;
       font-weight: 700;
       line-height: 1;
       margin-bottom: 10px;
     }
+
     .receipt-slip .r-row {
       display: flex;
       justify-content: space-between;
@@ -149,9 +161,11 @@
       padding: 2px 0;
       gap: 8px;
     }
+
     .receipt-slip .r-row span:first-child {
       color: #444;
     }
+
     .receipt-slip .r-extra {
       text-align: left;
       font-size: 11px;
@@ -159,10 +173,12 @@
       padding-top: 6px;
       border-top: 1px dashed #999;
     }
+
     .receipt-slip .r-dashed {
       border-top: 1px dashed #000;
       margin: 10px 0 6px;
     }
+
     .receipt-slip .r-footer {
       font-size: 10px;
       color: #444;
@@ -698,16 +714,14 @@
         <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
       </div>
       <div class="mobile-menu-body">
-        <a class="mobile-menu-item" href="#"
-          onclick="closeMobileMenu();showRecSection('portal');return false;">
+        <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();showRecSection('portal');return false;">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round"
               d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
           Appointments
         </a>
-        <a class="mobile-menu-item" href="#"
-          onclick="closeMobileMenu();showRecDesktopTab('patients');return false;">
+        <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();showRecDesktopTab('patients');return false;">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round"
               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
@@ -763,7 +777,11 @@
             <div id="search-results" style="margin-bottom:14px"></div>
             <button class="btn btn-outline" style="width:100%" onclick="openNewPatient()">+ Add as New Patient</button>
             <button class="btn btn-outline" style="width:100%;margin-top:8px;border-color:var(--teal);color:var(--teal)"
-              onclick="openPhoneBookingModal()"><svg width="14" height="14" style="vertical-align:-2px;margin-right:4px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>Book Appointment</button>
+              onclick="openPhoneBookingModal()"><svg width="14" height="14" style="vertical-align:-2px;margin-right:4px"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>Book Appointment</button>
             <button class="btn btn-sm" id="btn-emergency-intake"
               style="width:100%;margin-top:8px;background:#dc2626;color:#fff;border-color:#dc2626"
               onclick="onEmergencyIntakeBtnClick()">🚨 Emergency Intake</button>
@@ -809,319 +827,336 @@
             <div id="fee-group" style="display:none">
               <div class="form-group">
                 <label class="form-label">Consultation Fee (Rs.)</label>
-                <input type="number" min="0" step="1" class="form-control" id="consultation-fee" />
+                if (!doctorId) { toast('No doctor available.', 'error'); return; }
+                if (getDoctor()?.billing_enabled) {
+                const _fees = [parseFloat(document.getElementById('consultation-fee').value),
+                ...Object.values(selectedAdditionalDoctors).map(f => parseFloat(f))];
+                if (_fees.some(f => f < 0)) { toast('Fee should not be negative.', 'error' ); return; } }
+                  _tokenGenerationInFlight=true; </div>
               </div>
+
+              <div id="additional-doctors-list"></div>
+              <div id="visit-total-row"
+                style="display:none;font-size:14px;color:var(--slate);margin-bottom:10px;text-align:right;padding-right:10px">
+                Total for this visit: <strong id="visit-total-amount">₹0</strong>
+              </div>
+
+              <button class="btn btn-primary" id="btn-generate-token" style="width:100%"
+                onclick="generateToken()">Generate Token</button>
             </div>
 
-            <div id="additional-doctors-list"></div>
-            <div id="visit-total-row"
-              style="display:none;font-size:14px;color:var(--slate);margin-bottom:10px;text-align:right;padding-right:10px">
-              Total for this visit: <strong id="visit-total-amount">₹0</strong>
-            </div>
-
-            <button class="btn btn-primary" id="btn-generate-token" style="width:100%"
-              onclick="generateToken()">Generate Token</button>
-          </div>
-
-          <!-- Bills Modal -->
-          <div class="modal-overlay" id="modal-bills">
-            <div class="modal" style="max-width:720px;width:92vw;max-height:88vh;display:flex;flex-direction:column">
-              <div class="modal-header">
-                <h2>Today's Bills</h2><button class="modal-close" onclick="closeModal('modal-bills')">×</button>
-              </div>
-              <div style="display:flex;gap:8px;margin-bottom:12px">
-                <button class="btn btn-outline btn-sm bills-filter-btn" data-filter="all"
-                  onclick="setBillsFilter('all')">All</button>
-                <button class="btn btn-outline btn-sm bills-filter-btn" data-filter="generated"
-                  onclick="setBillsFilter('generated')">Generated</button>
-                <button class="btn btn-outline btn-sm bills-filter-btn" data-filter="pending"
-                  onclick="setBillsFilter('pending')">Pending</button>
-              </div>
-              <div id="bills-modal-list" style="overflow-y:auto;flex:1"></div>
-            </div>
-          </div>
-
-          <!-- Add Doctor Modal (item 7) -->
-          <div class="modal-overlay" id="modal-add-doctor">
-            <div class="modal"
-              style="max-width:460px;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:85vh">
-              <div style="background:var(--navy);color:#fff;padding:18px 22px">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-                  <h2 style="margin:0;font-size:17px">Add Doctor(s) to This Visit</h2>
-                  <button onclick="closeModal('modal-add-doctor')"
-                    style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:26px;height:26px;border-radius:50%;font-size:16px;line-height:1;cursor:pointer;flex-shrink:0">×</button>
+            <!-- Bills Modal -->
+            <div class="modal-overlay" id="modal-bills">
+              <div class="modal" style="max-width:720px;width:92vw;max-height:88vh;display:flex;flex-direction:column">
+                <div class="modal-header">
+                  <h2>Today's Bills</h2><button class="modal-close" onclick="closeModal('modal-bills')">×</button>
                 </div>
-                <p style="font-size:12.5px;color:rgba(255,255,255,0.75);margin:6px 0 0">Check every doctor this patient
-                  is seeing today. Fee is pre-filled from each doctor's default — edit if needed.</p>
-              </div>
-              <div id="add-doctor-checklist" style="padding:8px 22px;overflow-y:auto;flex:1"></div>
-              <div style="padding:14px 22px;border-top:1px solid var(--border)">
-                <button class="btn btn-primary" style="width:100%"
-                  onclick="closeModal('modal-add-doctor')">Done</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- STEP 4: Token slip -->
-          <div id="step-token" style="display:none;text-align:center">
-            <div id="print-area" class="print-area">
-              <div class="receipt-slip">
-                <p class="r-hospital" id="slip-hospital"></p>
-                <div class="r-rule"></div>
-                <p class="r-token-label">Token</p>
-                <div class="r-token" id="slip-token"></div>
-                <div id="slip-additional-doctors" class="r-extra" style="display:none"></div>
-                <div class="r-row"><span>Patient Name</span><span id="slip-name"></span></div>
-                <div class="r-row"><span>Doctor</span><span id="slip-doctor"></span></div>
-                <div class="r-row"><span>Room</span><span id="slip-room"></span></div>
-                <div class="r-row"><span>Date</span><span id="slip-date"></span></div>
-                <div class="r-row"><span>Time</span><span id="slip-checkin-time"></span></div>
-                <div class="r-dashed"></div>
-                <p class="r-footer">Please keep this slip</p>
+                <div style="display:flex;gap:8px;margin-bottom:12px">
+                  <button class="btn btn-outline btn-sm bills-filter-btn" data-filter="all"
+                    onclick="setBillsFilter('all')">All</button>
+                  <button class="btn btn-outline btn-sm bills-filter-btn" data-filter="generated"
+                    onclick="setBillsFilter('generated')">Generated</button>
+                  <button class="btn btn-outline btn-sm bills-filter-btn" data-filter="pending"
+                    onclick="setBillsFilter('pending')">Pending</button>
+                </div>
+                <div id="bills-modal-list" style="overflow-y:auto;flex:1"></div>
               </div>
             </div>
-            <div id="slip-billing-row" class="no-print"
-              style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
-              <p><strong>Fee:</strong> Rs.<span id="slip-fee">0</span>
-                <span id="slip-paid-badge" class="badge badge-amber" style="margin-left:6px">Unpaid</span>
-              </p>
-              <button class="btn btn-primary btn-sm" id="btn-mark-paid" style="width:100%;margin-top:8px"
-                onclick="markPaid()">Mark as Paid</button>
-            </div>
-            <div id="pending-tests-row" class="no-print"
-              style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
-              <p style="font-weight:600;margin-bottom:8px">Pending Test Fees <span
-                  style="font-weight:400;font-size:12px;color:var(--slate)">(uncheck what the patient won't be getting
-                  here)</span></p>
-              <div id="pending-tests-list"></div>
-              <p style="margin-top:8px"><strong>Total:</strong> Rs.<span id="pending-tests-total">0</span></p>
-              <button class="btn btn-primary btn-sm" id="pending-tests-collect-wrap"
-                style="width:100%;margin-top:8px">Collect Payment</button>
-            </div>
-            <div id="pending-radiology-row" class="no-print"
-              style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
-              <p style="font-weight:600;margin-bottom:8px">Pending Radiology Fees <span
-                  style="font-weight:400;font-size:12px;color:var(--slate)">(uncheck what the patient won't be getting
-                  here)</span></p>
-              <div id="pending-radiology-list"></div>
-              <p style="margin-top:8px"><strong>Total:</strong> Rs.<span id="pending-radiology-total">0</span></p>
-              <button class="btn btn-primary btn-sm" id="pending-radiology-collect-wrap"
-                style="width:100%;margin-top:8px">Collect Payment</button>
-            </div>
-            <div class="no-print"
-              style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:10px">
-              <button class="btn btn-primary btn-sm" style="width:100%" onclick="generateBill()">🧾 Generate
-                Bill</button>
-              <div style="display:flex;gap:10px">
-                <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
-                <button class="btn btn-outline" style="flex:1" onclick="goToStep('search')">New Check-In</button>
+
+            <!-- Add Doctor Modal (item 7) -->
+            <div class="modal-overlay" id="modal-add-doctor">
+              <div class="modal"
+                style="max-width:460px;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:85vh">
+                <div style="background:var(--navy);color:#fff;padding:18px 22px">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+                    <h2 style="margin:0;font-size:17px">Add Doctor(s) to This Visit</h2>
+                    <button onclick="closeModal('modal-add-doctor')"
+                      style="background:rgba(255,255,255,0.12);border:none;color:#fff;width:26px;height:26px;border-radius:50%;font-size:16px;line-height:1;cursor:pointer;flex-shrink:0">×</button>
+                  </div>
+                  <p style="font-size:12.5px;color:rgba(255,255,255,0.75);margin:6px 0 0">Check every doctor this
+                    patient
+                    is seeing today. Fee is pre-filled from each doctor's default — edit if needed.</p>
+                </div>
+                <div id="add-doctor-checklist" style="padding:8px 22px;overflow-y:auto;flex:1"></div>
+                <div style="padding:14px 22px;border-top:1px solid var(--border)">
+                  <button class="btn btn-primary" style="width:100%"
+                    onclick="closeModal('modal-add-doctor')">Done</button>
+                </div>
               </div>
-              <!-- TEMP: preview-only until real WhatsApp sending exists — remove this button + previewWhatsappTokenPdf() once WhatsApp delivery is wired up -->
-              <button class="btn btn-outline no-print" style="width:100%;margin-top:10px"
-                onclick="previewWhatsappTokenPdf(currentCheckinId)">📱 Preview WhatsApp PDF</button>
+            </div>
+
+            <!-- STEP 4: Token slip -->
+            <div id="step-token" style="display:none;text-align:center">
+              <div id="print-area" class="print-area">
+                <div class="receipt-slip">
+                  <p class="r-hospital" id="slip-hospital"></p>
+                  <div class="r-rule"></div>
+                  <p class="r-token-label">Token</p>
+                  <div class="r-token" id="slip-token"></div>
+                  <div id="slip-additional-doctors" class="r-extra" style="display:none"></div>
+                  <div class="r-row"><span>Patient Name</span><span id="slip-name"></span></div>
+                  <div class="r-row"><span>Doctor</span><span id="slip-doctor"></span></div>
+                  <div class="r-row"><span>Room</span><span id="slip-room"></span></div>
+                  <div class="r-row"><span>Date</span><span id="slip-date"></span></div>
+                  <div class="r-row"><span>Time</span><span id="slip-checkin-time"></span></div>
+                  <div class="r-dashed"></div>
+                  <p class="r-footer">Please keep this slip</p>
+                </div>
+              </div>
+              <div id="slip-billing-row" class="no-print"
+                style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
+                <p><strong>Fee:</strong> Rs.<span id="slip-fee">0</span>
+                  <span id="slip-paid-badge" class="badge badge-amber" style="margin-left:6px">Unpaid</span>
+                </p>
+                <button class="btn btn-primary btn-sm" id="btn-mark-paid" style="width:100%;margin-top:8px"
+                  onclick="markPaid()">Mark as Paid</button>
+              </div>
+              <div id="pending-tests-row" class="no-print"
+                style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
+                <p style="font-weight:600;margin-bottom:8px">Pending Test Fees <span
+                    style="font-weight:400;font-size:12px;color:var(--slate)">(uncheck what the patient won't be getting
+                    here)</span></p>
+                <div id="pending-tests-list"></div>
+                <p style="margin-top:8px"><strong>Total:</strong> Rs.<span id="pending-tests-total">0</span></p>
+                <button class="btn btn-primary btn-sm" id="pending-tests-collect-wrap"
+                  style="width:100%;margin-top:8px">Collect Payment</button>
+              </div>
+              <div id="pending-radiology-row" class="no-print"
+                style="display:none;text-align:left;border-top:1.5px solid var(--border);padding-top:16px;margin-bottom:16px">
+                <p style="font-weight:600;margin-bottom:8px">Pending Radiology Fees <span
+                    style="font-weight:400;font-size:12px;color:var(--slate)">(uncheck what the patient won't be getting
+                    here)</span></p>
+                <div id="pending-radiology-list"></div>
+                <p style="margin-top:8px"><strong>Total:</strong> Rs.<span id="pending-radiology-total">0</span></p>
+                <button class="btn btn-primary btn-sm" id="pending-radiology-collect-wrap"
+                  style="width:100%;margin-top:8px">Collect Payment</button>
+              </div>
+              <div class="no-print"
+                style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:10px">
+                <button class="btn btn-primary btn-sm" style="width:100%" onclick="generateBill()">🧾 Generate
+                  Bill</button>
+                <div style="display:flex;gap:10px">
+                  <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
+                  <button class="btn btn-outline" style="flex:1" onclick="goToStep('search')">New Check-In</button>
+                </div>
+                <!-- TEMP: preview-only until real WhatsApp sending exists — remove this button + previewWhatsappTokenPdf() once WhatsApp delivery is wired up -->
+                <button class="btn btn-outline no-print" style="width:100%;margin-top:10px"
+                  onclick="previewWhatsappTokenPdf(currentCheckinId)">📱 Preview WhatsApp PDF</button>
+              </div>
+            </div>
+
+            <button id="btn-same-day-options" class="btn btn-outline" style="display:none;margin-top:8px"
+              onclick="openSameDayOptionsModal()">Same-Day Options</button>
+
+          </div>
+
+          <!-- Same-Day Return Options Modal -->
+          <div class="modal-overlay" id="modal-same-day-options">
+            <div class="modal" style="max-width:440px">
+              <div class="modal-header">
+                <h2>Same-Day Options</h2><button class="modal-close"
+                  onclick="closeModal('modal-same-day-options')">×</button>
+              </div>
+              <div id="sd-option-return"
+                style="display:none;border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px">
+                <p style="font-weight:600;margin-bottom:4px">Send back to the same doctor</p>
+                <p style="font-size:13px;color:var(--slate);margin-bottom:10px">No new token, no new fee. Use this when
+                  the doctor asked to see this patient again later today (e.g. after a test result) — same visit, same
+                  doctor.</p>
+                <button class="btn btn-primary btn-sm" style="width:100%" onclick="requeueCheckinFromModal()">Send Back
+                  to
+                  Queue</button>
+              </div>
+              <div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+                <p style="font-weight:600;margin-bottom:4px">Start a new token today</p>
+                <p style="font-size:13px;color:var(--slate);margin-bottom:10px">A brand-new token with its own fee. Use
+                  this for a second, separate visit today — including seeing a <strong>different doctor</strong> (e.g.
+                  one
+                  for fever, another for a plaster). You'll get the same "Add Doctor" option on the next screen if they
+                  need more than one.</p>
+                <button class="btn btn-outline btn-sm" style="width:100%"
+                  onclick="startFreshTokenTodayFromModal()">Start
+                  New Token</button>
+              </div>
             </div>
           </div>
 
-          <button id="btn-same-day-options" class="btn btn-outline" style="display:none;margin-top:8px"
-            onclick="openSameDayOptionsModal()">Same-Day Options</button>
-
-        </div>
-
-        <!-- Same-Day Return Options Modal -->
-        <div class="modal-overlay" id="modal-same-day-options">
-          <div class="modal" style="max-width:440px">
-            <div class="modal-header">
-              <h2>Same-Day Options</h2><button class="modal-close"
-                onclick="closeModal('modal-same-day-options')">×</button>
-            </div>
-            <div id="sd-option-return"
-              style="display:none;border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px">
-              <p style="font-weight:600;margin-bottom:4px">Send back to the same doctor</p>
-              <p style="font-size:13px;color:var(--slate);margin-bottom:10px">No new token, no new fee. Use this when
-                the doctor asked to see this patient again later today (e.g. after a test result) — same visit, same
-                doctor.</p>
-              <button class="btn btn-primary btn-sm" style="width:100%" onclick="requeueCheckinFromModal()">Send Back to
-                Queue</button>
-            </div>
-            <div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px">
-              <p style="font-weight:600;margin-bottom:4px">Start a new token today</p>
-              <p style="font-size:13px;color:var(--slate);margin-bottom:10px">A brand-new token with its own fee. Use
-                this for a second, separate visit today — including seeing a <strong>different doctor</strong> (e.g. one
-                for fever, another for a plaster). You'll get the same "Add Doctor" option on the next screen if they
-                need more than one.</p>
-              <button class="btn btn-outline btn-sm" style="width:100%" onclick="startFreshTokenTodayFromModal()">Start
-                New Token</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="card" id="pending-payments-card" style="margin-top:20px">
-          <div class="card-header">
-            <h2>Pending Payments (Today)</h2>
-            <div class="search-wrap" style="max-width:260px">
-              <svg class="search-icon" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                stroke-width="2">
-                <circle cx="11" cy="11" r="8" />
-                <path stroke-linecap="round" d="M21 21l-4.35-4.35" />
-              </svg>
-              <input class="form-control" id="pp-search-input" placeholder="Search name, ID, phone…"
-                oninput="filterPendingPayments(this.value)" />
-            </div>
-          </div>
-          <div id="pending-payments-list"></div>
-        </div>
-
-      </div>
-      <div class="mobile-section" id="section-availability">
-        <div class="card">
-          <div class="card-header">
-            <h2>Manage Doctor Availability</h2>
-          </div>
-          <input class="form-control" id="avail-doctor-search" placeholder="Search doctors by name or specialization..."
-            style="margin-bottom:16px" />
-          <div id="avail-doctor-list">
-            <p>Loading doctors...</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="mobile-section" id="section-portal">
-        <div class="card" id="expected-today-card">
-          <div class="card-header" style="flex-wrap:wrap;gap:10px">
-            <h2>Expected Today <span class="badge badge-teal" id="expected-today-count" style="margin-left:8px">0</span>
-            </h2>
-            <select class="form-control" id="expected-today-doctor-filter" style="max-width:220px">
-              <option value="">All doctors</option>
-            </select>
-          </div>
-          <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
-            Patients who paid for a booked appointment or a queue-from-home slot for today. This does not change how you
-            check anyone in — it's just a heads-up.
-          </p>
-          <div id="expected-today-list">
-            <p style="color:var(--slate-light);font-size:13px">Loading...</p>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:20px" id="noshow-card">
-          <div class="card-header" style="flex-wrap:wrap;gap:10px">
-            <h2>No-shows to handle <span class="badge badge-teal" id="noshow-count" style="margin-left:8px">0</span></h2>
-          </div>
-          <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
-            Patients who paid but did not come. Nothing is cancelled automatically. Choose Rebook (new day, same doctor, no new charge) or Refund.
-          </p>
-          <div id="noshow-list"><p style="color:var(--slate-light);font-size:13px">Loading...</p></div>
-        </div>
-
-        <div class="modal-overlay" id="modal-noshow-rebook">
-          <div class="modal" style="max-width:520px;width:92vw">
-            <div class="modal-header">
-              <h2>Rebook no-show</h2>
-              <button class="modal-close" onclick="closeModal('modal-noshow-rebook')">&times;</button>
-            </div>
-            <p id="nsr-info" style="font-size:13px;color:var(--slate);margin-bottom:10px"></p>
-            <div class="form-group">
-              <label>New date</label>
-              <input type="date" class="form-control" id="nsr-date" onchange="loadNoShowSlots()">
-            </div>
-            <div id="nsr-slots"><p style="color:var(--slate-light);font-size:13px">Pick a date to see slots.</p></div>
-            <div class="form-group" style="margin-top:10px">
-              <label>Note (optional)</label>
-              <input type="text" class="form-control" id="nsr-note" maxlength="200">
-            </div>
-            <button class="btn btn-primary" style="width:100%" id="nsr-confirm" onclick="confirmNoShowRebook()" disabled>Rebook</button>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:20px" id="upcoming-bookings-card">
-          <div class="card-header" style="flex-wrap:wrap;gap:10px">
-            <h2>Next 15 Days <span class="badge badge-teal" id="upcoming-count" style="margin-left:8px">0</span></h2>
-            <select class="form-control" id="upcoming-doctor-filter" style="max-width:220px"
-              onchange="loadUpcomingBookings()">
-              <option value="">All doctors</option>
-            </select>
-          </div>
-          <div id="upcoming-list">
-            <p style="color:var(--slate-light);font-size:13px">Loading...</p>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:20px" id="slot-preview-card">
-          <div class="card-header" style="flex-wrap:wrap;gap:10px">
-            <h2>Slot Preview</h2>
-            <div style="display:flex;gap:8px">
-              <select class="form-control" id="slot-preview-doctor" style="max-width:200px"></select>
-              <input type="date" class="form-control" id="slot-preview-date" style="max-width:160px"
-                onchange="loadSlotPreview()" />
-            </div>
-          </div>
-          <div id="slot-preview-list">
-            <p style="color:var(--slate-light);font-size:13px">Pick a doctor to see their slots.</p>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:20px" id="pending-review-card">
-          <div class="card-header" style="flex-wrap:wrap;gap:10px">
-            <h2>Pending Appointment Reviews <span class="badge badge-red" id="pending-review-count"
-                style="margin-left:8px">0</span></h2>
-          </div>
-          <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
-            Paid bookings that need a human decision — usually because the doctor went unavailable after the patient
-            booked.
-          </p>
-          <div id="pending-review-list">
-            <p style="color:var(--slate-light);font-size:13px">Loading...</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="mobile-section" id="section-patients">
-        <div class="card" style="margin-top:24px">
-          <div class="card-header">
-            <h2>All Patients</h2>
-            <div style="display:flex;gap:12px;align-items:center">
-              <div class="search-wrap">
+          <div class="card" id="pending-payments-card" style="margin-top:20px">
+            <div class="card-header">
+              <h2>Pending Payments (Today)</h2>
+              <div class="search-wrap" style="max-width:260px">
                 <svg class="search-icon" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor"
                   stroke-width="2">
                   <circle cx="11" cy="11" r="8" />
                   <path stroke-linecap="round" d="M21 21l-4.35-4.35" />
                 </svg>
-                <input class="form-control" id="list-search-input" placeholder="Search name, phone, ID…"
-                  oninput="searchAllPatients(this.value)" />
+                <input class="form-control" id="pp-search-input" placeholder="Search name, ID, phone…"
+                  oninput="filterPendingPayments(this.value)" />
               </div>
             </div>
+            <div id="pending-payments-list"></div>
           </div>
-          <div style="display:flex;gap:8px;padding:0 0 14px 0">
-            <button class="btn btn-sm" id="pf-all" onclick="setPatientFilter('all')"
-              style="background:var(--teal);color:white;border-color:var(--teal)">All</button>
-            <button class="btn btn-outline btn-sm" id="pf-male" onclick="setPatientFilter('male')">Male</button>
-            <button class="btn btn-outline btn-sm" id="pf-female" onclick="setPatientFilter('female')">Female</button>
-          </div>
-          <div class="table-wrap">
-            <table id="all-patients-table" class="responsive-cards">
-              <thead>
-                <tr>
-                  <th>Patient</th>
-                  <th>ID</th>
-                  <th>Phone</th>
-                  <th>Age / Gender</th>
-                  <th>Last Visit</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="all-patients-tbody">
-                <tr>
-                  <td colspan="5">
-                    <div class="empty-state">
-                      <p>Loading patients…</p>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+
+        </div>
+        <div class="mobile-section" id="section-availability">
+          <div class="card">
+            <div class="card-header">
+              <h2>Manage Doctor Availability</h2>
+            </div>
+            <input class="form-control" id="avail-doctor-search"
+              placeholder="Search doctors by name or specialization..." style="margin-bottom:16px" />
+            <div id="avail-doctor-list">
+              <p>Loading doctors...</p>
+            </div>
           </div>
         </div>
-      </div>
+
+        <div class="mobile-section" id="section-portal">
+          <div class="card" id="expected-today-card">
+            <div class="card-header" style="flex-wrap:wrap;gap:10px">
+              <h2>Expected Today <span class="badge badge-teal" id="expected-today-count"
+                  style="margin-left:8px">0</span>
+              </h2>
+              <select class="form-control" id="expected-today-doctor-filter" style="max-width:220px">
+                <option value="">All doctors</option>
+              </select>
+            </div>
+            <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
+              Patients who paid for a booked appointment or a queue-from-home slot for today. This does not change how
+              you
+              check anyone in — it's just a heads-up.
+            </p>
+            <div id="expected-today-list">
+              <p style="color:var(--slate-light);font-size:13px">Loading...</p>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:20px" id="noshow-card">
+            <div class="card-header" style="flex-wrap:wrap;gap:10px">
+              <h2>No-shows to handle <span class="badge badge-teal" id="noshow-count" style="margin-left:8px">0</span>
+              </h2>
+            </div>
+            <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
+              Patients who paid but did not come. Nothing is cancelled automatically. Choose Rebook (new day, same
+              doctor, no new charge) or Refund.
+            </p>
+            <div id="noshow-list">
+              <p style="color:var(--slate-light);font-size:13px">Loading...</p>
+            </div>
+          </div>
+
+          <div class="modal-overlay" id="modal-noshow-rebook">
+            <div class="modal" style="max-width:520px;width:92vw">
+              <div class="modal-header">
+                <h2>Rebook no-show</h2>
+                <button class="modal-close" onclick="closeModal('modal-noshow-rebook')">&times;</button>
+              </div>
+              <p id="nsr-info" style="font-size:13px;color:var(--slate);margin-bottom:10px"></p>
+              <div class="form-group">
+                <label>New date</label>
+                <input type="date" class="form-control" id="nsr-date" onchange="loadNoShowSlots()">
+              </div>
+              <div id="nsr-slots">
+                <p style="color:var(--slate-light);font-size:13px">Pick a date to see slots.</p>
+              </div>
+              <div class="form-group" style="margin-top:10px">
+                <label>Note (optional)</label>
+                <input type="text" class="form-control" id="nsr-note" maxlength="200">
+              </div>
+              <button class="btn btn-primary" style="width:100%" id="nsr-confirm" onclick="confirmNoShowRebook()"
+                disabled>Rebook</button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:20px" id="upcoming-bookings-card">
+            <div class="card-header" style="flex-wrap:wrap;gap:10px">
+              <h2>Next 15 Days <span class="badge badge-teal" id="upcoming-count" style="margin-left:8px">0</span></h2>
+              <select class="form-control" id="upcoming-doctor-filter" style="max-width:220px"
+                onchange="loadUpcomingBookings()">
+                <option value="">All doctors</option>
+              </select>
+            </div>
+            <div id="upcoming-list">
+              <p style="color:var(--slate-light);font-size:13px">Loading...</p>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:20px" id="slot-preview-card">
+            <div class="card-header" style="flex-wrap:wrap;gap:10px">
+              <h2>Slot Preview</h2>
+              <div style="display:flex;gap:8px">
+                <select class="form-control" id="slot-preview-doctor" style="max-width:200px"></select>
+                <input type="date" class="form-control" id="slot-preview-date" style="max-width:160px"
+                  onchange="loadSlotPreview()" />
+              </div>
+            </div>
+            <div id="slot-preview-list">
+              <p style="color:var(--slate-light);font-size:13px">Pick a doctor to see their slots.</p>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:20px" id="pending-review-card">
+            <div class="card-header" style="flex-wrap:wrap;gap:10px">
+              <h2>Pending Appointment Reviews <span class="badge badge-red" id="pending-review-count"
+                  style="margin-left:8px">0</span></h2>
+            </div>
+            <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
+              Paid bookings that need a human decision — usually because the doctor went unavailable after the patient
+              booked.
+            </p>
+            <div id="pending-review-list">
+              <p style="color:var(--slate-light);font-size:13px">Loading...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mobile-section" id="section-patients">
+          <div class="card" style="margin-top:24px">
+            <div class="card-header">
+              <h2>All Patients</h2>
+              <div style="display:flex;gap:12px;align-items:center">
+                <div class="search-wrap">
+                  <svg class="search-icon" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    stroke-width="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <path stroke-linecap="round" d="M21 21l-4.35-4.35" />
+                  </svg>
+                  <input class="form-control" id="list-search-input" placeholder="Search name, phone, ID…"
+                    oninput="searchAllPatients(this.value)" />
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;padding:0 0 14px 0">
+              <button class="btn btn-sm" id="pf-all" onclick="setPatientFilter('all')"
+                style="background:var(--teal);color:white;border-color:var(--teal)">All</button>
+              <button class="btn btn-outline btn-sm" id="pf-male" onclick="setPatientFilter('male')">Male</button>
+              <button class="btn btn-outline btn-sm" id="pf-female" onclick="setPatientFilter('female')">Female</button>
+            </div>
+            <div class="table-wrap">
+              <table id="all-patients-table" class="responsive-cards">
+                <thead>
+                  <tr>
+                    <th>Patient</th>
+                    <th>ID</th>
+                    <th>Phone</th>
+                    <th>Age / Gender</th>
+                    <th>Last Visit</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="all-patients-tbody">
+                  <tr>
+                    <td colspan="5">
+                      <div class="empty-state">
+                        <p>Loading patients…</p>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
 
     </main>
   </div>
@@ -1446,10 +1481,12 @@
           <p class="r-footer">Please keep this slip</p>
         </div>
       </div>
-      <div class="no-print" style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:8px">
+      <div class="no-print"
+        style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:8px">
         <button class="btn btn-outline" style="width:100%" onclick="window.print()">Print Slip</button>
         <!-- TEMP: preview-only until real WhatsApp sending exists — remove once WhatsApp delivery is wired up -->
-        <button class="btn btn-outline" style="width:100%" onclick="previewWhatsappTokenPdf(currentPastSlipCheckinId)">📱 Preview WhatsApp PDF</button>
+        <button class="btn btn-outline" style="width:100%"
+          onclick="previewWhatsappTokenPdf(currentPastSlipCheckinId)">📱 Preview WhatsApp PDF</button>
       </div>
     </div>
   </div>
@@ -1493,7 +1530,9 @@
         <h2>Feedback — <span id="pf-patient-name"></span></h2>
         <button class="modal-close" onclick="closeModal('modal-patient-feedback')">×</button>
       </div>
-      <div id="pf-body"><p style="color:var(--slate)">Loading…</p></div>
+      <div id="pf-body">
+        <p style="color:var(--slate)">Loading…</p>
+      </div>
     </div>
   </div>
 
@@ -1516,14 +1555,17 @@
   <div class="modal-overlay" id="modal-avail-discard-confirm">
     <div class="modal" style="max-width:400px">
       <div class="modal-header">
-        <h2>Unsaved Changes</h2><button class="modal-close" onclick="closeModal('modal-avail-discard-confirm')">&times;</button>
+        <h2>Unsaved Changes</h2><button class="modal-close"
+          onclick="closeModal('modal-avail-discard-confirm')">&times;</button>
       </div>
       <p style="color:var(--slate);margin-bottom:20px">
         You have unsaved changes to this doctor's availability. Close without saving?
       </p>
       <div style="display:flex;gap:10px">
-        <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-avail-discard-confirm')">Keep Editing</button>
-        <button class="btn btn-primary" style="flex:1" onclick="closeModal('modal-avail-discard-confirm');closeAvailModal(true)">Discard Changes</button>
+        <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-avail-discard-confirm')">Keep
+          Editing</button>
+        <button class="btn btn-primary" style="flex:1"
+          onclick="closeModal('modal-avail-discard-confirm');closeAvailModal(true)">Discard Changes</button>
       </div>
     </div>
   </div>
@@ -1579,8 +1621,10 @@
         <h2>Consultation Fee</h2>
         <button class="modal-close" onclick="closeModal('modal-confirm-payment')">×</button>
       </div>
-      <p style="font-size:14px;color:var(--slate);margin-bottom:10px">This patient's consultation fee for the booked appointment needs to be collected in person.</p>
-      <div style="background:var(--smoke);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:13.5px">
+      <p style="font-size:14px;color:var(--slate);margin-bottom:10px">This patient's consultation fee for the booked
+        appointment needs to be collected in person.</p>
+      <div
+        style="background:var(--smoke);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:13.5px">
         <div><strong id="confirm-payment-patient"></strong></div>
         <div style="color:var(--slate)" id="confirm-payment-doctor"></div>
         <div style="color:var(--slate)" id="confirm-payment-time"></div>
@@ -2386,7 +2430,6 @@
       try {
         const invoice = await api("POST", `/billing/checkins/${checkinId}/finalize-invoice`, {});
         toast(`Bill generated — Rs.${invoice.grand_total}`, 'success');
-        downloadFile(`/billing/invoices/${invoice.id}/pdf`, `invoice_${invoice.id}.pdf`);
         openBillsModal();
       } catch (e) {
         toast(e.message, 'error');
@@ -2522,8 +2565,8 @@
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
             ${billingOn
-              ? `<input type="number" min="0" step="1" class="form-control" style="width:80px;padding:6px 8px;font-size:13px" value="${fee || 0}" oninput="${onFeeInput}" />`
-              : `<span style="font-size:13.5px;color:var(--slate)">₹${fee || 0}</span>`}
+          ? `<input type="number" min="0" step="1" class="form-control" style="width:80px;padding:6px 8px;font-size:13px" value="${fee || 0}" oninput="${onFeeInput}" />`
+          : `<span style="font-size:13.5px;color:var(--slate)">₹${fee || 0}</span>`}
             <button type="button" class="btn btn-outline btn-sm" style="padding:4px 9px;color:#c0392b;border-color:#c0392b" onclick="${onRemove}">Remove</button>
           </div>
         </div>`;
@@ -2814,8 +2857,10 @@
       return new Date(d.date && /[+-]\d\d:\d\d$|Z$/.test(d.date) ? d.date : d.date + "+05:30");
     }
 
-    async function openDocumentsModal(patientId, patientName) {
+    async function openDocumentsModal(patientId, patientName, phone) {
       window._docModalPatientId = patientId;
+      window._docModalName = patientName || '';
+      window._docModalPhone = phone || '';
       document.getElementById('doc-patient-name').textContent = patientName;
       document.getElementById('documents-list').innerHTML = '<p style="color:var(--slate)">Loading…</p>';
       document.getElementById('modal-documents').classList.add('open');
@@ -2861,9 +2906,10 @@
               <strong>${DOC_TYPE_LABEL[d.type] || d.label}</strong>
               <div style="font-size:12px;color:var(--slate)">${dateStr} · ${timeStr}</div>
             </div>
-            <div style="display:flex;gap:8px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
               ${billAction}
               <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', '${d.type === 'test_report' && d.order_ids ? d.order_ids.join(',') : d.ref_id}')">View / Print</button>
+              <button class="btn btn-outline btn-sm" onclick="sendDocWhatsApp('${d.type}', '${d.type === 'test_report' && d.order_ids ? d.order_ids.join(',') : d.ref_id}', this)">📱 Send to WhatsApp</button>
             </div>
           </div>
         `;
@@ -2902,6 +2948,48 @@
         const blob = await response.blob();
         window.open(URL.createObjectURL(blob), "_blank");
       } catch (e) { toast(e.message, 'error'); }
+    }
+
+    // Send one document to the patient on WhatsApp. No WhatsApp Business connection exists yet, so:
+    // phones that can attach a file open their share sheet with the PDF ready (pick WhatsApp);
+    // otherwise the PDF is saved and the patient's WhatsApp chat opens with the message typed in.
+    async function sendDocWhatsApp(type, refId, btn) {
+      let url, fname, label;
+      if (type === 'prescription') { url = `${BASE}/patients/prescriptions/${refId}/download`; fname = `prescription_${refId}.pdf`; label = 'prescription'; }
+      else if (type === 'test_report') { url = `${BASE}/lab/reports/combined?order_ids=${refId}`; fname = 'test_report.pdf'; label = 'test report'; }
+      else if (type === 'invoice') { url = `${BASE}/billing/invoices/${refId}/pdf`; fname = `invoice_${refId}.pdf`; label = 'bill'; }
+      else if (type === 'token_slip') { url = `${BASE}/patients/checkins/${refId}/token-slip-pdf`; fname = `token_slip_${refId}.pdf`; label = 'token slip'; }
+      else return;
+      const who = window._docModalName ? ` ${window._docModalName}` : '';
+      const clinic = (document.getElementById('topbar-clinic')?.textContent || '').trim() || 'the hospital';
+      const msg = `Hello${who}, please find your ${label} from ${clinic}.`;
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+        if (!res.ok) throw new Error('Could not load the document');
+        const blob = await res.blob();
+        const file = new File([blob], fname, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try { await navigator.share({ files: [file], text: msg }); }
+          catch (e) { if (e.name !== 'AbortError') throw e; }
+          return;
+        }
+        let digits = String(window._docModalPhone || '').replace(/\D/g, '');
+        if (digits.length === 10) digits = '91' + digits;
+        if (digits.length < 11) throw new Error('This patient has no valid phone number for WhatsApp.');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.open(`https://wa.me/${digits}?text=${encodeURIComponent(msg)}`, '_blank');
+        toast('PDF saved. Attach it in the WhatsApp chat that just opened.', 'success');
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     async function openPastSlipModal(checkinId) {
@@ -3397,8 +3485,8 @@
 
     let selectPatientCtx = null;
 
-    function openSelectPatientModal(patientId, patientName) {
-      selectPatientCtx = { patientId, patientName };
+    function openSelectPatientModal(patientId, patientName, phone) {
+      selectPatientCtx = { patientId, patientName, phone };
       document.getElementById('sel-patient-name').textContent = patientName;
       document.getElementById('modal-select-patient').classList.add('open');
     }
@@ -3409,7 +3497,7 @@
     function selectPatientOpenDocs() {
       const ctx = selectPatientCtx;
       closeSelectPatientModal();
-      if (ctx) openDocumentsModal(ctx.patientId, ctx.patientName);
+      if (ctx) openDocumentsModal(ctx.patientId, ctx.patientName, ctx.phone);
     }
     function selectPatientOpenPending() {
       const ctx = selectPatientCtx;
@@ -4181,7 +4269,7 @@
           <td data-label="">
             <div class="row-actions">
               <button class="btn btn-outline btn-sm" onclick='openEditPatient(${jsArg(p)})'>Edit</button>
-              <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, ${jsArg(p.name)})'>Select</button>
+              <button class="btn btn-primary btn-sm" onclick='openSelectPatientModal(${p.id}, ${jsArg(p.name)}, ${jsArg(p.phone)})'>Select</button>
             </div>
           </td>
         </tr>
@@ -4895,7 +4983,8 @@
     document.getElementById('btn-confirm-payment-yes').addEventListener('click', async () => {
       const feeInput = document.getElementById('confirm-payment-fee');
       const fee = feeInput.value !== '' ? parseFloat(feeInput.value) : null;
-      if (fee != null && (isNaN(fee) || fee < 0)) { toast("Enter a valid fee amount", "error"); return; }
+      if (fee != null && fee < 0) { toast("Fee should not be negative.", "error"); return; }
+      if (fee != null && isNaN(fee)) { toast("Enter a valid fee amount", "error"); return; }
       closeModal('modal-confirm-payment');
       const id = pendingCollectPaymentId;
       pendingCollectPaymentId = null;
@@ -5054,16 +5143,16 @@
                 </div>
               </div>
               ${a.reason === 'awaiting_payment'
-                ? `<span class="badge badge-amber">Unpaid</span>`
-                : `<span class="badge ${a.followup_sent ? 'badge-red' : 'badge-amber'}">${a.followup_sent ? 'Overdue' : 'Awaiting review'}</span>`}
+            ? `<span class="badge badge-amber">Unpaid</span>`
+            : `<span class="badge ${a.followup_sent ? 'badge-red' : 'badge-amber'}">${a.followup_sent ? 'Overdue' : 'Awaiting review'}</span>`}
             </div>
             ${a.reason === 'awaiting_payment' ? `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
               ${!a.arrived_at
-                ? `<button class="btn btn-primary btn-sm" onclick='markUnpaidArrived(${jsArg(a)}, this)'>Patient arrived</button>`
-                : a.late_unresolved
-                  ? `<span class="badge badge-red">Arrived late</span><button class="btn btn-primary btn-sm" onclick='reopenLateArrival(${jsArg(a)})'>Walk-in queue / new slot</button>`
-                  : `<span class="badge badge-green">Arrived</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${jsArg(a)})'>Collect Payment</button>`}
+              ? `<button class="btn btn-primary btn-sm" onclick='markUnpaidArrived(${jsArg(a)}, this)'>Patient arrived</button>`
+              : a.late_unresolved
+                ? `<span class="badge badge-red">Arrived late</span><button class="btn btn-primary btn-sm" onclick='reopenLateArrival(${jsArg(a)})'>Walk-in queue / new slot</button>`
+                : `<span class="badge badge-green">Arrived</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${jsArg(a)})'>Collect Payment</button>`}
             </div>
             ` : `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">

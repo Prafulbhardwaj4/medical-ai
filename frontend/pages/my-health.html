@@ -263,17 +263,77 @@
       </div>
     </div>
 
+    <style>
+      .legal-acc { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--white); }
+      .legal-acc summary { cursor: pointer; padding: 11px 14px; font-weight: 700; font-size: 14px; color: var(--navy); list-style: none; display: flex; justify-content: space-between; align-items: center; }
+      .legal-acc summary::-webkit-details-marker { display: none; }
+      .legal-acc summary::after { content: "+"; font-size: 18px; font-weight: 600; color: var(--teal); }
+      .legal-acc[open] summary::after { content: "\2212"; }
+      .legal-acc[open] summary { border-bottom: 1px solid var(--border); }
+      .legal-body { padding: 10px 14px 14px; font-size: 13px; line-height: 1.6; color: var(--slate); }
+      .legal-body h4 { margin: 12px 0 3px; font-size: 13px; color: var(--navy); }
+      .legal-body h4:first-child { margin-top: 0; }
+      .legal-body p { margin: 0; }
+    </style>
     <div class="modal-overlay" id="modal-terms">
-      <div class="modal" style="max-width:440px">
+      <div class="modal" style="max-width:560px">
         <div class="modal-header"><h2>Terms and Privacy</h2></div>
-        <p style="background:#fef3c7;border:1px solid #f59e0b;padding:10px;border-radius:8px;font-size:13px">
-          <strong>PENDING LEGAL REVIEW.</strong> Placeholder wording, not the final text.
+        <p style="font-size:13.5px;margin:0 0 12px">
+          To keep using the patient portal, please read and accept the Terms of Service and the Privacy Policy.
+          Tap a heading to open or close it.
         </p>
-        <p style="font-size:13.5px;margin:12px 0">
-          To keep using the patient portal, please read and accept our
-          <a href="terms.html" target="_blank">Terms of Service</a> and
-          <a href="privacy.html" target="_blank">Privacy Policy</a>.
-        </p>
+        <div style="max-height:46vh;overflow-y:auto;margin-bottom:12px">
+          <details class="legal-acc">
+            <summary>Terms of Service</summary>
+            <div class="legal-body">
+              <h4>1. Who these terms are with</h4>
+              <p>These terms are between you and MedScribe, the software that runs this patient portal for your hospital. Your treatment is provided by the hospital and its doctors, not by MedScribe.</p>
+              <h4>2. Your account</h4>
+              <p>Give correct details and keep your password private. You are responsible for what happens through your account. Add a family member's profile only with their permission (or as their parent or guardian).</p>
+              <h4>3. What the portal does</h4>
+              <p>You can see your visits, prescriptions, test reports and bills, and book appointments. The portal shows what the hospital has recorded. It does not replace advice from your doctor.</p>
+              <h4>4. Emergencies</h4>
+              <p>The portal is not for emergencies. In an emergency, go to the nearest hospital or call 108 / 112.</p>
+              <h4>5. Appointments and payments</h4>
+              <p>Consultation fees are set by the hospital. A booking holds your slot until the booked day. If a booking is not paid by then, the hospital may cancel it and release the slot. Cancellations and refunds follow the hospital's policy, and a refund goes back to the way you paid. If the hospital cancels a booking, contact the hospital for details.</p>
+              <h4>6. Fair use</h4>
+              <p>Do not make false bookings, share your login, or try to see anyone else's information.</p>
+              <h4>7. Availability</h4>
+              <p>We work to keep the portal running, but it may sometimes be unavailable for maintenance or reasons outside our control.</p>
+              <h4>8. Liability</h4>
+              <p>As far as the law allows, MedScribe is not responsible for medical decisions made by the hospital or its doctors, or for losses caused by the portal being unavailable. Nothing here takes away rights you have under Indian law.</p>
+              <h4>9. Changes</h4>
+              <p>We may update these terms. If a change is important, we will ask you to accept again.</p>
+              <h4>10. Governing law</h4>
+              <p>Indian law applies to these terms.</p>
+            </div>
+          </details>
+          <details class="legal-acc">
+            <summary>Privacy Policy</summary>
+            <div class="legal-body">
+              <h4>1. Who we are</h4>
+              <p>MedScribe provides the software. Your hospital decides why and how your health information is used, and MedScribe handles it on the hospital's behalf.</p>
+              <h4>2. What we collect</h4>
+              <p>Your name, phone number, age, gender and address; your appointments and visits; vitals, prescriptions, test and scan reports; bills and payments. If a consultation is recorded for the AI note, the audio of that conversation.</p>
+              <h4>3. Why we use it</h4>
+              <p>To give you care, manage appointments, prepare bills, keep your records safe and meet legal duties. We do not sell your information or use it for advertising.</p>
+              <h4>4. AI note-taking</h4>
+              <p>With your doctor's notice to you, a consultation may be recorded and processed by AI to draft the consultation note. The doctor checks the note and is responsible for the final version.</p>
+              <h4>5. Who can see it</h4>
+              <p>You, and the hospital staff who are involved in your care (each role sees only what it needs). Trusted service providers who host the system may process it under confidentiality duties. We share it with authorities only when the law requires.</p>
+              <h4>6. How it is protected</h4>
+              <p>Access is limited by role and sign-in, and the system keeps a log of who opened or changed records.</p>
+              <h4>7. How long we keep it</h4>
+              <p>Medical records are kept for as long as the hospital is required to keep them under law and medical practice.</p>
+              <h4>8. Your rights</h4>
+              <p>You can ask to see your information, correct it, or ask for it to be erased (some medical records must be kept by law). You can withdraw your consent at any time. Use "Data &amp; privacy requests" in your profile menu.</p>
+              <h4>9. Questions or complaints</h4>
+              <p>Use "Data &amp; privacy requests" in your profile menu or contact your hospital. We will reply within the time the law requires.</p>
+              <h4>10. Children</h4>
+              <p>A child's profile is managed by a parent or guardian, who accepts these terms for the child.</p>
+            </div>
+          </details>
+        </div>
         <label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px">
           <input type="checkbox" id="terms-accept-check" style="margin-top:3px" />
           I have read and accept the Terms of Service and the Privacy Policy.
@@ -835,11 +895,22 @@
       document.getElementById("modal-address").classList.remove("open");
     }
 
+    // First login: Terms and Privacy first, THEN the tutorial. The tutorial never starts on top of the terms modal.
+    function maybeStartFirstLoginTutorial() {
+      if (localStorage.getItem("ms_just_registered")) {
+        localStorage.removeItem("ms_just_registered");
+        startTutorial('patient', 'patient', 'my-health', false);
+      }
+    }
     async function checkTermsAccepted() {
       try {
         const s = await api("GET", "/portal/auth/consent-status");
-        if (s && !s.accepted) document.getElementById("modal-terms").classList.add("open");
+        if (s && !s.accepted) {
+          document.getElementById("modal-terms").classList.add("open");
+          return; // the tutorial starts after the patient accepts
+        }
       } catch (e) { /* never block the page if this check fails */ }
+      maybeStartFirstLoginTutorial();
     }
     async function acceptTerms() {
       if (!document.getElementById("terms-accept-check").checked) {
@@ -851,6 +922,7 @@
       try {
         await api("POST", "/portal/auth/consent");
         document.getElementById("modal-terms").classList.remove("open");
+        maybeStartFirstLoginTutorial();
       } catch (e) {
         toast(e.message, "error");
       } finally {
@@ -1063,14 +1135,8 @@
     loadPendingProfiles();
     checkTermsAccepted();
 
-    // Auto-launches only if this patient account hasn't completed/skipped
-    // the tutorial yet (backend-tracked via TutorialProgress) — shows
-    // through their first real session and never again after that,
-    // regardless of reloads, re-logins, or switching devices/browsers.
-    if (localStorage.getItem("ms_just_registered")) {
-      localStorage.removeItem("ms_just_registered");
-      startTutorial('patient', 'patient', 'my-health', false);
-    }
+    // The first-login tutorial is started by checkTermsAccepted() / acceptTerms() above,
+    // so it always comes after the Terms and Privacy step.
   </script>
 </body>
 

@@ -135,11 +135,16 @@ function _ensureUpgradeModalStyles() {
 
 function _tierCardHtml(tier, currentTierKey) {
   const isCurrent = tier.key === currentTierKey;
+  // A plan BELOW the hospital's current one: already covered, so there is nothing to buy.
+  const isLower = !isCurrent && typeof tierIndex === "function"
+    && tierIndex(currentTierKey) >= 0 && tierIndex(tier.key) < tierIndex(currentTierKey);
   const doc = (typeof getDoctor === "function") ? getDoctor() : null;
   const isAdmin = !!doc && ["admin", "sub_admin"].includes(doc.role);
   let cta;
   if (isCurrent) {
     cta = `<span class="btn btn-outline btn-sm upgrade-tier-cta" style="pointer-events:none">Current Plan</span>`;
+  } else if (isLower) {
+    cta = `<span class="btn btn-outline btn-sm upgrade-tier-cta" style="pointer-events:none">\u2713 Already included in your plan</span>`;
   } else if (tier.comingSoon) {
     cta = `<span class="btn btn-outline btn-sm upgrade-tier-cta" style="pointer-events:none">Coming Soon</span>`;
   } else if (isAdmin) {
@@ -148,8 +153,9 @@ function _tierCardHtml(tier, currentTierKey) {
     cta = `<button class="btn btn-primary btn-sm upgrade-tier-cta" onclick="sendUpgradeNudge('${tier.key}','${tier.label}', this)">Ask Admin to Upgrade</button>`;
   }
   return `
-    <div class="upgrade-tier-card${isCurrent ? " current" : ""}${tier.premium ? " premium" : ""}">
+    <div class="upgrade-tier-card${(isCurrent || isLower) ? " current" : ""}${tier.premium ? " premium" : ""}">
       ${isCurrent ? '<span class="badge badge-teal upgrade-current-badge">Current Plan</span>' : ""}
+      ${isLower ? '<span class="badge badge-teal upgrade-current-badge">Included in your plan</span>' : ""}
       ${!isCurrent && tier.premium ? '<span class="upgrade-premium-badge">Most Powerful</span>' : ""}
       <div class="upgrade-tier-label">${tier.label}</div>
       <div class="upgrade-tier-price">${tier.price}<span>${tier.period}</span></div>

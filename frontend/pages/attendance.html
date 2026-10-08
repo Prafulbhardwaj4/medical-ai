@@ -364,6 +364,18 @@
         `).join('') : `<p style="color:var(--slate-light);padding:12px 0">No ${staffFilter === 'all' ? 'staff' : staffFilter + 's'} found.</p>`;
         }
 
+        // History rows keep only the LAST status of the day, and that is "off_duty" for anyone who
+        // finished their shift. A row that has a shift start is a day the person worked: show Present.
+        function histBadge(r) {
+            if (r.shift_started_at && (r.status === 'off_duty' || r.status === 'present' || r.status === 'on_break')) {
+                return '<span class="badge badge-green">Present</span>';
+            }
+            return badgeFor(r.status);
+        }
+        function histTime(iso) {
+            return iso ? new Date(iso).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '\u2014';
+        }
+
         function badgeFor(status) {
             if (status === 'present') return '<span class="badge badge-green">Present</span>';
             if (status === 'on_break') return '<span class="badge badge-amber">On Break</span>';
@@ -431,15 +443,16 @@
                 }
                 el.innerHTML = `
           <table class="data-table" style="width:100%">
-            <thead><tr><th>Date</th><th>Name</th><th>Role</th><th>Status</th><th>Shift Started</th></tr></thead>
+            <thead><tr><th>Date</th><th>Name</th><th>Role</th><th>Status</th><th>Shift Started</th><th>Shift Ended</th></tr></thead>
             <tbody>
               ${rows.map(r => `
                 <tr>
                   <td>${new Date(r.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}</td>
                   <td>${sanitize(r.name)}</td>
                   <td>${sanitize(r.role || '')}</td>
-                  <td>${badgeFor(r.status)}</td>
-                  <td>${r.shift_started_at ? new Date(r.shift_started_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                  <td>${histBadge(r)}</td>
+                  <td>${histTime(r.shift_started_at)}</td>
+                  <td>${r.status === 'off_duty' ? histTime(r.shift_ended_at) + (r.auto_marked ? ' <span style="font-size:11px;color:var(--slate-light)">(auto)</span>' : '') : '<span style="color:var(--slate-light)">on shift</span>'}</td>
                 </tr>
               `).join('')}
             </tbody>

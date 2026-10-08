@@ -168,6 +168,22 @@ _VITALS_LIMITS = {
 }
 
 
+# The nurse screen saves each value with its unit ("120/80 mmHg", "72 bpm"). Strip the unit before checking,
+# otherwise every value fails the number check even when it is typed correctly.
+_VITALS_UNITS = {
+    "Blood Pressure": "mmHg", "Pulse": "bpm", "Temperature": "\u00b0F", "SpO2": "%",
+    "Respiratory Rate": "/min", "Weight": "kg", "Height": "cm", "Blood Sugar (GRBS)": "mg/dL",
+}
+
+
+def _strip_vital_unit(key: str, value: str) -> str:
+    unit = _VITALS_UNITS.get(key)
+    v = value.strip()
+    if unit and v.lower().endswith(unit.lower()):
+        v = v[: -len(unit)].strip()
+    return v
+
+
 def _validate_vitals(data: dict) -> None:
     import re
     if len(data) > 20:
@@ -175,10 +191,16 @@ def _validate_vitals(data: dict) -> None:
     for k, v in data.items():
         if len(k) > 40 or len(v) > 40:
             raise HTTPException(status_code=400, detail="A vitals field is too long")
+        v = _strip_vital_unit(k, v)
         if k == "Blood Pressure":
-            m = re.fullmatch(r"(\d{2,3})/(\d{2,3})", v)
-            if not m or not (50 <= int(m.group(1)) <= 300 and 20 <= int(m.group(2)) <= 200):
+            m = re.fullmatch(r"(\d{2,3})\s*/\s*(\d{2,3})", v)
+            if not m:
                 raise HTTPException(status_code=400, detail="Blood Pressure must look like 120/80")
+            sys_bp, dia_bp = int(m.group(1)), int(m.group(2))
+            if not (50 <= sys_bp <= 300 and 20 <= dia_bp <= 200):
+                raise HTTPException(status_code=400, detail="Blood Pressure is outside the possible range (top 50-300, bottom 20-200)")
+            if sys_bp <= dia_bp:
+                raise HTTPException(status_code=400, detail="Blood Pressure: the top (systolic) number must be higher than the bottom (diastolic) number")
         elif k in _VITALS_LIMITS:
             try:
                 n = float(v)

@@ -319,7 +319,7 @@ def finalize_invoice(
             action="invoice_regenerated",
             target_type="invoice",
             target_id=invoice.id,
-            target_label=f"Rs.{grand_total:.2f} for checkin {checkin_id}",
+            target_label=f"{patient.name if patient else 'Patient'} - Bill {invoice.receipt_number or invoice.id} - Rs.{grand_total:.2f} (Token {checkin.token_number})",
             hospital_id=current_doctor.hospital_id
         )
         return serialize_invoice(invoice)
@@ -361,7 +361,7 @@ def finalize_invoice(
         action="invoice_generated",
         target_type="invoice",
         target_id=invoice.id,
-        target_label=f"Rs.{grand_total:.2f} for checkin {checkin_id}",
+        target_label=f"{patient.name if patient else 'Patient'} - Bill {invoice.receipt_number or invoice.id} - Rs.{grand_total:.2f} (Token {checkin.token_number})",
         hospital_id=current_doctor.hospital_id
     )
     return serialize_invoice(invoice)

@@ -246,12 +246,12 @@
         </div>
         <div id="capacity-same-input" class="form-group" style="max-width:200px">
           <label class="form-label">Patients per slot</label>
-          <input class="form-control" type="number" min="1" id="cap-same" value="1" oninput="markDirty()" />
+          <input class="form-control" type="number" min="1" id="cap-same" value="1" oninput="markDirty()" onchange="checkCapacityField()" />
         </div>
         <div id="capacity-period-inputs" style="display:none;grid-template-columns:repeat(3,1fr);gap:12px;max-width:480px">
-          <div class="form-group"><label class="form-label">Morning</label><input class="form-control" type="number" min="1" id="cap-morning" value="1" oninput="markDirty()" /></div>
-          <div class="form-group"><label class="form-label">Afternoon</label><input class="form-control" type="number" min="1" id="cap-afternoon" value="1" oninput="markDirty()" /></div>
-          <div class="form-group"><label class="form-label">Evening</label><input class="form-control" type="number" min="1" id="cap-evening" value="1" oninput="markDirty()" /></div>
+          <div class="form-group"><label class="form-label">Morning</label><input class="form-control" type="number" min="1" id="cap-morning" value="1" oninput="markDirty()" onchange="checkCapacityField()" /></div>
+          <div class="form-group"><label class="form-label">Afternoon</label><input class="form-control" type="number" min="1" id="cap-afternoon" value="1" oninput="markDirty()" onchange="checkCapacityField()" /></div>
+          <div class="form-group"><label class="form-label">Evening</label><input class="form-control" type="number" min="1" id="cap-evening" value="1" oninput="markDirty()" onchange="checkCapacityField()" /></div>
         </div>
         <div class="err-msg" id="gen-err"></div>
         <button class="btn btn-primary" onclick="saveTemplate()">Save Availability</button>
@@ -604,6 +604,46 @@
       } catch (e) { /* no template yet — keep defaults */ }
     }
 
+    // Checks "patients per slot" BEFORE it is sent, so the doctor gets a plain message instead of a 422.
+    // Too big = fewer than 3 minutes for each patient in the shortest slot that uses the number.
+    const MIN_MINUTES_PER_PATIENT = 3;
+    function shortestWindow(periods) {
+      let shortest = null;
+      periods.forEach(p => {
+        [...selectedTimes[p]].forEach(t => {
+          const w = (customWindows[p] && customWindows[p][t]) ? customWindows[p][t] : 120;  // presets show as 2-hour windows
+          if (shortest === null || w < shortest) shortest = w;
+        });
+      });
+      return shortest;
+    }
+    function capacityError(raw, label, periods) {
+      const n = Number(raw);
+      if (String(raw).trim() === '' || !Number.isFinite(n) || n < 1 || !Number.isInteger(n)) {
+        return `${label}: patients per slot must be a positive whole number (1 or more).`;
+      }
+      if (n > 200) return `${label}: ${n} patients is too big. The most allowed is 200.`;
+      const w = shortestWindow(periods);
+      if (w !== null && w / n < MIN_MINUTES_PER_PATIENT) {
+        return `${label}: ${n} patients is too big for a ${w}-minute slot (under ${MIN_MINUTES_PER_PATIENT} minutes per patient). Enter ${Math.floor(w / MIN_MINUTES_PER_PATIENT)} or fewer.`;
+      }
+      return null;
+    }
+    function validateCapacities() {
+      if (capacityMode === 'same') {
+        return capacityError(document.getElementById('cap-same').value, 'Patients per slot', ['morning', 'afternoon', 'evening']);
+      }
+      for (const [id, label, p] of [['cap-morning', 'Morning', 'morning'], ['cap-afternoon', 'Afternoon', 'afternoon'], ['cap-evening', 'Evening', 'evening']]) {
+        const msg = capacityError(document.getElementById(id).value, label, [p]);
+        if (msg) return msg;
+      }
+      return null;
+    }
+    function checkCapacityField() {
+      const msg = validateCapacities();
+      if (msg) toast(msg, 'error');
+    }
+
     async function saveTemplate() {
       const err = document.getElementById("gen-err");
       err.textContent = "";
@@ -611,6 +651,8 @@
       const afternoon = [...selectedTimes.afternoon];
       const evening = [...selectedTimes.evening];
       if (!morning.length && !afternoon.length && !evening.length) { err.textContent = "Select at least one time slot"; return false; }
+      const capMsg = validateCapacities();
+      if (capMsg) { toast(capMsg, "error"); err.textContent = capMsg; return false; }
 
       const payload = {
         doctor_id: targetDoctorId,
@@ -618,10 +660,10 @@
         morning_times: morning, afternoon_times: afternoon, evening_times: evening,
         custom_windows: { ...customWindows.morning, ...customWindows.afternoon, ...customWindows.evening },
         capacity_mode: capacityMode,
-        capacity_same: parseInt(document.getElementById("cap-same").value) || 1,
-        capacity_morning: parseInt(document.getElementById("cap-morning").value) || 1,
-        capacity_afternoon: parseInt(document.getElementById("cap-afternoon").value) || 1,
-        capacity_evening: parseInt(document.getElementById("cap-evening").value) || 1,
+        capacity_same: parseInt(document.getElementById("cap-same").value),
+        capacity_morning: parseInt(document.getElementById("cap-morning").value),
+        capacity_afternoon: parseInt(document.getElementById("cap-afternoon").value),
+        capacity_evening: parseInt(document.getElementById("cap-evening").value),
       };
 
       try {

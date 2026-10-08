@@ -188,6 +188,13 @@ def _labeled_paragraph(label: str, value: str, base_style: ParagraphStyle, label
     )
     return Paragraph(f'<font color="{label_color}"><b>{prefix}</b></font>{value}', hanging_style)
 
+def _headed_paragraph(label: str, value: str, section_style: ParagraphStyle, body_style: ParagraphStyle) -> list:
+    """Heading line in the same style as Vitals / Medicines / Tests, with the text under it.
+    The heading is kept on the same page as its text."""
+    heading_style = ParagraphStyle(f"{section_style.name}_kwn", parent=section_style, keepWithNext=1)
+    return [Paragraph(label, heading_style), Paragraph(value, body_style)]
+
+
 def _patient_summary_line(patient) -> str:
     """'Name | Age | Gender | Blood Group', with blood group left out
     entirely when it isn't recorded (no dangling separator)."""
@@ -659,7 +666,7 @@ def generate_prescription_pdf(
 
     # ── Chief Complaint ──
     if consultation.chief_complaint:
-        elements.append(_labeled_paragraph("Chief Complaint / Symptoms", cap_sentence(consultation.chief_complaint), body_style))
+        elements.extend(_headed_paragraph("Chief Complaint / Symptoms", cap_sentence(consultation.chief_complaint), section_style, body_style))
         elements.append(Spacer(1, 3*mm))
 
     # ── Vitals ──
@@ -696,7 +703,7 @@ def generate_prescription_pdf(
 
     # ── Diagnosis ──
     if consultation.diagnosis:
-        elements.append(_labeled_paragraph("Diagnosis", cap_sentence(consultation.diagnosis), body_style))
+        elements.extend(_headed_paragraph("Diagnosis", cap_sentence(consultation.diagnosis), section_style, body_style))
         elements.append(Spacer(1, 3*mm))
 
     # ── Medicines ──
@@ -846,12 +853,12 @@ def generate_prescription_pdf(
 
     # ── Advice ──
     if consultation.advice:
-        elements.append(_labeled_paragraph("Doctor's Advice", cap_sentence(consultation.advice), body_style))
+        elements.extend(_headed_paragraph("Doctor's Advice", cap_sentence(consultation.advice), section_style, body_style))
         elements.append(Spacer(1, 3*mm))
 
     # ── Follow-up ──
     if consultation.followup:
-        elements.append(_labeled_paragraph("Follow-up", cap_sentence(consultation.followup), body_style))
+        elements.extend(_headed_paragraph("Follow-up", cap_sentence(consultation.followup), section_style, body_style))
         elements.append(Spacer(1, 3*mm))
 
     # ── QR Code + Verification ──
