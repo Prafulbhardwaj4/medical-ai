@@ -1855,7 +1855,19 @@ def todays_queue(
         Appointment.requested_time >= today_start, Appointment.requested_time < today_end,
     ).all()
 
+    # An appointment whose patient already has a check-in is shown by that check-in
+    # (with its token). Listing it again here as "expected" duplicated the patient.
+    _checked_in_appt_ids = set()
+    if expected:
+        _checked_in_appt_ids = {
+            r[0] for r in db.query(Checkin.portal_appointment_id).filter(
+                Checkin.portal_appointment_id.in_([x.id for x in expected])
+            ).all()
+        }
+
     for a in expected:
+        if a.id in _checked_in_appt_ids:
+            continue
         patient_name = a.profile_link.patient.name if a.profile_link and a.profile_link.patient else "Portal Patient"
         result.append({
             "checkin_id": None,

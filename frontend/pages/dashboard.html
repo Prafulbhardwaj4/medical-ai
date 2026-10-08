@@ -949,7 +949,8 @@
         const overlay = document.createElement("div");
         overlay.className = "modal-overlay open";
         overlay.innerHTML = `
-          <div class="modal" style="max-width:440px;min-height:280px;text-align:center;display:flex;flex-direction:column;justify-content:center">
+          <style>.room-pick-modal{transition:min-height .15s ease}.room-pick-modal:has(.cs-wrapper.cs-open){min-height:560px}</style>
+          <div class="modal room-pick-modal" style="max-width:440px;min-height:280px;text-align:center;display:flex;flex-direction:column;justify-content:center">
             <div class="modal-header" style="border-bottom:none;margin-bottom:10px;justify-content:center">
               <h2 style="margin:0;font-size:18px">Which room are you in today?</h2>
             </div>

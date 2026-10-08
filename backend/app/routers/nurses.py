@@ -7,7 +7,7 @@ import json
 from app.database import get_db
 from app.models.checkin import Checkin
 from app.models.patient import Patient
-from app.models.doctor import Doctor
+from app.models.doctor import Doctor, UserRole
 from app.schemas.patient import VitalsSubmit, NurseTaskComplete, AddOpdChargeIn
 from app.models.opd_charge import OpdCharge
 from app.utils.auth import get_current_doctor, ist_today
@@ -68,6 +68,8 @@ def vitals_queue(
             AttendanceRecord.status.in_(_live),
             AttendanceCoverage.doctor_id.isnot(None),
         )
+        # Only nurses count: an assistant cannot record vitals, so assistant coverage must not hide patients from nurses.
+        _base = _base.filter(AttendanceRecord.doctor_id.in_(db.query(Doctor.id).filter(Doctor.role == UserRole.nurse)))
         covered_by_anyone = {r[0] for r in _base.all()}
         my_covered = {r[0] for r in _base.filter(AttendanceRecord.doctor_id == current_doctor.id).all()}
         if covered_by_anyone:

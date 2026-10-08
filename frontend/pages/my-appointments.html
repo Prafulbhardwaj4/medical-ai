@@ -1173,6 +1173,15 @@
           new_patient_blood_group: state.profileLinkId ? null : state.newPatientBloodGroup,
         });
         state.confirmedAppointmentId = appt.id;
+        if (appt.requested_time) {
+          const tm = String(appt.requested_time).match(/T(\d{2}):(\d{2})/);
+          if (tm) {
+            let hh = parseInt(tm[1], 10);
+            const ap = hh >= 12 ? "PM" : "AM";
+            hh = hh % 12 || 12;
+            state.slotTime = `${hh}:${tm[2]} ${ap}`;
+          }
+        }
         closeConfirmModal();
         setStep("confirmed");
       } catch (e) { toast(e.message, "error"); }

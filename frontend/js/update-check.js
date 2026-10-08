@@ -26,6 +26,52 @@
   var SKIP_TYPES = /^(hidden|search|button|submit|reset|image|file)$/i;
   var SKIP_NAMES = /search|filter|query/i;
 
+  var userEdited = false;
+  function trackEdit(e) {
+    if (!e.isTrusted) return;
+    var el = e.target;
+    if (!el || !el.tagName || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    if (el.tagName === "INPUT" && SKIP_TYPES.test(el.type)) return;
+    if (SKIP_NAMES.test((el.id || "") + " " + (el.name || "") + " " + (el.placeholder || ""))) return;
+    if (el.closest && el.closest("[data-ms-nodirty]")) return;
+    userEdited = true;
+  }
+  window.addEventListener("input", trackEdit, true);
+  window.addEventListener("change", trackEdit, true);
+
+  var _origFetch = window.fetch;
+  if (_origFetch) {
+    window.fetch = function (input, init) {
+      var p = _origFetch.apply(this, arguments);
+      var m = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      if (m !== "GET") { p.then(function (r) { if (r && r.ok) userEdited = false; }, function () { }); }
+      return p;
+    };
+  }
+
+  function askUpdateAnyway(onYes) {
+    var ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;z-index:2147483001;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif";
+    var box = document.createElement("div");
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    box.style.cssText = "background:#fff;border-radius:14px;max-width:400px;width:100%;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.3)";
+    box.innerHTML =
+      '<div style="font-weight:700;font-size:17px;color:#0f172a;margin-bottom:8px">Unsaved changes</div>' +
+      '<p style="margin:0 0 18px;font-size:14px;line-height:1.5;color:#475569">You have unsaved work on this page. Updating now will discard it.</p>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end">' +
+      '<button type="button" data-a="no" style="padding:9px 14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#0f172a;font-weight:600;cursor:pointer">Stay on this page</button>' +
+      '<button type="button" data-a="yes" style="padding:9px 14px;border-radius:8px;border:0;background:#22c55e;color:#052e16;font-weight:700;cursor:pointer">Update anyway</button>' +
+      '</div>';
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    ov.addEventListener("click", function (e) {
+      var a = e.target.getAttribute && e.target.getAttribute("data-a");
+      if (a === "yes") { ov.remove(); onYes(); }
+      else if (a === "no" || e.target === ov) { ov.remove(); }
+    });
+  }
+
   function formsDirty() {
     var els = document.querySelectorAll("input, textarea, select");
     for (var i = 0; i < els.length; i++) {
@@ -56,8 +102,7 @@
     try {
       if (isConsultation) return true;
       if (typeof window.msKeepSessionAlive === "function" && window.msKeepSessionAlive()) return true;
-      if (document.querySelector(".modal-overlay.open")) return true;
-      return formsDirty();
+      return userEdited;
     } catch (e) {
       return true;
     }
@@ -88,10 +133,7 @@
       "color:#052e16;font:700 16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;cursor:pointer;" +
       "touch-action:manipulation";
     btn.addEventListener("click", function () {
-      if (hasUnsavedWork() &&
-          !window.confirm("You have unsaved work on this page. Update anyway? Unsaved changes will be lost.")) {
-        return;
-      }
+      if (hasUnsavedWork()) { askUpdateAnyway(reload); return; }
       reload();
     });
 

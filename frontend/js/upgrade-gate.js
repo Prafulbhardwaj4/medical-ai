@@ -41,10 +41,10 @@ function _ensureUpgradeModalStyles() {
   const style = document.createElement("style");
   style.id = "upgrade-modal-styles";
   style.textContent = `
-    .upgrade-modal { max-width: 960px; }
+    .upgrade-modal { max-width: 1180px; width: 96vw; }
     .upgrade-modal-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 14px;
     }
     @media (max-width: 860px) {
@@ -65,6 +65,21 @@ function _ensureUpgradeModalStyles() {
     }
     .upgrade-tier-card.current { border-color: var(--teal); background: var(--teal-subtle); }
     .upgrade-tier-card.premium { border-color: var(--navy); }
+    .upgrade-tier-card { min-width: 0; overflow-wrap: anywhere; }
+    .upgrade-tier-card.included { background: #f8fafc; border: 1.5px dashed #cbd5e1; }
+    .upgrade-tier-card.included .upgrade-tier-label,
+    .upgrade-tier-card.included .upgrade-tier-price,
+    .upgrade-tier-card.included .upgrade-tier-feature { color: var(--slate); }
+    .upgrade-tier-card.included .upgrade-tier-check { color: #94a3b8; }
+    .upgrade-included-badge {
+      position: absolute; top: -11px; left: 14px; font-size: 11px; font-weight: 700;
+      background: #e2e8f0; color: #475569; padding: 3px 10px; border-radius: 999px;
+    }
+    .upgrade-included-cta {
+      display: block; width: 100%; text-align: center; margin-top: 14px; padding: 8px 10px;
+      border-radius: 8px; background: #e2e8f0; color: #475569; font-size: 13px; font-weight: 600;
+      box-sizing: border-box;
+    }
     .upgrade-current-badge, .upgrade-premium-badge {
       position: absolute; top: -11px; left: 14px;
       font-size: 11px; font-weight: 700; letter-spacing: 0.03em;
@@ -144,7 +159,7 @@ function _tierCardHtml(tier, currentTierKey) {
   if (isCurrent) {
     cta = `<span class="btn btn-outline btn-sm upgrade-tier-cta" style="pointer-events:none">Current Plan</span>`;
   } else if (isLower) {
-    cta = `<span class="btn btn-outline btn-sm upgrade-tier-cta" style="pointer-events:none">\u2713 Already included in your plan</span>`;
+    cta = `<span class="upgrade-included-cta">\u2713 Already included in your plan</span>`;
   } else if (tier.comingSoon) {
     cta = `<span class="btn btn-outline btn-sm upgrade-tier-cta" style="pointer-events:none">Coming Soon</span>`;
   } else if (isAdmin) {
@@ -153,9 +168,9 @@ function _tierCardHtml(tier, currentTierKey) {
     cta = `<button class="btn btn-primary btn-sm upgrade-tier-cta" onclick="sendUpgradeNudge('${tier.key}','${tier.label}', this)">Ask Admin to Upgrade</button>`;
   }
   return `
-    <div class="upgrade-tier-card${(isCurrent || isLower) ? " current" : ""}${tier.premium ? " premium" : ""}">
+    <div class="upgrade-tier-card${isCurrent ? " current" : ""}${isLower ? " included" : ""}${tier.premium ? " premium" : ""}">
       ${isCurrent ? '<span class="badge badge-teal upgrade-current-badge">Current Plan</span>' : ""}
-      ${isLower ? '<span class="badge badge-teal upgrade-current-badge">Included in your plan</span>' : ""}
+      ${isLower ? '<span class="upgrade-included-badge">\u2713 Included in your plan</span>' : ""}
       ${!isCurrent && tier.premium ? '<span class="upgrade-premium-badge">Most Powerful</span>' : ""}
       <div class="upgrade-tier-label">${tier.label}</div>
       <div class="upgrade-tier-price">${tier.price}<span>${tier.period}</span></div>

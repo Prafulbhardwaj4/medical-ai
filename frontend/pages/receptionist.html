@@ -4860,7 +4860,7 @@
               ${a.payment_status !== 'paid' ? `<span class="badge badge-amber">Unpaid</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${jsArg(a)})'>Collect Payment</button>` : ''}
               ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
               ${(!a.arrived_at && a.payment_status === 'paid' && a.status === 'confirmed') ? `<button class="btn btn-outline btn-sm" onclick="markPortalArrived(${a.id}, this)">Mark Arrived</button>` : ''}
-              ${(a.arrived_at && a.doctor_id && coverageByDoctor[a.doctor_id] === false) ? `<button class="btn btn-outline btn-sm" onclick="notifyDoctorNoAssistant(${a.doctor_id}, this)">Notify Doctor</button>` : ''}
+              ${(a.arrived_at && a.doctor_id) ? `<button class="btn btn-outline btn-sm" onclick="notifyDoctorNoAssistant(${a.doctor_id}, this)">Notify</button>` : ''}
             </div>
           </div>`).join('');
       } catch (e) {

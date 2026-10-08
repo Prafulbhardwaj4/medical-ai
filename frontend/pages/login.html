@@ -202,7 +202,7 @@
       try {
         const res = await fetch(`${BASE}/auth/captcha`);
         const json = await res.json();
-        box.innerHTML = json.svg;
+        box.innerHTML = '<img alt="captcha" draggable="false" style="display:block;user-select:none;-webkit-user-select:none;pointer-events:none" src="data:image/svg+xml;utf8,' + encodeURIComponent(json.svg) + '">';
         currentCaptchaToken = json.token;
       } catch (e) {
         box.innerHTML = "Couldn't load captcha — tap 🔄 to retry";

@@ -73,9 +73,7 @@
          which is why the actions block sat left-aligned instead of
          shifting to the right of the card. */
     }
-    @media (max-width: 900px) {
-      #up-next-btn { width: 100%; }
-    }
+    #up-next-btn { width: auto; }
     @media (max-width: 900px) {
       #section-attendance .staff-att-actions {
         align-items: center;
@@ -84,9 +82,6 @@
       #section-attendance .doc-picker {
         align-self: center;
       }
-    }
-    @media (min-width: 901px) {
-      #up-next-btn { width: auto; display: block; margin-left: auto; }
     }
   </style>
 </head>
@@ -210,20 +205,22 @@
       <div class="mobile-section active d-active" id="section-home">
 
         <div class="card" id="up-next-card" style="display:none;margin-bottom:16px;background:var(--smoke)">
-          <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:8px">UP NEXT</div>
+          <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px">UP NEXT</div>
           <p id="up-next-empty-msg" style="display:none;margin:0;color:var(--slate);font-size:14px">No next patient currently.</p>
-          <div id="up-next-content" style="display:flex;justify-content:space-between;gap:12px">
-            <div>
-              <div style="font-size:15px"><strong id="up-next-name"></strong> <span style="font-size:13px;color:var(--slate);font-weight:400" id="up-next-uid"></span></div>
-              <div style="font-size:13px;color:var(--slate);margin-top:2px" id="up-next-phone"></div>
+          <div id="up-next-content">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <strong id="up-next-name"></strong>
+              <span id="up-next-vitals"></span>
             </div>
-            <div style="text-align:right">
-              <div style="font-size:12px;color:var(--slate);font-weight:600">Vitals</div>
-              <div style="margin-top:2px" id="up-next-vitals"></div>
-              <div style="font-size:13px;color:var(--slate);margin-top:2px" id="up-next-type"></div>
+            <div style="font-size:13px;color:var(--slate);margin-top:2px" id="up-next-uid"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">
+              <span style="font-size:13px;color:var(--slate)" id="up-next-phone"></span>
+              <span>
+                <span id="up-next-type" style="display:none"></span>
+                <button class="btn btn-primary btn-sm" id="up-next-btn" onclick="skipUpNext()">Next</button>
+              </span>
             </div>
           </div>
-          <button class="btn" id="up-next-btn" style="margin-top:12px;background:var(--teal);color:#fff;border:none" onclick="skipUpNext()">Next</button>
         </div>
 
         <div class="card" id="queue-card-walkin">
@@ -608,7 +605,7 @@
       upNextCard.style.display = '';  // card itself always stays, per spec — only its inner content toggles
       if (nextPatient) {
         document.getElementById('up-next-empty-msg').style.display = 'none';
-        document.getElementById('up-next-content').style.display = 'flex';
+        document.getElementById('up-next-content').style.display = 'block';
         document.getElementById('up-next-name').textContent = nextPatient.patient_name;
         document.getElementById('up-next-uid').textContent = nextPatient.patient_uid || '';
         document.getElementById('up-next-phone').textContent = nextPatient.phone || '';
