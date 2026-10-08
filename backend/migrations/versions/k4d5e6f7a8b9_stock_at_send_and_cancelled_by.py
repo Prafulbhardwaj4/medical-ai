@@ -2,8 +2,8 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = 'k4d5e6f7a8b9'
-down_revision = 'j3c4d5e6f7a8'  # your latest migration. If `alembic heads` shows another, use that one.
+revision = 'l5e6f7a8b9c0'
+down_revision = 'k4d5e6f7a8b9'  # the portal_temp_password_otp migration
 
 
 def upgrade():

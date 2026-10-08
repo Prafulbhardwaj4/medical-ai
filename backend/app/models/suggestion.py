@@ -10,8 +10,10 @@ class Suggestion(Base):
     __tablename__ = "suggestions"
 
     id = Column(Integer, primary_key=True, index=True)
-    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)
-    hospital_name = Column(String, nullable=False)  # snapshot at submission time — stays correct even if the hospital is later renamed
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)  # None for a patient suggestion (patients have no hospital here)
+    hospital_name = Column(String, nullable=True)  # snapshot at submission time; None for a patient suggestion
+    patient_account_id = Column(Integer, ForeignKey("patient_accounts.id"), nullable=True)  # set only for a patient suggestion
+    submitted_by_phone = Column(String, nullable=True)  # snapshot, patient suggestions only
     submitted_by = Column(Integer, ForeignKey("doctors.id"), nullable=True)  # null for a patient submission — see submitted_by_role
     submitted_by_name = Column(String, nullable=False)  # snapshot
     submitted_by_role = Column(String, nullable=False)  # snapshot

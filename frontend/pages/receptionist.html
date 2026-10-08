@@ -827,12 +827,8 @@
             <div id="fee-group" style="display:none">
               <div class="form-group">
                 <label class="form-label">Consultation Fee (Rs.)</label>
-                if (!doctorId) { toast('No doctor available.', 'error'); return; }
-                if (getDoctor()?.billing_enabled) {
-                const _fees = [parseFloat(document.getElementById('consultation-fee').value),
-                ...Object.values(selectedAdditionalDoctors).map(f => parseFloat(f))];
-                if (_fees.some(f => f < 0)) { toast('Fee should not be negative.', 'error' ); return; } }
-                  _tokenGenerationInFlight=true; </div>
+                <input type="number" min="0" step="1" class="form-control" id="consultation-fee" />
+              </div>
               </div>
 
               <div id="additional-doctors-list"></div>
@@ -2657,6 +2653,11 @@
       const btn = document.getElementById('btn-generate-token');
       const doctorId = document.getElementById('doc-select').value;
       if (!doctorId) { toast('No doctor available.', 'error'); return; }
+      if (getDoctor()?.billing_enabled) {
+        const _fees = [parseFloat(document.getElementById('consultation-fee').value),
+          ...Object.values(selectedAdditionalDoctors).map(f => parseFloat(f))];
+        if (_fees.some(f => f < 0)) { toast('Fee should not be negative.', 'error'); return; }
+      }
       _tokenGenerationInFlight = true;
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';

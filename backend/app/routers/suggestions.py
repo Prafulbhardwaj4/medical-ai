@@ -14,6 +14,25 @@ from datetime import timedelta
 router = APIRouter(prefix="/suggestions", tags=["suggestions"])
 
 
+def _patient_details(db: Session, s: Suggestion):
+    """Extra context for Super Admin on a PATIENT suggestion. Deliberately no hospital and
+    no location: just who they are and how long they have been using the portal."""
+    if s.submitted_by_role != "patient" or not s.patient_account_id:
+        return None
+    from app.models.portal import PatientAccount, PatientProfileLink
+    acct = db.query(PatientAccount).filter(PatientAccount.id == s.patient_account_id).first()
+    if not acct:
+        return None
+    return {
+        "email": acct.email,
+        "member_since": acct.created_at.date().isoformat() if acct.created_at else None,
+        "linked_profiles": db.query(PatientProfileLink).filter(
+            PatientProfileLink.account_id == acct.id, PatientProfileLink.relation != "pending_confirmation"
+        ).count(),
+        "account_active": bool(acct.is_active),
+    }
+
+
 @router.post("", status_code=201)
 def create_suggestion(
     body: SuggestionIn,
@@ -156,6 +175,8 @@ def list_all_suggestions(
             "hospital_name": s.hospital_name,
             "submitted_by_name": s.submitted_by_name,
             "submitted_by_role": s.submitted_by_role,
+            "submitted_by_phone": s.submitted_by_phone,
+            "patient_details": _patient_details(db, s),
             "message": s.message,
             "status": s.status,
             "rejection_reason": s.rejection_reason,
@@ -194,6 +215,8 @@ def get_suggestion(
         "hospital_name": suggestion.hospital_name,
         "submitted_by_name": suggestion.submitted_by_name,
         "submitted_by_role": suggestion.submitted_by_role,
+        "submitted_by_phone": suggestion.submitted_by_phone,
+        "patient_details": _patient_details(db, suggestion),
         "message": suggestion.message,
         "status": suggestion.status,
         "rejection_reason": suggestion.rejection_reason,
@@ -255,7 +278,7 @@ def add_suggestion_reply(
     )
     db.add(reply)
 
-    if is_super_admin:
+    if is_super_admin and suggestion.submitted_by:  # a patient has no staff bell; they see the reply in their own Suggest box
         from app.utils.notify import notify_suggestion_reply
         notify_suggestion_reply(db, suggestion.hospital_id, suggestion.id, suggestion.submitted_by)
 

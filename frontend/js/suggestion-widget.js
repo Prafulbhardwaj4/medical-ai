@@ -14,12 +14,15 @@
   // since that's a separate, staff-only endpoint. Module-scoped so every
   // function below (mount, submit, loadMine) can see it, not just mount().
   let isPatientSession = false;
+  // Staff and patients use different endpoints for the same box. A patient token is
+  // rejected by the staff ones, which is what used to log patients out.
+  const sBase = () => isPatientSession ? "/portal/dashboard/suggestions" : "/suggestions";
 
   function mount() {
     const doctor = getDoctor();
     if (!doctor || !getToken()) return;
     if (EXCLUDED_ROLES.includes(doctor.role)) return;
-    isPatientSession = !doctor.role;
+    isPatientSession = doctor.role === "patient";  // portal sessions are saved with role "patient"
 
     const profileBtn = document.querySelector(".topbar-profile-btn");
     if (!profileBtn || !profileBtn.parentNode) return;
@@ -164,7 +167,7 @@
     btn.textContent = editingId ? "Saving…" : "Sending…";
     try {
       if (editingId) {
-        await api("PATCH", `/suggestions/${editingId}`, { message });
+        await api("PATCH", `${sBase()}/${editingId}`, { message });
         toast("Suggestion updated", "success");
         delete btn.dataset.editingId;
       } else {
@@ -204,7 +207,7 @@
     const el = document.getElementById("suggestion-mine-list");
     el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Loading…</p>';
     try {
-      mineCache = isPatientSession ? [] : await api("GET", "/suggestions/mine");
+      mineCache = (await api("GET", `${sBase()}/mine`)) || [];
       renderMine();
     } catch (e) {
       el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`;
@@ -256,7 +259,7 @@
 
   async function followUp(id) {
     try {
-      await api("POST", `/suggestions/${id}/follow-up`);
+      await api("POST", `${sBase()}/${id}/follow-up`);
       toast("Follow-up sent", "success");
       loadMine();
     } catch (e) { toast(e.message, "error"); }
@@ -282,7 +285,7 @@
     if (!box) return;
     box.innerHTML = '<p style="color:var(--slate-light);font-size:12px">Loading…</p>';
     try {
-      const rows = await api("GET", `/suggestions/${id}/replies`);
+      const rows = (await api("GET", `${sBase()}/${id}/replies`)) || [];
       const listHtml = rows.length
         ? rows.map(r => `
             <div style="margin-bottom:6px;text-align:${r.sender === 'staff' ? 'right' : 'left'}">
@@ -310,7 +313,7 @@
     const message = input.value.trim();
     if (!message) return;
     try {
-      await api("POST", `/suggestions/${id}/replies`, { message });
+      await api("POST", `${sBase()}/${id}/replies`, { message });
       input.value = "";
       loadThread(id);
     } catch (e) { toast(e.message, "error"); }

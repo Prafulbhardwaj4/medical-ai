@@ -525,40 +525,159 @@ def submit_visit_feedback(
     return {"message": "Thanks for the feedback"}
 
 
+def _patient_suggestion_identity(db: Session, account: PatientAccount):
+    """Name shown to Super Admin: the patient's own name from their first confirmed profile,
+    falling back to the phone number."""
+    from app.models.portal import PatientProfileLink
+    from app.models.patient import Patient
+    link = db.query(PatientProfileLink).filter(
+        PatientProfileLink.account_id == account.id, PatientProfileLink.relation != "pending_confirmation"
+    ).order_by(PatientProfileLink.id.asc()).first()
+    patient = db.query(Patient).filter(Patient.id == link.patient_id).first() if link else None
+    return (patient.name if patient and patient.name else account.phone)
+
+
 @router.post("/suggestion")
 def submit_suggestion(
     body: PortalSuggestionIn,
     account: PatientAccount = Depends(get_current_patient_account),
     db: Session = Depends(get_db),
 ):
+    """A patient's suggestion goes to Super Admin's Suggestions tab, next to staff ones.
+    It carries NO hospital and no location: only the patient's name and phone."""
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Please enter a suggestion")
 
     from app.models.suggestion import Suggestion
-    from app.models.hospital import Hospital
-    from app.models.portal import PatientProfileLink
-    from app.models.patient import Patient
+    s = Suggestion(
+        hospital_id=None, hospital_name=None,
+        patient_account_id=account.id,
+        submitted_by=None, submitted_by_name=_patient_suggestion_identity(db, account),
+        submitted_by_phone=account.phone, submitted_by_role="patient",
+        message=body.message.strip(), status="sent",
+    )
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    return {"message": "Thanks for the suggestion", "id": s.id, "status": s.status}
 
-    patient_name = account.phone
-    link = db.query(PatientProfileLink).filter(PatientProfileLink.account_id == account.id).first()
-    if link:
-        patient = db.query(Patient).filter(Patient.id == link.patient_id).first()
-        if patient and patient.name:
-            patient_name = patient.name
 
-    hospital_name = "—"
-    if body.hospital_id:
-        hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id).first()
-        if hospital:
-            hospital_name = hospital.name
+def _own_suggestion(db: Session, account: PatientAccount, suggestion_id: int):
+    from app.models.suggestion import Suggestion
+    s = db.query(Suggestion).filter(
+        Suggestion.id == suggestion_id, Suggestion.patient_account_id == account.id
+    ).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    return s
 
-    db.add(Suggestion(
-        hospital_id=body.hospital_id, hospital_name=hospital_name,
-        submitted_by=None, submitted_by_name=patient_name, submitted_by_role="patient",
-        message=body.message.strip(),
+
+@router.get("/suggestions/mine")
+def my_suggestions(
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    """The patient's own suggestions with their status, same as staff see in their Suggest box."""
+    from app.models.suggestion import Suggestion
+    from app.models.suggestion_reply import SuggestionReply
+    rows = db.query(Suggestion).filter(
+        Suggestion.patient_account_id == account.id
+    ).order_by(Suggestion.created_at.desc()).all()
+    unread = {
+        r.suggestion_id for r in db.query(SuggestionReply).join(
+            Suggestion, Suggestion.id == SuggestionReply.suggestion_id
+        ).filter(
+            Suggestion.patient_account_id == account.id,
+            SuggestionReply.sender == "super_admin",
+            SuggestionReply.is_read_by_staff == False  # noqa: E712
+        ).all()
+    }
+    now = now_ist_naive()
+    return [
+        {
+            "id": s.id, "message": s.message, "status": s.status,
+            "rejection_reason": s.rejection_reason,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            "can_edit": s.status in ("sent", "seen"),
+            "can_follow_up": s.status not in ("completed", "rejected") and (now - s.updated_at) >= timedelta(days=3),
+            "follow_up_requested_at": s.follow_up_requested_at.isoformat() if s.follow_up_requested_at else None,
+            "has_unread_reply": s.id in unread,
+        }
+        for s in rows
+    ]
+
+
+@router.patch("/suggestions/{suggestion_id}")
+def edit_my_suggestion(
+    suggestion_id: int,
+    body: PortalSuggestionIn,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    s = _own_suggestion(db, account, suggestion_id)
+    if s.status not in ("sent", "seen"):
+        raise HTTPException(status_code=400, detail="This one is already in progress and cannot be changed. You can send another suggestion.")
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="Please enter a suggestion")
+    s.message = body.message.strip()
+    s.follow_up_requested_at = None
+    db.commit()
+    return {"message": "Suggestion updated", "id": s.id}
+
+
+@router.post("/suggestions/{suggestion_id}/follow-up")
+def follow_up_my_suggestion(
+    suggestion_id: int,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    s = _own_suggestion(db, account, suggestion_id)
+    if s.status in ("completed", "rejected"):
+        raise HTTPException(status_code=400, detail="This suggestion has already been resolved")
+    if (now_ist_naive() - s.updated_at) < timedelta(days=3):
+        raise HTTPException(status_code=400, detail="Follow-up is only available once a suggestion has sat unchanged for 3 days")
+    s.follow_up_requested_at = now_ist_naive()
+    db.commit()
+    return {"message": "Follow-up sent"}
+
+
+@router.get("/suggestions/{suggestion_id}/replies")
+def my_suggestion_replies(
+    suggestion_id: int,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    from app.models.suggestion_reply import SuggestionReply
+    _own_suggestion(db, account, suggestion_id)
+    rows = db.query(SuggestionReply).filter(
+        SuggestionReply.suggestion_id == suggestion_id
+    ).order_by(SuggestionReply.created_at.asc()).all()
+    db.query(SuggestionReply).filter(
+        SuggestionReply.suggestion_id == suggestion_id,
+        SuggestionReply.sender == "super_admin",
+        SuggestionReply.is_read_by_staff == False  # noqa: E712
+    ).update({"is_read_by_staff": True})
+    db.commit()
+    return [{"id": r.id, "sender": r.sender, "message": r.message, "created_at": r.created_at.isoformat()} for r in rows]
+
+
+@router.post("/suggestions/{suggestion_id}/replies", status_code=201)
+def add_my_suggestion_reply(
+    suggestion_id: int,
+    body: PortalSuggestionIn,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    from app.models.suggestion_reply import SuggestionReply
+    _own_suggestion(db, account, suggestion_id)
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="Message can't be empty")
+    db.add(SuggestionReply(
+        suggestion_id=suggestion_id, sender="staff", message=body.message.strip(), is_read_by_staff=True,
     ))
     db.commit()
-    return {"message": "Thanks for the suggestion"}
+    return {"message": "Reply sent"}
 
 
 @router.get("/hospital-feedback")
