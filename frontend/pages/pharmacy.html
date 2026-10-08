@@ -1539,8 +1539,8 @@
             ${m.status === 'advised' ? `<button class="btn btn-outline btn-sm" onclick="markMedicineAdvisedOutside(${m.id})">Advised Outside</button>` : ''}
             ${m.schedule === 'x' && !locked ? `<button class="btn btn-outline btn-sm" style="border-color:#b91c1c;color:#b91c1c" onclick="authorizeScheduleXRepeat(${m.id})">${m.repeat_authorized ? '✓ Repeat Authorized' : 'Authorize Repeat (Sch. X)'}</button>` : ''}
             ${(m.shortfall_quantity || 0) > 0 && (m.status === 'paid' || m.status === 'dispensed') ? `<button class="btn btn-outline btn-sm" onclick="billShortfall(${m.id})">Bill remaining ${m.shortfall_quantity}</button>` : ''}
-            ${m.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, ${jsArg(medicineName)}, ${m.billed_quantity || 0}, true)">Refund (not collected)</button>` : ''}
-            ${m.status === 'dispensed' && (m.billed_quantity || 0) - (m.already_returned || 0) > 0 ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, ${jsArg(medicineName)}, ${(m.billed_quantity || 0) - (m.already_returned || 0)})">Return</button>` : ''}
+            ${m.status === 'paid' ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, ${jsArg(m.medicine_name)}, ${m.billed_quantity || 0}, true)">Refund (not collected)</button>` : ''}
+            ${m.status === 'dispensed' && (m.billed_quantity || 0) - (m.already_returned || 0) > 0 ? `<button class="btn btn-outline btn-sm" onclick="openReturnModal(${m.id}, ${jsArg(m.medicine_name)}, ${(m.billed_quantity || 0) - (m.already_returned || 0)})">Return</button>` : ''}
           </div>
         </div>
       `}).join('') + '<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="openAddMedicineModal()">+ Add Medicine</button>';
