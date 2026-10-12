@@ -1186,6 +1186,23 @@ def save_order_result(
     if not payload.results or not any(str(v).strip() for v in payload.results.values()):
         raise HTTPException(status_code=400, detail="Enter at least one result value before saving")
 
+    # "Not tested" (panels only): a parameter sent as "-" is NOT stored. Every reader
+    # (combined report, doctor view, portal, referrals) already skips parameters that
+    # have no stored value, so the line disappears everywhere, and the critical-value
+    # check below never sees it, so no flag or alert is raised for it.
+    _dropped_untested = []
+    _item_nt = db.query(TestCatalogItem).filter(TestCatalogItem.id == order.test_id).first() if order.test_id else None
+    if _item_nt and _item_nt.is_panel:
+        _kept_results = {}
+        for _k, _v in payload.results.items():
+            if _k != "notes" and str(_v if _v is not None else "").strip() == "-":
+                _dropped_untested.append(_k)
+            else:
+                _kept_results[_k] = _v
+        if not any(str(_v).strip() for _k, _v in _kept_results.items() if _k != "notes"):
+            raise HTTPException(status_code=400, detail="At least one parameter must be tested. A report can't be released with every parameter marked Not tested.")
+        payload.results = _kept_results
+
     old_results = {}
     if order.result_data:
         try:
@@ -1195,6 +1212,7 @@ def save_order_result(
 
     was_already_completed = order.status == "verified_released"
     changed_fields = [k for k in payload.results if old_results.get(k) != payload.results.get(k)]
+    changed_fields += [k for k in _dropped_untested if k in old_results]
     _amend_reason = (payload.reason or "").strip()
     if was_already_completed and changed_fields and len(_amend_reason) < 3:
         raise HTTPException(status_code=400, detail="Please give a reason for correcting a released report")

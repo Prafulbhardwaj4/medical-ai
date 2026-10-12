@@ -1795,6 +1795,7 @@
                   <strong>${sanitize(p.name)}</strong>${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}
                   <span class="range-text">${p.range ? 'Reference: ' + sanitize(p.range) : 'No reference range set'}</span>
                 </div>
+                <label style="font-size:12px;color:var(--slate);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-nt-target="bulk-val-${test.orderId}-${p.id}" onchange="labToggleNotTested(this)" /> Not tested</label>
                 <input class="form-control" id="bulk-val-${test.orderId}-${p.id}" placeholder="Value" ${p.flagAttrs} oninput="labLiveFlag(this)" />
                 <span class="lab-flag" style="min-width:70px;font-size:12px;font-weight:700"></span>
               </div>
@@ -1864,6 +1865,24 @@
       out.style.color = color;
     }
 
+    function labToggleNotTested(cb) {
+      const inp = document.getElementById(cb.dataset.ntTarget);
+      if (!inp) return;
+      if (cb.checked) {
+        inp.dataset.prev = inp.value;
+        inp.value = '-';
+        inp.disabled = true;
+        inp.style.background = '#f1f5f9';
+        inp.style.color = '#94a3b8';
+      } else {
+        inp.disabled = false;
+        inp.value = (inp.dataset.prev && inp.dataset.prev !== '-') ? inp.dataset.prev : '';
+        inp.style.background = '';
+        inp.style.color = '';
+      }
+      labLiveFlag(inp);
+    }
+
     function closeBulkResultsModal() {
       document.getElementById('modal-bulk-results').classList.remove('open');
       bulkResultOrders = [];
@@ -1883,12 +1902,18 @@
         if (test.mode === 'panel') {
           const results = {};
           let anyFilled = false;
+          let anyMarked = false;
           for (const p of test.params) {
             const val = document.getElementById(`bulk-val-${test.orderId}-${p.id}`).value.trim();
-            if (!val) continue; // not tested / not ready — skipped, doesn't block anything
+            if (val === '-') { anyMarked = true; continue; } // "Not tested": left out of the report
+            if (!val) continue; // not ready: skipped, doesn't block anything
             if (p.unit && !NUM_RE.test(val)) { errEl.textContent = `${test.testName} — ${p.name} must be a number.`; return null; }
             results[p.name] = val;
             anyFilled = true;
+          }
+          if (!anyFilled && anyMarked) {
+            errEl.textContent = `${test.testName}: at least one parameter must be tested. A report can't be released with every parameter marked Not tested.`;
+            return null;
           }
           if (!anyFilled) {
             skipped.push(test.testName);  // whole test left blank — comes back next time, not an error
@@ -1896,7 +1921,7 @@
           }
           for (const p of test.params) {
             const val = document.getElementById(`bulk-val-${test.orderId}-${p.id}`).value.trim();
-            review.push({ test: test.testName, param: p.name, value: val || null, unit: p.unit });
+            review.push({ test: test.testName, param: p.name, value: (val && val !== '-') ? val : null, unit: p.unit });
           }
           const _panelNote = (document.getElementById(`bulk-notes-${test.orderId}`) || {}).value;
           if (_panelNote && _panelNote.trim()) results.notes = _panelNote.trim();
@@ -2001,7 +2026,8 @@
                 <strong>${sanitize(p.name)}</strong>${p.unit ? ' (' + sanitize(p.unit) + ')' : ''}
                 <span class="range-text">${range ? 'Reference: ' + sanitize(range) : 'No reference range set'}</span>
               </div>
-              <input class="form-control" id="edit-val-${p.id}" value="${sanitize(current.results[p.name] ?? '')}" placeholder="Value" ${labFlagAttrs(labBounds(current.patient_gender, p), p)} oninput="labLiveFlag(this)" />
+              <label style="font-size:12px;color:var(--slate);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-nt-target="edit-val-${p.id}" onchange="labToggleNotTested(this)" ${(current.results[p.name] ?? '') === '' ? 'checked' : ''} /> Not tested</label>
+              <input class="form-control" id="edit-val-${p.id}" value="${sanitize(current.results[p.name] ?? '-')}" ${(current.results[p.name] ?? '') === '' ? 'disabled style="background:#f1f5f9;color:#94a3b8"' : ''} placeholder="Value" ${labFlagAttrs(labBounds(current.patient_gender, p), p)} oninput="labLiveFlag(this)" />
               <span class="lab-flag" style="min-width:70px;font-size:12px;font-weight:700"></span>
             </div>
           `;
@@ -2040,11 +2066,13 @@
       if (editReportMode === 'panel') {
         for (const p of editReportParams) {
           const val = document.getElementById(`edit-val-${p.id}`).value.trim();
+          if (val === '-') { results[p.name] = '-'; continue; } // "Not tested": the server leaves it out
           if (!val) continue;
           if (p.unit && !NUM_RE.test(val)) { errEl.textContent = `${p.name} must be a number.`; return; }
           results[p.name] = val;
         }
         if (!Object.keys(results).length) { errEl.textContent = "Enter at least one value."; return; }
+        if (!Object.values(results).some(v => v !== '-')) { errEl.textContent = "At least one parameter must be tested. A report can't be released with every parameter marked Not tested."; return; }
       } else {
         const val = document.getElementById('edit-val-single').value.trim();
         if (!val) { errEl.textContent = "Enter a value."; return; }
