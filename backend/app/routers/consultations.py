@@ -1697,6 +1697,7 @@ def admin_dashboard(
         candidates = [t for t in (last_consult_at, last_checkin_at) if t]
         last_visit_dt = max(candidates) if candidates else None
         patients_list.append({
+            "id": p.id,
             "patient_uid": p.patient_uid,
             "name": p.name,
             "age": p.age,

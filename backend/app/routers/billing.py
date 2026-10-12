@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from datetime import datetime, timedelta
 import json, os
 
@@ -34,7 +34,7 @@ from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
 from app.services.pdf_service import generate_invoice_pdf, generate_credit_debit_note_pdf
 from app.utils.timezone import ist_today, ist_day_bounds, ist_date, now_ist_naive
-from app.utils.money_totals import collection_entries, collected_summary, collected_by_day, billed_total
+from app.utils.money_totals import collection_entries, collected_summary, collected_by_day, billed_total, uninvoiced_appointment_fees
 from app.utils.receipts import next_receipt_number, next_note_number, generate_verify_hash
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -493,6 +493,7 @@ def list_invoices(
             "id": inv.id,
             "patient_name": patient.name if patient else "Unknown",
             "token_number": checkin.token_number if checkin else "—",
+            "patient_uid": patient.patient_uid if patient else "—",
             "grand_total": inv.grand_total,
             "item_count": len(json.loads(inv.items_json)),
             "generated_from": inv.generated_from,
@@ -874,6 +875,13 @@ def revenue_history_daily(
         buckets[d]["total"] += inv.subtotal if inv.subtotal is not None else inv.grand_total  # BILLED: pre-tax invoice value by invoice date
         buckets[d]["invoice_count"] += 1
 
+    # BILLED also includes appointment fees collected at reception that have no invoice yet
+    for paid_at, amt in uninvoiced_appointment_fees(db, current_doctor.hospital_id, range_start, range_end):
+        d = ist_date(paid_at)
+        if d not in buckets:
+            buckets[d] = {"total": 0.0, "invoice_count": 0, "collected": 0.0}
+        buckets[d]["total"] += amt
+
     # COLLECTED: by payment date, net of refunds and waivers (same helper as day-end)
     for d, amt in collected_by_day(db, current_doctor.hospital_id, range_start, range_end).items():
         if d not in buckets:
@@ -1000,6 +1008,14 @@ def revenue_history_monthly(
         buckets[key]["total"] += inv.subtotal if inv.subtotal is not None else inv.grand_total  # BILLED: pre-tax invoice value by invoice date
         buckets[key]["invoice_count"] += 1
 
+    # BILLED also includes appointment fees collected at reception that have no invoice yet
+    for paid_at, amt in uninvoiced_appointment_fees(db, current_doctor.hospital_id, range_start, range_end):
+        d = ist_date(paid_at)
+        key = (d.year, d.month)
+        if key not in buckets:
+            buckets[key] = {"total": 0.0, "invoice_count": 0, "collected": 0.0}
+        buckets[key]["total"] += amt
+
     # COLLECTED: by payment date, net of refunds and waivers (same helper as day-end)
     for d, amt in collected_by_day(db, current_doctor.hospital_id, range_start, range_end).items():
         key = (d.year, d.month)
@@ -1111,9 +1127,12 @@ def _day_end_summary_core(db: Session, hospital_id: int, target_date):
     # Refunds leave through the channel they were issued on, so each one is netted
     # out of that mode's total (previously only cash refunds were netted, so a
     # pharmacy refund paid back by card/UPI left the card/UPI total overstated).
+    # Till view: a refund leaves the drawer on the day it was actually PAID OUT.
+    _paid_on = func.coalesce(Refund.settled_at, Refund.processed_at)
     day_refunds = db.query(Refund).filter(
         Refund.hospital_id == hospital_id,
-        Refund.processed_at >= day_start, Refund.processed_at < day_end
+        Refund.status == "completed",
+        _paid_on >= day_start, _paid_on < day_end
     ).all()
     refunds_by_channel = {}
     for r in day_refunds:

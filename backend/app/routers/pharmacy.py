@@ -1385,7 +1385,7 @@ def return_medicine_order(
         source_id=order.id,
         amount=refund_amount,
         channel=body.channel,
-        status="pending" if body.channel == "online" else "completed",
+        status="pending",
         reason=f"Pharmacy {'refund (not collected)' if never_dispensed else 'return'} — {order.medicine_name} x{body.quantity}",
         processed_by=current_doctor.id,
     )

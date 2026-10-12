@@ -1242,7 +1242,7 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
             _fl = row.get("flag") or _flag_for(row["value"], row["range"])
             _lbl = {"H": "H", "L": "L", "CH": "CRIT H", "CL": "CRIT L"}.get(_fl)
             out = _lbl is not None
-            _shown = (f"{row['value']}  {_lbl}" if out else (row["value"] or "—"))
+            _shown = row["value"] or "—"
             table_data.append([row["name"], _shown, row["unit"] or "—", row["range"] or "—"])
             if out:
                 row_styles.append(("FONTNAME", (1, i+1), (1, i+1), "Helvetica-Bold"))
@@ -1512,12 +1512,12 @@ def generate_invoice_pdf(
 
     to_lines = [
         Paragraph("BILL TO", label_style),
-        Paragraph(f"{patient.name.title()} | {patient.age}yr | {patient.patient_uid}", biz_bold_style),
+        Paragraph(_patient_summary_line(patient), biz_bold_style),
+        Paragraph(f"Patient ID: <b>{patient.patient_uid}</b>", biz_style),
     ]
     if getattr(patient, "phone", None):
         to_lines.append(Paragraph(f"Contact Number: <b>{_format_mobile_display(patient.phone)}</b>", biz_style))
-    if token_number:
-        to_lines.append(Paragraph(f"Token Number: <b>{token_number}</b>", biz_style))
+
 
     bill_table = Table([[to_lines, from_lines]], colWidths=[95*mm, 75*mm])
     bill_table.setStyle(TableStyle([
@@ -1538,8 +1538,8 @@ def generate_invoice_pdf(
         elements.append(Paragraph(f"<b>Discharge Date:</b> {discharge_date.strftime('%d %b %Y, %I:%M %p')}", meta_style))
     elements.append(Spacer(1, 5*mm))
 
-    payable_items = [i for i in items if i.get("payable_here", True) is not False]
-    pharmacy_items = [i for i in items if i.get("payable_here", True) is False]
+    payable_items = list(items)
+    pharmacy_items = []
 
     gst_enabled = gst_registered and any(i.get("gst_rate") for i in payable_items)
     desc_style = ParagraphStyle("desc", fontSize=8 if gst_enabled else 9.5, fontName="Helvetica", leading=11)
@@ -1664,7 +1664,7 @@ def generate_invoice_pdf(
     elements.append(Spacer(1, 8*mm))
     now_dt = now_ist()
     footer_label_style = ParagraphStyle("footlabel", fontSize=8.5, fontName="Helvetica", textColor=colors.HexColor("#334155"), leading=12)
-    footer_right_style = ParagraphStyle("footright", fontSize=8.5, fontName="Helvetica", alignment=TA_CENTER, textColor=colors.HexColor("#334155"), leading=12)
+    footer_right_style = ParagraphStyle("footright", fontSize=8.5, fontName="Helvetica", alignment=TA_RIGHT, textColor=colors.HexColor("#334155"), leading=12)
     footer_band = Table(
         [[
             Paragraph(f"Date: {now_dt.strftime('%d %b %Y')}<br/>Time: {now_dt.strftime('%I:%M %p')}", footer_label_style),

@@ -393,13 +393,17 @@ def notify_doctor_no_assistant(
 
     existing = db.query(Notification).filter(
         Notification.hospital_id == current_doctor.hospital_id,
-        Notification.source_key == f"no_assistant:{doctor_id}",
-        Notification.is_read == False
+        Notification.source_key == f"no_assistant:{doctor_id}"
     ).first()
     if existing:
+        # (hospital_id, source_key) is unique, so once the doctor has read the earlier
+        # alert, the same row is raised again as unread instead of inserting a duplicate.
+        already_unread = not existing.is_read
+        existing.is_read = False
+        existing.target_doctor_id = doctor_id
         existing.updated_at = now_ist_naive()
         db.commit()
-        return {"message": "Doctor already notified"}
+        return {"message": "Doctor already notified" if already_unread else "Doctor notified"}
 
     notif = Notification(
         hospital_id=current_doctor.hospital_id,

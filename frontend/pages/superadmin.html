@@ -684,6 +684,7 @@
             <button class="detail-subnav-btn active" id="dsn-info" onclick="setDetailPane('info')">Hospital Info</button>
             <button class="detail-subnav-btn" id="dsn-aiscribe" onclick="setDetailPane('aiscribe')">AI Scribing</button>
             <button class="detail-subnav-btn" id="dsn-analytics" onclick="setDetailPane('analytics')">Analytics</button>
+            <button class="detail-subnav-btn" id="dsn-import" onclick="setDetailPane('import')">Import Data</button>
           </div>
 
           <!-- INFO PANE -->
@@ -704,6 +705,26 @@
                 <div id="detail-admins"></div>
               </div>
             </div>
+          </div>
+
+          <!-- IMPORT DATA PANE (Phase 6) -->
+          <div class="detail-pane" id="detail-pane-import" style="display:none">
+            <style>
+              .xi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 0; }
+              @media (min-width: 700px) { .xi-grid { grid-template-columns:repeat(6,1fr); } }
+              .xi-cell { background:var(--smoke); border-radius:8px; padding:10px; text-align:center; }
+              .xi-num { font-size:20px; font-weight:800; color:var(--navy); }
+              .xi-lbl { font-size:11px; color:var(--slate); font-weight:600; }
+              .xi-issues { margin:8px 0; border:1px solid var(--border); border-radius:8px; padding:8px 12px; }
+              .xi-issues summary { cursor:pointer; font-weight:700; font-size:13px; }
+              .xi-issues ul { margin:8px 0 0 18px; padding:0; max-height:200px; overflow-y:auto; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+              .xi-h { margin:14px 0 6px; font-size:13px; color:var(--slate); text-transform:uppercase; letter-spacing:.05em; }
+              .xi-note { font-size:12px; color:var(--slate-light,#64748b); }
+              .xi-last { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px; padding:10px 12px; border:1px dashed var(--border); border-radius:8px; margin-top:16px; }
+              #si-root td { overflow-wrap:anywhere; }
+            </style>
+            <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Import medicines/stock and lab tests from Excel <strong>for <span id="si-hospital"></span></strong>. Same checks as the hospital's own import. Nothing is saved until you confirm, and every import is recorded in the audit log under your name.</p>
+            <div id="si-root"></div>
           </div>
 
           <!-- AI SCRIBING PANE -->
@@ -1035,6 +1056,7 @@
   <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
+  <script src="../js/superadmin-import.js"></script>
   <script src="../js/chat-widget.js"></script>
   <script>
     requireAuth();

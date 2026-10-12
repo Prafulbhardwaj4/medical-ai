@@ -880,7 +880,6 @@ function _renderReportsVisitsHtml(visits, opts) {
         <span style="color:var(--slate)">${v.tests.length} test${v.tests.length > 1 ? 's' : ''} ▾</span>
       </button>
       <div style="display:${i === 0 ? '' : 'none'};padding:0 14px 14px">
-        ${allowPdf ? `<button class="btn btn-outline btn-sm" style="margin-bottom:10px" onclick="downloadFile('/lab/reports/combined?order_ids=${orderIdsKey}', 'report_${orderIdsKey}.pdf')">📄 View Full Report (PDF)</button>` : ''}
         ${v.tests.map(t => `
           <div style="padding:10px 0;border-top:1px solid var(--border)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -902,8 +901,8 @@ function _renderReportsVisitsHtml(visits, opts) {
                     // Server-computed flag (structured numeric range) wins; old free-text parsing is the fallback.
                     const fl = row.flag || (_isOutOfRange(row.value, row.range) ? "X" : "");
                     const out = ["H", "L", "CH", "CL", "X"].includes(fl);
-                    const valueColor = (fl === "CH" || fl === "CL") ? "#b91c1c" : (out ? "#ef4444" : (row.value ? "#065f46" : "inherit"));
-                    const valueWeight = out ? "700" : "600";
+                    const valueColor = out ? "#ef4444" : (row.value ? "#065f46" : "inherit");
+                    const valueWeight = out ? "700" : "400";
                     return `
                     <tr style="border-top:1px solid var(--border)">
                       <td style="padding:5px 8px 5px 0">${row.name}</td>

@@ -42,7 +42,7 @@ from app.models.consultation import Consultation
 from app.models.doctor import UserRole
 from app.utils.auth import get_current_doctor, ist_today
 from app.utils.tier_gate import require_tier
-from app.utils.timezone import now_ist_naive, ist_day_bounds
+from app.utils.timezone import now_ist_naive, ist_day_bounds, IST
 from app.utils.audit import log_action
 from app.routers.patients import generate_patient_uid, generate_url_token
 from sqlalchemy.exc import IntegrityError
@@ -325,7 +325,7 @@ def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_cur
             # input) — strip the tzinfo so it compares cleanly against the naive
             # IST timestamps used everywhere else in this codebase, since the offset
             # is expected to already represent IST, not UTC.
-            admission_dt = admission_dt.replace(tzinfo=None)
+            admission_dt = admission_dt.astimezone(IST).replace(tzinfo=None)
         if admission_dt > now_ist_naive():
             raise HTTPException(status_code=400, detail="Admission date/time can't be in the future")
 
@@ -617,6 +617,12 @@ def send_to_admission(body: SendToAdmissionIn, current_doctor: Doctor = Depends(
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="This patient has already been sent for admission")
+
+    from app.models.checkin import Checkin as _CheckinToday
+    if not db.query(_CheckinToday.id).filter(
+        _CheckinToday.patient_id == patient.id, _CheckinToday.visit_date == ist_today()
+    ).first():
+        raise HTTPException(status_code=400, detail="This patient must be physically checked in today (an active token) before they can be admitted")
 
     referral = AdmissionReferral(
         hospital_id=current_doctor.hospital_id, patient_id=patient.id,
@@ -2088,7 +2094,7 @@ def _build_discharge_bill(db: Session, a: Admission):
             is_emergency_seg = seg.get("is_emergency", False)
             items.append({
                 "type": "room",
-                "name": f"Emergency Ward Charge — {seg['ward']}" if is_emergency_seg else f"Room Charges — {seg['ward']} ({start_str} to {end_str})",
+                "name": f"Emergency Ward Charge — {seg['ward']}" if is_emergency_seg else f"Room Charges - {seg['ward']} ({seg['days']} day{'s' if seg['days'] != 1 else ''})",
                 "qty": 1 if is_emergency_seg else seg["days"], "unit_price": seg["daily_charge"], "line_total": seg["amount"], "payable_here": True,
                 "_is_icu": bool(seg_ward_type and seg_ward_type.is_icu),
             })
@@ -2419,12 +2425,18 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
     a.discharge_invoice_id = invoice.id
 
     if refund_due > 0:
-        db.add(Refund(
+        # Settled right here at discharge; the Refunds page keeps the record and admin gets the notification.
+        _ipd_refund = Refund(
             patient_id=a.patient_id, hospital_id=a.hospital_id, source_type="ipd_deposit", source_id=a.id,
             amount=refund_due, channel=body.refund_channel,
-            status="pending" if body.refund_channel == "online" else "completed",
+            status="completed",
             reason="Deposit balance refund at discharge", processed_by=current_doctor.id,
-        ))
+            settled_at=now_ist_naive(), settled_by=current_doctor.id,
+        )
+        db.add(_ipd_refund)
+        db.flush()
+        from app.utils.refund_notify import notify_admin_refund
+        notify_admin_refund(db, _ipd_refund, current_doctor, patient.name if patient else None, kind="paid")
     db.commit()
 
     return {
