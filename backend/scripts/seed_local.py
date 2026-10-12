@@ -41,6 +41,8 @@ from app.models.medicine_batch import MedicineBatch  # noqa: E402
 from app.models.patient import Patient  # noqa: E402
 from app.models.portal import PatientAccount, PatientProfileLink  # noqa: E402
 from app.models.test_catalog import TestCatalogItem  # noqa: E402
+from app.models.master_test import MasterTest, MasterTestParameter  # noqa: E402
+from app.models.master_medicine import MasterMedicine  # noqa: E402
 from app.models.attendance import AttendanceRecord  # noqa: E402
 from app.routers.admin import generate_doctor_uid  # noqa: E402
 from app.routers.patients import generate_patient_uid, generate_url_token  # noqa: E402
@@ -101,6 +103,103 @@ PATIENTS = [
     ("Sunita Devi", "9822222222", 32, "Female"),
     ("Aarav Gupta", "9833333333", 7, "Male"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# SAMPLE platform-wide master lists (LOCAL DEV ONLY - never auto-loaded in production).
+# Master items have NO price. No HIV or radiology tests, ever.
+# ---------------------------------------------------------------------------
+# panel parameters: (name, unit, male range, female range, critical low, critical high)
+MASTER_TESTS = [
+    {"name": "Complete Blood Count (CBC)", "category": "Haematology", "tube": "EDTA (purple top)",
+     "fasting": False, "tat": 4, "is_panel": True, "params": [
+         ("Haemoglobin", "g/dL", "13.0-17.0", "12.0-15.0", 7.0, 20.0),
+         ("Total Leucocyte Count", "/cumm", "4000-11000", "4000-11000", 2000.0, 30000.0),
+         ("RBC Count", "million/cumm", "4.5-5.5", "3.8-4.8", None, None),
+         ("Haematocrit (PCV)", "%", "40-50", "36-46", None, None),
+         ("MCV", "fL", "83-101", "83-101", None, None),
+         ("MCH", "pg", "27-32", "27-32", None, None),
+         ("MCHC", "g/dL", "31.5-34.5", "31.5-34.5", None, None),
+         ("Platelet Count", "lakh/cumm", "1.5-4.1", "1.5-4.1", 0.5, 10.0),
+     ]},
+    {"name": "Lipid Profile", "category": "Biochemistry", "tube": "Plain (red top)",
+     "fasting": True, "tat": 6, "is_panel": True, "params": [
+         ("Total Cholesterol", "mg/dL", "<200", "<200", None, None),
+         ("Triglycerides", "mg/dL", "<150", "<150", None, None),
+         ("HDL Cholesterol", "mg/dL", ">40", ">50", None, None),
+         ("LDL Cholesterol", "mg/dL", "<100", "<100", None, None),
+         ("VLDL Cholesterol", "mg/dL", "<30", "<30", None, None),
+     ]},
+    {"name": "Blood Sugar (Fasting)", "category": "Biochemistry", "tube": "Fluoride (grey top)",
+     "fasting": True, "tat": 2, "unit": "mg/dL", "male": "70-100", "female": "70-100", "crit_low": 40.0, "crit_high": 500.0},
+    {"name": "HbA1c", "category": "Biochemistry", "tube": "EDTA (purple top)",
+     "fasting": False, "tat": 6, "unit": "%", "male": "4.0-5.6", "female": "4.0-5.6", "crit_low": None, "crit_high": None},
+    {"name": "Serum Creatinine", "category": "Biochemistry", "tube": "Plain (red top)",
+     "fasting": False, "tat": 4, "unit": "mg/dL", "male": "0.7-1.3", "female": "0.6-1.1", "crit_low": None, "crit_high": 10.0},
+    {"name": "Blood Urea", "category": "Biochemistry", "tube": "Plain (red top)",
+     "fasting": False, "tat": 4, "unit": "mg/dL", "male": "15-45", "female": "15-45", "crit_low": None, "crit_high": None},
+    {"name": "Thyroid Stimulating Hormone (TSH)", "category": "Biochemistry", "tube": "Plain (red top)",
+     "fasting": False, "tat": 8, "unit": "uIU/mL", "male": "0.4-4.2", "female": "0.4-4.2", "crit_low": None, "crit_high": None},
+    {"name": "SGPT (ALT)", "category": "Biochemistry", "tube": "Plain (red top)",
+     "fasting": False, "tat": 4, "unit": "U/L", "male": "7-56", "female": "7-45", "crit_low": None, "crit_high": None},
+    {"name": "Serum Uric Acid", "category": "Biochemistry", "tube": "Plain (red top)",
+     "fasting": False, "tat": 4, "unit": "mg/dL", "male": "3.5-7.2", "female": "2.6-6.0", "crit_low": None, "crit_high": None},
+    {"name": "Urine Routine", "category": "Clinical Pathology", "tube": "Sterile urine container",
+     "fasting": False, "tat": 2, "unit": "", "male": "", "female": "", "crit_low": None, "crit_high": None},
+]
+
+# generic, strength, form, schedule, default pack, billing mode, GST %
+MASTER_MEDICINES = [
+    ("Paracetamol", "500mg", "Tablet", "otc", 15, "per_pack", 12.0),
+    ("Paracetamol", "125mg/5ml", "Syrup", "otc", 1, "per_unit", 12.0),
+    ("Cetirizine", "10mg", "Tablet", "otc", 10, "per_pack", 12.0),
+    ("Ibuprofen", "400mg", "Tablet", "otc", 10, "per_pack", 12.0),
+    ("Amoxicillin", "500mg", "Capsule", "h", 10, "per_pack", 12.0),
+    ("Azithromycin", "500mg", "Tablet", "h", 3, "per_pack", 12.0),
+    ("Metformin", "500mg", "Tablet", "h", 10, "per_pack", 5.0),
+    ("Amlodipine", "5mg", "Tablet", "h", 10, "per_pack", 12.0),
+    ("Pantoprazole", "40mg", "Tablet", "h", 15, "per_pack", 12.0),
+    ("Ceftriaxone", "1g", "Injection", "h", 1, "per_unit", 12.0),
+    ("Salbutamol", "100mcg", "Inhaler", "h", 1, "per_unit", 12.0),
+    ("Alprazolam", "0.25mg", "Tablet", "h1", 10, "per_pack", 12.0),
+    ("Clonazepam", "0.5mg", "Tablet", "h1", 10, "per_pack", 12.0),
+    ("Morphine", "10mg", "Injection", "x", 1, "per_unit", 12.0),
+    ("Methylphenidate", "10mg", "Tablet", "x", 10, "per_pack", 12.0),
+]
+
+
+def seed_master_catalog(db):
+    """Platform-wide (no hospital). Adds the sample lists only when the tables are empty."""
+    if db.query(MasterTest).count() == 0:
+        for t in MASTER_TESTS:
+            is_panel = bool(t.get("is_panel"))
+            mt = MasterTest(
+                name=t["name"], category=t["category"], required_tube=t["tube"],
+                fasting_required=t["fasting"], turnaround_hours=t["tat"], is_panel=is_panel,
+                unit="" if is_panel else t.get("unit", ""),
+                reference_range_male="" if is_panel else t.get("male", ""),
+                reference_range_female="" if is_panel else t.get("female", ""),
+                critical_low=None if is_panel else t.get("crit_low"),
+                critical_high=None if is_panel else t.get("crit_high"),
+                is_active=True,
+            )
+            db.add(mt)
+            db.flush()
+            for i, (pname, punit, pmale, pfemale, clow, chigh) in enumerate(t.get("params", [])):
+                db.add(MasterTestParameter(
+                    master_test_id=mt.id, name=pname, unit=punit,
+                    reference_range_male=pmale, reference_range_female=pfemale,
+                    critical_low=clow, critical_high=chigh, display_order=i, is_active=True,
+                ))
+        db.commit()
+    if db.query(MasterMedicine).count() == 0:
+        for generic, strength, form, sched, pack, mode, gst in MASTER_MEDICINES:
+            db.add(MasterMedicine(
+                generic_name=generic, strength=strength, dosage_form=form, schedule=sched,
+                default_pack_size=pack, default_billing_mode=mode, gst_percent=gst,
+                hsn_code="3004", is_active=True,
+            ))
+        db.commit()
 
 
 def get_or_create_hospital(db, code, name, tier):
@@ -240,6 +339,7 @@ def main():
     db = SessionLocal()
     try:
         seed_superadmin(db)
+        seed_master_catalog(db)
         all_staff, hospitals = [], []
         for code, name, tier in HOSPITALS:
             hospital = get_or_create_hospital(db, code, name, tier)

@@ -188,6 +188,7 @@
           style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <h2 style="margin:0">Test Catalog</h2>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" id="ms-open-btn">Add from master list</button>
             <button class="btn btn-outline btn-sm" id="xt-open-btn">Import from Excel</button>
             <button class="btn btn-outline btn-sm" onclick="triggerUpload()">Upload PDF/Excel</button>
             <button class="btn btn-primary btn-sm" onclick="openAddModal()">Add Test</button>
@@ -207,7 +208,77 @@
           <p style="color:var(--slate)">Loading…</p>
         </div>
       </div>
-    </main>
+        <style>
+        .ms-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start; }
+        @media (max-width: 900px) { .ms-grid { grid-template-columns:1fr; } }
+        .ms-col { min-width:0; }
+        .ms-col h3 { margin:0 0 10px; font-size:15px; }
+        .ms-filters { display:grid; grid-template-columns:1fr 190px; gap:10px; margin-bottom:12px; }
+        @media (max-width: 600px) { .ms-filters { grid-template-columns:1fr; } }
+        #ms-list { max-height:60vh; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius-lg); }
+        .ms-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+        .ms-row:last-child { border-bottom:none; }
+        .ms-done { background:var(--smoke); color:var(--slate-light); }
+        .ms-check { display:flex; align-items:center; gap:10px; flex:1 1 220px; min-width:0; cursor:pointer; margin:0; }
+        .ms-done .ms-check { cursor:default; }
+        .ms-name { overflow-wrap:anywhere; font-weight:600; font-size:14px; }
+        .ms-name small { display:block; font-weight:400; font-size:12px; color:var(--slate); }
+        .ms-price { width:110px; flex:0 0 110px; }
+        .ms-price.ms-bad { border-color:var(--danger,#dc2626); }
+        .ms-already { font-size:12px; color:var(--slate-light); flex:0 0 110px; text-align:right; }
+        .ms-footer { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 0 0; position:sticky; bottom:0; background:var(--white); }
+        .ms-footer span { font-size:13px; font-weight:600; }
+        .ms-resultbox { display:flex; gap:14px; align-items:center; flex-wrap:wrap; padding:10px 14px; margin-top:16px; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--smoke); font-size:14px; }
+        .ms-status { padding:10px 12px; border-radius:8px; background:var(--smoke); font-size:13px; font-weight:600; margin-top:12px; }
+        .ms-summarybox { padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-top:12px; font-size:13px; font-weight:600; }
+        .ms-issues { margin:8px 0; border:1px solid var(--border); border-radius:8px; padding:8px 12px; }
+        .ms-issues summary { cursor:pointer; font-weight:700; font-size:13px; }
+        .ms-issues ul { margin:8px 0 0 18px; padding:0; max-height:200px; overflow-y:auto; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+        .ms-msg { font-size:12px; color:var(--slate); margin-top:2px; overflow-wrap:anywhere; }
+        .ms-sugg { margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; }
+        #ms-table td { overflow-wrap:anywhere; vertical-align:top; }
+      </style>
+      <div class="card" id="ms-panel" style="display:none;margin-top:20px">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <h2 style="margin:0">Add tests from the master list</h2>
+            <div id="ms-hospital" style="font-size:13px;color:var(--slate)"></div>
+            <div id="ms-super-note" style="display:none;font-size:12px;color:var(--slate)">Super Admin: you are setting up this hospital.</div>
+          </div>
+          <button class="btn btn-outline btn-sm" data-action="close">Close</button>
+        </div>
+        <div class="ms-grid">
+          <div class="ms-col">
+            <h3>Choose from the master list</h3>
+            <div class="ms-filters">
+              <input class="form-control" id="ms-search" placeholder="Search by test name…" autocomplete="off" />
+              <select class="form-control" id="ms-category"><option value="">All Categories</option></select>
+            </div>
+            <div id="ms-list"><p style="color:var(--slate);padding:12px">Loading…</p></div>
+            <div class="ms-footer">
+              <span id="ms-footer-text">0 selected, 0 need a price</span>
+              <button class="btn btn-primary" id="ms-add-btn" data-action="add" disabled>Add selected tests</button>
+            </div>
+          </div>
+          <div class="ms-col">
+            <h3>Or upload an Excel file</h3>
+            <p style="font-size:13px;color:var(--slate);margin:0 0 12px">Two columns only: Test name and Price. The test name must be exactly as in the master list.</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" data-action="template">Download template</button>
+              <button class="btn btn-primary btn-sm" data-action="choose">Choose Excel file (.xlsx)</button>
+              <input type="file" id="ms-file" accept=".xlsx" style="display:none" />
+            </div>
+            <div id="ms-status"></div>
+            <div id="ms-summary"></div>
+            <div id="ms-errors"></div>
+            <div id="ms-warnings"></div>
+            <div id="ms-table" style="margin-top:12px"></div>
+            <button class="btn btn-primary" id="ms-confirm" data-action="confirm" style="display:none;margin-top:12px;width:100%" disabled>Confirm</button>
+          </div>
+        </div>
+        <div id="ms-result"></div>
+      </div>
+  </main>
   </div>
 
   <!-- Add/Edit Test Modal -->
@@ -385,10 +456,12 @@
   <script src="../js/chat-widget.js"></script>
   <script src="../js/suggestion-widget.js"></script>
   <script src="../js/test-import.js"></script>
+  <script src="../js/master-select-tests.js"></script>
   <script>
     const doc = getDoctor();
     renderAdminNav('test-catalog');
-    if (!doc || !["admin", "sub_admin"].includes(doc.role)) window.location.href = "dashboard.html";
+    const _msSuper = !!(doc && doc.role === "super_admin" && Number(new URLSearchParams(window.location.search).get("hospital_id")) > 0);
+    if (!_msSuper && (!doc || !["admin", "sub_admin"].includes(doc.role))) window.location.href = "dashboard.html";
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
 
@@ -536,6 +609,7 @@
     }
 
     async function loadTests() {
+      if (window.MS_SUPER_MODE) return;
       try {
         const params = new URLSearchParams();
         const search = document.getElementById('test-search').value.trim();
@@ -852,6 +926,7 @@
     let notifiableDiseasesCache = [];
 
     async function loadNotifiableDiseases() {
+      if (window.MS_SUPER_MODE) return;
       try {
         notifiableDiseasesCache = await api("GET", "/admin/tests/notifiable-diseases");
         const sel = document.getElementById('t-notifiable-disease');

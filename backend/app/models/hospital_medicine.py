@@ -26,3 +26,5 @@ class HospitalMedicine(Base):
     low_stock_threshold = Column(Integer, nullable=False, default=25)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=now_ist_naive)
+    # Traceability only: the master medicine this generic row was copied from. Never synced afterwards.
+    master_medicine_id = Column(Integer, ForeignKey("master_medicines.id"), nullable=True)

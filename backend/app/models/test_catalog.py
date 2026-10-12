@@ -33,6 +33,8 @@ class TestCatalogItem(Base):
     ref_high_male = Column(Float, nullable=True)
     ref_low_female = Column(Float, nullable=True)
     ref_high_female = Column(Float, nullable=True)
+    # Traceability only: the master test this copy was made from. Later master edits never change this row.
+    master_test_id = Column(Integer, ForeignKey("master_tests.id"), nullable=True)
 
 
 from sqlalchemy import event as _event

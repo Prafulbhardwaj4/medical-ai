@@ -25,6 +25,8 @@ from app.routers import medicine_import as medicine_import_router
 from app.routers import tests as tests_router
 from app.routers import test_import as test_import_router
 from app.routers import super_import as super_import_router
+from app.routers import master_catalog as master_catalog_router
+from app.routers import master_select_tests as master_select_tests_router
 from app.routers import radiology_templates as radiology_templates_router
 from app.routers import radiology as radiology_router
 from app.routers import lab as lab_router
@@ -312,6 +314,8 @@ app.include_router(medicine_import_router.router)
 app.include_router(tests_router.router)
 app.include_router(test_import_router.router)
 app.include_router(super_import_router.router)
+app.include_router(master_catalog_router.router)
+app.include_router(master_select_tests_router.router)
 app.include_router(radiology_templates_router.router)
 app.include_router(radiology_router.router)
 app.include_router(lab_router.router)

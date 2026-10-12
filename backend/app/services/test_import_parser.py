@@ -190,7 +190,7 @@ def _filled(v, keys):
     return [_LABEL[k] for k in keys if not is_blank(v[k])]
 
 
-def parse_tests_workbook(content: bytes) -> TestParseResult:
+def parse_tests_workbook(content: bytes, master: bool = False) -> TestParseResult:
     import openpyxl
     result = TestParseResult()
     try:
@@ -198,9 +198,14 @@ def parse_tests_workbook(content: bytes) -> TestParseResult:
     except Exception:
         raise ImportFileError("Could not read this file. Make sure it is a valid, unprotected .xlsx.")
     try:
-        rows = read_table(wb, "Tests", TEST_COLUMNS, MAX_TEST_ROWS, result.errors, True)
+        _cols = [(k, l, r and not (master and k == "price")) for k, l, r in TEST_COLUMNS]
+        rows = read_table(wb, "Tests", _cols, MAX_TEST_ROWS, result.errors, True)
     finally:
         wb.close()
+    if master and rows:
+        if any(not is_blank(v["price"]) for _, v in rows):
+            result.warnings.append(Issue("Tests", None, "Price", "Price is not part of the master list. Every Price cell was ignored."))
+        rows = [(n, dict(v, price=0) if is_blank(v["parent"]) else v) for n, v in rows]
     result.rows_read = len(rows or [])
     if rows is None:
         return result
