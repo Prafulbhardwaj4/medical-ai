@@ -473,14 +473,6 @@
                         <p style="color:var(--slate)">Loading…</p>
                     </div>
                 </div>
-                <div class="card" style="margin-bottom:20px" id="pending-refunds-card">
-                    <div class="card-header">
-                        <h2>Pending Online Refunds</h2>
-                    </div>
-                    <div id="pending-refunds-list">
-                        <p style="color:var(--slate)">Loading…</p>
-                    </div>
-                </div>
                 <div class="card" style="margin-bottom:20px" id="patient-feedback-card">
                     <div class="card-header">
                         <h2>Patient Feedback</h2>
@@ -909,7 +901,6 @@
             loadCollected30Days();
             loadBillingHistory();
             loadPendingWaivers();
-            loadPendingRefunds();
             loadPatientFeedback();
             loadDuplicatePatients();
         }
@@ -1142,7 +1133,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div style="flex:1;min-width:200px">
               <strong>${sanitize(inv.patient_name)}</strong>
-              <span class="badge badge-navy" style="margin-left:6px">${sanitize(inv.token_number)}</span>
+              <span class="badge badge-navy" style="margin-left:6px">${sanitize(inv.patient_uid)}</span>
             </div>
             <div style="font-size:12px;color:var(--slate);min-width:150px">${dateStr} · ${timeStr}</div>
             <div style="font-size:12px;color:var(--slate);min-width:90px">${inv.item_count} item${inv.item_count === 1 ? '' : 's'}</div>
@@ -1539,6 +1530,7 @@
         <td data-label="Visits" class="table-center" style="font-weight:600;color:var(--teal)">${p.total_visits}</td>
         <td data-label="Last Visit" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(p.last_visit)}</td>
         <td data-label="Registered" style="color:var(--slate);font-size:13px;white-space:nowrap">${sanitize(p.registered)}</td>
+        <td data-label=""><button class="btn btn-primary btn-sm" onclick='openMorePatientModal(${p.id}, ${jsArg(p.name)})'>More</button></td>
       </tr>`).join('');
             container.innerHTML = makeTable(
                 ['UID', 'Name',
@@ -1547,7 +1539,7 @@
                     '<span style="display:block;text-align:center">Blood Group</span>',
                     'Phone', 'Doctor',
                     '<span style="display:block;text-align:center">Visits</span>',
-                    'Last Visit', 'Registered'],
+                    'Last Visit', 'Registered', ''],
                 rows
             );
         }
@@ -1693,6 +1685,97 @@
             document.getElementById('filter-search').value = '';
             document.getElementById('filter-doctor').value = '';
             loadConsultations(1);
+        }
+
+        let morePatientCtx = null;
+        function openMorePatientModal(patientId, patientName) {
+            morePatientCtx = { patientId, patientName };
+            document.getElementById('more-patient-name').textContent = patientName;
+            document.getElementById('modal-more-patient').classList.add('open');
+        }
+        function moreOpenDocs() {
+            const ctx = morePatientCtx;
+            closeModal('modal-more-patient');
+            if (ctx) openAdminDocsModal(ctx.patientId, ctx.patientName);
+        }
+        function moreOpenFeedback() {
+            const ctx = morePatientCtx;
+            closeModal('modal-more-patient');
+            if (ctx) openAdminFeedbackModal(ctx.patientId, ctx.patientName);
+        }
+
+        const ADM_DOC_LABEL = {
+            prescription: "📋 Prescription",
+            test_report: "🧪 Test Report",
+            invoice: "🧾 Invoice"
+        };
+        function admParseDocDate(d) {
+            return new Date(d.date && /[+-]\d\d:\d\d$|Z$/.test(d.date) ? d.date : d.date + "+05:30");
+        }
+        async function openAdminDocsModal(patientId, patientName) {
+            document.getElementById('adm-doc-patient-name').textContent = patientName || '';
+            const list = document.getElementById('adm-documents-list');
+            list.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+            document.getElementById('modal-adm-documents').classList.add('open');
+            try {
+                const docs = await api("GET", `/patients/${patientId}/documents`);
+                const shown = docs.filter(d => d.type !== 'token_slip')
+                    .sort((a, b) => admParseDocDate(b) - admParseDocDate(a));
+                if (!shown.length) {
+                    list.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No documents yet for this patient.</p>';
+                    return;
+                }
+                list.innerHTML = shown.map(d => {
+                    const dt = admParseDocDate(d);
+                    const dateStr = dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                    const timeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                    const ref = d.type === 'test_report' && d.order_ids ? d.order_ids.join(',') : d.ref_id;
+                    return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
+            <div>
+              <strong>${ADM_DOC_LABEL[d.type] || sanitize(d.label)}</strong>${d.is_admission ? ' <span class="badge badge-navy">Admission</span>' : ''}
+              <div style="font-size:12px;color:var(--slate)">${dateStr} · ${timeStr}</div>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="viewAdminDocument('${d.type}', '${ref}')">View / Print</button>
+          </div>`;
+                }).join('');
+            } catch (e) {
+                list.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
+            }
+        }
+        async function viewAdminDocument(type, refId) {
+            try {
+                let url = null;
+                if (type === 'prescription') url = `${BASE}/patients/prescriptions/${refId}/download`;
+                else if (type === 'test_report') url = `${BASE}/lab/reports/combined?order_ids=${refId}`;
+                else if (type === 'invoice') url = `${BASE}/billing/invoices/${refId}/pdf`;
+                else return;
+                const response = await fetch(url, { headers: { "Authorization": `Bearer ${getToken()}` } });
+                if (!response.ok) throw new Error("Could not load document");
+                const blob = await response.blob();
+                window.open(URL.createObjectURL(blob), "_blank");
+            } catch (e) { toast(e.message, 'error'); }
+        }
+        async function openAdminFeedbackModal(patientId, patientName) {
+            document.getElementById('adm-fb-patient-name').textContent = patientName || '';
+            const body = document.getElementById('adm-fb-body');
+            body.innerHTML = '<p style="color:var(--slate)">Loading…</p>';
+            document.getElementById('modal-adm-feedback').classList.add('open');
+            try {
+                const entries = await api("GET", `/consultations/patient-feedback/${patientId}`);
+                if (!entries.length) {
+                    body.innerHTML = '<p style="color:var(--slate-light)">No feedback left yet.</p>';
+                    return;
+                }
+                body.innerHTML = entries.map(f => `
+          <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+            <div style="font-weight:600">${f.rating}/5 stars</div>
+            <div style="font-size:12px;color:var(--slate-light);margin:2px 0 6px">${f.created_at ? new Date(f.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : ''}</div>
+            <div style="color:var(--slate);white-space:pre-wrap">${f.comment ? sanitize(f.comment) : '<span style="color:var(--slate-light)">No notes left.</span>'}</div>
+          </div>`).join('');
+            } catch (e) {
+                body.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
+            }
         }
 
         function openFeedbackNotesModal(patientName, comment) {
@@ -2053,6 +2136,43 @@
                 <button class="modal-close" onclick="closeModal('modal-feedback-notes')">×</button>
             </div>
             <p id="fbn-comment" style="white-space:pre-wrap;color:var(--slate)"></p>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-more-patient">
+        <div class="modal" style="max-width:360px">
+            <div class="modal-header">
+                <h2 id="more-patient-name">Patient</h2>
+                <button class="modal-close" onclick="closeModal('modal-more-patient')">×</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+                <button class="btn btn-outline" style="display:flex;justify-content:space-between;align-items:center" onclick="moreOpenDocs()">
+                    <span>📄 Docs</span><span style="font-size:12px;color:var(--slate)">Bills &amp; reports</span>
+                </button>
+                <button class="btn btn-outline" style="display:flex;justify-content:space-between;align-items:center" onclick="moreOpenFeedback()">
+                    <span>⭐ Feedback</span><span style="font-size:12px;color:var(--slate)">Ratings &amp; notes</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-adm-documents">
+        <div class="modal" style="max-width:600px">
+            <div class="modal-header">
+                <h2>Documents — <span id="adm-doc-patient-name"></span></h2>
+                <button class="modal-close" onclick="closeModal('modal-adm-documents')">×</button>
+            </div>
+            <div id="adm-documents-list" style="max-height:60vh;overflow-y:auto"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-adm-feedback">
+        <div class="modal" style="max-width:480px">
+            <div class="modal-header">
+                <h2>Feedback — <span id="adm-fb-patient-name"></span></h2>
+                <button class="modal-close" onclick="closeModal('modal-adm-feedback')">×</button>
+            </div>
+            <div id="adm-fb-body"><p style="color:var(--slate)">Loading…</p></div>
         </div>
     </div>
 

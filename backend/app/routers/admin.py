@@ -686,9 +686,11 @@ def billing_today(
 
     from app.models.refund import Refund as _Refund
     _rs, _re = ist_day_bounds()
+    _paid_on = func.coalesce(_Refund.settled_at, _Refund.processed_at)
     refunds_today = round(sum((r.amount or 0) for r in db.query(_Refund).filter(
         _Refund.hospital_id == current_doctor.hospital_id,
-        _Refund.processed_at >= _rs, _Refund.processed_at < _re
+        _Refund.status == "completed",
+        _paid_on >= _rs, _paid_on < _re
     ).all()), 2)
 
     from app.models.test_order import TestOrder

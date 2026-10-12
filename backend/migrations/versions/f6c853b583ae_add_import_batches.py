@@ -3,7 +3,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = 'f6c853b583ae'
-down_revision = 'm6f7a8b9c0d1'  # patient_suggestions - the single head when this was written; run `alembic heads` first
+down_revision = 'f4e44919c572'  # refund_settlement_columns - the single head before this migration; run `alembic heads` to re-check
 
 
 def upgrade():

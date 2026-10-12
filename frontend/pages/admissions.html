@@ -1661,7 +1661,7 @@
         return;
       }
       el.innerHTML = referrals.map(r => `
-        <div class="select-row-card" style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer" onclick='selectAdmitPatient(${r.patient_id}, ${jsArg(r.patient_name)}, ${r.referral_id}, ${r.referred_by})'>
+        <div class="select-row-card" style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer" onclick='selectAdmitPatient(${r.patient_id}, ${jsArg(r.patient_name)}, ${r.referral_id}, ${r.referred_by}, ${jsArg(r.reason || '')})'>
           <div style="font-weight:600">${sanitize(r.patient_name)}</div>
           <div style="font-size:12px;color:var(--slate-light)">${sanitize(r.patient_uid || '')} · ${sanitize(r.phone || '')}</div>
           <div style="font-size:12px;color:var(--teal);margin-top:4px">Sent by ${sanitize(r.referred_by_name)}${r.reason ? ' — ' + sanitize(r.reason) : ''}</div>
@@ -1681,7 +1681,7 @@
 
     let selectedReferralId = null;
 
-    async function selectAdmitPatient(id, name, referralId, referredByDoctorId) {
+    async function selectAdmitPatient(id, name, referralId, referredByDoctorId, referralReason) {
       selectedPatientId = id; selectedPatientName = name; selectedReferralId = referralId;
       document.getElementById("admit-selected-name").textContent = `Admitting: ${name}`;
       document.getElementById("admit-step-search").style.display = "none";
@@ -1690,10 +1690,14 @@
       document.getElementById("admit-type").value = "planned";
       const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
       document.getElementById("admit-datetime").value = now.toISOString().slice(0, 16);
-      try {
-        const res = await api("GET", `/admissions/last-diagnosis/${id}`);
-        if (res.diagnosis) document.getElementById("admit-diagnosis").value = res.diagnosis;
-      } catch (e) { /* prefill is best-effort only */ }
+      if (referralReason) {
+        document.getElementById("admit-diagnosis").value = referralReason;
+      } else {
+        try {
+          const res = await api("GET", `/admissions/last-diagnosis/${id}`);
+          if (res.diagnosis) document.getElementById("admit-diagnosis").value = res.diagnosis;
+        } catch (e) { /* prefill is best-effort only */ }
+      }
 
       const docSel = document.getElementById("admit-doctor");
       docSel.innerHTML = `<option value="">Loading...</option>`;
@@ -1754,7 +1758,7 @@
       loadDefaultAdmitPatientList().then(() => {
         const match = referralsCache.find(r => String(r.patient_id) === String(deepLinkPatientId));
         if (match) {
-          selectAdmitPatient(match.patient_id, match.patient_name, match.referral_id);
+          selectAdmitPatient(match.patient_id, match.patient_name, match.referral_id, match.referred_by, match.reason);
         } else {
           toast("Referral not found yet — it may still be processing. Search for the patient below.", "info");
         }

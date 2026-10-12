@@ -374,7 +374,7 @@
                   onchange="renderQueueRows()">
                   <option value="all">All</option>
                   <option value="waiting">Waiting</option>
-                  <option value="consulted">Consulted</option>
+                  <option value="done">Consulted</option>
                   <option value="expected">Expected</option>
                 </select>
               </div>
@@ -1159,7 +1159,7 @@
         return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div>
-              <strong>${DOC_TYPE_LABEL[d.type] || d.label}</strong>
+              <strong>${DOC_TYPE_LABEL[d.type] || d.label}</strong>${d.is_admission ? ' <span class="badge badge-red">Admission</span>' : ''}
               <div style="font-size:12px;color:var(--slate)">${dateStr} · ${timeStr}</div>
             </div>
             <div style="display:flex;gap:8px">

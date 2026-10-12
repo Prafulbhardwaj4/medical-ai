@@ -8,7 +8,9 @@ billing_today (admin.py), revenue history and day-end (billing.py) all call
 these helpers, so the three screens can never disagree.
 """
 from collections import defaultdict
+from sqlalchemy import func
 from app.models.checkin import Checkin
+from app.models.portal import Appointment
 from app.models.test_order import TestOrder
 from app.models.opd_charge import OpdCharge
 from app.models.medicine_order import MedicineOrder
@@ -30,11 +32,31 @@ def collection_entries(db, hospital_id, start, end):
         if amount:
             entries.append({"at": at, "mode": mode or None, "category": category, "amount": round(float(amount), 2)})
 
-    for c in db.query(Checkin).filter(
+    _checkins = db.query(Checkin).filter(
         Checkin.hospital_id == hospital_id, Checkin.is_paid == True,  # noqa: E712
         Checkin.paid_at >= start, Checkin.paid_at < end
-    ).all():
+    ).all()
+    # A check-in made from an appointment carries the same fee the appointment
+    # itself records, so that fee is counted once, from the appointment, below.
+    _linked = {c.portal_appointment_id for c in _checkins if c.portal_appointment_id}
+    _counted_via_appt = {
+        i for (i,) in db.query(Appointment.id).filter(
+            Appointment.id.in_(_linked), Appointment.payment_status == "paid", Appointment.paid_at.isnot(None)
+        ).all()
+    } if _linked else set()
+    for c in _checkins:
+        if c.portal_appointment_id in _counted_via_appt:
+            continue
         add(c.paid_at, c.payment_method, "consultation", c.consultation_fee or 0)
+
+    # Appointment fees collected at reception count on the day the money was
+    # taken, whether or not the patient ever got a token (no-shows, future
+    # dates, new patients). Refunds of these fees are netted separately.
+    for ap in db.query(Appointment).filter(
+        Appointment.hospital_id == hospital_id, Appointment.payment_status == "paid",
+        Appointment.paid_at >= start, Appointment.paid_at < end
+    ).all():
+        add(ap.paid_at, ap.payment_method, "consultation", ap.fee_amount or 0)
 
     # Tests: lab orders are the only source. OPD only (admission_id empty);
     # IPD tests are billed on the discharge bill, not paid at the counter.
@@ -89,9 +111,14 @@ def collection_entries(db, hospital_id, start, end):
 
 
 def refund_rows(db, hospital_id, start, end):
+    """Paid-out refunds, placed on the day the ORIGINAL money was collected
+    (collected_at), not the day they were paid back. Pending/dismissed
+    refunds have moved no money, so they never count."""
+    on_day = func.coalesce(Refund.collected_at, Refund.processed_at)
     return db.query(Refund).filter(
         Refund.hospital_id == hospital_id,
-        Refund.processed_at >= start, Refund.processed_at < end
+        Refund.status == "completed",
+        on_day >= start, on_day < end
     ).all()
 
 
@@ -109,8 +136,27 @@ def collected_by_day(db, hospital_id, start, end):
     for e in collection_entries(db, hospital_id, start, end):
         days[e["at"].date()] += e["amount"]
     for r in refund_rows(db, hospital_id, start, end):
-        days[r.processed_at.date()] -= (r.amount or 0)
+        days[(r.collected_at or r.processed_at).date()] -= (r.amount or 0)
     return {d: round(v, 2) for d, v in days.items()}
+
+
+def uninvoiced_appointment_fees(db, hospital_id, start, end):
+    """[(paid_at, amount)] for appointment fees collected between start and end
+    whose visit has no invoice yet. They count as Billed on the day collected;
+    once the visit's invoice exists, the invoice carries the fee instead."""
+    appts = db.query(Appointment).filter(
+        Appointment.hospital_id == hospital_id, Appointment.payment_status == "paid",
+        Appointment.paid_at >= start, Appointment.paid_at < end
+    ).all()
+    appts = [a for a in appts if a.fee_amount]
+    if not appts:
+        return []
+    invoiced_ids = {
+        i for (i,) in db.query(Checkin.portal_appointment_id).filter(
+            Checkin.portal_appointment_id.in_([a.id for a in appts]), Checkin.invoice_id.isnot(None)
+        ).all()
+    }
+    return [(a.paid_at, round(float(a.fee_amount), 2)) for a in appts if a.id not in invoiced_ids]
 
 
 def _invoice_value(inv):
@@ -122,4 +168,6 @@ def billed_total(db, hospital_id, start, end):
         Invoice.hospital_id == hospital_id,
         Invoice.generated_at >= start, Invoice.generated_at < end
     ).all()
-    return round(sum(_invoice_value(i) for i in rows), 2)
+    invoiced = sum(_invoice_value(i) for i in rows)
+    uninvoiced = sum(amt for _, amt in uninvoiced_appointment_fees(db, hospital_id, start, end))
+    return round(invoiced + uninvoiced, 2)

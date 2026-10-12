@@ -23,6 +23,8 @@ from app.routers import attendance as attendance_router
 from app.routers import medicines as medicines_router
 from app.routers import medicine_import as medicine_import_router
 from app.routers import tests as tests_router
+from app.routers import test_import as test_import_router
+from app.routers import super_import as super_import_router
 from app.routers import radiology_templates as radiology_templates_router
 from app.routers import radiology as radiology_router
 from app.routers import lab as lab_router
@@ -308,6 +310,8 @@ app.include_router(attendance_router.router)
 app.include_router(medicines_router.router)
 app.include_router(medicine_import_router.router)
 app.include_router(tests_router.router)
+app.include_router(test_import_router.router)
+app.include_router(super_import_router.router)
 app.include_router(radiology_templates_router.router)
 app.include_router(radiology_router.router)
 app.include_router(lab_router.router)

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Refunds — MedScribe</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="../css/style.css" />
+  <script src="../js/custom-select.js" defer></script>
+  <style>
+    .rf-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; }
+    .rf-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+    .rf-sub { font-size: 12px; color: var(--slate); }
+    .rf-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .rf-actions select { width: 100px; min-width: 100px; padding: 4px 8px; font-size: 0.85rem; }
+    .rf-note { font-size: 12.5px; color: var(--slate); margin-bottom: 12px; }
+  </style>
+</head>
+
+<body>
+  <header class="topbar" style="justify-content:space-between">
+    <div class="topbar-brand">Med<span>Scribe</span></div>
+    <div class="topbar-doctor">
+      <span><strong id="topbar-doctor-name"></strong></span>
+      <div class="topbar-divider"></div>
+      <span id="topbar-clinic" style="color:var(--slate)"></span>
+      <button class="btn btn-outline btn-sm" onclick="logout()">Sign out</button>
+    </div>
+  </header>
+
+  <div class="rf-wrap">
+    <div class="rf-top">
+      <div>
+        <h1 style="margin:0">Refunds</h1>
+        <p class="rf-sub">Money owed back to patients. You pay it here, then mark it refunded.</p>
+      </div>
+      <a class="btn btn-outline btn-sm" href="receptionist.html">← Back to Reception</a>
+    </div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <h2>To refund</h2>
+        <span class="rf-sub" id="rf-pending-count"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Patient</th>
+              <th>For</th>
+              <th>Amount</th>
+              <th>Reason</th>
+              <th>Raised</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="rf-pending-body">
+            <tr><td colspan="6"><div class="empty-state"><p>Loading…</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>History — last 30 days</h2>
+        <span class="rf-sub" id="rf-history-total"></span>
+      </div>
+      <p class="rf-note">IPD deposit balances are paid on the admission page at discharge. They are listed here as a record.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Patient</th>
+              <th>For</th>
+              <th>Amount</th>
+              <th>Paid by</th>
+              <th>Reason</th>
+              <th>Status</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="rf-history-body">
+            <tr><td colspan="7"><div class="empty-state"><p>Loading…</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    const doc = getDoctor();
+    if (!doc || doc.role !== "receptionist") window.location.href = "dashboard.html";
+    if (!requireAuth()) throw new Error("Not authenticated");
+    fillTopbar();
+
+    function fmtDT(iso) {
+      if (!iso) return '—';
+      const d = new Date(/[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30");
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ' · ' +
+        d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function patientCell(r) {
+      return `<strong>${sanitize(r.patient_name)}</strong>${r.patient_uid ? `<div class="rf-sub">${sanitize(r.patient_uid)}</div>` : ''}`;
+    }
+
+    async function loadRefunds() {
+      try {
+        const data = await api("GET", "/refunds");
+        renderPending(data.pending || []);
+        renderHistory(data.history || [], data.history_paid_total || 0);
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    }
+
+    function renderPending(rows) {
+      document.getElementById('rf-pending-count').textContent = rows.length ? `${rows.length} waiting` : '';
+      const body = document.getElementById('rf-pending-body');
+      if (!rows.length) {
+        body.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No refunds waiting.</p></div></td></tr>`;
+        return;
+      }
+      body.innerHTML = rows.map(r => `
+        <tr>
+          <td data-label="Patient">${patientCell(r)}</td>
+          <td data-label="For">${sanitize(r.source_label)}</td>
+          <td data-label="Amount" style="font-weight:600">Rs.${Number(r.amount).toFixed(2)}</td>
+          <td data-label="Reason" style="color:var(--slate);font-size:13px;max-width:320px">${sanitize(r.reason || '—')}</td>
+          <td data-label="Raised" style="color:var(--slate);font-size:13px;white-space:nowrap">${fmtDT(r.raised_at)}</td>
+          <td data-label="">
+            ${r.already_billed
+              ? `<div class="rf-actions"><span class="badge badge-amber">Already billed</span>
+                   <button class="btn btn-outline btn-sm" onclick="dismissRefund(${r.id})">Close without paying</button></div>`
+              : `<div class="rf-actions">
+                   <select class="form-control" id="rf-ch-${r.id}">
+                     ${['cash', 'card', 'upi'].map(c => `<option value="${c}" ${c === r.suggested_channel ? 'selected' : ''}>${c.toUpperCase()}</option>`).join('')}
+                   </select>
+                   <button class="btn btn-primary btn-sm" onclick="settleRefund(${r.id}, ${Number(r.amount)})">Mark Refunded</button>
+                   <button class="btn btn-outline btn-sm" onclick="dismissRefund(${r.id})">Can't refund</button>
+                 </div>`}
+          </td>
+        </tr>`).join('');
+    }
+
+    function renderHistory(rows, total) {
+      document.getElementById('rf-history-total').textContent = `Paid out: Rs.${Number(total).toFixed(2)}`;
+      const body = document.getElementById('rf-history-body');
+      if (!rows.length) {
+        body.innerHTML = `<tr><td colspan="7"><div class="empty-state"><p>No refunds in the last 30 days.</p></div></td></tr>`;
+        return;
+      }
+      body.innerHTML = rows.map(r => {
+        const paid = r.status === 'completed';
+        const forCell = r.admission_token
+          ? `<a href="admission-detail.html?id=${encodeURIComponent(r.admission_token)}">${sanitize(r.source_label)}</a>`
+          : sanitize(r.source_label);
+        return `
+        <tr>
+          <td data-label="Patient">${patientCell(r)}</td>
+          <td data-label="For">${forCell}</td>
+          <td data-label="Amount" style="font-weight:600">Rs.${Number(r.amount).toFixed(2)}${paid && r.channel ? `<div class="rf-sub">${sanitize(String(r.channel).toUpperCase())}</div>` : ''}</td>
+          <td data-label="Paid by" style="color:var(--slate)">${sanitize(r.paid_by_name || '—')}</td>
+          <td data-label="Reason" style="color:var(--slate);font-size:13px;max-width:320px">${sanitize(r.reason || '—')}</td>
+          <td data-label="Status">${paid ? '<span class="badge badge-green">Refunded</span>' : '<span class="badge badge-grey">Closed, not paid</span>'}</td>
+          <td data-label="Date" style="color:var(--slate);font-size:13px;white-space:nowrap">${fmtDT(r.paid_at)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function settleRefund(id, amount) {
+      const channel = document.getElementById(`rf-ch-${id}`).value;
+      const ok = await confirmModal(`Confirm you have refunded Rs.${amount.toFixed(2)} by ${channel.toUpperCase()}?`, { title: 'Mark refunded' });
+      if (!ok) return;
+      try {
+        await api("POST", `/refunds/${id}/settle`, { channel });
+        toast("Refund recorded.", "success");
+        loadRefunds();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    async function dismissRefund(id) {
+      const reason = await promptModal("Why is this refund not being paid? Admin will see this reason.");
+      if (reason === null) return;
+      if (reason.trim().length < 3) { toast("Please give a reason.", "error"); return; }
+      try {
+        await api("POST", `/refunds/${id}/dismiss`, { reason: reason.trim() });
+        toast("Refund closed without payment.", "success");
+        loadRefunds();
+      } catch (e) { toast(e.message, "error"); }
+    }
+
+    loadRefunds();
+  </script>
+</body>
+
+</html>

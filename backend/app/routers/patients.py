@@ -1806,9 +1806,13 @@ def todays_queue(
     # A patient sent for admission has effectively been seen by the doctor
     # even though no Consultation row exists for this visit — without this,
     # they'd sit in the queue as "waiting" forever after Send Admit.
+    _ref_day_start, _ref_day_end = ist_day_bounds()
     admitted_referral_patient_ids = set(
         pid for (pid,) in db.query(AdmissionReferral.patient_id).filter(
-            AdmissionReferral.patient_id.in_(patient_ids)
+            AdmissionReferral.patient_id.in_(patient_ids),
+            AdmissionReferral.referred_by == current_doctor.id,
+            AdmissionReferral.created_at >= _ref_day_start,
+            AdmissionReferral.created_at < _ref_day_end,
         ).all()
     )
 
@@ -2595,7 +2599,7 @@ def cancel_test_order(
         db.add(Refund(
             patient_id=order.patient_id, hospital_id=order.hospital_id,
             source_type="test", source_id=order.id, amount=order.price,
-            channel=_channel, status="completed",
+            channel=_channel, status="pending",
             reason=f"Test cancelled: {order.test_name}. {body.reason}"[:250],
             processed_by=current_doctor.id,
         ))
@@ -2727,15 +2731,20 @@ def get_patient_documents(
 
     grouped_by_consultation = {}
     for t in test_orders:
-        grouped_by_consultation.setdefault(t.consultation_id, []).append(t)
+        if t.admission_id:
+            _group_key = ("adm", t.admission_id, t.order_batch_id or f"o{t.id}")
+        else:
+            _group_key = ("opd", t.consultation_id)
+        grouped_by_consultation.setdefault(_group_key, []).append(t)
 
     for consultation_id, orders in grouped_by_consultation.items():
         orders_sorted = sorted(orders, key=lambda o: o.id)
-        latest_date = max((o.completed_at for o in orders if o.completed_at), default=None)
+        latest_date = max((o.completed_at or o.verified_at for o in orders if o.completed_at or o.verified_at), default=None)
         test_names = ", ".join(o.test_name for o in orders_sorted)
         documents.append({
             "type": "test_report",
             "label": f"Test Report — {test_names}",
+            "is_admission": bool(orders_sorted[0].admission_id),
             "ref_id": orders_sorted[0].id,
             "order_ids": [o.id for o in orders_sorted],
             "extra": None,
