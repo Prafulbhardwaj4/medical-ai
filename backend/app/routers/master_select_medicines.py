@@ -4,6 +4,7 @@ of a hospital (passes hospital_id). Not tier-gated. Pharmacy flows are not touch
 medicine rows with stock 0, exactly like the manual Add Medicine / Add Brand screens create them."""
 import io
 import logging
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -35,6 +36,13 @@ class BrandLine(BaseModel):
     price_per_pack: Optional[float] = None
 
 
+class StockLine(BaseModel):
+    brand_name: Optional[str] = None      # blank = the generic medicine itself
+    packs: Optional[int] = None
+    expiry_date: Optional[date] = None
+    batch_number: Optional[str] = None
+
+
 class SelectedMedicine(BaseModel):
     master_medicine_id: int
     price_per_pack: Optional[float] = None
@@ -42,6 +50,8 @@ class SelectedMedicine(BaseModel):
     hsn_code: Optional[str] = None
     nppa_ceiling_price: Optional[float] = None
     low_stock_threshold: Optional[int] = None
+    gst_percent: Optional[float] = None
+    stock: list[StockLine] = []
     brands: list[BrandLine] = []
 
 

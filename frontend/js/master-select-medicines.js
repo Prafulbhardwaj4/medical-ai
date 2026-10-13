@@ -8,6 +8,8 @@
   const MAX_PRICE = 1000000;
   const MAX_PACK = 10000;
   const MAX_THRESHOLD = 1000000;
+  const MAX_STOCK_UNITS = 10000000;
+  const MAX_GST = 28;
   const MAX_ROWS_SHOWN = 500;
   const MAX_LIST = 200;
 
@@ -50,7 +52,8 @@
   }
   function priceProblem(s) { return !validMrp(s.mrp) || !validPack(s.pack); }
   function otherProblem(s) {
-    if (!validOptNum(s.nppa, MAX_PRICE) || !validOptInt(s.thr, MAX_THRESHOLD) || String(s.hsn || "").length > 20) return true;
+    if (stockProblem(s)) return true;
+    if (!validOptNum(s.nppa, MAX_PRICE) || !validOptNum(s.gst, MAX_GST) || !validOptInt(s.thr, MAX_THRESHOLD) || String(s.hsn || "").length > 20) return true;
     return s.brands.some((b) => (b.name || "").trim().length > 100 || !(b.mrp === "" || validMrp(b.mrp)));
   }
 
@@ -69,11 +72,91 @@
     </div>`;
   }
 
+  // ---------------------------------------------------------------- "Add stock" lines (one batch per line)
+  function validDate(v) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v || "")) return false;
+    const y = Number(String(v).slice(0, 4));
+    return !isNaN(new Date(v + "T00:00:00")) && y >= 2000 && y <= 2100;
+  }
+  function stockActive(l) { return !!(String(l.qty).trim() || l.exp || String(l.batch || "").trim()); }
+  function stockQtyBad(s, l) {
+    const q = Number(l.qty);
+    return l.qty === "" || !Number.isInteger(q) || q < 1 || q * (Number(s.pack) || 1) > MAX_STOCK_UNITS;
+  }
+  function stockLineBad(s, l) {
+    if (!stockActive(l)) return false;
+    return stockQtyBad(s, l) || !validDate(l.exp) || String(l.batch || "").trim().length > 50;
+  }
+  function stockProblem(s) {
+    const seen = new Set();
+    for (const l of s.stock) {
+      if (stockLineBad(s, l)) return true;
+      const b = String(l.batch || "").trim().toLowerCase();
+      if (stockActive(l) && b) {
+        const k = (l.sb || "") + "|" + b;
+        if (seen.has(k)) return true;
+        seen.add(k);
+      }
+    }
+    return false;
+  }
+  function hasNamedBrand(s) { return s.brands.some((b) => (b.name || "").trim()); }
+  function brandOptionsHtml(s, selected) {
+    return '<option value="">Generic (no brand)</option>' + s.brands.map((b, i) =>
+      (b.name || "").trim() ? `<option value="${i}"${String(selected) === String(i) ? " selected" : ""}>${esc(b.name.trim())}</option>` : "").join("");
+  }
+  function unitsText(s, l) {
+    const q = Number(l.qty);
+    return (l.qty !== "" && Number.isInteger(q) && q >= 1) ? ` = ${q * (Number(s.pack) || 1)} units` : "";
+  }
+  function stockLineHtml(id, s, l, i) {
+    const act = stockActive(l);
+    const bq = act && stockQtyBad(s, l), be = act && !validDate(l.exp), bb = String(l.batch || "").trim().length > 50;
+    return `<div class="ms-stockline">
+      <label class="ms-sbrand">For brand<select class="form-control" data-m="${id}" data-f="sbrand" data-i="${i}">${brandOptionsHtml(s, l.sb)}</select></label>
+      <label>Packs / strips*<span class="ms-units" data-u="${id}:${i}">${esc(unitsText(s, l))}</span><input type="number" class="form-control${bq ? " ms-bad" : ""}" data-m="${id}" data-f="sqty" data-i="${i}" min="1" step="1" inputmode="numeric" value="${esc(l.qty)}" /></label>
+      <label>Expiry date*<input type="date" class="form-control${be ? " ms-bad" : ""}" data-m="${id}" data-f="sexp" data-i="${i}" min="2000-01-01" max="2100-12-31" value="${esc(l.exp)}" /></label>
+      <label>Batch no. (optional)<input type="text" class="form-control${bb ? " ms-bad" : ""}" data-m="${id}" data-f="sbatch" data-i="${i}" maxlength="50" value="${esc(l.batch)}" /></label>
+      <button type="button" class="btn btn-outline btn-sm ms-stockdel" data-action="rmstock" data-id="${id}" data-i="${i}" aria-label="Remove stock line">×</button>
+    </div>`;
+  }
+  function stockHtml(id, s) {
+    return `<div class="ms-stock${hasNamedBrand(s) ? " has-brands" : ""}">${s.stock.map((l, i) => stockLineHtml(id, s, l, i)).join("")}
+      <div class="ms-chips"><button type="button" class="ms-chip ms-chip-dashed" data-action="addstock" data-id="${id}">+ Add stock</button></div></div>`;
+  }
+  function refreshStockLine(id, s, i) {
+    const l = s.stock[i];
+    if (!l) return;
+    const root = $("ms-list");
+    const u = root.querySelector(`[data-u="${id}:${i}"]`);
+    if (u) u.textContent = unitsText(s, l);
+    const act = stockActive(l);
+    const set = (f, bad) => {
+      const el = root.querySelector(`input[data-m="${id}"][data-f="${f}"][data-i="${i}"]`);
+      if (el) el.classList.toggle("ms-bad", act && bad);
+    };
+    set("sqty", stockQtyBad(s, l));
+    set("sexp", !validDate(l.exp));
+    set("sbatch", String(l.batch || "").trim().length > 50);
+  }
+  function refreshBrandSelects(id, s) {
+    const box = $("ms-list").querySelector(`[data-item="${id}"] .ms-stock`);
+    if (!box) return;
+    box.classList.toggle("has-brands", hasNamedBrand(s));
+    box.querySelectorAll('select[data-f="sbrand"]').forEach((sel) => {
+      const l = s.stock[Number(sel.getAttribute("data-i"))];
+      if (!l) return;
+      if (l.sb !== "" && !((s.brands[Number(l.sb)] || {}).name || "").trim()) l.sb = "";
+      sel.innerHTML = brandOptionsHtml(s, l.sb);
+      sel.value = l.sb;
+    });
+  }
+
   function extraHtml(id, s) {
     const more = s.more ? `<div class="ms-more">
         <div class="ms-fields">
           <label>HSN code<input type="text" class="form-control${String(s.hsn || "").length > 20 ? " ms-bad" : ""}" data-m="${id}" data-f="hsn" maxlength="20" value="${esc(s.hsn)}" /></label>
-          <label>NPPA ceiling price (Rs per unit)<input type="number" class="form-control${validOptNum(s.nppa, MAX_PRICE) ? "" : " ms-bad"}" data-m="${id}" data-f="nppa" min="0" step="0.01" inputmode="decimal" value="${esc(s.nppa)}" /></label>
+          <label>NPPA ceiling (Rs per unit)<input type="number" class="form-control${validOptNum(s.nppa, MAX_PRICE) ? "" : " ms-bad"}" data-m="${id}" data-f="nppa" min="0" step="0.01" inputmode="decimal" value="${esc(s.nppa)}" /></label>
           <label>Low-stock alert at<input type="number" class="form-control${validOptInt(s.thr, MAX_THRESHOLD) ? "" : " ms-bad"}" data-m="${id}" data-f="thr" min="0" step="1" inputmode="numeric" placeholder="25" value="${esc(s.thr)}" /></label>
         </div>
         ${s.brands.map((b, i) => brandHtml(id, b, i, s.brands.length)).join("")}
@@ -83,7 +166,9 @@
       <div class="ms-fields">
         <label>MRP per pack (Rs)*<input type="number" class="form-control${s.mrp !== "" && !validMrp(s.mrp) ? " ms-bad" : ""}" data-m="${id}" data-f="mrp" min="0" step="0.01" inputmode="decimal" value="${esc(s.mrp)}" /></label>
         <label>Units per pack*<input type="number" class="form-control${s.pack !== "" && !validPack(s.pack) ? " ms-bad" : ""}" data-m="${id}" data-f="pack" min="1" step="1" inputmode="numeric" value="${esc(s.pack)}" /></label>
+        <label>GST %<input type="number" class="form-control${validOptNum(s.gst, MAX_GST) ? "" : " ms-bad"}" data-m="${id}" data-f="gst" min="0" max="28" step="0.01" inputmode="decimal" value="${esc(s.gst)}" /></label>
       </div>
+      ${stockHtml(id, s)}
       <div class="ms-chips"><button type="button" class="ms-chip${s.more ? " open" : ""}" data-action="more" data-id="${id}" aria-expanded="${s.more ? "true" : "false"}">${s.more ? "Hide optional fields" : "More (optional)"}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div>
       ${more}
     </div>`;
@@ -169,6 +254,13 @@
         master_medicine_id: Number(id),
         price_per_pack: Number(s.mrp),
         pack_size: Number(s.pack),
+        gst_percent: s.gst === "" ? 0 : Number(s.gst),
+        stock: s.stock.filter(stockActive).map((l) => ({
+          brand_name: (l.sb !== "" && s.brands[Number(l.sb)]) ? (String(s.brands[Number(l.sb)].name || "").trim() || null) : null,
+          packs: Number(l.qty),
+          expiry_date: l.exp,
+          batch_number: String(l.batch || "").trim() || null,
+        })),
         hsn_code: String(s.hsn || "").trim() || null,
         nppa_ceiling_price: s.nppa === "" ? null : Number(s.nppa),
         low_stock_threshold: s.thr === "" ? null : Number(s.thr),
@@ -193,7 +285,7 @@
 
   async function undoBatch(id) {
     const ok = await confirmModal(
-      "This removes the medicines you just added from your catalog. It is refused if any of them has already been used in an order or has stock.",
+      "This removes the medicines you just added, and the stock you added with them, from your catalog. It is refused if any of them has already been used in an order, or if that stock has been sold or changed.",
       { title: "Undo this?", okLabel: "Undo", danger: true });
     if (!ok) return;
     try {
@@ -233,7 +325,7 @@
     ok: ["badge-green", "OK"], already: ["badge-grey", "Already added"],
     not_found: ["badge-red", "Not found"], duplicate: ["badge-red", "Duplicate in file"],
     bad_price: ["badge-red", "Bad price"], price_missing: ["badge-red", "MRP missing"],
-    bad_pack: ["badge-red", "Bad pack or brand"],
+    bad_pack: ["badge-red", "Bad pack or brand"], bad_stock: ["badge-red", "Bad stock or expiry"],
   };
 
   function previewRowHtml(r) {
@@ -245,6 +337,7 @@
     const shownName = r.master_name && r.master_name !== r.name ? `${esc(r.name)} <small>(${esc(r.master_name)})</small>` : esc(r.name);
     return `<tr><td>${esc(r.row)}</td><td>${shownName}</td><td>${r.brand ? esc(r.brand) : "-"}</td>
       <td>${r.mrp != null ? "Rs." + esc(r.mrp) : "-"}</td><td>${r.pack != null ? esc(r.pack) : "-"}</td>
+      <td>${r.stock != null ? esc(r.stock) : "-"}</td><td>${r.expiry ? esc(String(r.expiry).split("-").reverse().join("-")) : "-"}</td><td>${r.batch ? esc(r.batch) : "-"}</td>
       <td><span class="badge ${s[0]}">${esc(s[1])}</span>${r.message ? `<div class="ms-msg">${esc(r.message)}</div>` : ""}${sugg}</td></tr>`;
   }
 
@@ -254,7 +347,7 @@
     $("ms-warnings").innerHTML = issueList(p.warnings, "Notes (these do not block saving)", false);
     const rows = p.rows || [];
     if (rows.length) {
-      $("ms-table").innerHTML = `<div class="table-wrap" style="max-height:46vh;overflow-y:auto"><table><thead><tr><th>Row</th><th>Medicine</th><th>Brand</th><th>MRP</th><th>Units</th><th>Status</th></tr></thead><tbody>${
+      $("ms-table").innerHTML = `<div class="table-wrap" style="max-height:46vh;overflow-y:auto"><table><thead><tr><th>Row</th><th>Medicine</th><th>Brand</th><th>MRP</th><th>Units</th><th>Stock (packs)</th><th>Expiry</th><th>Batch</th><th>Status</th></tr></thead><tbody>${
         rows.slice(0, MAX_ROWS_SHOWN).map(previewRowHtml).join("")}</tbody></table></div>` +
         (rows.length > MAX_ROWS_SHOWN ? `<p class="ms-msg">Only the first ${MAX_ROWS_SHOWN} rows are shown. Every row in the file is checked.</p>` : "");
     } else {
@@ -297,7 +390,7 @@
   async function onConfirm() {
     if (!state.previewId) return;
     const ok = await confirmModal(
-      "This adds the medicines in this file to the hospital's live medicine catalog with the MRP in the file (stock 0). You can undo it afterwards, but only while none of them has been used or has stock.",
+      "This adds the medicines in this file to the hospital's live medicine catalog with the MRP in the file (with any stock in the file). You can undo it afterwards, but only while none of them has been used and their stock is untouched.",
       { title: "Add these medicines?", okLabel: "Confirm" });
     if (!ok) return;
     try {
@@ -358,22 +451,42 @@
         ev.preventDefault();
         const s = state.sel.get(id);
         if (s && s.brands.length < 10) { s.brands.push({ name: "", mrp: "" }); renderRow(id); updateFooter(); }
+      } else if (a === "addstock") {
+        ev.preventDefault();
+        const s = state.sel.get(id);
+        if (s && s.stock.length < 20) { s.stock.push({ sb: "", qty: "", exp: "", batch: "" }); renderRow(id); updateFooter(); }
+      } else if (a === "rmstock") {
+        const s = state.sel.get(id);
+        const i = Number(el.getAttribute("data-i"));
+        if (s && i >= 0 && i < s.stock.length) { s.stock.splice(i, 1); renderRow(id); updateFooter(); }
       } else if (a === "rmbrand") {
         const s = state.sel.get(id);
         const i = Number(el.getAttribute("data-i"));
-        if (s && s.brands.length > 1 && i >= 0 && i < s.brands.length) { s.brands.splice(i, 1); renderRow(id); updateFooter(); }
+        if (s && s.brands.length > 1 && i >= 0 && i < s.brands.length) {
+          s.brands.splice(i, 1);
+          s.stock.forEach((l) => { if (l.sb !== "") { const k = Number(l.sb); l.sb = k === i ? "" : String(k > i ? k - 1 : k); } });
+          renderRow(id);
+          updateFooter();
+        }
       }
     });
 
     panel.addEventListener("change", (ev) => {
       const t = ev.target;
+      if (t.matches('select[data-f="sbrand"]')) {
+        const sid = Number(t.getAttribute("data-m"));
+        const ss = state.sel.get(sid);
+        const sl = ss && ss.stock[Number(t.getAttribute("data-i"))];
+        if (sl) { sl.sb = t.value; updateFooter(); }
+        return;
+      }
       if (t.id === "ms-schedule" || t.id === "ms-form") { loadList(); return; }
       if (t.id === "ms-file") { const f = t.files && t.files[0]; t.value = ""; onFileChosen(f); return; }
       if (t.matches("input[type=checkbox][data-id]")) {
         const id = Number(t.getAttribute("data-id"));
         const m = state.items.find((x) => Number(x.id) === id);
         if (t.checked && m) {
-          state.sel.set(id, { mrp: "", pack: String(Number(m.default_pack_size) || 1), hsn: "", nppa: "", thr: "25", more: false, brands: [{ name: "", mrp: "" }] });
+          state.sel.set(id, { mrp: "", pack: String(Number(m.default_pack_size) || 1), hsn: "", nppa: "", thr: "25", gst: m.gst_percent != null ? String(m.gst_percent) : "", more: false, stock: [], brands: [{ name: "", mrp: "" }] });
         } else {
           state.sel.delete(id);
         }
@@ -395,15 +508,26 @@
         if (!s) return;
         const f = t.getAttribute("data-f");
         const v = t.value;
+        if (f === "sqty" || f === "sexp" || f === "sbatch") {
+          const si = Number(t.getAttribute("data-i"));
+          const sl = s.stock[si];
+          if (!sl) return;
+          if (f === "sqty") sl.qty = v; else if (f === "sexp") sl.exp = v; else sl.batch = v;
+          refreshStockLine(id, s, si);
+          updateFooter();
+          return;
+        }
         if (f === "bname" || f === "bmrp") {
           const b = s.brands[Number(t.getAttribute("data-i"))];
           if (!b) return;
-          if (f === "bname") { b.name = v; t.classList.toggle("ms-bad", v.trim().length > 100); }
+          if (f === "bname") { b.name = v; t.classList.toggle("ms-bad", v.trim().length > 100); refreshBrandSelects(id, s); }
           else { b.mrp = v; t.classList.toggle("ms-bad", v !== "" && !validMrp(v)); }
         } else {
           s[f] = v;
+          if (f === "pack") s.stock.forEach((l, k) => refreshStockLine(id, s, k));
           const bad = f === "mrp" ? (v !== "" && !validMrp(v))
             : f === "pack" ? (v !== "" && !validPack(v))
+            : f === "gst" ? !validOptNum(v, MAX_GST)
             : f === "nppa" ? !validOptNum(v, MAX_PRICE)
             : f === "thr" ? !validOptInt(v, MAX_THRESHOLD)
             : f === "hsn" ? v.length > 20 : false;

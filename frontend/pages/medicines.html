@@ -290,6 +290,37 @@
         .ms-msg { font-size:12px; color:var(--slate); margin-top:2px; overflow-wrap:anywhere; }
         .ms-sugg { margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; }
         #ms-table td { overflow-wrap:anywhere; vertical-align:top; }
+        #ms-panel { height:94vh; max-height:94vh; display:flex; flex-direction:column; overflow:hidden; }
+        #ms-panel > .card-header { flex:0 0 auto; position:static; }
+        .ms-grid { flex:1 1 auto; min-height:0; align-items:stretch; }
+        .ms-col { display:flex; flex-direction:column; min-height:0; overflow-y:auto; }
+        #ms-list { flex:1 1 auto; min-height:200px; max-height:none; overflow-x:hidden; }
+        .ms-footer, #ms-result { flex:0 0 auto; }
+        .ms-fields { grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:end; }
+        .ms-fields label { display:flex; flex-direction:column; justify-content:flex-end; gap:4px; line-height:1.3; }
+        .ms-fields input { margin-top:0; width:100%; box-sizing:border-box; }
+        @media (max-width: 900px) { .ms-grid { display:block; overflow-y:auto; } .ms-col { display:block; overflow:visible; margin-bottom:20px; } #ms-list { height:55vh; max-height:55vh; flex:none; } }
+        @media (max-width: 600px) { #ms-panel { height:100vh; max-height:100vh; } .ms-fields { grid-template-columns:1fr; } }
+        #ms-panel { height:94vh; max-height:94vh; display:flex; flex-direction:column; overflow:hidden; }
+        #ms-panel > .card-header { flex:0 0 auto; position:static; }
+        .ms-grid { flex:1 1 auto; min-height:0; align-items:stretch; }
+        .ms-col { display:flex; flex-direction:column; min-height:0; overflow-y:auto; }
+        #ms-list { flex:1 1 auto; min-height:200px; max-height:none; overflow-x:hidden; }
+        .ms-footer, #ms-result { flex:0 0 auto; }
+        .ms-fields { grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:end; }
+        .ms-fields label { display:flex; flex-direction:column; justify-content:flex-end; gap:4px; line-height:1.3; }
+        .ms-fields input { margin-top:0; width:100%; box-sizing:border-box; }
+        @media (max-width: 900px) { .ms-grid { display:block; overflow-y:auto; } .ms-col { display:block; overflow:visible; margin-bottom:20px; } #ms-list { height:55vh; max-height:55vh; flex:none; } }
+        @media (max-width: 600px) { #ms-panel { height:100vh; max-height:100vh; } .ms-fields { grid-template-columns:1fr; } }
+        .ms-stock { margin:2px 0 8px; }
+        .ms-stockline { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)) auto; gap:12px; align-items:end; margin-bottom:10px; padding:10px 12px; background:var(--smoke); border:1px solid var(--border); border-radius:8px; }
+        .ms-stock.has-brands .ms-stockline { grid-template-columns:minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)) auto; }
+        .ms-stock:not(.has-brands) .ms-sbrand { display:none; }
+        .ms-stockline label { display:flex; flex-direction:column; justify-content:flex-end; gap:4px; margin:0; font-size:12px; font-weight:600; color:var(--slate); line-height:1.3; }
+        .ms-stockline input, .ms-stockline select { width:100%; box-sizing:border-box; margin:0; }
+        .ms-units { font-weight:400; color:var(--teal); }
+        .ms-stockdel { height:38px; }
+        @media (max-width: 900px) { .ms-stockline, .ms-stock.has-brands .ms-stockline { grid-template-columns:repeat(2, minmax(0, 1fr)); } .ms-stockdel { grid-column:1 / -1; } }
       </style>
       <div class="card" id="ms-panel" style="display:none;margin-top:20px">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -316,7 +347,7 @@
           </div>
           <div class="ms-col">
             <h3>Or upload an Excel file</h3>
-            <p style="font-size:13px;color:var(--slate);margin:0 0 12px">Columns: Medicine, MRP per pack, Units per pack (optional) and Brand name (optional). The medicine must be exactly as in the master list. To add several brands of one medicine, repeat the row with a different brand and MRP.</p>
+            <p style="font-size:13px;color:var(--slate);margin:0 0 12px">Columns: Medicine, MRP per pack, Units per pack (optional), Brand name (optional), then optional Stock (packs), Expiry date and Batch number for one batch per row. The medicine must be exactly as in the master list. To add several brands of one medicine, repeat the row with a different brand and MRP.</p>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
               <button class="btn btn-outline btn-sm" data-action="template">Download template</button>
               <button class="btn btn-primary btn-sm" data-action="choose">Choose Excel file (.xlsx)</button>

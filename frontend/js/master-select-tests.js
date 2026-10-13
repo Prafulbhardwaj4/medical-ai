@@ -45,7 +45,7 @@
       ? `<button type="button" class="ms-caret" data-action="toggle" data-id="${id}" aria-expanded="${isOpen}" aria-label="${isOpen ? "Hide" : "Show"} parameters" title="${isOpen ? "Hide" : "Show"} parameters"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>`
       : "";
     const params = hasParams
-      ? `<div class="ms-params"><ol>${names.map((n) => `<li>${esc(n)}</li>`).join("")}</ol></div>`
+      ? `<div class="ms-params"><div class="ms-params-title">Includes ${names.length} parameter${names.length === 1 ? "" : "s"}</div><ul>${names.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></div>`
       : "";
     const badge = t.is_panel
       ? `<span class="badge badge-navy">Panel - ${esc(t.parameter_count)} parameters</span>`

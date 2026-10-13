@@ -7,7 +7,7 @@ Import-batch records use kind "master_medicines" so the existing Excel-import hi
 import io
 import json
 import secrets
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from difflib import get_close_matches
 from typing import Optional
 
@@ -28,7 +28,10 @@ from app.services.import_common import (
     ImportFileError, Issue, is_blank, norm_key, norm_strength_key, norm_text, parse_number, parse_whole, read_table,
 )
 from app.services.medicine_import_service import ImportRefused
+from app.models.medicine_order_batch import MedicineOrderBatch
 from app.utils.audit import stage_action
+from app.utils.auth import ist_today
+from app.utils.notify import sync_stock_notifications
 from app.utils.master_catalog import clean_text, norm_name
 from app.utils.timezone import now_ist_naive
 
@@ -41,8 +44,12 @@ MAX_BRAND_LEN = 100
 MAX_HSN_LEN = 20
 SUGGESTION_ROWS_MAX = 200
 DEFAULT_THRESHOLD = 25
+MAX_BATCH_LEN = 50
+MAX_STOCK_UNITS = 10_000_000      # same upper limit as the manual Add Stock screen
+MAX_STOCK_LINES = 20
 COLUMNS = [("name", "Medicine*", True), ("mrp", "MRP per pack*", True),
-           ("pack", "Units per pack", False), ("brand", "Brand name", False)]
+           ("pack", "Units per pack", False), ("brand", "Brand name", False),
+           ("stock", "Stock (packs)", False), ("expiry", "Expiry date", False), ("batch", "Batch number", False)]
 
 
 # ======================= helpers =======================
@@ -59,6 +66,105 @@ def clean_mrp(value):
     if n > MAX_PRICE:
         return None, f"MRP must not be more than {MAX_PRICE:,}"
     return round(n, 2), None
+
+
+def _raw_expiry(v):
+    """Keeps the expiry as JSON-safe text (a real Excel date becomes yyyy-mm-dd)."""
+    if is_blank(v):
+        return None
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    if isinstance(v, date):
+        return v.isoformat()
+    return norm_text(v)
+
+
+def clean_expiry(raw):
+    """Accepts yyyy-mm-dd (from the preview store), a real Excel date or dd-mm-yyyy text. Blank -> (None, None)."""
+    if is_blank(raw):
+        return None, None
+    if isinstance(raw, str):
+        s = raw.strip()
+        if len(s) == 10 and s[4] == "-" and s[7] == "-":
+            try:
+                d = date.fromisoformat(s)
+            except ValueError:
+                return None, f"'{norm_text(s)[:30]}' is not a valid date. Write it as dd-mm-yyyy, for example 31-12-2027"
+            if not (2000 <= d.year <= 2100):
+                return None, f"year {d.year} looks wrong. Write the date as dd-mm-yyyy"
+            return d, None
+    return parse_date(raw)
+
+
+def clean_stock(packs_raw, expiry_raw, batch_raw, pack_size=1):
+    """Stock is optional. If any of the three is given, packs and expiry are both needed (same rule as the
+    Add Stock screen: quantity is in packs/strips). Returns (packs, expiry, lot, None) or (None, None, None, reason)."""
+    lot = norm_text(batch_raw)
+    if is_blank(packs_raw) and is_blank(expiry_raw) and not lot:
+        return None, None, "", None
+    if is_blank(packs_raw):
+        return None, None, None, "Stock (packs) is missing."
+    packs, err = parse_whole(packs_raw)
+    if err:
+        return None, None, None, f"Stock {err}"
+    if packs is None or packs < 1:
+        return None, None, None, "Stock must be at least 1 pack."
+    if packs * int(pack_size or 1) > MAX_STOCK_UNITS:
+        return None, None, None, f"Stock is too large (maximum {MAX_STOCK_UNITS:,} units)."
+    exp, eerr = clean_expiry(expiry_raw)
+    if eerr:
+        return None, None, None, f"Expiry {eerr}"
+    if exp is None:
+        return None, None, None, "Expiry date is missing."
+    if len(lot) > MAX_BATCH_LEN:
+        return None, None, None, f"Batch number is too long (maximum {MAX_BATCH_LEN} characters)."
+    return packs, exp, lot, None
+
+
+def _clean_stock_lines(label, lines, brands, pack):
+    """Checks the 'Add stock' lines of one ticked medicine.
+    Returns ([(brand_key, packs, expiry, lot)], None) or (None, reason)."""
+    out, seen = [], set()
+    names = {norm_name(n) for n, _ in brands}
+    if len(lines or []) > MAX_STOCK_LINES:
+        return None, f"{label}: at most {MAX_STOCK_LINES} stock lines"
+    for ln in (lines or []):
+        key = norm_name(ln.brand_name) if clean_text(ln.brand_name) else ""
+        if key and key not in names:
+            return None, f"{label}: stock was added for a brand that is not in the brand list"
+        if ln.packs is None or ln.packs < 1:
+            return None, f"{label}: stock quantity must be at least 1 pack"
+        if ln.packs * int(pack or 1) > MAX_STOCK_UNITS:
+            return None, f"{label}: stock is too large (maximum {MAX_STOCK_UNITS:,} units)"
+        if ln.expiry_date is None:
+            return None, f"{label}: expiry date is missing on a stock line"
+        if not (2000 <= ln.expiry_date.year <= 2100):
+            return None, f"{label}: an expiry date looks wrong (year {ln.expiry_date.year})"
+        lot = clean_text(ln.batch_number)
+        if len(lot) > MAX_BATCH_LEN:
+            return None, f"{label}: batch number is too long (maximum {MAX_BATCH_LEN} characters)"
+        if lot:
+            k = (key, lot.casefold())
+            if k in seen:
+                return None, f"{label}: batch '{lot}' is entered twice"
+            seen.add(k)
+        out.append((key, int(ln.packs), ln.expiry_date, lot or None))
+    return out, None
+
+
+def clean_gst(value, default):
+    """Blank/None means the master list's GST %. Returns (gst, None) or (None, reason)."""
+    if value is None or is_blank(value):
+        return default, None
+    n, err = parse_number(value)
+    if err:
+        return None, err
+    if n is None:
+        return default, None
+    problem = _number_problem(gst_percent=n)
+    if problem:
+        return None, problem
+    return n, None
 
 
 def clean_pack(value, default: int):
@@ -143,7 +249,8 @@ def apply_selection(db: Session, actor, hospital, entries: list, file_name: str,
         if _find_duplicate_medicine(db, hid, m.generic_name, m.strength, m.dosage_form):
             raise HTTPException(status_code=409, detail=f"{m.display_name} is already in your catalog. Nothing was saved. Please reload the list.")
     n_brands = sum(len(e["brands"]) for e in entries)
-    summary = {"medicines_added": len(entries), "brands_added": n_brands, "source": source}
+    n_stock = sum(len(e.get("stock") or []) for e in entries)
+    summary = {"medicines_added": len(entries), "brands_added": n_brands, "stock_batches": n_stock, "source": source}
     batch = ImportBatch(hospital_id=hid, kind=KIND, created_by=actor.id,
                         created_by_name=(f"{actor.title} {actor.name}" if getattr(actor, "title", None) else actor.name),
                         created_by_role=actor.role.value, file_name=(file_name or "")[:200],
@@ -151,6 +258,7 @@ def apply_selection(db: Session, actor, hospital, entries: list, file_name: str,
     db.add(batch)
     db.flush()
     warnings = []
+    created_map = []
     for e in entries:
         m = e["master"]
         thr = e["thr"] if e["thr"] is not None else DEFAULT_THRESHOLD
@@ -159,13 +267,16 @@ def apply_selection(db: Session, actor, hospital, entries: list, file_name: str,
             category=(m.category or "").strip(), dosage_forms=(m.dosage_form or "").strip(),
             strength=(m.strength or "").strip(), schedule=(m.schedule or "otc").lower(),
             low_stock_threshold=thr, pack_size=e["pack"], price_per_pack=e["mrp"],
-            nppa_ceiling_price=e["nppa"], billing_mode=m.default_billing_mode, gst_percent=m.gst_percent,
+            nppa_ceiling_price=e["nppa"], billing_mode=m.default_billing_mode,
+            gst_percent=(e["gst"] if e.get("gst") is not None else m.gst_percent),
             hsn_code=(e["hsn"] or (m.hsn_code or "").strip() or None),
             price=compute_unit_price(e["mrp"], e["pack"]), stock_quantity=0, is_active=True,
             master_medicine_id=m.id)
         db.add(parent)
         db.flush()
         db.add(ImportBatchItem(batch_id=batch.id, entity="medicine", entity_id=parent.id, action="created"))
+        by_brand = {"": parent}
+        created_map.append((e, by_brand))
         w = _ceiling_price_warning(parent)
         if w:
             warnings.append(w)
@@ -180,18 +291,37 @@ def apply_selection(db: Session, actor, hospital, entries: list, file_name: str,
             db.add(brand)
             db.flush()
             db.add(ImportBatchItem(batch_id=batch.id, entity="medicine", entity_id=brand.id, action="created"))
+            by_brand[norm_name(brand_name)] = brand
             w = _ceiling_price_warning(brand)
             if w:
                 warnings.append(w)
+    for e, tmap in created_map:
+        for key, packs, expiry, lot in (e.get("stock") or []):
+            target = tmap[key]
+            qty = int(packs) * int(target.pack_size or 1)
+            mb = MedicineBatch(medicine_id=target.id, hospital_id=hid, batch_number=lot or None, quantity=qty,
+                               expiry_date=expiry, received_date=ist_today())
+            db.add(mb)
+            db.flush()
+            target.stock_quantity = (target.stock_quantity or 0) + qty
+            db.add(ImportBatchItem(batch_id=batch.id, entity="medicine_batch", entity_id=mb.id, action="created",
+                                   after_json=json.dumps({"quantity": qty})))
     by = " by super admin" if actor.role.value == "super_admin" else ""
     stage_action(db, actor, "master_medicines_added", "import_batch", batch.id, hospital.name,
-                 details=f"medicines_added={len(entries)}, brands_added={n_brands}, source={source}{by}",
+                 details=f"medicines_added={len(entries)}, brands_added={n_brands}, stock_batches={n_stock}, source={source}{by}",
                  hospital_id=hid)
     db.commit()
+    if n_stock:
+        sync_stock_notifications(db, hid)
     n = len(entries)
     msg = f"{n} medicine{'s' if n != 1 else ''} added"
+    extras = []
     if n_brands:
-        msg += f" with {n_brands} brand{'s' if n_brands != 1 else ''}"
+        extras.append(f"{n_brands} brand{'s' if n_brands != 1 else ''}")
+    if n_stock:
+        extras.append(f"{n_stock} stock batch{'es' if n_stock != 1 else ''}")
+    if extras:
+        msg += " with " + " and ".join(extras)
     return {"import_id": batch.id, "added": n, "brands_added": n_brands, "message": msg,
             "warnings": list(dict.fromkeys(warnings))[:10]}
 
@@ -235,6 +365,7 @@ def add_selected(db: Session, actor, hospital, items: list) -> dict:
         mrp, merr = clean_mrp(it.price_per_pack)
         pack, perr = clean_pack(it.pack_size, m.default_pack_size)
         hsn, nppa, thr, xerr = _clean_extras(m.display_name, it.hsn_code, it.nppa_ceiling_price, it.low_stock_threshold)
+        gst, gerr = clean_gst(it.gst_percent, m.gst_percent)
         if merr == "missing":
             missing_price.append(m.display_name)
             continue
@@ -246,6 +377,9 @@ def add_selected(db: Session, actor, hospital, items: list) -> dict:
             continue
         if xerr:
             bad.append(xerr)
+            continue
+        if gerr:
+            bad.append(f"{m.display_name}: {gerr}")
             continue
         brands, seen = [], set()
         if len(it.brands or []) > MAX_BRANDS_PER_MEDICINE:
@@ -271,7 +405,12 @@ def add_selected(db: Session, actor, hospital, items: list) -> dict:
                     break
             brands.append((name, bmrp))
         else:
-            entries.append({"master": m, "mrp": mrp, "pack": pack, "hsn": hsn, "nppa": nppa, "thr": thr, "brands": brands})
+            stock_lines, serr = _clean_stock_lines(m.display_name, it.stock, brands, pack)
+            if serr:
+                bad.append(serr)
+                continue
+            entries.append({"master": m, "mrp": mrp, "pack": pack, "hsn": hsn, "nppa": nppa, "thr": thr, "gst": gst,
+                            "brands": brands, "stock": stock_lines})
     if existing:
         raise HTTPException(status_code=409, detail="Already added: " + ", ".join(existing[:5]) + (" and more" if len(existing) > 5 else "") + ". Nothing was saved. Please reload the list.")
     if missing_price:
@@ -298,12 +437,14 @@ def build_select_template(db: Session) -> bytes:
         cell.font = bold
         if required:
             cell.fill = req
-    for col, w in (("A", 52), ("B", 18), ("C", 16), ("D", 28)):
+    for col, w in (("A", 52), ("B", 18), ("C", 16), ("D", 28), ("E", 16), ("F", 16), ("G", 22)):
         ws.column_dimensions[col].width = w
     ws.freeze_panes = "A2"
     for r in range(2, MAX_SELECT_ROWS + 2):
         ws.cell(row=r, column=1).number_format = "@"
         ws.cell(row=r, column=4).number_format = "@"
+        ws.cell(row=r, column=6).number_format = "dd-mm-yyyy"
+        ws.cell(row=r, column=7).number_format = "@"
     wm = wb.create_sheet("Master list")
     for c, h in enumerate(("Medicine", "Schedule", "Default units per pack", "GST %"), start=1):
         wm.cell(row=1, column=c, value=h).font = bold
@@ -329,6 +470,15 @@ def build_select_template(db: Session) -> bytes:
                         showErrorMessage=True, errorTitle="Units per pack", error="Enter a whole number, 1 or more.")
     ws.add_data_validation(dk)
     dk.add(f"C2:C{MAX_SELECT_ROWS + 1}")
+    ds = DataValidation(type="whole", operator="between", formula1="1", formula2=str(MAX_STOCK_UNITS), allow_blank=True,
+                        showErrorMessage=True, errorTitle="Stock (packs)", error="Enter a whole number of packs, 1 or more.")
+    ws.add_data_validation(ds)
+    ds.add(f"E2:E{MAX_SELECT_ROWS + 1}")
+    dd = DataValidation(type="date", operator="greaterThan", formula1="36526", allow_blank=True,
+                        showErrorMessage=True, errorStyle="warning", errorTitle="Expiry date",
+                        error="Write the expiry date as dd-mm-yyyy, for example 31-12-2027.")
+    ws.add_data_validation(dd)
+    dd.add(f"F2:F{MAX_SELECT_ROWS + 1}")
     wi = wb.create_sheet("Instructions")
     wi.column_dimensions["A"].width = 110
     lines = [
@@ -340,7 +490,11 @@ def build_select_template(db: Session) -> bytes:
         "Brand name: optional. To add several brands of one medicine, repeat the row with a different brand and MRP.",
         "Every repeated row of a medicine needs a different brand name, and the same units per pack.",
         "Medicines you already have are shown as 'Already added' and are not changed.",
-        "Stock is not added here. Add stock afterwards with 'Add batch' (or the stock import).",
+        "Stock (packs): optional. The number of packs/strips received, the same as on the Add Stock screen. Units added = packs x units per pack.",
+        "Expiry date: needed when you give Stock. Write it as dd-mm-yyyy, for example 31-12-2027.",
+        "Batch number: optional.",
+        "One batch per row. Stock on a row goes to that row's brand, or to the generic medicine when Brand name is blank.",
+        "To add more batches of a medicine later, use 'Add Stock' on the medicine.",
         "After you upload, you will see a preview. Nothing is saved until you press Confirm.",
         "If any row has a problem (red), nothing is saved until it is fixed.",
     ]
@@ -382,7 +536,9 @@ def parse_select_workbook(content: bytes):
     rows = []
     for n, v in table or []:
         rows.append({"row": n, "name": norm_text(v["name"]), "mrp": _raw_number(v["mrp"]),
-                     "pack": _raw_number(v["pack"]), "brand": norm_text(v["brand"]), "forced": None})
+                     "pack": _raw_number(v["pack"]), "brand": norm_text(v["brand"]),
+                     "stock": _raw_number(v["stock"]), "expiry": _raw_expiry(v["expiry"]),
+                     "batch": norm_text(v["batch"]), "forced": None})
     return rows, issues
 
 
@@ -402,7 +558,7 @@ def plan_rows(db: Session, hospital_id: int, rows: list) -> dict:
     for r in rows:
         name, key, brand = r["name"], norm_name(r["name"]), r.get("brand") or ""
         row = {"row": r["row"], "name": name, "brand": brand, "status": "ok", "message": "", "mrp": None,
-               "pack": None, "master_medicine_id": None, "master_name": "", "schedule": "", "default_pack": None,
+               "pack": None, "stock": None, "expiry": None, "batch": "", "master_medicine_id": None, "master_name": "", "schedule": "", "default_pack": None,
                "suggestions": []}
         m = by_id.get(r.get("forced")) if r.get("forced") else by_key.get(key)
         if not name:
@@ -417,6 +573,7 @@ def plan_rows(db: Session, hospital_id: int, rows: list) -> dict:
                        default_pack=m.default_pack_size or 1)
             mrp, merr = clean_mrp(r["mrp"])
             pack, perr = clean_pack(r.get("pack"), m.default_pack_size)
+            stock, expiry, lot, serr = clean_stock(r.get("stock"), r.get("expiry"), r.get("batch"), pack or 1)
             pair = (m.id, norm_name(brand))
             first = seen_master.get(m.id)
             if master_key(m) in have:
@@ -433,10 +590,12 @@ def plan_rows(db: Session, hospital_id: int, rows: list) -> dict:
                 row.update(status="bad_pack", message=perr)
             elif len(brand) > MAX_BRAND_LEN:
                 row.update(status="bad_pack", message=f"Brand name is too long (maximum {MAX_BRAND_LEN} characters).")
+            elif serr:
+                row.update(status="bad_stock", message=serr)
             elif first is not None and pack != first["pack"]:
                 row.update(status="bad_pack", message=f"Units per pack must be the same on every row of this medicine (row {first['row']} uses {first['pack']}).")
             else:
-                row.update(mrp=mrp, pack=pack)
+                row.update(mrp=mrp, pack=pack, stock=stock, expiry=(expiry.isoformat() if expiry else None), batch=lot)
                 if first is None:
                     seen_master[m.id] = {"row": r["row"], "pack": pack}
                 seen_pair[pair] = r["row"]
@@ -448,12 +607,12 @@ def plan_rows(db: Session, hospital_id: int, rows: list) -> dict:
     return {"rows": out}
 
 
-BLOCKING = ("not_found", "duplicate", "bad_price", "bad_pack", "price_missing")
+BLOCKING = ("not_found", "duplicate", "bad_price", "bad_pack", "bad_stock", "price_missing")
 
 
 def summarize(rows: list) -> dict:
     c = {s: sum(1 for r in rows if r["status"] == s)
-         for s in ("ok", "already", "not_found", "price_missing", "bad_price", "bad_pack", "duplicate")}
+         for s in ("ok", "already", "not_found", "price_missing", "bad_price", "bad_pack", "bad_stock", "duplicate")}
     ok_rows = [r for r in rows if r["status"] == "ok"]
     meds = len({r["master_medicine_id"] for r in ok_rows})
     brands = sum(1 for r in ok_rows if r.get("brand"))
@@ -467,6 +626,11 @@ def summarize(rows: list) -> dict:
         parts.append(f"{c['bad_pack']} bad pack or brand")
     if c["duplicate"]:
         parts.append(f"{c['duplicate']} duplicate in file")
+    if c["bad_stock"]:
+        parts.append(f"{c['bad_stock']} bad stock or expiry")
+    n_stock = sum(1 for r in ok_rows if r.get("stock"))
+    if n_stock:
+        parts.insert(1, f"{n_stock} with stock")
     return {"counts": c, "text": ", ".join(parts), "blocking": sum(c[s] for s in BLOCKING),
             "will_add": meds, "brands": brands}
 
@@ -545,9 +709,13 @@ def confirm_preview(db: Session, doctor, hospital, preview_id: str) -> dict:
         e = ents.get(r["master_medicine_id"])
         if e is None:
             e = ents[r["master_medicine_id"]] = {"master": masters[r["master_medicine_id"]], "mrp": r["mrp"],
-                                                 "pack": r["pack"], "hsn": None, "nppa": None, "thr": None, "brands": []}
+                                                 "pack": r["pack"], "hsn": None, "nppa": None, "thr": None, "brands": [],
+                                                 "stock": []}
         if r["brand"]:
             e["brands"].append((r["brand"], r["mrp"]))
+        if r.get("stock"):
+            e["stock"].append((norm_name(r["brand"]) if r["brand"] else "", int(r["stock"]),
+                               date.fromisoformat(r["expiry"]), r.get("batch") or None))
     claimed = db.query(ImportPreview).filter(ImportPreview.id == pv.id, ImportPreview.consumed == False).update(  # noqa: E712
         {"consumed": True}, synchronize_session=False)
     if claimed != 1:
@@ -566,19 +734,35 @@ def undo_selection(db: Session, batch: ImportBatch, actor, hospital) -> dict:
     meds = db.query(HospitalMedicine).filter(HospitalMedicine.id.in_(ids or [0]),
                                              HospitalMedicine.hospital_id == batch.hospital_id).all()
     problems = []
+    own_qty = {}      # {batch id: quantity it was created with} for the stock this add created
+    for it in db.query(ImportBatchItem).filter(ImportBatchItem.batch_id == batch.id,
+                                               ImportBatchItem.entity == "medicine_batch").all():
+        try:
+            own_qty[it.entity_id] = int(json.loads(it.after_json or "{}").get("quantity", -1))
+        except (ValueError, TypeError):
+            own_qty[it.entity_id] = -1
     for m in meds:
         name = m.generic_name + (f" - {m.brand_name}" if m.brand_name else "")
         if db.query(MedicineOrder.id).filter(MedicineOrder.catalog_medicine_id == m.id).first() or \
            db.query(AdmissionMedicationOrder.id).filter(AdmissionMedicationOrder.medicine_id == m.id).first():
             problems.append(f"{name} has already been used in an order.")
-        if db.query(MedicineBatch.id).filter(MedicineBatch.medicine_id == m.id).first():
-            problems.append(f"{name} already has stock added.")
+        rows_b = db.query(MedicineBatch).filter(MedicineBatch.medicine_id == m.id).all()
+        if any(b.id not in own_qty or b.quantity != own_qty[b.id] for b in rows_b) or \
+           (m.stock_quantity or 0) != sum(b.quantity for b in rows_b):
+            problems.append(f"{name} stock has been sold, changed or added to since this was added.")
+        elif rows_b and db.query(MedicineOrderBatch.id).filter(
+                MedicineOrderBatch.batch_id.in_([b.id for b in rows_b])).first():
+            problems.append(f"{name} stock has already been used.")
         if m.parent_medicine_id is None and db.query(HospitalMedicine.id).filter(
                 HospitalMedicine.parent_medicine_id == m.id, ~HospitalMedicine.id.in_(ids or [0])).first():
             problems.append(f"{name} has brands that were added after this.")
     if problems:
         raise ImportRefused("This cannot be undone because some of these medicines are already in use. Nothing was changed.",
                             list(dict.fromkeys(problems))[:10])
+    if own_qty:
+        db.query(MedicineBatch).filter(MedicineBatch.id.in_(list(own_qty.keys())),
+                                       MedicineBatch.hospital_id == batch.hospital_id).delete(synchronize_session=False)
+        db.flush()
     for m in sorted(meds, key=lambda x: x.parent_medicine_id is None):   # brand rows first, then generic rows
         db.delete(m)
         db.flush()
@@ -591,6 +775,8 @@ def undo_selection(db: Session, batch: ImportBatch, actor, hospital) -> dict:
                  details=f"medicines_removed={parents}, brands_removed={len(meds) - parents}{by}",
                  hospital_id=batch.hospital_id)
     db.commit()
+    if own_qty:
+        sync_stock_notifications(db, batch.hospital_id)
     return {"medicines_removed": parents, "message": f"{parents} medicine{'s' if parents != 1 else ''} removed"}
 
 

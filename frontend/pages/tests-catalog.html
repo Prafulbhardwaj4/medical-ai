@@ -227,11 +227,13 @@
         .ms-caret:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
         .ms-caret svg { transition:transform .2s; }
         .ms-open .ms-caret svg { transform:rotate(180deg); }
-        .ms-params { display:none; flex:0 0 100%; margin:0 0 4px 28px; padding:10px 14px; background:var(--smoke); border-radius:8px; font-size:13px; color:var(--navy); }
+        .ms-open .ms-caret { background:var(--teal); border-color:var(--teal); color:#fff; }
+        .ms-params { display:none; flex:0 0 calc(100% - 28px); box-sizing:border-box; max-width:calc(100% - 28px); margin:0 0 6px 28px; padding:12px 14px; background:var(--smoke); border:1px solid var(--border); border-left:3px solid var(--teal); border-radius:8px; }
         .ms-open .ms-params { display:block; }
-        .ms-params ol { margin:0; padding-left:20px; columns:2; column-gap:28px; }
-        .ms-params li { padding:2px 0; overflow-wrap:anywhere; break-inside:avoid; }
-        @media (max-width: 600px) { .ms-params { margin-left:0; } .ms-params ol { columns:1; } } 
+        .ms-params-title { font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--slate); }
+        .ms-params ul { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 0; padding:0; list-style:none; }
+        .ms-params li { padding:4px 10px; background:var(--white); border:1px solid var(--border); border-radius:999px; font-size:12px; color:var(--navy); overflow-wrap:anywhere; }
+        @media (max-width: 600px) { .ms-params { margin-left:0; flex-basis:100%; max-width:100%; } } 
         .ms-price { width:110px; flex:0 0 110px; }
         .ms-price.ms-bad { border-color:var(--danger,#dc2626); }
         .ms-already { font-size:12px; color:var(--slate-light); flex:0 0 110px; text-align:right; }
@@ -246,6 +248,14 @@
         .ms-msg { font-size:12px; color:var(--slate); margin-top:2px; overflow-wrap:anywhere; }
         .ms-sugg { margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; }
         #ms-table td { overflow-wrap:anywhere; vertical-align:top; }
+        #ms-panel { height:94vh; max-height:94vh; display:flex; flex-direction:column; overflow:hidden; }
+        #ms-panel > .card-header { flex:0 0 auto; position:static; }
+        .ms-grid { flex:1 1 auto; min-height:0; align-items:stretch; }
+        .ms-col { display:flex; flex-direction:column; min-height:0; overflow-y:auto; }
+        #ms-list { flex:1 1 auto; min-height:200px; max-height:none; overflow-x:hidden; }
+        .ms-footer, #ms-result { flex:0 0 auto; }
+        @media (max-width: 900px) { .ms-grid { display:block; overflow-y:auto; } .ms-col { display:block; overflow:visible; margin-bottom:20px; } #ms-list { height:55vh; max-height:55vh; flex:none; } }
+        @media (max-width: 600px) { #ms-panel { height:100vh; max-height:100vh; } }
       </style>
       <div class="card" id="ms-panel" style="display:none;margin-top:20px">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
