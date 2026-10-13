@@ -189,13 +189,9 @@
           <h2 style="margin:0">Test Catalog</h2>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <button class="btn btn-primary btn-sm" id="ms-open-btn">Add from master list</button>
-            <button class="btn btn-outline btn-sm" id="xt-open-btn">Import from Excel</button>
-            <button class="btn btn-outline btn-sm" onclick="triggerUpload()">Upload PDF/Excel</button>
-            <button class="btn btn-primary btn-sm" onclick="openAddModal()">Add Test</button>
+            <button class="btn btn-outline btn-sm" onclick="openAddModal()">Add single test</button>
           </div>
         </div>
-        <input type="file" id="upload-input" accept=".pdf,.xlsx,.xls" style="display:none"
-          onchange="handleFileSelected(event)" />
 
         <div class="test-search-filter-grid" style="display:grid;grid-template-columns:1fr 200px;gap:10px;margin:16px 0 20px">
           <input class="form-control" id="test-search" placeholder="Search by test name…" oninput="loadTests()" />
@@ -226,6 +222,16 @@
         .ms-done .ms-check { cursor:default; }
         .ms-name { overflow-wrap:anywhere; font-weight:600; font-size:14px; }
         .ms-name small { display:block; font-weight:400; font-size:12px; color:var(--slate); }
+        .ms-caret { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:1px solid var(--border); border-radius:50%; background:var(--white); color:var(--navy); cursor:pointer; flex:0 0 28px; transition:background .15s, border-color .15s, color .15s; }
+        .ms-caret:hover { background:var(--teal-subtle); border-color:var(--teal); color:var(--teal); }
+        .ms-caret:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
+        .ms-caret svg { transition:transform .2s; }
+        .ms-open .ms-caret svg { transform:rotate(180deg); }
+        .ms-params { display:none; flex:0 0 100%; margin:0 0 4px 28px; padding:10px 14px; background:var(--smoke); border-radius:8px; font-size:13px; color:var(--navy); }
+        .ms-open .ms-params { display:block; }
+        .ms-params ol { margin:0; padding-left:20px; columns:2; column-gap:28px; }
+        .ms-params li { padding:2px 0; overflow-wrap:anywhere; break-inside:avoid; }
+        @media (max-width: 600px) { .ms-params { margin-left:0; } .ms-params ol { columns:1; } } 
         .ms-price { width:110px; flex:0 0 110px; }
         .ms-price.ms-bad { border-color:var(--danger,#dc2626); }
         .ms-already { font-size:12px; color:var(--slate-light); flex:0 0 110px; text-align:right; }
@@ -458,7 +464,6 @@
   <script src="../js/upgrade-gate.js"></script>
   <script src="../js/chat-widget.js"></script>
   <script src="../js/suggestion-widget.js"></script>
-  <script src="../js/test-import.js"></script>
   <script src="../js/master-select-tests.js"></script>
   <script>
     const doc = getDoctor();

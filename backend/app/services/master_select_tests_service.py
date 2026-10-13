@@ -59,6 +59,19 @@ def _param_counts(db: Session, ids):
         MasterTestParameter.master_test_id.in_(list(ids))).group_by(MasterTestParameter.master_test_id).all())
 
 
+def _param_names(db: Session, ids):
+    """{master_test_id: [parameter names in display order]} for the expandable panel rows."""
+    out = {}
+    if not ids:
+        return out
+    for mid, name in db.query(MasterTestParameter.master_test_id, MasterTestParameter.name).filter(
+            MasterTestParameter.is_active == True,  # noqa: E712
+            MasterTestParameter.master_test_id.in_(list(ids))
+    ).order_by(MasterTestParameter.display_order, MasterTestParameter.id).all():
+        out.setdefault(mid, []).append(name)
+    return out
+
+
 def active_masters(db: Session):
     return [m for m in db.query(MasterTest).filter(MasterTest.is_active == True).all()  # noqa: E712
             if not is_excluded_test(m.name, m.category)]
@@ -90,11 +103,13 @@ def list_for_hospital(db: Session, hospital_id: int, search: Optional[str], cate
         rows.append(m)
     rows.sort(key=lambda m: m.name_norm)
     counts = _param_counts(db, [m.id for m in rows])
+    names = _param_names(db, [m.id for m in rows if m.is_panel])
     items = []
     for m in rows:
         k = norm_name(m.name)
         items.append({"id": m.id, "test_name": m.name, "category": m.category or "", "is_panel": bool(m.is_panel),
                       "parameter_count": counts.get(m.id, 0) if m.is_panel else 0,
+                      "parameters": names.get(m.id, []) if m.is_panel else [],
                       "already_added": k in have, "already_inactive": (k in have and not have[k])})
     return {"items": items, "total": len(items), "categories": categories}
 

@@ -156,11 +156,11 @@ STEPS = [
     # active — see maybeRunCatalogTutorial/demoMedicineRowHtml in pharmacy.html)
     # since real rows have no stable per-item selector to target. ═══
     {"role": "pharmacy", "page": "pharmacy-catalog", "device": "both", "step_order": 1,
-     "target_selector": "[onclick=\"triggerUpload()\"]", "title": "Upload PDF/Excel",
-     "description": "Already have your medicine list as a file? Upload it here instead of adding one by one.",
+     "target_selector": "#ms-open-btn", "title": "Add from master list",
+     "description": "Pick medicines from the master list, enter the MRP for each, and add them in one go. You can also upload a simple Excel file.",
      "placement": "bottom"},
     {"role": "pharmacy", "page": "pharmacy-catalog", "device": "both", "step_order": 2,
-     "target_selector": "[onclick=\"openAddModal()\"]", "title": "Add Medicine",
+     "target_selector": "[onclick=\"openAddModal()\"]", "title": "Add single medicine",
      "description": "Add a new medicine to your catalog from here.",
      "placement": "bottom"},
     {"role": "pharmacy", "page": "pharmacy-catalog", "device": "both", "step_order": 3,

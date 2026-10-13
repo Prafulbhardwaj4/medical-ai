@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from app.utils.rate_limit import limiter
 
-MAX_TEST_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import Optional
@@ -15,7 +14,6 @@ from app.models.test_catalog_parameter import TestCatalogParameter
 from app.models.notifiable_disease import NotifiableDisease
 from app.utils.auth import get_current_doctor
 from app.utils.audit import log_action
-from app.services.groq_service import extract_tests
 
 router = APIRouter(prefix="/admin/tests", tags=["tests"])
 
@@ -432,145 +430,3 @@ def deactivate_test(
         hospital_id=current_doctor.hospital_id
     )
     return {"id": test.id, "is_active": test.is_active}
-
-
-def _extract_text_from_pdf(content: bytes) -> str:
-    import pdfplumber
-    text_parts = []
-    with pdfplumber.open(io.BytesIO(content)) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text_parts.append(page_text)
-    return "\n".join(text_parts)
-
-
-def _extract_text_from_excel(content: bytes) -> str:
-    import openpyxl
-    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
-    lines = []
-    for sheet in wb.worksheets:
-        for row in sheet.iter_rows(values_only=True):
-            cells = [str(c) for c in row if c is not None]
-            if cells:
-                lines.append(", ".join(cells))
-    return "\n".join(lines)
-
-
-@router.post("/upload")
-@limiter.limit("10/hour")
-async def upload_tests(
-    request: Request,
-    file: UploadFile = File(...),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    require_admin(current_doctor)
-
-    filename = (file.filename or "").lower()
-    if filename.endswith(".xls"):
-        raise HTTPException(status_code=400, detail="Old .xls files are not supported. Open it in Excel, choose Save As .xlsx, and upload that.")
-    content = await file.read(MAX_TEST_UPLOAD_BYTES + 1)
-    if len(content) > MAX_TEST_UPLOAD_BYTES:
-        raise HTTPException(status_code=400, detail="File is too large (max 10 MB)")
-
-    if filename.endswith(".pdf"):
-        raw_text = _extract_text_from_pdf(content)
-    elif filename.endswith(".xlsx") or filename.endswith(".xls"):
-        raw_text = _extract_text_from_excel(content)
-    else:
-        raise HTTPException(status_code=400, detail="Only PDF or Excel files are supported")
-
-    if not raw_text.strip():
-        raise HTTPException(status_code=400, detail="Could not extract any text from file")
-
-    try:
-        extracted = await extract_tests(raw_text)
-    except Exception as e:
-        import logging as _lg
-        _lg.getLogger(__name__).exception("Test extraction failed")
-        raise HTTPException(status_code=502, detail="Could not read this file. Please try again or use a different file.")
-
-    return {"tests": extracted}
-
-
-@router.post("/bulk-confirm")
-def bulk_confirm_tests(
-    payload: TestBulkConfirm,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    require_admin(current_doctor)
-
-    created = []
-    _taken_names = {
-        (n or "").lower() for (n,) in db.query(TestCatalogItem.name).filter(
-            TestCatalogItem.hospital_id == current_doctor.hospital_id,
-            TestCatalogItem.is_active == True
-        ).all()
-    }
-    for item in payload.tests:
-        if not item.test_name or not item.test_name.strip():
-            continue
-
-        is_panel = bool(item.is_panel)
-
-        _nm = item.test_name.strip()
-        if len(_nm) > 150 or _nm.lower() in _taken_names:
-            continue  # blank/too long, already in the catalog, or repeated in this file
-        if item.price is not None and (item.price < 0 or item.price > 1_000_000):
-            continue
-        _taken_names.add(_nm.lower())
-
-        test = TestCatalogItem(
-            hospital_id=current_doctor.hospital_id,
-            name=item.test_name.strip(),
-            fee=item.price if item.price is not None else 0,
-            category=(item.category or "").strip(),
-            purpose=(item.purpose or "").strip(),
-            is_panel=is_panel,
-            reference_range_male="" if is_panel else (item.reference_range_male or "").strip(),
-            reference_range_female="" if is_panel else (item.reference_range_female or "").strip(),
-            unit="" if is_panel else (item.unit or "").strip(),
-            turnaround_hours=item.turnaround_hours,
-            critical_low=None if is_panel else item.critical_low,
-            critical_high=None if is_panel else item.critical_high,
-            fasting_required=bool(item.fasting_required),
-            required_tube=(item.required_tube or "").strip() or None,
-            is_irreplaceable_sample=bool(item.is_irreplaceable_sample),
-            is_nabl_accredited=bool(item.is_nabl_accredited),
-            is_active=True
-        )
-        db.add(test)
-        db.flush()
-
-        if is_panel and item.parameters:
-            for i, p in enumerate(item.parameters):
-                if not p.name or not p.name.strip():
-                    continue
-                db.add(TestCatalogParameter(
-                    test_catalog_item_id=test.id,
-                    hospital_id=current_doctor.hospital_id,
-                    name=p.name.strip(),
-                    unit=(p.unit or "").strip(),
-                    reference_range_male=(p.reference_range_male or "").strip(),
-                    reference_range_female=(p.reference_range_female or "").strip(),
-                    purpose=(p.purpose or "").strip(),
-                    display_order=i,
-                    is_active=True
-                ))
-
-        created.append(test)
-
-    db.commit()
-    for t in created:
-        db.refresh(t)
-
-    log_action(
-        db, current_doctor,
-        action="tests_bulk_imported",
-        target_type="test_catalog_item",
-        target_id=0,
-        target_label=f"{len(created)} tests",
-        hospital_id=current_doctor.hospital_id
-    )
-    return [serialize(t, db) for t in created]

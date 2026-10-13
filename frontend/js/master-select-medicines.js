@@ -77,14 +77,14 @@
           <label>Low-stock alert at<input type="number" class="form-control${validOptInt(s.thr, MAX_THRESHOLD) ? "" : " ms-bad"}" data-m="${id}" data-f="thr" min="0" step="1" inputmode="numeric" placeholder="25" value="${esc(s.thr)}" /></label>
         </div>
         ${s.brands.map((b, i) => brandHtml(id, b, i, s.brands.length)).join("")}
-        <a href="#" data-action="addbrand" data-id="${id}">+ add another brand</a>
+        <div class="ms-chips"><button type="button" class="ms-chip ms-chip-dashed" data-action="addbrand" data-id="${id}">+ Add another brand</button></div>
       </div>` : "";
     return `<div class="ms-extra">
       <div class="ms-fields">
         <label>MRP per pack (Rs)*<input type="number" class="form-control${s.mrp !== "" && !validMrp(s.mrp) ? " ms-bad" : ""}" data-m="${id}" data-f="mrp" min="0" step="0.01" inputmode="decimal" value="${esc(s.mrp)}" /></label>
         <label>Units per pack*<input type="number" class="form-control${s.pack !== "" && !validPack(s.pack) ? " ms-bad" : ""}" data-m="${id}" data-f="pack" min="1" step="1" inputmode="numeric" value="${esc(s.pack)}" /></label>
       </div>
-      <a href="#" data-action="more" data-id="${id}">${s.more ? "Hide optional fields" : "More (optional)"}</a>
+      <div class="ms-chips"><button type="button" class="ms-chip${s.more ? " open" : ""}" data-action="more" data-id="${id}" aria-expanded="${s.more ? "true" : "false"}">${s.more ? "Hide optional fields" : "More (optional)"}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div>
       ${more}
     </div>`;
   }
@@ -157,7 +157,9 @@
   }
 
   function refreshHospitalList() {
-    if (!window.MS_SUPER_MODE && typeof loadMedicines === "function") loadMedicines();
+    if (window.MS_SUPER_MODE) return;
+    if (typeof loadMedicines === "function") loadMedicines();
+    else if (typeof loadStockMedicines === "function") loadStockMedicines();
   }
 
   async function addSelected() {
@@ -371,7 +373,7 @@
         const id = Number(t.getAttribute("data-id"));
         const m = state.items.find((x) => Number(x.id) === id);
         if (t.checked && m) {
-          state.sel.set(id, { mrp: "", pack: String(Number(m.default_pack_size) || 1), hsn: "", nppa: "", thr: "", more: false, brands: [{ name: "", mrp: "" }] });
+          state.sel.set(id, { mrp: "", pack: String(Number(m.default_pack_size) || 1), hsn: "", nppa: "", thr: "25", more: false, brands: [{ name: "", mrp: "" }] });
         } else {
           state.sel.delete(id);
         }

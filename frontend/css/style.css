@@ -806,6 +806,17 @@ select.form-control::-ms-expand {
   background: var(--teal-light);
 }
 
+/* Number fields: no up/down spinner arrows (type the value; keyboard arrows still work) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 textarea.form-control {
   resize: vertical;
 }

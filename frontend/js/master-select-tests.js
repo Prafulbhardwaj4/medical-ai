@@ -14,7 +14,7 @@
   const HID = IS_SUPER ? Number(new URLSearchParams(window.location.search).get("hospital_id")) || 0 : 0;
   window.MS_SUPER_MODE = IS_SUPER && HID > 0;   // the page's own catalog list is skipped in this mode
 
-  const state = { items: [], sel: new Map(), categories: [], previewId: null, timer: null, loaded: false };
+  const state = { items: [], sel: new Map(), categories: [], previewId: null, timer: null, loaded: false, open: new Set() };
   const $ = (id) => document.getElementById(id);
   const esc = (v) => sanitize(v);
 
@@ -38,16 +38,25 @@
     const done = !!t.already_added;
     const ticked = !done && state.sel.has(id);
     const price = ticked ? state.sel.get(id) : "";
+    const names = Array.isArray(t.parameters) ? t.parameters : [];
+    const hasParams = !!t.is_panel && names.length > 0;
+    const isOpen = hasParams && state.open.has(id);
+    const caret = hasParams
+      ? `<button type="button" class="ms-caret" data-action="toggle" data-id="${id}" aria-expanded="${isOpen}" aria-label="${isOpen ? "Hide" : "Show"} parameters" title="${isOpen ? "Hide" : "Show"} parameters"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>`
+      : "";
+    const params = hasParams
+      ? `<div class="ms-params"><ol>${names.map((n) => `<li>${esc(n)}</li>`).join("")}</ol></div>`
+      : "";
     const badge = t.is_panel
       ? `<span class="badge badge-navy">Panel - ${esc(t.parameter_count)} parameters</span>`
       : `<span class="badge badge-grey">Single</span>`;
     const right = done
       ? `<span class="ms-already">Already added${t.already_inactive ? " (inactive)" : ""}</span>`
       : `<input type="number" class="form-control ms-price" data-price="${id}" placeholder="Rs" min="0" step="0.01" inputmode="decimal" value="${esc(price)}" ${ticked ? "" : "disabled"} aria-label="Price for ${esc(t.test_name)}" />`;
-    return `<div class="ms-row${done ? " ms-done" : ""}">
+    return `<div class="ms-row${done ? " ms-done" : ""}${isOpen ? " ms-open" : ""}">
       <label class="ms-check"><input type="checkbox" data-id="${id}" ${ticked ? "checked" : ""} ${done ? "disabled" : ""} />
         <span class="ms-name">${esc(t.test_name)}${t.category ? `<small>${esc(t.category)}</small>` : ""}</span></label>
-      ${badge}${right}</div>`;
+      ${badge}${caret}${right}${params}</div>`;
   }
 
   function renderList() {
@@ -263,6 +272,16 @@
       if (!el) return;
       const a = el.getAttribute("data-action");
       if (a === "undo") { ev.preventDefault(); undoBatch(el.getAttribute("data-id")); }
+      else if (a === "toggle") {
+        const tid = Number(el.getAttribute("data-id"));
+        if (state.open.has(tid)) state.open.delete(tid); else state.open.add(tid);
+        const open = state.open.has(tid);
+        const row = el.closest(".ms-row");
+        if (row) row.classList.toggle("ms-open", open);
+        el.setAttribute("aria-expanded", String(open));
+        el.setAttribute("aria-label", (open ? "Hide" : "Show") + " parameters");
+        el.title = (open ? "Hide" : "Show") + " parameters";
+      }
       else if (a === "close") closePanel();
       else if (a === "add") addSelected();
       else if (a === "template") downloadFile(`${BASE}/template`, "MedScribe_Select_Tests_Template.xlsx");
