@@ -53,7 +53,7 @@
   function renderList() {
     $("ms-list").innerHTML = state.items.length
       ? state.items.map(rowHtml).join("")
-      : '<p style="color:var(--slate-light);padding:12px 0">No tests found in the master list.</p>';
+      : '<p style="color:var(--slate-light);padding:12px 0">No tests found in the master list. If you did not type a search, the master list has not been loaded yet. Please contact support.</p>';
     updateFooter();
   }
 
@@ -241,12 +241,13 @@
     $("ms-panel").style.display = "";
     resetPreview();
     loadList();
-    if (!window.MS_SUPER_MODE) $("ms-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    document.body.style.overflow = "hidden";
   }
 
   function closePanel() {
     if (window.MS_SUPER_MODE) { window.location.href = "superadmin.html"; return; }
     $("ms-panel").style.display = "none";
+    document.body.style.overflow = "";
     resetPreview();
     $("ms-result").innerHTML = "";
   }
