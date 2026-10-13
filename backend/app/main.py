@@ -201,6 +201,18 @@ def _seed_tutorial_content():
 
 _seed_tutorial_content()
 
+def _seed_master_catalog():
+    """Adds any missing items from scripts/master_data_*.py to the master lists on every startup.
+    Add-only and idempotent. Non-fatal: a problem here must not take the API down."""
+    try:
+        from scripts.master_catalog_autoload import run as master_autoload_run
+        master_autoload_run()
+    except Exception:
+        logger.exception("Master list auto-load failed at startup")
+
+
+_seed_master_catalog()
+
 security = HTTPBearer()
 from app.utils.rate_limit import limiter
 
