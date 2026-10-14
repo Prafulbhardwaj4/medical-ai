@@ -65,11 +65,19 @@
 
   // ---------------------------------------------------------------- left side: the master list
   function brandHtml(id, b, i, count) {
-    return `<div class="ms-brand">
-      <input type="text" class="form-control" data-m="${id}" data-f="bname" data-i="${i}" maxlength="100" placeholder="Brand name" value="${esc(b.name)}" aria-label="Brand name" />
-      <input type="number" class="form-control${b.mrp !== "" && !validMrp(b.mrp) ? " ms-bad" : ""}" data-m="${id}" data-f="bmrp" data-i="${i}" min="0" step="0.01" inputmode="decimal" placeholder="MRP per pack (blank = same)" value="${esc(b.mrp)}" aria-label="Brand MRP per pack" />
+    // The first brand shows only the name field; its MRP is the main MRP above.
+    // The MRP box appears for extra brands, or if this brand already has its own MRP.
+    const showMrp = i > 0 || b.mrp !== "";
+    return `<div class="ms-brand${showMrp ? "" : " ms-brand-one"}">
+      <input type="text" class="form-control" data-m="${id}" data-f="bname" data-i="${i}" maxlength="100" placeholder="${i === 0 ? "e.g. Augmentin" : "Brand name"}" value="${esc(b.name)}" aria-label="Brand name" />
+      ${showMrp ? `<input type="number" class="form-control${b.mrp !== "" && !validMrp(b.mrp) ? " ms-bad" : ""}" data-m="${id}" data-f="bmrp" data-i="${i}" min="0" step="0.01" inputmode="decimal" placeholder="MRP per pack (blank = same)" value="${esc(b.mrp)}" aria-label="Brand MRP per pack" />` : ""}
       ${count > 1 ? `<button type="button" class="btn btn-outline btn-sm" data-action="rmbrand" data-id="${id}" data-i="${i}" aria-label="Remove brand">×</button>` : ""}
     </div>`;
+  }
+  function brandsHtml(id, s) {
+    return `<div class="ms-brands"><div class="ms-blabel">Brand name (optional)</div>
+      ${s.brands.map((b, i) => brandHtml(id, b, i, s.brands.length)).join("")}
+      <div class="ms-chips"><button type="button" class="ms-chip ms-chip-dashed" data-action="addbrand" data-id="${id}">+ Add another brand</button></div></div>`;
   }
 
   // ---------------------------------------------------------------- "Add stock" lines (one batch per line)
@@ -159,8 +167,6 @@
           <label>NPPA ceiling (Rs per unit)<input type="number" class="form-control${validOptNum(s.nppa, MAX_PRICE) ? "" : " ms-bad"}" data-m="${id}" data-f="nppa" min="0" step="0.01" inputmode="decimal" value="${esc(s.nppa)}" /></label>
           <label>Low-stock alert at<input type="number" class="form-control${validOptInt(s.thr, MAX_THRESHOLD) ? "" : " ms-bad"}" data-m="${id}" data-f="thr" min="0" step="1" inputmode="numeric" placeholder="25" value="${esc(s.thr)}" /></label>
         </div>
-        ${s.brands.map((b, i) => brandHtml(id, b, i, s.brands.length)).join("")}
-        <div class="ms-chips"><button type="button" class="ms-chip ms-chip-dashed" data-action="addbrand" data-id="${id}">+ Add another brand</button></div>
       </div>` : "";
     return `<div class="ms-extra">
       <div class="ms-fields">
@@ -168,6 +174,7 @@
         <label>Units per pack*<input type="number" class="form-control${s.pack !== "" && !validPack(s.pack) ? " ms-bad" : ""}" data-m="${id}" data-f="pack" min="1" step="1" inputmode="numeric" value="${esc(s.pack)}" /></label>
         <label>GST %<input type="number" class="form-control${validOptNum(s.gst, MAX_GST) ? "" : " ms-bad"}" data-m="${id}" data-f="gst" min="0" max="28" step="0.01" inputmode="decimal" value="${esc(s.gst)}" /></label>
       </div>
+      ${brandsHtml(id, s)}
       ${stockHtml(id, s)}
       <div class="ms-chips"><button type="button" class="ms-chip${s.more ? " open" : ""}" data-action="more" data-id="${id}" aria-expanded="${s.more ? "true" : "false"}">${s.more ? "Hide optional fields" : "More (optional)"}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div>
       ${more}
@@ -178,7 +185,7 @@
     const id = Number(m.id);
     const done = !!m.already_added;
     const s = done ? null : state.sel.get(id);
-    const meta = [`${Number(m.default_pack_size) || 1} per pack`, m.gst_percent != null ? `GST ${m.gst_percent}%` : "", m.category || ""].filter(Boolean).join(" · ");
+    const meta = [`${Number(m.default_pack_size) || 1} per pack`, m.category || ""].filter(Boolean).join(" · ");
     const right = done ? `<span class="ms-already">Already added</span>` : badge(m.schedule);
     return `<div class="ms-row ms-item${done ? " ms-done" : ""}" data-item="${id}">
       <label class="ms-check"><input type="checkbox" data-id="${id}" ${s ? "checked" : ""} ${done ? "disabled" : ""} />
