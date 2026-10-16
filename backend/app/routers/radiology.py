@@ -21,7 +21,7 @@ from app.services.pdf_service import generate_radiology_report_pdf
 
 from app.utils.tier_gate import require_tier
 
-router = APIRouter(prefix="/radiology", tags=["radiology"], dependencies=[Depends(require_tier("enterprise", "Radiology / Imaging"))])
+router = APIRouter(prefix="/radiology", tags=["radiology"], dependencies=[Depends(require_tier("scale", "Radiology / Imaging"))])
 
 
 def require_radiology(current_doctor: Doctor):

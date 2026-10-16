@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Response
 from pydantic import BaseModel, Field, EmailStr, Field, validator
 from typing import Optional, List, Literal
 from sqlalchemy.orm import Session
@@ -594,8 +594,8 @@ def create_doctor(
         raise HTTPException(status_code=403, detail="Sub admin can only create doctor accounts")
     if role == "radiology":
         from app.utils.tier_gate import hospital_has_tier
-        if not hospital_has_tier(db, hospital_id, "enterprise"):
-            raise HTTPException(status_code=403, detail="Radiology staff accounts require the Enterprise plan")
+        if not hospital_has_tier(db, hospital_id, "scale"):
+            raise HTTPException(status_code=403, detail="Radiology staff accounts require the Scale plan")
     if current_doctor.role.value == "sub_admin" and role != "doctor":
         raise HTTPException(status_code=403, detail="Sub admin can only create doctor accounts")
 
@@ -1759,6 +1759,36 @@ def toggle_hospital_billing(
 
     return {"id": hospital.id, "billing_enabled": hospital.billing_enabled}
 
+@router.get("/hospitals/{hospital_id}/usage-history")
+def hospital_usage_history(
+    hospital_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(require_super_admin),
+):
+    from app.utils.usage_history import get_usage_history
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    return get_usage_history(db, hospital)
+
+
+@router.get("/hospitals/{hospital_id}/usage-history.csv")
+def hospital_usage_history_csv(
+    hospital_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(require_super_admin),
+):
+    from app.utils.usage_history import get_usage_history, usage_history_csv
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    content = usage_history_csv(hospital, get_usage_history(db, hospital))
+    return Response(
+        content=content, media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{hospital.hospital_code}-usage.csv"'},
+    )
+
+
 @router.get("/hospitals/{hospital_id}/live-load")
 def hospital_live_load(
     hospital_id: int,
@@ -2464,8 +2494,8 @@ def update_account(
             raise HTTPException(status_code=400, detail="Invalid role")
         if role == "radiology":
             from app.utils.tier_gate import hospital_has_tier
-            if not hospital_has_tier(db, account.hospital_id, "enterprise"):
-                raise HTTPException(status_code=403, detail="Radiology staff accounts require the Enterprise plan")
+            if not hospital_has_tier(db, account.hospital_id, "scale"):
+                raise HTTPException(status_code=403, detail="Radiology staff accounts require the Scale plan")
         account.role = UserRole(role)
         if role not in ["doctor", "sub_admin"]:
             account.consultation_fee = None

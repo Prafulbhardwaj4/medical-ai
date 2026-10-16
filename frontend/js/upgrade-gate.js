@@ -322,7 +322,7 @@ async function submitUpgradeRequest() {
 // Radiology role option / filter button so lower tiers don't see a dead choice.
 function hideRadiologyBelowEnterprise() {
   const doc = (typeof getDoctor === "function") ? getDoctor() : null;
-  if (!doc || doc.role === "super_admin" || doc.hospital_tier === "enterprise") return;
+  if (!doc || doc.role === "super_admin" || ["scale", "enterprise"].includes(doc.hospital_tier)) return;
   document.querySelectorAll('option[value="radiology"], button[onclick*="\'radiology\'"]').forEach((el) => el.remove());
 }
 document.addEventListener("DOMContentLoaded", hideRadiologyBelowEnterprise);

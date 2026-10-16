@@ -745,6 +745,13 @@
               </div>
               <div id="detail-ai-scribe"></div>
             </div>
+            <div class="card" id="detail-usage-card" style="margin-bottom:20px">
+              <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <h2>Consultation Usage</h2>
+                <button class="btn btn-outline btn-sm" onclick="downloadUsageCsv()">Download CSV</button>
+              </div>
+              <div id="detail-usage"><p style="color:var(--slate)">Loading...</p></div>
+            </div>
           </div>
 
           <!-- ANALYTICS PANE -->
@@ -2451,11 +2458,54 @@
 
         document.getElementById('admin-modal-sub').textContent = `For: ${h.name}`;
         renderAiScribeDetailCard(h);
+        loadUsageHistory(hospitalId);
         currentDetailHospitalId = hospitalId;
         loadHospitalAnalytics(hospitalId);
       } catch (e) {
         toast('Failed to load hospital details', 'error');
       }
+    }
+
+    // ── Consultation usage history (numbers only). Source: /admin/hospitals/{id}/usage-history ──
+    function fmtYmd(s) {
+      if (!s) return '—';
+      const [y, m, d] = s.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function usageRowsHtml(rows, showAi) {
+      if (!rows.length) return `<tr><td colspan="${showAi ? 3 : 2}" style="color:var(--slate)">No periods yet.</td></tr>`;
+      return rows.map(r => `<tr>
+        <td>${fmtYmd(r.start)} – ${fmtYmd(r.end)}${r.final ? '' : ' <span class="badge badge-grey">in progress</span>'}</td>
+        <td style="text-align:right"><strong>${r.completed}</strong></td>
+        ${showAi ? `<td style="text-align:right">${r.ai_scribe}</td>` : ''}
+      </tr>`).join('');
+    }
+
+    async function loadUsageHistory(hospitalId) {
+      const el = document.getElementById('detail-usage');
+      el.innerHTML = '<p style="color:var(--slate)">Loading...</p>';
+      try {
+        const u = await api('GET', `/admin/hospitals/${hospitalId}/usage-history`);
+        const aiHead = u.show_ai ? '<th style="text-align:right">Used AI Scribe</th>' : '';
+        const table = (title, rows) => `
+          <h3 style="font-size:14px;margin:16px 0 8px">${title}</h3>
+          <div style="overflow-x:auto"><table style="width:100%">
+            <thead><tr><th style="text-align:left">Period</th><th style="text-align:right">Completed consultations</th>${aiHead}</tr></thead>
+            <tbody>${usageRowsHtml(rows, u.show_ai)}</tbody>
+          </table></div>`;
+        const termLine = u.term
+          ? `<div class="info-row"><span class="info-label">Whole plan term (${fmtYmd(u.term.start)} – ${fmtYmd(u.term.end)})</span><span class="info-value"><strong>${u.term.completed}</strong> completed${u.show_ai ? ` · ${u.term.ai_scribe} used AI Scribe` : ''}</span></div>`
+          : '';
+        el.innerHTML = termLine + table('By calendar month', u.months) + table('By billing cycle', u.cycles);
+      } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
+      }
+    }
+
+    function downloadUsageCsv() {
+      if (!currentHospitalId) return;
+      downloadFile(`/admin/hospitals/${currentHospitalId}/usage-history.csv`, `hospital-${currentHospitalId}-usage.csv`);
     }
 
     function fmtCycleDate(iso) {

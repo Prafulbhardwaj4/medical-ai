@@ -865,7 +865,7 @@ def confirm_prescription(
                 clinical_indication=indication,
             ))
 
-    if payload.recommended_radiology_template_ids and hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
+    if payload.recommended_radiology_template_ids and hospital_has_tier(db, current_doctor.hospital_id, "scale"):
         radiology_templates = db.query(RadiologyTemplate).filter(
             RadiologyTemplate.id.in_(payload.recommended_radiology_template_ids),
             RadiologyTemplate.hospital_id == current_doctor.hospital_id
@@ -1307,7 +1307,7 @@ def update_consultation(
         consultation.recommended_test_ids = json.dumps(list(payload.recommended_test_ids or []))
 
     new_radiology_orders = []
-    if was_confirmed and payload.recommended_radiology_template_ids and hospital_has_tier(db, current_doctor.hospital_id, "enterprise"):
+    if was_confirmed and payload.recommended_radiology_template_ids and hospital_has_tier(db, current_doctor.hospital_id, "scale"):
         old_radiology_ids = set(json.loads(consultation.recommended_radiology_template_ids or "[]"))
         new_radiology_ids = [tid for tid in payload.recommended_radiology_template_ids if tid not in old_radiology_ids]
         if new_radiology_ids:

@@ -891,6 +891,8 @@
     .lp-yearly-line strong { font-family: 'DM Mono', monospace; font-weight: 600; color: var(--navy); }
     .lp-yearly-link { background: none; border: none; padding: 0 0 0 6px; font: inherit; font-weight: 600; color: var(--teal); text-decoration: underline; cursor: pointer; }
     .lp-yearly-link:hover { color: #0b8078; }
+    .lp-price-card-premium .lp-yearly-line { color: rgba(255, 255, 255, 0.55); }
+    .lp-price-card-premium .lp-yearly-line strong { color: var(--white); }
 
     /* ── Benefits + Contact modals (public page — no shared app modal CSS
        here, so these are fully self-contained) ── */
@@ -1546,8 +1548,10 @@
           ${t.premium ? '<div class="lp-premium-badge">Most Powerful</div>' : ''}
           <div class="lp-price-tier-label">${t.label}</div>
           <div class="lp-price-amount">${t.price}<span>${t.period}</span></div>
-          <div class="lp-price-scope">${t.scope}</div>
-          ${t.comingSoon ? '' : `<div class="lp-yearly-line"><strong>${t.yearlyPrice}</strong><span>${t.yearlyPeriod}</span><button type="button" class="lp-yearly-link" onclick="openBenefitsModal('${t.key}')">Benefits</button></div>`}
+          <div class="lp-price-scope">
+            <div>${t.scope}</div>
+            <div class="lp-yearly-line"><strong>${t.yearlyPrice}</strong><span>${t.yearlyPeriod}</span>${t.comingSoon ? '' : `<button type="button" class="lp-yearly-link" onclick="openBenefitsModal('${t.key}')">Benefits</button>`}</div>
+          </div>
           <div class="lp-price-features">
             ${t.features.map(f => `<div class="lp-price-feature"><span class="lp-price-check">✓</span> ${f}</div>`).join('')}
           </div>

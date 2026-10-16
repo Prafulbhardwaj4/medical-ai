@@ -12,7 +12,7 @@ from app.utils.audit import log_action
 
 from app.utils.tier_gate import require_tier
 
-router = APIRouter(prefix="/admin/radiology-templates", tags=["radiology-templates"], dependencies=[Depends(require_tier("enterprise", "Radiology / Imaging"))])
+router = APIRouter(prefix="/admin/radiology-templates", tags=["radiology-templates"], dependencies=[Depends(require_tier("scale", "Radiology / Imaging"))])
 
 VALID_STUDY_TYPES = ["xray", "ct", "mri", "ultrasound"]
 

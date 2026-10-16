@@ -190,6 +190,8 @@ async def lab_escalation_loop():
 async def midnight_close_loop():
     try:
         run_midnight_close_for_all_hospitals()  # catch up on any day missed while the server was down
+        from app.utils.usage_history import finalize_usage_snapshots_for_all_hospitals
+        finalize_usage_snapshots_for_all_hospitals()  # store ended months/cycles not stored yet (add-only)
         purge_generated_files()
     except Exception as e:
         logger.warning(f"Startup day-end catch-up failed: {e}")
@@ -200,6 +202,8 @@ async def midnight_close_loop():
             purge_generated_files()
             run_midnight_close_for_all_hospitals()
             run_billing_deactivation_sweep_for_all_hospitals()
+            from app.utils.usage_history import finalize_usage_snapshots_for_all_hospitals
+            finalize_usage_snapshots_for_all_hospitals()
         except Exception as e:
             logger.warning(f"Midnight scheduler loop error: {e}")
             await asyncio.sleep(60)  # avoid a tight crash loop if something above is broken
