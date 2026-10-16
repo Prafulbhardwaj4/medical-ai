@@ -886,6 +886,12 @@
     .lp-yearly-benefits-btn:hover { background: #0b8078; }
     .lp-price-card-premium .lp-yearly-benefits-btn { background: var(--teal-light); }
 
+    /* Yearly price line, directly under the tier's one-line scope */
+    .lp-yearly-line { margin-top: 8px; font-size: 0.85rem; color: var(--slate); display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+    .lp-yearly-line strong { font-family: 'DM Mono', monospace; font-weight: 600; color: var(--navy); }
+    .lp-yearly-link { background: none; border: none; padding: 0 0 0 6px; font: inherit; font-weight: 600; color: var(--teal); text-decoration: underline; cursor: pointer; }
+    .lp-yearly-link:hover { color: #0b8078; }
+
     /* ── Benefits + Contact modals (public page — no shared app modal CSS
        here, so these are fully self-contained) ── */
     .lp-modal-overlay {
@@ -1541,17 +1547,13 @@
           <div class="lp-price-tier-label">${t.label}</div>
           <div class="lp-price-amount">${t.price}<span>${t.period}</span></div>
           <div class="lp-price-scope">${t.scope}</div>
+          ${t.comingSoon ? '' : `<div class="lp-yearly-line"><strong>${t.yearlyPrice}</strong><span>${t.yearlyPeriod}</span><button type="button" class="lp-yearly-link" onclick="openBenefitsModal('${t.key}')">Benefits</button></div>`}
           <div class="lp-price-features">
             ${t.features.map(f => `<div class="lp-price-feature"><span class="lp-price-check">✓</span> ${f}</div>`).join('')}
           </div>
           ${t.comingSoon
             ? '<span class="lp-price-cta lp-price-cta-disabled">Coming Soon</span>'
             : `<button type="button" class="lp-price-cta" style="border:none;cursor:pointer;font:inherit" onclick="openContactModal('${t.key}','yearly')">Contact Us</button>`}
-          ${t.comingSoon ? '' : `
-          <div class="lp-yearly-row">
-            <div class="lp-yearly-price">${t.yearlyPrice}<span>${t.yearlyPeriod}</span></div>
-            <button type="button" class="lp-yearly-benefits-btn" onclick="openBenefitsModal('${t.key}')">${t.yearlyPeriod ? t.yearlyPrice + t.yearlyPeriod + ' ' : ''}Benefits</button>
-          </div>`}
         </div>
       `).join('');
     })();
@@ -1578,7 +1580,8 @@ const LP_API_BASE = window.MEDSCRIBE_API_BASE || (["localhost", "127.0.0.1"].inc
       const t = lpTier(tierKey);
       if (!t) return;
       document.getElementById('lp-benefits-tier-label').textContent = t.label + ' — Yearly Plan';
-      document.getElementById('lp-benefits-yearly-text').textContent = t.yearlyBenefit;
+      document.getElementById('lp-benefits-yearly-text').innerHTML =
+        (t.yearlyPerks || [t.yearlyBenefit]).map(p => `<div class="lp-modal-feature"><span class="lp-modal-feature-check">✓</span><span>${p}</span></div>`).join('');
       document.getElementById('lp-benefits-regular-features').innerHTML =
         t.features.map(f => `<div class="lp-modal-feature"><span class="lp-modal-feature-check">✓</span><span>${f}</span></div>`).join('');
       document.getElementById('lp-benefits-contact-btn').style.display = t.comingSoon ? 'none' : 'block';

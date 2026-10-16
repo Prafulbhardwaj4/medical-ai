@@ -48,11 +48,21 @@ TIER_MONTHLY_PRICE = {
 
 # Yearly plans: the AI Scribe allowance is one pool for the whole 12-month cycle
 # (12 x monthly cap) plus the advertised yearly bonus (tier-catalog.js yearlyBenefit).
-AI_SCRIBE_YEARLY_BONUS = {"growth": 2000, "scale": 5000}
+# Growth yearly bonus on top of the 60,000 base pool (final: 2,000, so pool = 62,000).
+# SINGLE source of truth. Change only this constant.
+GROWTH_YEARLY_BONUS_CONSULTATIONS = 2000
+AI_SCRIBE_YEARLY_BONUS = {"growth": GROWTH_YEARLY_BONUS_CONSULTATIONS}
+
+# Only these tiers can be sold yearly. Scale/Enterprise stay placeholders until on sale.
+YEARLY_SELLABLE_TIERS = ("foundation", "growth")
+YEARLY_TERM_MONTHS = {"foundation": 13, "growth": 12}  # Foundation: pay for 12, get 13
+YEARLY_LIST_PRICE = {"foundation": 119999, "growth": 349999}  # final yearly prices; Foundation = 13 months of service
 
 
 def cycle_months(hospital) -> int:
-    return 12 if getattr(hospital, "billing_period", "monthly") == "yearly" else 1
+    if getattr(hospital, "billing_period", "monthly") != "yearly":
+        return 1
+    return YEARLY_TERM_MONTHS.get(hospital.tier, 12)
 
 
 def effective_ai_scribe_cap(hospital):
@@ -60,9 +70,69 @@ def effective_ai_scribe_cap(hospital):
     base = AI_SCRIBE_TIER_CAPS.get(hospital.tier, 0)
     if not base:
         return base
-    if cycle_months(hospital) == 12:
-        return base * 12 + AI_SCRIBE_YEARLY_BONUS.get(hospital.tier, 0)
+    if getattr(hospital, "billing_period", "monthly") == "yearly":
+        stored = getattr(hospital, "ai_scribe_yearly_allowance", None)
+        if stored:
+            return stored  # snapshot taken at term start; later constant changes don't touch running terms
+        return yearly_ai_scribe_allowance(hospital.tier)
     return base
+
+
+def yearly_ai_scribe_allowance(tier):
+    """One pool for the whole term: 12 x monthly cap + bonus. 0 when the tier has no AI Scribe."""
+    base = AI_SCRIBE_TIER_CAPS.get(tier, 0)
+    if not base:
+        return 0
+    return base * 12 + AI_SCRIBE_YEARLY_BONUS.get(tier, 0)
+
+
+def validate_billing_period(tier, billing_period):
+    """Single backend gate for monthly/yearly. Raises ValueError with a user-facing message."""
+    if billing_period not in ("monthly", "yearly"):
+        raise ValueError("billing_period must be 'monthly' or 'yearly'")
+    if billing_period == "yearly" and tier not in YEARLY_SELLABLE_TIERS:
+        raise ValueError("Yearly plans are only available for Foundation and Growth")
+    return billing_period
+
+
+def apply_plan_term(hospital):
+    """Recomputes the stored term fields from the anchor, tier and period. Call after ANY change
+    to billing_cycle_start, tier or billing_period. Monthly hospitals keep both fields NULL so
+    they behave exactly as before."""
+    if getattr(hospital, "billing_period", "monthly") != "yearly" or not hospital.billing_cycle_start:
+        hospital.plan_end_date = None
+        hospital.ai_scribe_yearly_allowance = None
+        return
+    hospital.plan_end_date = hospital.billing_cycle_start + relativedelta(months=cycle_months(hospital))
+    hospital.ai_scribe_yearly_allowance = yearly_ai_scribe_allowance(hospital.tier) or None
+
+
+def monthly_equivalent_price(hospital, tier=None):
+    """Per-month revenue contribution for MRR/ARR. Yearly = term price / service months
+    (Foundation 119988/13, Growth 349999/12); monthly = list monthly price."""
+    tier = tier or hospital.tier
+    if getattr(hospital, "billing_period", "monthly") == "yearly" and tier in YEARLY_LIST_PRICE:
+        return round(YEARLY_LIST_PRICE[tier] / YEARLY_TERM_MONTHS[tier])
+    return TIER_MONTHLY_PRICE.get(tier, 0)
+
+
+def plan_summary(tier, billing_period):
+    """Price and entitlements for one plan. The creation preview reads this, never hardcoded in JS."""
+    base = AI_SCRIBE_TIER_CAPS.get(tier, 0) or None
+    if billing_period == "yearly":
+        months = YEARLY_TERM_MONTHS[tier]
+        return {
+            "tier": tier, "billing_period": "yearly", "price": YEARLY_LIST_PRICE[tier],
+            "service_months": months, "free_months": months - 12,
+            "consultations_total": yearly_ai_scribe_allowance(tier) or None,
+            "consultations_base": (base * 12) if base else None,
+            "consultations_bonus": AI_SCRIBE_YEARLY_BONUS.get(tier) or None,
+        }
+    return {
+        "tier": tier, "billing_period": "monthly", "price": TIER_MONTHLY_PRICE.get(tier, 0),
+        "service_months": 1, "free_months": 0,
+        "consultations_total": base, "consultations_base": base, "consultations_bonus": None,
+    }
 
 
 GRACE_DAYS = 3           # days after cycle-end that non-AI-Scribe services keep working
@@ -77,7 +147,11 @@ def get_billing_cycle_info(hospital):
         return None
 
     cycle_start = hospital.billing_cycle_start
-    cycle_end = cycle_start + relativedelta(months=cycle_months(hospital))
+    stored_end = getattr(hospital, "plan_end_date", None)
+    if getattr(hospital, "billing_period", "monthly") == "yearly" and stored_end:
+        cycle_end = stored_end  # stored by apply_plan_term: 12 months Growth / 13 months Foundation
+    else:
+        cycle_end = cycle_start + relativedelta(months=cycle_months(hospital))
     grace_end = cycle_end + timedelta(days=GRACE_DAYS)              # last moment non-Scribe services work
     deactivation_at = grace_end + timedelta(days=1)                  # deactivation begins the day after grace ends
     renew_window_start = cycle_end - timedelta(days=RENEW_WINDOW_LEAD_DAYS)

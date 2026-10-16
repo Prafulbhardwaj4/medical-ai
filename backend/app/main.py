@@ -213,6 +213,26 @@ def _seed_master_catalog():
 
 _seed_master_catalog()
 
+def _backfill_billing_period():
+    """Existing hospitals default to monthly. Add-only: fills NULLs only, never overwrites a value.
+    Non-fatal: must not take the API down."""
+    try:
+        from app.database import SessionLocal
+        from app.models.hospital import Hospital
+        db = SessionLocal()
+        try:
+            db.query(Hospital).filter(Hospital.billing_period.is_(None)).update(
+                {Hospital.billing_period: "monthly"}, synchronize_session=False
+            )
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("billing_period backfill failed at startup")
+
+
+_backfill_billing_period()
+
 security = HTTPBearer()
 from app.utils.rate_limit import limiter
 

@@ -939,12 +939,18 @@
         <option value="private">Private</option>
         <option value="government">Government</option>
       </select>
-      <select class="form-control" id="lh-tier" style="margin-bottom:14px">
+      <select class="form-control" id="lh-tier" style="margin-bottom:14px" onchange="refreshPlanPreview('lh')">
         <option value="foundation" selected>Foundation</option>
         <option value="growth">Growth</option>
         <option value="scale">Scale</option>
         <option value="enterprise">Enterprise</option>
       </select>
+      <label class="form-label" style="font-size:12.5px;color:var(--slate)">Plan Duration</label>
+      <select class="form-control" id="lh-period" style="margin-bottom:10px" onchange="refreshPlanPreview('lh')">
+        <option value="monthly" selected>Monthly</option>
+        <option value="yearly">Yearly</option>
+      </select>
+      <div id="lh-plan-preview" style="background:#f0faf9;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6;color:var(--navy);margin-bottom:14px"></div>
       <label class="form-label" style="font-size:12.5px;color:var(--slate)">Billing Cycle Start Date</label>
       <input type="date" class="form-control" id="lh-cycle" style="margin-bottom:14px" />
       <div class="err-msg" id="lh-err" style="margin-bottom:12px"></div>
@@ -988,12 +994,18 @@
         <option value="private">Private</option>
         <option value="government">Government</option>
       </select>
-      <select class="form-control" id="h-tier" style="margin-bottom:14px">
+      <select class="form-control" id="h-tier" style="margin-bottom:14px" onchange="refreshPlanPreview('h')">
         <option value="foundation" selected>Foundation</option>
         <option value="growth">Growth</option>
         <option value="scale">Scale</option>
         <option value="enterprise">Enterprise</option>
       </select>
+      <label class="form-label" style="font-size:12.5px;color:var(--slate)">Plan Duration</label>
+      <select class="form-control" id="h-period" style="margin-bottom:10px" onchange="refreshPlanPreview('h')">
+        <option value="monthly" selected>Monthly</option>
+        <option value="yearly">Yearly</option>
+      </select>
+      <div id="h-plan-preview" style="background:#f0faf9;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6;color:var(--navy);margin-bottom:14px"></div>
       <label class="form-label" style="font-size:12.5px;color:var(--slate)">Billing Cycle Start Date</label>
       <input type="date" class="form-control" id="h-billing-cycle-start" style="margin-bottom:20px" />
       <div class="err-msg" id="hospital-err" style="margin-bottom:12px"></div>
@@ -1255,6 +1267,8 @@
       document.getElementById('lh-name').value = l.hospital_name;
       document.getElementById('lh-type').value = 'private';
       document.getElementById('lh-tier').value = 'foundation';
+      document.getElementById('lh-period').value = 'monthly';
+      refreshPlanPreview('lh');
       document.getElementById('lh-cycle').value = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       document.getElementById('lh-err').textContent = '';
       openModal('lead-hospital-modal');
@@ -1268,6 +1282,7 @@
           hospital_type: document.getElementById('lh-type').value,
           tier: document.getElementById('lh-tier').value,
           billing_cycle_start: document.getElementById('lh-cycle').value || null,
+          billing_period: document.getElementById('lh-period').value,
         });
         closeModal('lead-hospital-modal');
         toast(`Hospital created (${h.hospital_code}). Add its admin from the hospital page.`, 'success');
@@ -2026,6 +2041,7 @@
               <div class="hosp-card-meta">${sanitize(h.city)} · Code: ${sanitize(h.hospital_code)} · ${h.hospital_type === 'government' ? 'Government' : 'Private'}</div>
               <div class="hosp-card-badges">
                 <span class="badge badge-grey">${typeof tierLabel === 'function' ? tierLabel(h.tier) : h.tier}</span>
+                ${h.billing_period === 'yearly' ? `<span class="badge badge-teal">Yearly · ends ${fmtCycleDate(h.plan_end_date || h.billing_cycle_end)}</span>` : ''}
                 ${aiScribeUsageBadgeHtml(h)}
                 <span class="badge ${h.is_active ? 'badge-teal' : 'badge-grey'}">${h.is_active ? 'Active' : 'Inactive'}</span>
               </div>
@@ -2465,7 +2481,7 @@
         : '';
 
       body.innerHTML = `
-        ${h.has_ai_scribe ? `<div class="info-row"><span class="info-label">Consultations Used This Cycle</span><span class="info-value">${capLine}</span></div>` : ''}
+        ${h.has_ai_scribe ? `<div class="info-row"><span class="info-label">${h.billing_period === 'yearly' ? 'Consultations Used This Term (yearly pool)' : 'Consultations Used This Cycle'}</span><span class="info-value">${capLine}</span></div>` : ''}
         <div class="info-row"><span class="info-label">Billing Period</span><span class="info-value">
           <select class="form-control" style="width:auto;display:inline-block" onchange="setBillingPeriod(${h.id}, this.value)">
             <option value="monthly" ${h.billing_period !== 'yearly' ? 'selected' : ''}>Monthly</option>
@@ -2473,6 +2489,7 @@
           </select></span></div>
         <div class="info-row"><span class="info-label">Billing Cycle</span><span class="info-value">${fmtCycleDate(h.billing_cycle_start)} → ${fmtCycleDate(h.billing_cycle_end)}</span></div>
         ${cycleSetControl}
+        ${h.billing_period === 'yearly' ? `<div class="info-row"><span class="info-label">Plan Term</span><span class="info-value">Yearly · ${h.plan_service_months} months · ends ${fmtCycleDate(h.plan_end_date || h.billing_cycle_end)}</span></div>` : ''}
         <div class="info-row"><span class="info-label">Grace Period Ends</span><span class="info-value">${fmtCycleDate(h.grace_end)}</span></div>
         <div class="info-row"><span class="info-label">Full Deactivation From</span><span class="info-value" style="color:var(--danger)">${fmtCycleDate(h.deactivation_at)}</span></div>
         <div class="detail-actions-row">
@@ -2483,6 +2500,8 @@
     }
 
     async function setBillingPeriod(hospitalId, period) {
+      const okSwitch = await confirmDialog(`Switch this hospital to ${period} billing? This recalculates the plan end date and AI Scribe pool, and does not reset consultations already used.`, 'Yes, Switch');
+      if (!okSwitch) { openDetail(hospitalId); return; }
       try {
         await api('PATCH', `/admin/hospitals/${hospitalId}/billing-period?period=${encodeURIComponent(period)}`);
         toast('Billing period updated.', 'success');
@@ -2527,7 +2546,13 @@
     }
 
     async function renewHospital(hospitalId) {
-      const ok = await confirmDialog('Has payment been collected for this hospital\'s renewal?', 'Yes, Payment Collected — Renew');
+      const hd = currentHospitalData;
+      const terms = await loadPlanTerms();
+      const plan = hd && terms && terms[hd.tier] ? terms[hd.tier][hd.billing_period === 'yearly' ? 'yearly' : 'monthly'] : null;
+      const renewMsg = plan && plan.price
+        ? `Has payment of \u20B9${Number(plan.price).toLocaleString('en-IN')} been collected for this hospital's ${plan.billing_period} renewal (${plan.service_months} month${plan.service_months > 1 ? 's' : ''} of service)?`
+        : 'Has payment been collected for this hospital\'s renewal?';
+      const ok = await confirmDialog(renewMsg, 'Yes, Payment Collected — Renew');
       if (!ok) return;
       try {
         await api('POST', `/admin/hospitals/${hospitalId}/renew?confirm=true`);
@@ -2544,7 +2569,57 @@
     }
 
     // ── HOSPITAL MODAL (Add) ──
+    // ── Plan duration (Monthly/Yearly) + preview. Prices and entitlements come from GET /admin/plan-terms ──
+    let planTermsCache = null;
+    async function loadPlanTerms() {
+      if (planTermsCache) return planTermsCache;
+      try { planTermsCache = await api('GET', '/admin/plan-terms'); } catch (e) { planTermsCache = null; }
+      return planTermsCache;
+    }
+
+    function planLines(plan) {
+      const inr = (n) => '\u20B9' + Number(n).toLocaleString('en-IN');
+      const num = (n) => Number(n).toLocaleString('en-IN');
+      const lines = [];
+      if (plan.billing_period === 'yearly') {
+        lines.push(`<strong>${inr(plan.price)}</strong> for the year`);
+        lines.push(plan.free_months
+          ? `${plan.service_months} months of service (pay for 12, get ${plan.service_months})`
+          : `${plan.service_months} months of service`);
+        lines.push(plan.consultations_total
+          ? `${num(plan.consultations_total)} AI Scribe consultations for the whole term (${num(plan.consultations_base)} + ${num(plan.consultations_bonus)} bonus)`
+          : 'No AI Scribe, no consultation cap');
+        const tc = typeof TIER_CATALOG !== 'undefined' ? TIER_CATALOG.find(t => t.key === plan.tier) : null;
+        ((tc && tc.yearlyPerks) || []).filter(p => /radiology/i.test(p)).forEach(p => lines.push(p));
+      } else {
+        lines.push(`<strong>${inr(plan.price)}</strong> per month`);
+        lines.push(plan.consultations_total
+          ? `${num(plan.consultations_total)} AI Scribe consultations per month`
+          : 'No AI Scribe, no consultation cap');
+      }
+      return lines;
+    }
+
+    async function refreshPlanPreview(prefix) {
+      const tier = document.getElementById(prefix + '-tier').value;
+      const periodEl = document.getElementById(prefix + '-period');
+      const box = document.getElementById(prefix + '-plan-preview');
+      const yearlyOpt = periodEl.querySelector('option[value="yearly"]');
+      if (tier === 'scale' || tier === 'enterprise') {
+        periodEl.value = 'monthly';
+        yearlyOpt.disabled = true;
+        box.textContent = 'Not on sale yet \u2014 price shows as "-". Monthly only.';
+        return;
+      }
+      yearlyOpt.disabled = false;
+      const terms = await loadPlanTerms();
+      const plan = terms && terms[tier] ? terms[tier][periodEl.value] : null;
+      box.innerHTML = plan ? planLines(plan).join('<br>') : '';
+    }
+
     function openHospitalModal() {
+      document.getElementById('h-period').value = 'monthly';
+      refreshPlanPreview('h');
       document.getElementById('hospital-modal').classList.add('open');
     }
     function closeHospitalModal() {
@@ -2571,7 +2646,8 @@
         err.textContent = 'Billing cycle start date is required.'; return;
       }
 
-      const params = new URLSearchParams({ name, city, state, address, hospital_type, tier, billing_cycle_start });
+      const billing_period = document.getElementById('h-period').value;
+      const params = new URLSearchParams({ name, city, state, address, hospital_type, tier, billing_period, billing_cycle_start });
       try {
         await api('POST', `/admin/hospitals-jwt?${params.toString()}`);
         toast('Hospital created.', 'success');

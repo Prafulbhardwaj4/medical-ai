@@ -40,5 +40,7 @@ class Hospital(Base):
     billing_cycle_start = Column(DateTime, nullable=True)  # anchor date for the current cycle — set on the hospital's first login, then re-anchored on renewal (rolls +1mo) or reactivation (resets to reactivation date)
     billing_period = Column(String, default="monthly")  # "monthly" | "yearly" — yearly = 12-month cycle, AI Scribe cap pooled across the year
     ai_scribe_consultations_used = Column(Integer, default=0, nullable=False)  # resets to 0 every cycle roll (renewal or reactivation)
+    plan_end_date = Column(DateTime, nullable=True)  # yearly hospitals only: end of the paid term (anchor + 12 months Growth / 13 months Foundation); NULL for monthly
+    ai_scribe_yearly_allowance = Column(Integer, nullable=True)  # yearly hospitals only: pooled AI Scribe allowance for the whole term, snapshotted at term start; NULL for monthly
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=now_ist_naive)

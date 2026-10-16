@@ -1033,7 +1033,7 @@
       } catch (e) {
         if (e.status === 402 && e.data?.ai_scribe_blocked) {
           const reasonMessages = {
-            cap_reached: "This month's AI Scribe usage is used up — continuing with manual entry.",
+            cap_reached: "This plan's AI Scribe allowance is used up — continuing with manual entry.",
             cycle_ended: "This hospital's billing cycle has ended — AI Scribe is paused until renewal. Continuing with manual entry.",
             cycle_not_started: "AI Scribe hasn't been activated for this hospital yet — continuing with manual entry.",
           };
@@ -1241,7 +1241,7 @@
         const status = await api("GET", "/consultations/ai-scribe-status", null, false, true);
         if (!status.allowed) {
           const reasonMessages = {
-            cap_reached: "This month's AI Scribe usage is used up — continuing with manual entry.",
+            cap_reached: "This plan's AI Scribe allowance is used up — continuing with manual entry.",
             cycle_ended: "This hospital's billing cycle has ended — AI Scribe is paused until renewal. Continuing with manual entry.",
             cycle_not_started: "AI Scribe hasn't been activated for this hospital yet — continuing with manual entry.",
           };

@@ -19,7 +19,7 @@ from app.models.checkin import Checkin
 from sqlalchemy import func
 from datetime import datetime, timedelta
 from app.utils.ai_scribe_gate import get_ai_scribe_status, has_ai_scribe_at_all
-from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING, AI_SCRIBE_TIER_CAPS, effective_ai_scribe_cap, cycle_months
+from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING, AI_SCRIBE_TIER_CAPS, effective_ai_scribe_cap, cycle_months, validate_billing_period, apply_plan_term, plan_summary, YEARLY_SELLABLE_TIERS, monthly_equivalent_price, YEARLY_LIST_PRICE
 from app.models.suggestion import Suggestion
 from app.models.ai_scribe_topup import AiScribeTopup
 from app.models.upgrade_request import UpgradeRequest
@@ -368,6 +368,7 @@ class LeadToHospitalIn(BaseModel):
     hospital_type: Literal["government", "private"] = "private"
     tier: Literal["foundation", "growth", "scale", "enterprise"] = "foundation"
     billing_cycle_start: Optional[str] = None  # YYYY-MM-DD, defaults to today
+    billing_period: Literal["monthly", "yearly"] = "monthly"
 
 
 @router.post("/hospital-leads/{lead_id}/create-hospital", status_code=201)
@@ -385,7 +386,7 @@ def create_hospital_from_lead(
         raise HTTPException(status_code=400, detail="This lead already has a hospital")
     created = create_hospital_jwt(
         name=(body.name or lead.hospital_name).strip(), city=lead.city, state=lead.state, address=body.address,
-        hospital_type=body.hospital_type, tier=body.tier,
+        hospital_type=body.hospital_type, tier=body.tier, billing_period=body.billing_period,
         billing_cycle_start=body.billing_cycle_start or now_ist_naive().strftime("%Y-%m-%d"),
         db=db, current_doctor=current_doctor,
     )
@@ -444,6 +445,29 @@ def mark_plan_inquiry_contacted(
     return {"id": inquiry.id, "status": inquiry.status}
 
 
+@router.get("/plan-terms")
+def get_plan_terms(current_doctor: Doctor = Depends(require_super_admin)):
+    """Prices and entitlements for the hospital-creation preview. yearly is null for tiers
+    that can't be sold yearly (Scale, Enterprise), so the frontend can't offer it."""
+    return {
+        t: {
+            "monthly": plan_summary(t, "monthly"),
+            "yearly": plan_summary(t, "yearly") if t in YEARLY_SELLABLE_TIERS else None,
+        }
+        for t in ("foundation", "growth", "scale", "enterprise")
+    }
+
+
+def _term_fields(hospital) -> dict:
+    """Yearly-term fields shared by both branches of serialize_billing_block."""
+    yearly = hospital.billing_period == "yearly"
+    return {
+        "plan_end_date": hospital.plan_end_date.isoformat() if hospital.plan_end_date else None,
+        "plan_service_months": cycle_months(hospital) if yearly else None,
+        "ai_scribe_yearly_allowance": hospital.ai_scribe_yearly_allowance if yearly else None,
+    }
+
+
 def serialize_billing_block(db: Session, hospital: Hospital) -> dict:
     """Shared by the hospital list and hospital detail endpoints so the two
     views can never disagree on used/total or renew-button state. Returns
@@ -458,6 +482,7 @@ def serialize_billing_block(db: Session, hospital: Hospital) -> dict:
         # sweep runs for every tier).
         return {
             "has_ai_scribe": False,
+            **_term_fields(hospital),
             "billing_period": hospital.billing_period,
             "ai_scribe_used": None, "ai_scribe_cap": None, "ai_scribe_topup_remaining": None, "ai_scribe_total_remaining": None,
             "billing_cycle_start": hospital.billing_cycle_start.isoformat() if hospital.billing_cycle_start else None,
@@ -471,6 +496,7 @@ def serialize_billing_block(db: Session, hospital: Hospital) -> dict:
 
     return {
         "has_ai_scribe": True,
+        **_term_fields(hospital),
         "billing_period": hospital.billing_period,
         "ai_scribe_used": status["used"],
         "ai_scribe_cap": status["cap"],  # None = unlimited (Enterprise) — frontend must show "Unlimited", not a fraction
@@ -1500,6 +1526,7 @@ def set_hospital_billing_cycle_start(
         raise HTTPException(status_code=400, detail="A reason (at least 5 characters) is required to change an existing billing cycle start")
 
     hospital.billing_cycle_start = parsed
+    apply_plan_term(hospital)
     hospital.ai_scribe_consultations_used = 0  # setting/resetting the anchor starts a fresh cycle
     db.commit()
 
@@ -1584,8 +1611,13 @@ def set_hospital_billing_period(
     hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
+    try:
+        validate_billing_period(hospital.tier, period)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     previous = hospital.billing_period
     hospital.billing_period = period
+    apply_plan_term(hospital)
     db.commit()
     log_action(
         db, current_doctor,
@@ -1632,14 +1664,15 @@ def renew_hospital_billing_cycle(
     # button was pressed").
     from app.models.subscription_payment import SubscriptionPayment
     from app.utils.billing_cycle import TIER_MONTHLY_PRICE
-    _yearly = {"foundation": 109999, "growth": 350000}
+    _yearly = YEARLY_LIST_PRICE
     _months = cycle_months(hospital)
-    _list_price = _yearly.get(hospital.tier, TIER_MONTHLY_PRICE.get(hospital.tier, 0) * 12) if _months == 12 else TIER_MONTHLY_PRICE.get(hospital.tier, 0)
+    _list_price = _yearly.get(hospital.tier, TIER_MONTHLY_PRICE.get(hospital.tier, 0) * 12) if hospital.billing_period == "yearly" else TIER_MONTHLY_PRICE.get(hospital.tier, 0)
     _paid = _list_price if amount is None else amount
     if _paid < 0 or _paid > 100_000_000:
         raise HTTPException(status_code=400, detail="Invalid payment amount")
     _period_start = hospital.billing_cycle_start
-    hospital.billing_cycle_start = hospital.billing_cycle_start + relativedelta(months=_months)
+    hospital.billing_cycle_start = hospital.billing_cycle_start + relativedelta(months=_months)  # _months: 1 monthly, 12 Growth yearly, 13 Foundation yearly
+    apply_plan_term(hospital)  # yearly: new plan_end_date + fresh pooled allowance (pool used-count is reset just below)
     hospital.ai_scribe_consultations_used = 0
     db.add(SubscriptionPayment(
         hospital_id=hospital.id, tier=hospital.tier, billing_period=hospital.billing_period or "monthly",
@@ -1681,8 +1714,11 @@ def set_hospital_tier(
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
 
+    if hospital.billing_period == "yearly" and tier not in YEARLY_SELLABLE_TIERS:
+        raise HTTPException(status_code=400, detail="This hospital is on a yearly plan, and Scale/Enterprise can't be yearly. Switch it to monthly first.")
     previous_tier = hospital.tier
     hospital.tier = tier
+    apply_plan_term(hospital)
     db.commit()
 
     log_action(
@@ -1760,6 +1796,7 @@ def toggle_hospital_active(
         # was already running; a hospital that never had one set stays None
         # until the super admin sets it manually.
         hospital.billing_cycle_start = now_ist_naive()
+        apply_plan_term(hospital)
         hospital.ai_scribe_consultations_used = 0
         reanchored = True
 
@@ -1785,6 +1822,7 @@ def create_hospital_jwt(
     address: str = "",
     hospital_type: str = "private",
     tier: str = "foundation",
+    billing_period: str = "monthly",  # "monthly" | "yearly" (yearly: Foundation and Growth only)
     billing_cycle_start: str = None,  # "YYYY-MM-DD" — required, asked at creation time now instead of set separately after the fact
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(require_super_admin)
@@ -1797,6 +1835,12 @@ def create_hospital_jwt(
     tier = tier.strip().lower()
     if tier not in VALID_TIERS:
         raise HTTPException(status_code=400, detail=f"tier must be one of {sorted(VALID_TIERS)}")
+
+    billing_period = (billing_period or "monthly").strip().lower()
+    try:
+        validate_billing_period(tier, billing_period)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     if not billing_cycle_start:
         raise HTTPException(status_code=400, detail="billing_cycle_start is required")
@@ -1822,8 +1866,9 @@ def create_hospital_jwt(
     hospital = Hospital(
         name=name, address=address, city=city, state=state, hospital_code=hospital_code,
         hospital_type=hospital_type, billing_enabled=(hospital_type == "private"),
-        tier=tier, billing_cycle_start=parsed_cycle_start,
+        tier=tier, billing_period=billing_period, billing_cycle_start=parsed_cycle_start,
     )
+    apply_plan_term(hospital)  # yearly: stores plan_end_date + pooled allowance; monthly: leaves both NULL
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
@@ -1831,12 +1876,13 @@ def create_hospital_jwt(
     log_action(
         db, current_doctor,
         action="hospital_created",
+        details=f"Plan: {tier} / {billing_period}" + (f", term ends {hospital.plan_end_date.date().isoformat()}" if hospital.plan_end_date else ""),
         target_type="hospital",
         target_id=hospital.id,
         target_label=hospital.name,
         hospital_id=hospital.id
     )
-    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type, "billing_enabled": hospital.billing_enabled}
+    return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type, "billing_enabled": hospital.billing_enabled, "billing_period": hospital.billing_period, "plan_end_date": hospital.plan_end_date.isoformat() if hospital.plan_end_date else None}
 
 class CreateAdminIn(BaseModel):
     hospital_id: int
@@ -1916,7 +1962,7 @@ def superadmin_stats(
     ).count()
 
     from app.utils.billing_cycle import TIER_MONTHLY_PRICE
-    monthly_revenue = sum(TIER_MONTHLY_PRICE.get(h.tier, 0) for h in active_hospitals)
+    monthly_revenue = sum(monthly_equivalent_price(h) for h in active_hospitals)
 
     hospitals_by_tier = {"foundation": 0, "growth": 0, "scale": 0, "enterprise": 0}
     for h in active_hospitals:
@@ -2307,7 +2353,7 @@ def platform_business_analytics(
     mrr_by_tier = {"foundation": 0, "growth": 0, "scale": 0, "enterprise": 0}
     for h in active_hospitals:
         if h.tier in mrr_by_tier:
-            mrr_by_tier[h.tier] += TIER_MONTHLY_PRICE.get(h.tier, 0)
+            mrr_by_tier[h.tier] += monthly_equivalent_price(h)
     mrr = sum(mrr_by_tier.values())
     arr = mrr * 12
 
@@ -2788,7 +2834,7 @@ def platform_month_over_month_comparison(
     ipd_last = _window_count(Admission, Admission.admission_date, last_month_start, last_month_asof)
 
     active_hospitals = db.query(Hospital).filter(Hospital.is_active == True).all()
-    current_mrr = sum(TIER_MONTHLY_PRICE.get(h.tier, 0) for h in active_hospitals)
+    current_mrr = sum(monthly_equivalent_price(h) for h in active_hospitals)
 
     last_month_mrr = 0
     for h in active_hospitals:
@@ -2805,7 +2851,7 @@ def platform_month_over_month_comparison(
             tier_then = m.group(2) if m else h.tier
         else:
             tier_then = h.tier
-        last_month_mrr += TIER_MONTHLY_PRICE.get(tier_then, 0)
+        last_month_mrr += monthly_equivalent_price(h, tier_then)
 
     return {
         "as_of": now.strftime("%Y-%m-%d"),
@@ -2840,7 +2886,7 @@ def platform_alerts(
 
     for h in db.query(Hospital).filter(Hospital.is_active == True).all():
         if has_ai_scribe_at_all(h.tier):
-            cap = AI_SCRIBE_TIER_CAPS.get(h.tier)
+            cap = effective_ai_scribe_cap(h)
             if cap:
                 pct = (h.ai_scribe_consultations_used / cap) * 100
                 if pct >= 80:
