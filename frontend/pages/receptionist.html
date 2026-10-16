@@ -4880,7 +4880,7 @@
     }
 
     async function noShowRefund(id, name) {
-      if (!confirm(`Cancel ${name}'s booking and refund the fee they paid? This cannot be undone.`)) return;
+      if (!(await confirmModal(`Cancel ${name}'s booking and refund the fee they paid? This cannot be undone.`, { okLabel: "Cancel & refund", danger: true }))) return;
       try {
         const res = await api("POST", `/portal-appointments-staff/${id}/no-show/refund`, { percent: 100 });
         toast(res.message, "success");

@@ -430,6 +430,10 @@
         .ms-chip svg { width:12px; height:12px; flex:0 0 12px; transition:transform .15s; }
         .ms-chip.open svg { transform:rotate(180deg); }
         .ms-chip-dashed { border-style:dashed; }
+        /* Add brand / Add stock / More: one consistent, full-width action style */
+        .ms-chips { display:block; margin:6px 0 10px; }
+        .ms-chip { display:flex; align-items:center; justify-content:center; width:100%; min-height:38px; padding:8px 14px; border-radius:8px; font-size:13px; }
+        .ms-chip[data-action="more"] { background:var(--smoke, #f6f8fa); }
         .ms-fields { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-bottom:8px; }
         .ms-fields label { display:block; font-size:12px; color:var(--slate); margin:0; font-weight:600; }
         .ms-fields input { margin-top:4px; }
@@ -1649,7 +1653,7 @@
     }
 
     async function markMedicineAdvisedOutside(orderId) {
-      if (!confirm("Mark this medicine as advised outside (patient buys it elsewhere)? It will be removed from this bill.")) return;
+      if (!(await confirmModal("Mark this medicine as advised outside (patient buys it elsewhere)? It will be removed from this bill.", { okLabel: "Mark as outside" }))) return;
       try {
         const updated = await api("PATCH", `/pharmacy/medicine-orders/${orderId}/mark-unavailable`, {});
         const idx = currentMedicineOrders.findIndex(m => m.id === orderId);
@@ -1991,7 +1995,7 @@
 
     async function reverseOutsideDispense() {
       if (!currentRxToken) return;
-      const reason = prompt("This prescription was marked dispensed through the public QR link (a pharmacy outside the hospital).\n\nReason for undoing it:");
+      const reason = await promptModal("This prescription was marked dispensed through the public QR link (a pharmacy outside the hospital).\n\nReason for undoing it:");
       if (reason === null) return;
       try {
         const res = await api("POST", `/pharmacy/prescription/${currentRxToken}/reverse-outside-dispense`, { reason });

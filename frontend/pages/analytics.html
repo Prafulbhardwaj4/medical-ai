@@ -922,7 +922,7 @@
         }
 
         async function markRefundSettled(refundId) {
-            if (!confirm("Confirm this refund has reached the patient?")) return;
+            if (!(await confirmModal("Confirm this refund has reached the patient?", { okLabel: "Yes, settled" }))) return;
             try {
                 await api("PATCH", `/refunds/${refundId}/mark-settled`, {});
                 toast("Refund marked settled.", "success");

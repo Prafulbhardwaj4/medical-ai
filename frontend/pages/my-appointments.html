@@ -1312,7 +1312,7 @@
     }
 
     async function openNoShowModal(id) {
-      const wasHospitalIssue = confirm("We're sorry we missed your slot. Was this due to a delay on the hospital's side? (OK = Yes, hospital delay · Cancel = No, I wasn't able to make it)");
+      const wasHospitalIssue = await confirmModal("We're sorry we missed your slot. Was this due to a delay on the hospital's side?", { title: "Missed appointment", okLabel: "Yes, hospital delay", cancelLabel: "No, I couldn't make it" });
       const reason = wasHospitalIssue ? "hospital_delay" : "patient_no_show";
       try {
         await api("POST", `/portal/appointments/${id}/no-show-reason`, { reason });

@@ -2691,9 +2691,9 @@
     async function decideSubstitution(orderId, approve) {
       let reason = null;
       if (!approve) {
-        reason = prompt("Reason for rejecting this substitute (optional):") ;
+        reason = await promptModal("Reason for rejecting this substitute (optional):");
         if (reason === null) return;
-      } else if (!confirm("Approve this substitute medicine? Pharmacy will be able to send it.")) return;
+      } else if (!(await confirmModal("Approve this substitute medicine? Pharmacy will be able to send it.", { okLabel: "Approve" }))) return;
       try {
         const res = await api("PATCH", `/admissions/${admissionId}/medications/${orderId}/substitution`, { approve, reason });
         toast(res.message, "success");
@@ -2702,7 +2702,7 @@
     }
 
     async function authorizeXRepeat(orderId) {
-      if (!confirm("Authorize this Schedule X repeat for this patient? This is recorded under your name.")) return;
+      if (!(await confirmModal("Authorize this Schedule X repeat for this patient? This is recorded under your name.", { okLabel: "Authorize" }))) return;
       try {
         const res = await api("PATCH", `/admissions/${admissionId}/medications/${orderId}/authorize-repeat`);
         toast(res.message, "success");
@@ -3356,7 +3356,7 @@
         loadAdmission();
       } catch (e) {
         if (e.message && e.message.toLowerCase().includes("pending")) {
-          alert(e.message); // blocking popup, per requirement
+          await alertModal(e.message, { title: "Cannot discharge yet" }); // still a blocking notice, per requirement
         }
         err.textContent = e.message;
       }

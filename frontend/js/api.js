@@ -366,7 +366,14 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 
-async function logout() {
+async function logout(opts = {}) {
+  // Manual Sign out buttons ask first. Automatic logouts (expired token / 401) don't call
+  // this function (they clear the session and redirect inline), so they stay silent.
+  // Call logout({ confirm: false }) for any future silent use.
+  if (opts.confirm !== false) {
+    const ok = await confirmModal("Sign out of MedScribe?", { title: "Sign out", okLabel: "Sign out" });
+    if (!ok) return;
+  }
   // Read the token BEFORE clearing the session: the server needs it (as an
   // Authorization header) to blacklist it. Patients use the portal endpoint.
   const token = getToken();
