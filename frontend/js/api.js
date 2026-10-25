@@ -402,6 +402,15 @@ function sanitize(str) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+// Shows an Indian mobile number as "+91 XXXXX XXXXX". Anything else is returned unchanged.
+function formatPhone(p) {
+  const raw = String(p === undefined || p === null ? "" : p).trim();
+  const digits = raw.replace(/\D/g, "");
+  const ten = digits.length === 12 && digits.startsWith("91") ? digits.slice(2)
+    : digits.length === 10 ? digits : null;
+  return ten && /^[6-9]/.test(ten) ? "+91 " + ten.slice(0, 5) + " " + ten.slice(5) : raw;
+}
+
 // Safe value for an inline handler: onclick="fn(${jsArg(name)})" or onclick='fn(${jsArg(obj)})'.
 // JSON-encodes, then HTML-entity-escapes & < > ' " so the value survives either attribute quote
 // style (the HTML parser decodes the entities back before the JS runs).

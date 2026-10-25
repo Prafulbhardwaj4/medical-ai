@@ -12,7 +12,8 @@ from app.models.patient import Patient
 from app.models.portal import PatientAccount, PatientProfileLink
 from app.schemas.portal import LoginIn, CompleteRegisterIn, TokenOut, PatientSessionOut, LoginResultOut, ChangePasswordIn, AddressUpdateIn, PatientAddressIn, PatientAddressOut, ConfirmProfileIn, DeactivateAccountIn
 from app.schemas.portal import PortalForgotPasswordRequestIn
-from app.schemas.portal import PortalForgotPasswordResetIn, PortalForgotPasswordResetOut
+from app.schemas.portal import PortalForgotPasswordVerifyIn, PortalForgotPasswordVerifyOut, PortalForgotPasswordResetIn
+from app.services.reset_tokens import create_reset_token, read_reset_token, current_stamp
 from app.services.patient_reset import issue_reset_code, consume_reset_code, issue_verification_code
 from app.models.portal import PatientAddress
 from app.utils.portal_auth import create_portal_access_token, hash_password, verify_password, get_current_patient_account, portal_security
@@ -259,43 +260,47 @@ def forgot_password_request(request: Request, body: PortalForgotPasswordRequestI
     return {"message": "If this number is registered, a code has been prepared."}
 
 
-@router.post("/forgot-password/reset", response_model=PortalForgotPasswordResetOut)
+@router.post("/forgot-password/verify", response_model=PortalForgotPasswordVerifyOut)
 @limiter.limit("10/minute")
 @limiter.limit("40/hour")
-def forgot_password_reset(request: Request, body: PortalForgotPasswordResetIn, db: Session = Depends(get_db)):
-    """The 6-digit code and the new password together. A wrong, expired or used code always gets the
-    same answer and counts as a try (5 per code, and 5 per number per 15 minutes).
-    An account that never set its own password gets a NEW verification code (valid 7 days) instead."""
+def forgot_password_verify(request: Request, body: PortalForgotPasswordVerifyIn, db: Session = Depends(get_db)):
+    """Step 2: only the 6-digit code. A wrong, expired or used code always gets the same answer and counts as
+    a try (5 per code, and 5 per number per 15 minutes). A correct code opens the "new password" step; an
+    account that never set its own password gets a NEW verification code (valid 7 days) instead."""
     phone = normalize_phone(body.phone)
     if _otp_throttle.is_blocked(phone):
         raise HTTPException(status_code=429, detail="Too many wrong attempts. Please try again in 15 minutes.")
-    new_password = body.new_password or ""
-    if new_password:
-        check_password_strength(new_password)
-        if is_temp_password(new_password):
-            raise HTTPException(status_code=400, detail="Please choose a different password than the temporary one")
     account = db.query(PatientAccount).filter(PatientAccount.phone == phone).first() if phone else None
-    usable = bool(account and account.is_active)
-    first_time = bool(usable and account.must_change_password)
-    if usable and not first_time and not new_password:
-        # A password is needed here: check the code WITHOUT using it up, so it can be tried again.
-        if not consume_reset_code(db, account, body.otp, consume=False):
-            _otp_throttle.record_failure(phone)
-            raise HTTPException(status_code=400, detail="Incorrect or expired code")
-        raise HTTPException(status_code=400, detail="Please enter a new password.")
-    if not usable or not consume_reset_code(db, account, body.otp):
+    if not account or not account.is_active or not consume_reset_code(db, account, body.otp):
         _otp_throttle.record_failure(phone)
         raise HTTPException(status_code=400, detail="Incorrect or expired code")
     _otp_throttle.reset(phone)
-    if first_time:
+    if account.must_change_password:
         if not issue_verification_code(db, account):
             raise HTTPException(status_code=503, detail="Could not prepare the verification code. Please try again later.")
-        return PortalForgotPasswordResetOut(
+        return PortalForgotPasswordVerifyOut(
             status="verification_code_prepared",
-            message="Your new verification code has been prepared (valid for 7 days). The hospital will send it to "
-                    "your WhatsApp shortly. Use it as your password on the sign-in page and choose your own password.",
+            message="Your new verification code (valid for 7 days) will be sent to you shortly via WhatsApp. "
+                    "Enter it as your password on the sign-in page.",
         )
-    account.password_hash = hash_password(new_password)
+    return PortalForgotPasswordVerifyOut(
+        status="set_password", reset_token=create_reset_token("patient", account.id, account.password_changed_at))
+
+
+@router.post("/forgot-password/reset", response_model=TokenOut)
+@limiter.limit("10/minute")
+@limiter.limit("40/hour")
+def forgot_password_reset(request: Request, body: PortalForgotPasswordResetIn, db: Session = Depends(get_db)):
+    """Step 3: the new password, with the token from step 2 (valid 10 minutes, works once)."""
+    account_id, stamp = read_reset_token(body.reset_token, "patient")
+    account = db.query(PatientAccount).filter(PatientAccount.id == account_id).first() if account_id else None
+    if (not account or not account.is_active or account.must_change_password
+            or stamp != current_stamp(account.password_changed_at)):
+        raise HTTPException(status_code=400, detail="This reset session has expired. Please start again.")
+    check_password_strength(body.new_password)
+    if is_temp_password(body.new_password):
+        raise HTTPException(status_code=400, detail="Please choose a different password than the temporary one")
+    account.password_hash = hash_password(body.new_password)
     account.must_change_password = False
     account.temp_password_expires_at = None
     account.reset_otp_hash = None
@@ -304,8 +309,7 @@ def forgot_password_reset(request: Request, body: PortalForgotPasswordResetIn, d
     account.password_changed_at = datetime.utcnow()
     wipe_secrets_for_recipient(db, recipient_kind="portal_account", recipient_id=account.id)
     db.commit()
-    return PortalForgotPasswordResetOut(
-        status="signed_in",
+    return TokenOut(
         access_token=create_portal_access_token(account.id),
         doctor=_session_payload(account),
     )

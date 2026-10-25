@@ -68,7 +68,7 @@
             </div>
           </div>
 
-          <div class="form-group" id="login-captcha-group" style="display:none">
+          <div class="form-group" id="login-captcha-group">
             <label class="form-label">Enter the code shown below</label>
             <div id="captcha-image-box" style="margin-bottom:8px;line-height:0">Loading captcha…</div>
             <div style="display:flex;gap:8px;align-items:center">
@@ -173,7 +173,7 @@
   </div>
 
   <script src="../js/api.js"></script>
-  <script src="../js/forgot-password.js" defer></script>
+  <script src="../js/password-reset.js" defer></script>
   <script>
     // Redirect if already logged in
     if (getToken()) redirectByRole(getDoctor()?.role);
@@ -205,19 +205,7 @@
       }
     }
 
-    document.getElementById("login-id").addEventListener("input", () => {
-      const val = document.getElementById("login-id").value.trim();
-      const group = document.getElementById("login-captcha-group");
-
-      if (isEmail(val) || isPhone(val)) {
-        if (group.style.display === "none") {
-          group.style.display = "block";
-          loadCaptcha();
-        }
-      } else {
-        group.style.display = "none";
-      }
-    });
+    loadCaptcha(); 
 
     function toggleLoginPasswordVisibility() {
       const input = document.getElementById("login-password");

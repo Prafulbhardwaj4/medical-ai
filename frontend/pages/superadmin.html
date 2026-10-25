@@ -1051,7 +1051,14 @@
         <button class="modal-close" onclick="closeAdminModal()">×</button>
       </div>
       <p style="margin-bottom:16px;font-size:13px;color:var(--slate)" id="admin-modal-sub"></p>
-      <input class="form-control" id="a-name" placeholder="Full Name" style="margin-bottom:14px" />
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <select class="form-control" id="a-title" style="width:84px;flex:none">
+          <option value="Dr.">Dr.</option>
+          <option value="Mr.">Mr.</option>
+          <option value="Ms.">Ms.</option>
+        </select>
+        <input class="form-control" id="a-name" placeholder="Full Name" style="flex:1" />
+      </div>
       <input class="form-control" id="a-email" type="email" placeholder="Email" style="margin-bottom:14px" />
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
         <span
@@ -1079,7 +1086,14 @@
         <button class="modal-close" onclick="closeEditAccountModal()">×</button>
       </div>
       <input type="hidden" id="ea-id" />
-      <input class="form-control" id="ea-name" placeholder="Full Name" style="margin-bottom:14px" />
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <select class="form-control" id="ea-title" style="width:84px;flex:none">
+          <option value="Dr.">Dr.</option>
+          <option value="Mr.">Mr.</option>
+          <option value="Ms.">Ms.</option>
+        </select>
+        <input class="form-control" id="ea-name" placeholder="Full Name" style="flex:1" />
+      </div>
       <input class="form-control" id="ea-email" type="email" placeholder="Email" style="margin-bottom:14px" />
       <input class="form-control" id="ea-phone" placeholder="Phone" style="margin-bottom:20px" />
       <div class="err-msg" id="edit-account-err" style="margin-bottom:12px"></div>
@@ -2167,6 +2181,8 @@
     // ── EDIT ACCOUNT (modal, was prompt()) ──
     function openEditAccount(a) {
       document.getElementById('ea-id').value = a.id;
+      const _prefix = (a.name.match(/^(Dr\.|Mr\.|Ms\.)\s/) || [])[1] || 'Dr.';
+      document.getElementById('ea-title').value = _prefix;
       document.getElementById('ea-name').value = a.name.replace(/^(Dr\.|Mr\.|Ms\.)\s*/, '');
       document.getElementById('ea-email').value = a.email;
       document.getElementById('ea-phone').value = a.phone;
@@ -2186,7 +2202,7 @@
         err.textContent = 'All fields are required.'; return;
       }
       try {
-        await api('PATCH', `/admin/accounts/${id}`, { name, email, phone });
+        await api('PATCH', `/admin/accounts/${id}`, { name, email, phone, title: document.getElementById('ea-title').value });
         toast('Account updated.', 'success');
         closeEditAccountModal();
         openDetail(currentHospitalId);
@@ -2736,6 +2752,7 @@
       try {
         const created = await api('POST', '/admin/create-admin-jwt', {
           hospital_id: currentHospitalId, name, email, phone: "+91" + phone,
+          title: document.getElementById('a-title').value,
           specialization: specialization || "Hospital Admin"
         });
         toast('Admin created.', 'success');

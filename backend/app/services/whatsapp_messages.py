@@ -76,7 +76,7 @@ TEMPLATE_BODIES = {
         "\n"
         "Hello {{1}},\n"
         "\n"
-        "Your {{2}} portal at *{{3}}* is ready \u2705\n"
+        "{{2}} \u2705\n"
         "\n"
         f"{_DIV}\n"
         "\U0001F194 *Login ID:* {{4}}\n"
@@ -92,35 +92,28 @@ TEMPLATE_BODIES = {
     ),
     T_TEMP_PASSWORD: "{{1}} is your verification code. For your security, do not share this code.",
     T_VISIT_TOKEN: (
-        "Hello {{1}} \U0001F44B\n"
+        "Hello {{1}},\n"
         "\n"
-        "Your visit at *{{2}}* is registered \u2705\n"
+        "*TOKEN NUMBER: {{3}}*\n"
         "\n"
-        f"{_DIV}\n"
-        "\U0001F3AB *TOKEN NUMBER: {{3}}*\n"
-        f"{_DIV}\n"
-        "\n"
-        "\U0001F468\u200D\u2695\uFE0F *Doctor:* {{4}}\n"
-        "\U0001FA7A *Speciality:* {{5}}\n"
-        "\U0001F6AA *Room:* {{6}}\n"
-        "\U0001F4C5 *Date & time:* {{7}}\n"
-        "\U0001F194 *Patient ID:* {{8}}\n"
+        "*Doctor:* {{4}}\n"
+        "*Room:* {{6}}\n"
+        "*Date & time:* {{7}}\n"
+        "*Hospital:* {{2}}\n"
         "\n"
         "*NOTE:* Your bills, reports and prescriptions will be available on the patient portal once they are generated.\n"
         "\n"
-        "\U0001F4DE Need help? Call {{9}} anytime.\n"
+        "Need help? Call {{9}} anytime.\n"
         "\n"
         "Open patient portal: {{10}}"
     ),
     T_APPT_CONFIRMED: (
-        "Hello {{1}} \U0001F44B\n"
+        "Hello {{1}},\n"
         "\n"
-        "Your appointment at *{{2}}* is confirmed \u2705\n"
+        "Your appointment at *{{2}}* is confirmed.\n"
         "\n"
-        f"{_DIV}\n"
-        "\U0001F4C5 *Date & time:* {{3}}\n"
-        "\U0001F468\u200D\u2695\uFE0F *Doctor:* {{4}}\n"
-        f"{_DIV}\n"
+        "*Date & time:* {{3}}\n"
+        "*Doctor:* {{4}}\n"
         "\n"
         "Please arrive at least *10 minutes* before your appointment time.\n"
         "\n"
@@ -168,7 +161,7 @@ ROLE_WORDS = {
 ROLE_LINES = {
     "admin": "You can manage staff, rooms, billing and reports for your hospital from your dashboard.",
     "sub_admin": "You can help manage staff, patients and daily hospital work from your dashboard.",
-    "doctor": "You can see your patients, record consultations and write prescriptions from your dashboard.",
+    "doctor": "You can see your patients, record consultations with the AI scribe and review their history from your dashboard.",
     "receptionist": "You can register patients, issue tokens and manage appointments and billing from your dashboard.",
     "nurse": "You can record vitals, manage ward duties and give medicines from your dashboard.",
     "pharmacy": "You can manage medicine stock, dispense prescriptions and handle pharmacy billing from your dashboard.",
@@ -240,9 +233,13 @@ def hospital_mobile(hospital) -> str:
 def build_welcome(*, name, role, hospital_name, login_id) -> str:
     role = role or "patient"
     link = portal_login_link() if role == "patient" else staff_login_link()
+    if role == "patient":
+        intro = "Your patient portal is ready"  # one portal for every hospital, so no hospital name here
+    else:
+        word = ROLE_WORDS.get(role, clean_line(role.replace("_", "-"), 30))
+        intro = f"Your {word} portal at *{clean_line(hospital_name)}* is ready"
     return _fill(TEMPLATE_BODIES[T_WELCOME], {
-        1: clean_line(name), 2: ROLE_WORDS.get(role, clean_line(role.replace("_", "-"), 30)),
-        3: clean_line(hospital_name), 4: clean_line(login_id),
+        1: clean_line(name), 2: intro, 4: clean_line(login_id),
         5: ROLE_LINES.get(role, DEFAULT_ROLE_LINE), 6: link,
     })
 
@@ -263,18 +260,23 @@ def build_forgot_otp(code) -> tuple:
 
 def build_visit_token(*, patient_name, hospital_name, token_number, doctor_name, speciality,
                       room, visit_datetime, patient_uid, hospital_mobile_number) -> str:
+    doctor = clean_line(doctor_name)
+    if clean_line(speciality):
+        doctor = f"{doctor} ({clean_line(speciality)})"
     return _fill(TEMPLATE_BODIES[T_VISIT_TOKEN], {
         1: clean_line(patient_name), 2: clean_line(hospital_name), 3: clean_line(token_number, 30),
-        4: clean_line(doctor_name), 5: clean_line(speciality) or "-", 6: clean_line(room, 40) or "-",
-        7: format_ist_datetime(visit_datetime), 8: clean_line(patient_uid, 40) or "-",
+        4: doctor, 6: clean_line(room, 40) or "-", 7: format_ist_datetime(visit_datetime),
         9: clean_line(hospital_mobile_number, 30) or "the reception", 10: portal_login_link(),
     })
 
 
-def build_appointment_confirmed(*, patient_name, hospital_name, appt_datetime, doctor_name) -> str:
+def build_appointment_confirmed(*, patient_name, hospital_name, appt_datetime, doctor_name, speciality=None) -> str:
+    doctor = clean_line(doctor_name)
+    if clean_line(speciality):
+        doctor = f"{doctor} ({clean_line(speciality)})"
     return _fill(TEMPLATE_BODIES[T_APPT_CONFIRMED], {
         1: clean_line(patient_name), 2: clean_line(hospital_name),
-        3: format_ist_datetime(appt_datetime), 4: clean_line(doctor_name),
+        3: format_ist_datetime(appt_datetime), 4: doctor,
     })
 
 

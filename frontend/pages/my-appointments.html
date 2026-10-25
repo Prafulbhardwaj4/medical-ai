@@ -1215,7 +1215,7 @@
         if (!reqs.length) { banner.innerHTML = ""; return; }
         banner.innerHTML = reqs.map(r => `
           <div class="card" style="background:#fffbea;border-color:#f5d76e;margin-bottom:12px">
-            <p style="font-weight:600;margin-bottom:4px">${sanitize(r.requester_phone)} wants to book you an appointment</p>
+            <p style="font-weight:600;margin-bottom:4px">${sanitize(formatPhone(r.requester_phone))} wants to book you an appointment</p>
             <p style="font-size:13px;color:var(--slate);margin-bottom:10px">${sanitize(r.hospital_name)}${r.doctor_name ? ' · ' + sanitize(r.doctor_name) : ''}</p>
             <div style="display:flex;gap:8px">
               <button class="btn btn-primary btn-sm" onclick="confirmFamilyRequest(${r.id})">Yes, that's me</button>
@@ -1269,7 +1269,7 @@
               <div style="font-size:12px;color:var(--slate-light);margin-top:2px">${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
               ${a.status === 'cancelled' ? (a.cancelled_by === 'patient'
                 ? `<div style="font-size:12.5px;color:var(--slate);margin-top:6px">You cancelled this appointment.</div>`
-                : `<div style="font-size:12.5px;color:var(--danger);margin-top:6px;font-weight:600">Rejected / cancelled by hospital.<span style="font-weight:400;color:var(--slate)"> For more information, contact the hospital${a.hospital_phone ? ': <a href="tel:' + sanitize(a.hospital_phone) + '">' + sanitize(a.hospital_phone) + '</a>' : '.'}</span></div>`) : ''}
+                : `<div style="font-size:12.5px;color:var(--danger);margin-top:6px;font-weight:600">Rejected / cancelled by hospital.<span style="font-weight:400;color:var(--slate)"> For more information, contact the hospital${a.hospital_phone ? ': <a href="tel:' + sanitize(a.hospital_phone) + '">' + sanitize(formatPhone(a.hospital_phone)) + '</a>' : '.'}</span></div>`) : ''}
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span class="badge ${statusBadge[a.status] || 'badge-grey'}">${a.status}</span>

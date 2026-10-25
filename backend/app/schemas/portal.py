@@ -397,18 +397,20 @@ class PortalForgotPasswordRequestIn(BaseModel):
 
 
 
-class PortalForgotPasswordResetIn(BaseModel):
+class PortalForgotPasswordVerifyIn(BaseModel):
     phone: str
     otp: str  # the 6-digit code from the WhatsApp message
-    new_password: Optional[str] = None  # empty only for an account that never set its own password
 
 
-class PortalForgotPasswordResetOut(BaseModel):
-    status: str  # "signed_in" | "verification_code_prepared"
+class PortalForgotPasswordVerifyOut(BaseModel):
+    status: str  # "set_password" | "verification_code_prepared"
+    reset_token: Optional[str] = None  # only with status "set_password"
     message: Optional[str] = None
-    access_token: Optional[str] = None
-    token_type: str = "bearer"
-    doctor: Optional[PatientSessionOut] = None
+
+
+class PortalForgotPasswordResetIn(BaseModel):
+    reset_token: str
+    new_password: str
 
 
 class DeactivateAccountIn(BaseModel):

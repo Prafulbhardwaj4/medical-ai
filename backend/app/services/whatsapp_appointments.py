@@ -123,7 +123,9 @@ def _add_booking_messages(db: Session, appt: Appointment, created_by=None) -> No
     wa.enqueue_message(
         db, template_key=wa.T_APPT_CONFIRMED, expires_at=_expiry(when, now),
         text=wa.build_appointment_confirmed(patient_name=name, hospital_name=hname, appt_datetime=when,
-                                            doctor_name=_doctor_name(doctor)), **common)
+                                            doctor_name=_doctor_name(doctor),
+                                            speciality=getattr(doctor, "specialization", None) if doctor else None),
+        **common)
 
     # 2) 24-hour reminder (template 6): due 24 h before; NOT created when booked less than 24 h ahead.
     if when - now >= REMINDER_BEFORE:

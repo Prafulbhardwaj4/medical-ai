@@ -46,9 +46,16 @@ class StaffForgotPasswordRequestIn(BaseModel):
     captcha_token: str
     captcha_answer: str
 
-class StaffForgotPasswordResetIn(BaseModel):
+class StaffForgotPasswordVerifyIn(BaseModel):
     email: EmailStr
     otp: str  # the 6-digit code from the WhatsApp message
+
+class StaffForgotPasswordVerifyOut(BaseModel):
+    status: str = "set_password"
+    reset_token: str
+
+class StaffForgotPasswordResetIn(BaseModel):
+    reset_token: str
     new_password: str
 
 class EditMeIn(BaseModel):

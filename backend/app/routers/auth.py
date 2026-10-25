@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.models.doctor import Doctor
 from app.schemas.doctor import DoctorCreate, DoctorLogin, DoctorOut, EditMeIn, Token, CaptchaOut, StaffLoginResultOut, SetNewPasswordIn, ChangePasswordIn
-from app.schemas.doctor import StaffForgotPasswordRequestIn, StaffForgotPasswordResetIn
+from app.schemas.doctor import StaffForgotPasswordRequestIn, StaffForgotPasswordVerifyIn, StaffForgotPasswordVerifyOut, StaffForgotPasswordResetIn
+from app.services.reset_tokens import create_reset_token, read_reset_token, current_stamp
 from app.services.staff_reset import is_eligible, issue_staff_reset_code, consume_staff_reset_code
 from app.utils.auth import hash_password, verify_password, create_access_token
 from app.utils.auth import blacklist_token, get_current_doctor, decode_access_token
@@ -300,21 +301,32 @@ def forgot_password_request(request: Request, payload: StaffForgotPasswordReques
         issue_staff_reset_code(db, doctor)
     return {"message": "If this email belongs to an account that has already set its password, a code has been prepared."}
 
-@router.post("/forgot-password/reset", response_model=Token)
+@router.post("/forgot-password/verify", response_model=StaffForgotPasswordVerifyOut)
 @limiter.limit("10/minute")
 @limiter.limit("40/hour")
-def forgot_password_reset(request: Request, payload: StaffForgotPasswordResetIn, db: Session = Depends(get_db)):
-    """The 6-digit code and the new password together. A wrong, expired or used code always gets the
-    same answer and counts as a try (5 per code, and 5 per email per 15 minutes)."""
+def forgot_password_verify(request: Request, payload: StaffForgotPasswordVerifyIn, db: Session = Depends(get_db)):
+    """Step 2: only the 6-digit code. A wrong, expired or used code always gets the same answer and counts as
+    a try (5 per code, and 5 per email per 15 minutes). A correct code opens the "new password" step."""
     email = payload.email.lower().strip()
     if _staff_otp_throttle.is_blocked(email):
         raise HTTPException(status_code=429, detail="Too many wrong attempts. Please try again in 15 minutes.")
-    check_password_strength(payload.new_password)
     doctor = db.query(Doctor).filter(Doctor.email == email).first()
     if not doctor or not is_eligible(doctor) or not consume_staff_reset_code(db, doctor, payload.otp):
         _staff_otp_throttle.record_failure(email)
         raise HTTPException(status_code=400, detail="Incorrect or expired code")
     _staff_otp_throttle.reset(email)
+    return StaffForgotPasswordVerifyOut(reset_token=create_reset_token("staff", doctor.id, doctor.password_changed_at))
+
+@router.post("/forgot-password/reset", response_model=Token)
+@limiter.limit("10/minute")
+@limiter.limit("40/hour")
+def forgot_password_reset(request: Request, payload: StaffForgotPasswordResetIn, db: Session = Depends(get_db)):
+    """Step 3: the new password, with the token from step 2 (valid 10 minutes, works once)."""
+    doctor_id, stamp = read_reset_token(payload.reset_token, "staff")
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first() if doctor_id else None
+    if not doctor or not is_eligible(doctor) or stamp != current_stamp(doctor.password_changed_at):
+        raise HTTPException(status_code=400, detail="This reset session has expired. Please start again.")
+    check_password_strength(payload.new_password)
     doctor.hashed_password = hash_password(payload.new_password)
     doctor.must_change_password = False
     doctor.temp_password_expires_at = None
