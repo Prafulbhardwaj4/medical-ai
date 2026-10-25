@@ -47,7 +47,9 @@ def convert_appointment_to_checkin(db: Session, appt, patient):
     hospital_code = hospital.hospital_code if hospital else "GEN"
 
     from app.routers.patients import generate_token_number, pick_random_nurse
-    token = generate_token_number(db, appt.hospital_id, hospital_code)
+    from app.services.whatsapp_appointments import reserved_token_for_appointment
+    # The token already promised in the appointment's WhatsApp token message (same number), else a new one.
+    token = reserved_token_for_appointment(db, appt.id) or generate_token_number(db, appt.hospital_id, hospital_code)
 
     # Assistant-away fallback gate: an online booking only ever goes
     # straight to the doctor if no nurse/assistant is present at all —

@@ -8,7 +8,6 @@ python-multipart
 openai
 groq
 reportlab
-twilio
 httpx
 pydantic-settings
 email-validator

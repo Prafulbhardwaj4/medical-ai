@@ -991,9 +991,6 @@
                   <button class="btn btn-outline" style="flex:1" onclick="window.print()">Print Slip</button>
                   <button class="btn btn-outline" style="flex:1" onclick="goToStep('search')">New Check-In</button>
                 </div>
-                <!-- TEMP: preview-only until real WhatsApp sending exists — remove this button + previewWhatsappTokenPdf() once WhatsApp delivery is wired up -->
-                <button class="btn btn-outline no-print" style="width:100%;margin-top:10px"
-                  onclick="previewWhatsappTokenPdf(currentCheckinId)">📱 Preview WhatsApp PDF</button>
               </div>
             </div>
 
@@ -1536,9 +1533,6 @@
       <div class="no-print"
         style="border-top:1.5px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:8px">
         <button class="btn btn-outline" style="width:100%" onclick="window.print()">Print Slip</button>
-        <!-- TEMP: preview-only until real WhatsApp sending exists — remove once WhatsApp delivery is wired up -->
-        <button class="btn btn-outline" style="width:100%"
-          onclick="previewWhatsappTokenPdf(currentPastSlipCheckinId)">📱 Preview WhatsApp PDF</button>
       </div>
     </div>
   </div>
@@ -1707,6 +1701,7 @@
   <div id="toast"></div>
 
   <script src="../js/api.js"></script>
+  <script src="../js/whatsapp-messages.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
   <script src="../js/chat-widget.js"></script>
@@ -2688,20 +2683,6 @@
 
     let currentCheckinId = null;
     let currentVisitGroupId = null;
-    let currentPastSlipCheckinId = null; // TEMP — only needed for the WhatsApp-PDF preview button; remove alongside it
-
-    // TEMP: preview-only until real WhatsApp sending exists.
-    async function previewWhatsappTokenPdf(checkinId) {
-      if (!checkinId) { toast('No check-in selected.', 'error'); return; }
-      try {
-        const response = await fetch(`${BASE}/patients/checkins/${checkinId}/token-slip-pdf`, {
-          headers: { "Authorization": `Bearer ${getToken()}` }
-        });
-        if (!response.ok) throw new Error("Could not load token slip PDF");
-        const blob = await response.blob();
-        window.open(URL.createObjectURL(blob), "_blank");
-      } catch (e) { toast(e.message, 'error'); }
-    }
 
     let _tokenGenerationInFlight = false;
     async function generateToken(force, duplicateReason) {
@@ -2966,7 +2947,6 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               ${billAction}
               <button class="btn btn-outline btn-sm" onclick="viewDocument('${d.type}', '${d.type === 'test_report' && d.order_ids ? d.order_ids.join(',') : d.ref_id}')">View / Print</button>
-              <button class="btn btn-outline btn-sm" onclick="sendDocWhatsApp('${d.type}', '${d.type === 'test_report' && d.order_ids ? d.order_ids.join(',') : d.ref_id}', this)">📱 Send to WhatsApp</button>
             </div>
           </div>
         `;
@@ -3007,53 +2987,10 @@
       } catch (e) { toast(e.message, 'error'); }
     }
 
-    // Send one document to the patient on WhatsApp. No WhatsApp Business connection exists yet, so:
-    // phones that can attach a file open their share sheet with the PDF ready (pick WhatsApp);
-    // otherwise the PDF is saved and the patient's WhatsApp chat opens with the message typed in.
-    async function sendDocWhatsApp(type, refId, btn) {
-      let url, fname, label;
-      if (type === 'prescription') { url = `${BASE}/patients/prescriptions/${refId}/download`; fname = `prescription_${refId}.pdf`; label = 'prescription'; }
-      else if (type === 'test_report') { url = `${BASE}/lab/reports/combined?order_ids=${refId}`; fname = 'test_report.pdf'; label = 'test report'; }
-      else if (type === 'invoice') { url = `${BASE}/billing/invoices/${refId}/pdf`; fname = `invoice_${refId}.pdf`; label = 'bill'; }
-      else if (type === 'token_slip') { url = `${BASE}/patients/checkins/${refId}/token-slip-pdf`; fname = `token_slip_${refId}.pdf`; label = 'token slip'; }
-      else return;
-      const who = window._docModalName ? ` ${window._docModalName}` : '';
-      const clinic = (document.getElementById('topbar-clinic')?.textContent || '').trim() || 'the hospital';
-      const msg = `Hello${who}, please find your ${label} from ${clinic}.`;
-      if (btn) btn.disabled = true;
-      try {
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
-        if (!res.ok) throw new Error('Could not load the document');
-        const blob = await res.blob();
-        const file = new File([blob], fname, { type: 'application/pdf' });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try { await navigator.share({ files: [file], text: msg }); }
-          catch (e) { if (e.name !== 'AbortError') throw e; }
-          return;
-        }
-        let digits = String(window._docModalPhone || '').replace(/\D/g, '');
-        if (digits.length === 10) digits = '91' + digits;
-        if (digits.length < 11) throw new Error('This patient has no valid phone number for WhatsApp.');
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = fname;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.open(`https://wa.me/${digits}?text=${encodeURIComponent(msg)}`, '_blank');
-        toast('PDF saved. Attach it in the WhatsApp chat that just opened.', 'success');
-      } catch (e) {
-        toast(e.message, 'error');
-      } finally {
-        if (btn) btn.disabled = false;
-      }
-    }
-
     async function openPastSlipModal(checkinId) {
       try {
         const t = await api("GET", `/patients/checkins/${checkinId}/slip`);
         renderTokenSlip('pslip', t, 'pslip-additional-doctors');
-        currentPastSlipCheckinId = checkinId;
         document.getElementById('modal-past-slip').classList.add('open');
       } catch (e) { toast(e.message, 'error'); }
     }

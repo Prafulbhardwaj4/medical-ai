@@ -315,7 +315,11 @@ def _auto_link_portal_profile(db: Session, patient: Patient) -> None:
 
     account = db.query(PatientAccount).filter(PatientAccount.phone == normalize_phone(patient.phone)).first()
     if not account:
-        return
+        from app.services.whatsapp_flows import ensure_patient_portal_account
+        # First-ever registration of this number: portal account + welcome + temporary password messages.
+        account = ensure_patient_portal_account(db, patient)
+        if not account:
+            return
     existing_link = db.query(PatientProfileLink).filter(PatientProfileLink.patient_id == patient.id).first()
     if existing_link:
         return
@@ -789,61 +793,6 @@ def get_checkin_slip(
         "total_fee": (checkin.consultation_fee or 0),
         "is_paid": checkin.is_paid
     }
-
-
-# TEMP — manual preview only, so the WhatsApp-bound PDF can be checked
-# before WhatsApp sending exists. Remove this endpoint (and the frontend
-# button that calls it) once real WhatsApp delivery calls
-# generate_token_slip_pdf directly instead of a person clicking a button.
-@router.get("/checkins/{checkin_id}/token-slip-pdf")
-def preview_token_slip_pdf(
-    checkin_id: int,
-    db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
-):
-    checkin = db.query(Checkin).filter(
-        Checkin.id == checkin_id,
-        Checkin.hospital_id == current_doctor.hospital_id
-    ).first()
-    if not checkin:
-        raise HTTPException(status_code=404, detail="Visit not found")
-
-    patient = db.query(Patient).filter(Patient.id == checkin.patient_id).first()
-    doctor = db.query(Doctor).filter(Doctor.id == checkin.doctor_id).first()
-    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
-
-    if checkin.vitals_status == "done" and checkin.vitals_recorded_by:
-        attending_nurse = db.query(Doctor).filter(Doctor.id == checkin.vitals_recorded_by).first()
-    else:
-        attending_nurse = db.query(Doctor).filter(Doctor.id == checkin.nurse_id).first() if checkin.nurse_id else None
-
-    additional_doctors = []
-    if checkin.visit_group_id:
-        sibling_checkins = db.query(Checkin).filter(
-            Checkin.visit_group_id == checkin.visit_group_id,
-            Checkin.id != checkin.id,
-        ).all()
-        for sc in sibling_checkins:
-            sc_doctor = db.query(Doctor).filter(Doctor.id == sc.doctor_id).first()
-            if sc_doctor:
-                additional_doctors.append({
-                    "doctor_name": f"{sc_doctor.title} {sc_doctor.name}",
-                    "specialization": sc_doctor.specialization,
-                    "room_number": get_checkin_room(db, sc, current_doctor.hospital_id),
-                })
-
-    primary_room = get_checkin_room(db, checkin, current_doctor.hospital_id) if doctor else None
-
-    from app.services.pdf_service import generate_token_slip_pdf
-    pdf_path = generate_token_slip_pdf(
-        checkin, patient, doctor, hospital,
-        nurse_name=f"{attending_nurse.title} {attending_nurse.name}" if attending_nurse else None,
-        additional_doctors=additional_doctors or None,
-        doctor_room=primary_room,
-    )
-
-    from fastapi.responses import FileResponse
-    return FileResponse(pdf_path, media_type="application/pdf", filename=os.path.basename(pdf_path))
 
 @router.post("/{patient_id}/send-to-nurse")
 def send_to_nurse(
@@ -1422,6 +1371,9 @@ def checkin_patient(
         )
     )
 
+    from app.services.whatsapp_visit import queue_visit_token_message
+    queue_visit_token_message(db, checkin=checkin, patient=patient, doctor=doctor, hospital=hospital, created_by=current_doctor.id)
+
     additional_tokens_out = []
     if payload.additional_doctors:
         checkin.visit_group_id = checkin.id
@@ -1487,6 +1439,7 @@ def checkin_patient(
                 target_label=f"{patient.name} ({patient.patient_uid})",
                 details=f"Token {extra_token} → {extra_doctor.title} {extra_doctor.name} (same visit as {token})" + (" · vitals reused from within the last 4 hours" if extra_reused_vitals else "")
             )
+            queue_visit_token_message(db, checkin=extra_checkin, patient=patient, doctor=extra_doctor, hospital=hospital, created_by=current_doctor.id)
             additional_tokens_out.append({
                 "checkin_id": extra_checkin.id,
                 "token_number": extra_token,

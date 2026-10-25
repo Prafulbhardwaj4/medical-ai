@@ -100,13 +100,6 @@
       }
     }
 
-    .btn-whatsapp {
-      background: var(--success);
-      border: 1px solid var(--success);
-      color: var(--white);
-    }
-    .btn-whatsapp:hover { filter: brightness(0.95); }
-
     /* Queue: one card per patient */
     .lq-card {
       border: 1.5px solid var(--border);
@@ -1054,15 +1047,10 @@
           </div>
           <div class="lr-item-actions">
             <button class="btn btn-outline btn-sm" onclick="downloadReport([${v.order_ids.join(',')}])">Download</button>
-            <button class="btn btn-sm btn-whatsapp" onclick="sendReportWhatsApp(${idx}, ${vIdx})">Send on WhatsApp</button>
           </div>
         </div>
       `).join('');
       document.getElementById('modal-patient-reports').classList.add('open');
-    }
-
-    function sendReportWhatsApp(patientIdx, visitIdx) {
-      toast('Send on WhatsApp — Coming Soon', 'info');
     }
 
     function closePatientReportsModal() {

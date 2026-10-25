@@ -177,11 +177,29 @@ def run_lab_escalation_tick():
         db.close()
 
 
+def run_whatsapp_message_tick():
+    """Moves scheduled WhatsApp messages to 'due', expires old ones and deletes the plaintext of closed/expired secrets."""
+    from app.services.whatsapp_messages import run_message_maintenance
+
+    db = SessionLocal()
+    try:
+        run_message_maintenance(db)
+        from app.services.patient_reset import purge_old_reset_codes
+        purge_old_reset_codes(db)  # used / expired forgot-password code rows older than a day
+        # The future automatic sender plugs in here: dispatch_due_messages(db) in services/whatsapp_messages.py.
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"WhatsApp message tick failed: {e}")
+    finally:
+        db.close()
+
+
 async def lab_escalation_loop():
     while True:
         try:
             await asyncio.sleep(120)
             await asyncio.get_running_loop().run_in_executor(None, run_lab_escalation_tick)
+            await asyncio.get_running_loop().run_in_executor(None, run_whatsapp_message_tick)
         except Exception as e:
             logger.warning(f"Lab escalation loop error: {e}")
             await asyncio.sleep(60)

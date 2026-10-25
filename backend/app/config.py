@@ -16,9 +16,6 @@ class Settings(BaseSettings):
 
     SARVAM_API_KEY: str = ""
     GROQ_API_KEY: str = ""
-    TWILIO_ACCOUNT_SID: str = ""
-    TWILIO_AUTH_TOKEN: str = ""
-    TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
 
     BASE_URL: str = "http://localhost:8000"
 
@@ -32,11 +29,18 @@ class Settings(BaseSettings):
     PORTAL_INVITE_SECRET: str = "changeme-invite-secret"
     PORTAL_INVITE_EXPIRE_DAYS: int = 30
     PORTAL_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
-    # TEMPORARY, until WhatsApp delivery is live. Set either to "" to switch it off.
-    PORTAL_TEMP_PASSWORD: str = "Test1234"   # first-login password for patients; they must replace it
-    PORTAL_FIXED_OTP: str = "1234"           # "" = real random 6-digit OTP
+    # "" (default) = every patient account gets its own random temporary password. Never set a shared one in production.
+    PORTAL_TEMP_PASSWORD: str = ""
     PORTAL_LINK_CONFIRM_EXPIRE_HOURS: int = 24
     PORTAL_FRONTEND_URL: str = "http://localhost:5501"
+
+    # --- WhatsApp messages list (staff send by hand until Meta approval) ---
+    # Fernet key that encrypts temporary passwords / codes kept in the messages table.
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # REQUIRED in production (the app refuses to start without it). Local dev derives a key from SECRET_KEY.
+    WHATSAPP_MESSAGES_KEY: str = ""
+    # After "Mark as sent" / "Cancel" the stored secret stays this long so Undo can restore it, then it is deleted.
+    WHATSAPP_UNDO_WINDOW_SECONDS: int = 90
 
     # CORS. Bearer tokens live in localStorage (no cookies), so credentials are
     # never sent cross-origin. Allowed origins = PUBLIC_FRONTEND_URL + the two
@@ -135,6 +139,12 @@ def validate_startup_secrets(s) -> None:
         raise RuntimeError("Refusing to start: DEV_SKIP_SUPERADMIN_2FA must never be set in production")
     if s.DEV_CAPTCHA_ANSWER and _is_production(s):
         raise RuntimeError("Refusing to start: DEV_CAPTCHA_ANSWER must never be set in production")
+    if _is_production(s):
+        try:
+            from cryptography.fernet import Fernet
+            Fernet((s.WHATSAPP_MESSAGES_KEY or "").encode())
+        except Exception:
+            problems.append("WHATSAPP_MESSAGES_KEY is missing or is not a valid Fernet key")
     for name in ("SECRET_KEY", "PORTAL_INVITE_SECRET"):
         value = getattr(s, name)
         if value in _WEAK_SECRETS or len(value) < _MIN_SECRET_LEN:

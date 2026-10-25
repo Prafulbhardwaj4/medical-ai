@@ -11,18 +11,19 @@ from app.config import settings
 from app.models.patient import Patient
 from app.models.portal import PatientAccount, PatientProfileLink
 from app.schemas.portal import LoginIn, CompleteRegisterIn, TokenOut, PatientSessionOut, LoginResultOut, ChangePasswordIn, AddressUpdateIn, PatientAddressIn, PatientAddressOut, ConfirmProfileIn, DeactivateAccountIn
-from app.schemas.portal import PortalForgotPasswordRequestIn, PortalForgotPasswordVerifyIn, PortalForgotPasswordVerifyOut, PortalResetPasswordIn
+from app.schemas.portal import PortalForgotPasswordRequestIn
+from app.schemas.portal import PortalForgotPasswordResetIn
+from app.services.patient_reset import issue_reset_code, consume_reset_code
 from app.models.portal import PatientAddress
 from app.utils.portal_auth import create_portal_access_token, hash_password, verify_password, get_current_patient_account, portal_security
-from app.utils.portal_auth import create_patient_password_reset_token, verify_patient_password_reset_token
 from app.utils.portal_auth import create_portal_register_token, verify_portal_register_token
-from app.utils.portal_otp import generate_otp, hash_otp, deliver_otp, is_temp_password, temp_password_enabled, OTP_TTL_MINUTES
+from app.utils.portal_otp import is_temp_password, temp_password_enabled
 from app.utils.auth import check_password_strength
-import hmac
 from app.utils.auth import verify_captcha_token, blacklist_token
 from app.utils.rate_limit import limiter, FailureThrottle
 from app.utils.timezone import now_ist_naive
 from app.utils.phone import normalize_phone
+from app.services.whatsapp_messages import wipe_secrets_for_recipient
 
 router = APIRouter(prefix="/portal/auth", tags=["portal-auth"])
 
@@ -112,6 +113,8 @@ def login(request: Request, body: LoginIn, db: Session = Depends(get_db)):
         db.commit()
 
     _login_throttle.reset(_phone)
+    if account.must_change_password and account.temp_password_expires_at and now_ist_naive() > account.temp_password_expires_at:
+        raise HTTPException(status_code=403, detail="Your temporary password has expired. Use Forgot password.")
     if account.must_change_password:
         # Account was created for them (e.g. by reception) with the temporary password.
         return LoginResultOut(status="needs_registration", registration_token=create_portal_register_token(_phone))
@@ -139,6 +142,8 @@ def complete_registration(body: CompleteRegisterIn, db: Session = Depends(get_db
             raise HTTPException(status_code=400, detail="This number is already registered. Please sign in.")
         account.password_hash = hash_password(body.new_password)
         account.must_change_password = False
+        account.temp_password_expires_at = None
+        wipe_secrets_for_recipient(db, recipient_kind="portal_account", recipient_id=account.id)
         account.password_changed_at = datetime.utcnow()
         account.is_active = True
     else:
@@ -240,62 +245,45 @@ def portal_logout(
 
 @router.post("/forgot-password/request")
 @limiter.limit("5/minute")
+@limiter.limit("30/hour")
 def forgot_password_request(request: Request, body: PortalForgotPasswordRequestIn, db: Session = Depends(get_db)):
     if not verify_captcha_token(body.captcha_token, body.captcha_answer):
         raise HTTPException(status_code=400, detail="Incorrect captcha. Please try again.")
     phone = normalize_phone(body.phone)
     account = db.query(PatientAccount).filter(PatientAccount.phone == phone).first() if phone else None
     if account and account.is_active:
-        otp = generate_otp()
-        account.reset_otp_hash = hash_otp(account.id, otp)
-        account.reset_otp_expires_at = now_ist_naive() + timedelta(minutes=OTP_TTL_MINUTES)
-        db.commit()
-        deliver_otp(phone, otp)
+        # Makes a random 6-digit code (valid 10 minutes, 5 tries, single use) and adds its WhatsApp
+        # message to the staff list. At most 3 codes per number per hour; nothing is logged.
+        issue_reset_code(db, account)
     # Same answer for every number, so this can't be used to find who has an account.
-    return {"message": "If this number is registered, an OTP has been sent to its WhatsApp."}
+    return {"message": "If this number is registered, a code has been prepared."}
 
 
-@router.post("/forgot-password/verify", response_model=PortalForgotPasswordVerifyOut)
-@limiter.limit("5/minute")
-def forgot_password_verify(request: Request, body: PortalForgotPasswordVerifyIn, db: Session = Depends(get_db)):
+@router.post("/forgot-password/reset", response_model=TokenOut)
+@limiter.limit("10/minute")
+@limiter.limit("40/hour")
+def forgot_password_reset(request: Request, body: PortalForgotPasswordResetIn, db: Session = Depends(get_db)):
+    """The 6-digit code and the new password together. A wrong, expired or used code always gets the
+    same answer and counts as a try (5 per code, and 5 per number per 15 minutes)."""
     phone = normalize_phone(body.phone)
     if _otp_throttle.is_blocked(phone):
-        raise HTTPException(status_code=429, detail="Too many wrong OTP attempts. Please try again in 15 minutes.")
-    account = db.query(PatientAccount).filter(PatientAccount.phone == phone).first() if phone else None
-    ok = bool(
-        account and account.reset_otp_hash and account.reset_otp_expires_at
-        and now_ist_naive() < account.reset_otp_expires_at
-        and hmac.compare_digest(hash_otp(account.id, (body.otp or "").strip()), account.reset_otp_hash)
-    )
-    if not ok:
-        _otp_throttle.record_failure(phone)
-        raise HTTPException(status_code=400, detail="Incorrect or expired OTP")
-    account.reset_otp_hash = None      # single use
-    account.reset_otp_expires_at = None
-    db.commit()
-    _otp_throttle.reset(phone)
-    # The token's second field carries the account's password-change stamp, so the
-    # token stops working the moment the password is changed (one reset per OTP).
-    stamp = str(int(account.password_changed_at.timestamp())) if account.password_changed_at else "0"
-    return PortalForgotPasswordVerifyOut(reset_token=create_patient_password_reset_token(account.id, stamp))
-
-
-@router.post("/reset-password", response_model=TokenOut)
-@limiter.limit("5/minute")
-def reset_password(request: Request, body: PortalResetPasswordIn, db: Session = Depends(get_db)):
-    account_id, stamp = verify_patient_password_reset_token(body.reset_token)
-    account = db.query(PatientAccount).filter(PatientAccount.id == account_id).first() if account_id else None
-    current_stamp = str(int(account.password_changed_at.timestamp())) if account and account.password_changed_at else "0"
-    if not account or not account.is_active or stamp != current_stamp:
-        raise HTTPException(status_code=400, detail="This reset link has expired. Please start again.")
+        raise HTTPException(status_code=429, detail="Too many wrong attempts. Please try again in 15 minutes.")
     check_password_strength(body.new_password)
     if is_temp_password(body.new_password):
         raise HTTPException(status_code=400, detail="Please choose a different password than the temporary one")
+    account = db.query(PatientAccount).filter(PatientAccount.phone == phone).first() if phone else None
+    if not account or not account.is_active or not consume_reset_code(db, account, body.otp):
+        _otp_throttle.record_failure(phone)
+        raise HTTPException(status_code=400, detail="Incorrect or expired code")
+    _otp_throttle.reset(phone)
     account.password_hash = hash_password(body.new_password)
     account.must_change_password = False
-    account.password_changed_at = datetime.utcnow()
+    account.temp_password_expires_at = None
     account.reset_otp_hash = None
     account.reset_otp_expires_at = None
+    # Every earlier token dies, and the temporary-password and code messages lose their secrets at once.
+    account.password_changed_at = datetime.utcnow()
+    wipe_secrets_for_recipient(db, recipient_kind="portal_account", recipient_id=account.id)
     db.commit()
     return TokenOut(
         access_token=create_portal_access_token(account.id),

@@ -17,6 +17,9 @@ from app.schemas.portal import (
 from app.utils.portal_auth import get_current_patient_account
 from app.utils.timezone import now_ist_naive
 from app.utils.phone import normalize_phone
+from app.services.whatsapp_appointments import (
+    queue_appointment_messages, queue_appointment_cancelled, queue_appointment_rescheduled, release_token_message,
+)
 
 router = APIRouter(prefix="/portal/appointments", tags=["portal-appointments"])
 
@@ -301,6 +304,8 @@ def book_appointment(
     db.commit()
     db.refresh(appt)
 
+    queue_appointment_messages(db, appt)  # WhatsApp: confirmation, 24-hour reminder, token message
+
     # If this booking is for an existing hospital record that has no address
     # on file yet, backfill it — never overwrites an address reception already has.
     if body.profile_link_id and resolved_address:
@@ -528,6 +533,7 @@ def mark_arrived(
     if not appt.arrived_at:
         appt.arrived_at = now_ist_naive()
         db.commit()
+        release_token_message(db, appt)  # WhatsApp: the token message is due now
 
     if appt.profile_link_id and appt.profile_link and appt.profile_link.patient:
         from app.utils.portal_checkin import convert_appointment_to_checkin
@@ -760,6 +766,7 @@ def confirm_family_booking_request(
     )
     db.add(appt)
     req.status = "confirmed"
+    queue_appointment_messages(db, appt, commit=False)  # WhatsApp: confirmation, 24-hour reminder, token message
     db.commit()
     db.refresh(appt)
     return _to_out(appt, db)
@@ -784,6 +791,7 @@ def self_serve_mass_reschedule(
     if new_slot.doctor_id != appt.doctor_id:
         raise HTTPException(status_code=400, detail="Please pick a slot with the same doctor")
     _ensure_slot_bookable(db, new_slot, appt.hospital_id)
+    _old_time = appt.requested_time
     if new_slot.booked_count >= new_slot.capacity:
         raise HTTPException(status_code=400, detail="That slot is already full")
 
@@ -797,6 +805,7 @@ def self_serve_mass_reschedule(
     appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
     # Already-paid fee carries over automatically — no refund-then-repay cycle.
     appt.mass_reschedule_notice = False
+    queue_appointment_rescheduled(db, appt, _old_time, commit=False)  # WhatsApp: old appointment update + new messages
     appt.arrived_at = None
     appt.no_show_detected_at = None
     appt.no_show_reason = None
@@ -851,6 +860,7 @@ def cancel_appointment(
 
     appt.status = AppointmentStatus.cancelled
     appt.cancelled_by = "patient"
+    queue_appointment_cancelled(db, appt, send_message=False, commit=False)  # WhatsApp: only cancels the unsent messages
     db.commit()
     db.refresh(appt)
     return _to_out(appt, db)

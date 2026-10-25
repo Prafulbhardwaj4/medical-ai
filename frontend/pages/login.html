@@ -82,8 +82,11 @@
             Sign In
           </button>
 
-          <div style="text-align:right;margin-top:14px">
-            <a href="#" onclick="openForgotPasswordModal();return false;" style="font-size:13px;color:var(--teal, #0d9488)">Forgot password?</a>
+          <div style="text-align:right;margin-top:14px" id="fp-link-box">
+            <a href="#" onclick="openForgotPasswordModal();return false;" style="font-size:13px;color:var(--teal, #0d9488)">Forgot password? (patients)</a>
+          </div>
+          <div id="fp-staff-note" style="display:none;margin-top:14px;font-size:13px;color:var(--slate)">
+            Forgot your password? Staff: ask your hospital admin. Admins: ask the super admin.
           </div>
 
           <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--slate-light)">
@@ -178,7 +181,7 @@
   </div>
 
   <script src="../js/api.js"></script>
-  <script src="../js/forgot-password.js" defer></script>
+  <script src="../js/patient-forgot-password.js" defer></script>
   <script>
     // Redirect if already logged in
     if (getToken()) redirectByRole(getDoctor()?.role);
@@ -213,6 +216,8 @@
     document.getElementById("login-id").addEventListener("input", () => {
       const val = document.getElementById("login-id").value.trim();
       const group = document.getElementById("login-captcha-group");
+      document.getElementById("fp-link-box").style.display = isEmail(val) ? "none" : "";
+      document.getElementById("fp-staff-note").style.display = isEmail(val) ? "block" : "none";
       if (isEmail(val) || isPhone(val)) {
         if (group.style.display === "none") {
           group.style.display = "block";

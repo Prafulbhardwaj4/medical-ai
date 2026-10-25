@@ -33,6 +33,7 @@ class Doctor(Base):
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True)
     must_change_password = Column(Boolean, default=False, nullable=False)
+    temp_password_expires_at = Column(DateTime, nullable=True)  # naive IST; NULL = no expiry (set 7 days ahead when a temporary password is issued)
     password_changed_at = Column(DateTime, nullable=True)  # UTC naive; tokens issued before this are rejected
     is_hiv_authorized = Column(Boolean, default=False, nullable=False)  # explicitly granted by admin — tighter access than the general "lab" role (Phase 6 item 21)
 

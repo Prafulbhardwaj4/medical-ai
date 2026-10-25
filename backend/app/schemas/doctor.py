@@ -41,22 +41,6 @@ class ChangePasswordIn(BaseModel):
     old_password: str
     new_password: str
 
-class ForgotPasswordRequestIn(BaseModel):
-    email: EmailStr
-    captcha_token: str
-    captcha_answer: str
-
-class ForgotPasswordVerifyIn(BaseModel):
-    email: EmailStr
-    otp: str
-
-class ForgotPasswordVerifyOut(BaseModel):
-    reset_token: str
-
-class ResetPasswordIn(BaseModel):
-    reset_token: str
-    new_password: str
-
 class EditMeIn(BaseModel):
     name: str
     phone: str

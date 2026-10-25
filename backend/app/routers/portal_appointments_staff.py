@@ -18,6 +18,9 @@ from app.utils.timezone import now_ist_naive
 from app.utils.portal_billing import current_doctor_fee, create_patient_cancellation_refund
 from app.utils.notify import resolve_notification
 from app.utils.portal_checkin import convert_appointment_to_checkin
+from app.services.whatsapp_appointments import (
+    queue_appointment_messages, queue_appointment_cancelled, queue_appointment_rescheduled, release_token_message,
+)
 from app.utils.portal_auth import hash_password
 from app.utils.portal_otp import issue_temporary_password
 from app.models.portal import PatientAccount, PatientProfileLink
@@ -65,16 +68,8 @@ def book_appointment_for_caller(
         _acct_phone = normalize_phone(patient.phone)
         if len(_acct_phone) != 10:
             raise HTTPException(status_code=400, detail="This patient's phone number is invalid. Correct it on the patient record before booking.")
-        account = db.query(PatientAccount).filter(PatientAccount.phone == _acct_phone).first()
-        if not account:
-            # The patient signs in with the temporary password and must replace it
-            # (later this password is generated per patient and sent on WhatsApp).
-            account = PatientAccount(
-                phone=_acct_phone, password_hash=hash_password(issue_temporary_password()),
-                must_change_password=True,
-            )
-            db.add(account)
-            db.flush()
+        from app.services.whatsapp_flows import ensure_patient_portal_account
+        account = ensure_patient_portal_account(db, patient)  # creates the account + welcome/temporary password messages if the number is new
         link = PatientProfileLink(account_id=account.id, patient_id=patient.id, relation="self")
         db.add(link)
         db.flush()
@@ -128,6 +123,8 @@ def book_appointment_for_caller(
         target_label=f"{patient.name} ({patient.patient_uid})",
         details=f"Slot {slot.slot_date} {slot.slot_time}, doctor_id {slot.doctor_id}, status booked/unpaid",
     )
+
+    queue_appointment_messages(db, appt, created_by=current_doctor.id)  # WhatsApp: confirmation, 24-hour reminder, token message
 
     return {
         "appointment_id": appt.id,
@@ -206,6 +203,7 @@ def mark_arrived_before_payment(
             target_type="appointment", target_id=appt.id,
             details=f"slot {appt.requested_time.isoformat()}, arrived {appt.arrived_at.isoformat()}",
         )
+        release_token_message(db, appt, created_by=current_doctor.id)  # WhatsApp: the token message is due now
     return {
         "late": _late_unresolved(appt),
         "arrived_at": appt.arrived_at.isoformat(),
@@ -242,6 +240,7 @@ def resolve_late_arrival(
     choice = (body.late_choice or "").strip()
     old_slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.slot_id).with_for_update().first()
 
+    _old_time = appt.requested_time
     if choice == "next_slot":
         if not body.slot_id:
             raise HTTPException(status_code=400, detail="Pick the new slot for this patient")
@@ -265,12 +264,14 @@ def resolve_late_arrival(
         appt.slot_id = new_slot.id
         appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
         # arrived_at stays: the patient is here now, which is before the new slot.
+        queue_appointment_rescheduled(db, appt, _old_time, created_by=current_doctor.id, commit=False)  # WhatsApp
     elif choice == "walk_in":
         if old_slot and old_slot.booked_count > 0:
             old_slot.booked_count -= 1
         appt.slot_id = None
         appt.requested_time = now
         appt.arrived_at = now
+        release_token_message(db, appt, created_by=current_doctor.id, commit=False)  # WhatsApp: walk-in token message due now
     else:
         raise HTTPException(status_code=400, detail="Choose the walk-in queue or a new slot")
 
@@ -482,6 +483,7 @@ def _expire_stale_pending_reviews(db: Session, hospital_id: int) -> None:
             if slot and slot.booked_count > 0:
                 slot.booked_count -= 1
         appt.status = AppointmentStatus.cancelled
+        queue_appointment_cancelled(db, appt, commit=False)  # WhatsApp: hospital did not respond in time
         db.add(Notification(
             hospital_id=hospital_id,
             source_key=f"appointment_auto_declined:{appt.id}",
@@ -519,6 +521,7 @@ def _expire_stale_awaiting_payment(db: Session, hospital_id: int) -> None:
             if slot and slot.booked_count > 0:
                 slot.booked_count -= 1
         appt.status = AppointmentStatus.cancelled
+        queue_appointment_cancelled(db, appt, send_message=False, commit=False)  # WhatsApp: only cancels the unsent messages
         db.add(Notification(
             hospital_id=hospital_id,
             source_key=f"appointment_awaiting_payment_expired:{appt.id}",
@@ -722,6 +725,7 @@ def rebook_no_show(
     appt.requested_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
 
     _park_stale_checkin(db, appt, detach=True)
+    queue_appointment_rescheduled(db, appt, old_time, created_by=current_doctor.id, commit=False)  # WhatsApp
 
     appt.arrived_at = None
     appt.no_show_detected_at = None
@@ -763,6 +767,7 @@ def refund_no_show(
             slot.booked_count -= 1
     _park_stale_checkin(db, appt, detach=False)
     appt.status = AppointmentStatus.cancelled
+    queue_appointment_cancelled(db, appt, send_message=False, commit=False)  # WhatsApp: only cancels the unsent messages
     db.commit()
     log_action(
         db, current_doctor,
@@ -989,6 +994,7 @@ def mark_arrived_by_staff(
     if not appt.arrived_at:
         appt.arrived_at = now_ist_naive()
         db.commit()
+        release_token_message(db, appt, created_by=current_doctor.id)  # WhatsApp: the token message is due now
 
     if appt.profile_link_id and appt.profile_link and appt.profile_link.patient:
         convert_appointment_to_checkin(db, appt, appt.profile_link.patient)
@@ -1013,6 +1019,7 @@ def accept_appointment(
     if appt.status != AppointmentStatus.pending_review:
         raise HTTPException(status_code=400, detail="This appointment isn't awaiting review")
 
+    _old_time, _old_doc = appt.requested_time, appt.doctor_id
     if appt.requested_reschedule_slot_id:
         new_slot = db.query(DoctorSlot).filter(
             DoctorSlot.id == appt.requested_reschedule_slot_id, DoctorSlot.hospital_id == appt.hospital_id
@@ -1066,6 +1073,8 @@ def accept_appointment(
 
     appt.status = AppointmentStatus.confirmed
     resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
+    if appt.requested_time != _old_time or appt.doctor_id != _old_doc:
+        queue_appointment_rescheduled(db, appt, _old_time, old_doctor_id=_old_doc, created_by=current_doctor.id, commit=False)  # WhatsApp
     db.commit()
     log_action(
         db, current_doctor,
@@ -1123,6 +1132,7 @@ def decline_appointment(
             slot.booked_count -= 1
 
     appt.status = AppointmentStatus.cancelled
+    queue_appointment_cancelled(db, appt, created_by=current_doctor.id, commit=False)  # WhatsApp: declined by the hospital
     resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
     db.commit()
     log_action(
@@ -1158,6 +1168,7 @@ def suggest_new_slot(
     old_fee = appt.fee_amount or 0
     old_slot_id = appt.slot_id
     old_doctor_id = appt.doctor_id
+    _old_time = appt.requested_time
 
     if body.new_doctor_id:
         from app.models.doctor import UserRole
@@ -1221,6 +1232,8 @@ def suggest_new_slot(
     appt.reschedule_kind = None
     appt.requested_reschedule_slot_id = None
     resolve_notification(db, appt.hospital_id, f"appointment_needs_review:{appt.id}")
+    if appt.requested_time != _old_time or appt.doctor_id != old_doctor_id:
+        queue_appointment_rescheduled(db, appt, _old_time, old_doctor_id=old_doctor_id, created_by=current_doctor.id, commit=False)  # WhatsApp
     db.commit()
     log_action(
         db, current_doctor,

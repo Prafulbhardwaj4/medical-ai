@@ -9,6 +9,8 @@ from app.models.doctor import Doctor, UserRole
 from app.config import settings
 import secrets
 from app.utils.auth import hash_password, get_current_doctor, now_ist_naive, ist_today, ist_day_bounds, generate_temp_password
+from app.services.whatsapp_flows import queue_staff_account_messages, temp_password_expiry
+from app.services.whatsapp_messages import wipe_secrets_for_recipient
 from app.utils.inventory import line_total
 from app.utils.audit import log_action
 import re
@@ -626,6 +628,7 @@ def create_doctor(
         clinic_name=hospital.name,
         hashed_password=hash_password(temp_password),
         must_change_password=True,
+        temp_password_expires_at=temp_password_expiry(),
         role=UserRole(role),
         hospital_id=hospital_id,
         is_active=True,
@@ -635,6 +638,8 @@ def create_doctor(
         doctor_uid=generate_doctor_uid(db, hospital.hospital_code),
     )
     db.add(doctor)
+    db.flush()
+    queue_staff_account_messages(db, doctor, hospital, temp_password, creator=current_doctor)  # welcome + temporary password
     db.commit()
     db.refresh(doctor)
 
@@ -678,6 +683,8 @@ def reset_staff_password(
     temp_password = generate_temp_password()
     target.hashed_password = hash_password(temp_password)
     target.must_change_password = True
+    target.temp_password_expires_at = temp_password_expiry()
+    wipe_secrets_for_recipient(db, recipient_kind="staff", recipient_id=target.id)
     target.password_changed_at = datetime.utcnow()  # signs out every existing session
     target.failed_login_attempts = 0
     target.locked_until = None
@@ -1959,9 +1966,12 @@ def create_admin_jwt(
         specialization=specialization, clinic_name=hospital.name,
         hashed_password=hash_password(temp_password),
         must_change_password=True,
+        temp_password_expires_at=temp_password_expiry(),
         role=UserRole.admin, hospital_id=hospital_id, is_active=True
     )
     db.add(admin)
+    db.flush()
+    queue_staff_account_messages(db, admin, hospital, temp_password, creator=current_doctor, hospital_admin=True)  # password message: super admin only
     db.commit()
     db.refresh(admin)
 
@@ -2573,6 +2583,8 @@ def reset_account_password(
 
     account.hashed_password = hash_password(new_password)
     account.must_change_password = True
+    account.temp_password_expires_at = temp_password_expiry()
+    wipe_secrets_for_recipient(db, recipient_kind="staff", recipient_id=account.id)
     account.password_changed_at = datetime.utcnow()  # signs out every existing session
     account.failed_login_attempts = 0
     account.locked_until = None

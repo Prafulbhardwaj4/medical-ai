@@ -36,11 +36,6 @@ Open `frontend/pages/login.html` directly in a browser, or serve with:
 python -m http.server 5500 --directory frontend
 ```
 
-## Twilio WhatsApp Sandbox Setup
-1. Go to [Twilio Console](https://console.twilio.com/) → Messaging → Try it out → Send a WhatsApp message
-2. Note the sandbox number (default: `+1 415 523 8886`)
-3. Have the patient's phone send `join <sandbox-keyword>` to that number to opt in
-4. Set `TWILIO_WHATSAPP_FROM=whatsapp:+14155238886` in your `.env`
 
 ## Project Structure
 ```

@@ -396,17 +396,10 @@ class PortalForgotPasswordRequestIn(BaseModel):
     captcha_answer: str
 
 
-class PortalForgotPasswordVerifyIn(BaseModel):
+
+class PortalForgotPasswordResetIn(BaseModel):
     phone: str
-    otp: str
-
-
-class PortalForgotPasswordVerifyOut(BaseModel):
-    reset_token: str
-
-
-class PortalResetPasswordIn(BaseModel):
-    reset_token: str
+    otp: str  # the 6-digit code from the WhatsApp message
     new_password: str
 
 

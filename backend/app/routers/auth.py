@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.models.doctor import Doctor
 from app.schemas.doctor import DoctorCreate, DoctorLogin, DoctorOut, EditMeIn, Token, CaptchaOut, StaffLoginResultOut, SetNewPasswordIn, ChangePasswordIn
-from app.schemas.doctor import ForgotPasswordRequestIn, ForgotPasswordVerifyIn, ForgotPasswordVerifyOut, ResetPasswordIn
 from app.utils.auth import hash_password, verify_password, create_access_token
 from app.utils.auth import blacklist_token, get_current_doctor, decode_access_token
 from app.utils.auth import create_captcha_token, verify_captcha_token, generate_captcha_code, generate_captcha_svg
@@ -16,6 +15,7 @@ from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
 from app.utils.rate_limit import limiter
 from app.utils.phone import normalize_phone
+from app.services.whatsapp_messages import wipe_secrets_for_recipient
 import json
 from pydantic import BaseModel
 from app.config import _is_production
@@ -89,6 +89,10 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
         raise HTTPException(status_code=403, detail="Account is deactivated. Contact your admin.")
     if doctor.hospital_id and doctor.hospital and not doctor.hospital.is_active:
         raise HTTPException(status_code=403, detail="Your hospital account has been deactivated. Contact support.")
+
+    # A temporary password works for 7 days only (checked after the password is proven correct).
+    if doctor.must_change_password and doctor.temp_password_expires_at and now_ist_naive() > doctor.temp_password_expires_at:
+        raise HTTPException(status_code=403, detail="Your temporary password has expired. Ask your admin (or the super admin) for a new one.")
 
     # Successful login — reset failed attempts
     doctor.failed_login_attempts = 0
@@ -248,6 +252,9 @@ def set_new_password(request: Request, payload: SetNewPasswordIn, db: Session = 
     if not doctor.must_change_password:
         raise HTTPException(status_code=400, detail="This account has already set its password. Please log in normally.")
 
+    if doctor.temp_password_expires_at and now_ist_naive() > doctor.temp_password_expires_at:
+        raise HTTPException(status_code=403, detail="Your temporary password has expired. Ask your admin (or the super admin) for a new one.")
+
     new_password = payload.new_password
     if len(new_password) < 8 or not any(c.isdigit() for c in new_password) or not any(c.isupper() for c in new_password):
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters, with 1 number and 1 capital letter")
@@ -256,6 +263,8 @@ def set_new_password(request: Request, payload: SetNewPasswordIn, db: Session = 
 
     doctor.hashed_password = hash_password(new_password)
     doctor.must_change_password = False
+    doctor.temp_password_expires_at = None
+    wipe_secrets_for_recipient(db, recipient_kind="staff", recipient_id=doctor.id)
     doctor.password_changed_at = datetime.utcnow()
     doctor.failed_login_attempts = 0
     doctor.locked_until = None
@@ -273,30 +282,6 @@ def set_new_password(request: Request, payload: SetNewPasswordIn, db: Session = 
 
     token = create_access_token({"sub": str(doctor.id), "role": doctor.role.value})
     return {"access_token": token, "token_type": "bearer", "doctor": doctor}
-
-@router.post("/forgot-password/request")
-@limiter.limit("5/minute")
-def forgot_password_request(request: Request, payload: ForgotPasswordRequestIn, db: Session = Depends(get_db)):
-    # DISABLED until WhatsApp OTP delivery exists (was a fixed "1234" for every
-    # account). Same response for every email, so nothing to enumerate. Hospital
-    # admins reset staff passwords instead (POST /admin/doctors/{id}/reset-password).
-    raise HTTPException(
-        status_code=503,
-        detail="Self-service password reset is not available yet. Please ask your hospital admin to reset your password."
-    )
-
-@router.post("/forgot-password/verify", response_model=ForgotPasswordVerifyOut)
-@limiter.limit("5/minute")
-def forgot_password_verify(request: Request, payload: ForgotPasswordVerifyIn, db: Session = Depends(get_db)):
-    # DISABLED with the request step above (no OTP exists to verify).
-    raise HTTPException(status_code=503, detail="Self-service password reset is not available yet.")
-
-@router.post("/reset-password", response_model=Token)
-@limiter.limit("5/minute")
-def reset_password(request: Request, payload: ResetPasswordIn, db: Session = Depends(get_db)):
-    # DISABLED with the request step above. When WhatsApp OTP goes live,
-    # restore the reset logic here and set doctor.password_changed_at.
-    raise HTTPException(status_code=503, detail="Self-service password reset is not available yet.")
 
 @router.post("/change-password", response_model=Token)
 @limiter.limit("10/minute")
@@ -316,6 +301,8 @@ def change_password(
 
     current_doctor.hashed_password = hash_password(payload.new_password)
     current_doctor.must_change_password = False
+    current_doctor.temp_password_expires_at = None
+    wipe_secrets_for_recipient(db, recipient_kind="staff", recipient_id=current_doctor.id)
     current_doctor.password_changed_at = datetime.utcnow()
     db.commit()
     db.refresh(current_doctor)
