@@ -41,6 +41,16 @@ class ChangePasswordIn(BaseModel):
     old_password: str
     new_password: str
 
+class StaffForgotPasswordRequestIn(BaseModel):
+    email: EmailStr
+    captcha_token: str
+    captcha_answer: str
+
+class StaffForgotPasswordResetIn(BaseModel):
+    email: EmailStr
+    otp: str  # the 6-digit code from the WhatsApp message
+    new_password: str
+
 class EditMeIn(BaseModel):
     name: str
     phone: str

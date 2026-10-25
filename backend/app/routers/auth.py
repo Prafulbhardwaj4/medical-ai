@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.models.doctor import Doctor
 from app.schemas.doctor import DoctorCreate, DoctorLogin, DoctorOut, EditMeIn, Token, CaptchaOut, StaffLoginResultOut, SetNewPasswordIn, ChangePasswordIn
+from app.schemas.doctor import StaffForgotPasswordRequestIn, StaffForgotPasswordResetIn
+from app.services.staff_reset import is_eligible, issue_staff_reset_code, consume_staff_reset_code
 from app.utils.auth import hash_password, verify_password, create_access_token
 from app.utils.auth import blacklist_token, get_current_doctor, decode_access_token
 from app.utils.auth import create_captcha_token, verify_captcha_token, generate_captcha_code, generate_captcha_svg
@@ -13,7 +15,7 @@ from app.utils.auth import create_password_setup_token, verify_password_setup_to
 from app.config import settings
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
-from app.utils.rate_limit import limiter
+from app.utils.rate_limit import limiter, FailureThrottle
 from app.utils.phone import normalize_phone
 from app.services.whatsapp_messages import wipe_secrets_for_recipient
 import json
@@ -25,6 +27,7 @@ from app.utils import totp as totp_util
 security = HTTPBearer()
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+_staff_otp_throttle = FailureThrottle(max_failures=5, window_seconds=15 * 60)  # wrong reset-code guesses per email
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
 _TIMING_HASH = hash_password("timing-equalizer-Aa1")  # used only to equalize login response time
@@ -280,6 +283,51 @@ def set_new_password(request: Request, payload: SetNewPasswordIn, db: Session = 
         hospital_id=doctor.hospital_id
     )
 
+    token = create_access_token({"sub": str(doctor.id), "role": doctor.role.value})
+    return {"access_token": token, "token_type": "bearer", "doctor": doctor}
+
+@router.post("/forgot-password/request")
+@limiter.limit("5/minute")
+@limiter.limit("30/hour")
+def forgot_password_request(request: Request, payload: StaffForgotPasswordRequestIn, db: Session = Depends(get_db)):
+    """Admins and staff who already set their own password. The code goes to the hospital's messages list.
+    Same answer for every email, so nothing can be learned about who has an account."""
+    if not verify_captcha_token(payload.captcha_token, payload.captcha_answer):
+        raise HTTPException(status_code=400, detail="Incorrect captcha. Please try again.")
+    email = payload.email.lower().strip()
+    doctor = db.query(Doctor).filter(Doctor.email == email).first()
+    if doctor and is_eligible(doctor):
+        issue_staff_reset_code(db, doctor)
+    return {"message": "If this email belongs to an account that has already set its password, a code has been prepared."}
+
+@router.post("/forgot-password/reset", response_model=Token)
+@limiter.limit("10/minute")
+@limiter.limit("40/hour")
+def forgot_password_reset(request: Request, payload: StaffForgotPasswordResetIn, db: Session = Depends(get_db)):
+    """The 6-digit code and the new password together. A wrong, expired or used code always gets the
+    same answer and counts as a try (5 per code, and 5 per email per 15 minutes)."""
+    email = payload.email.lower().strip()
+    if _staff_otp_throttle.is_blocked(email):
+        raise HTTPException(status_code=429, detail="Too many wrong attempts. Please try again in 15 minutes.")
+    check_password_strength(payload.new_password)
+    doctor = db.query(Doctor).filter(Doctor.email == email).first()
+    if not doctor or not is_eligible(doctor) or not consume_staff_reset_code(db, doctor, payload.otp):
+        _staff_otp_throttle.record_failure(email)
+        raise HTTPException(status_code=400, detail="Incorrect or expired code")
+    _staff_otp_throttle.reset(email)
+    doctor.hashed_password = hash_password(payload.new_password)
+    doctor.must_change_password = False
+    doctor.temp_password_expires_at = None
+    doctor.password_changed_at = datetime.utcnow()  # signs out every existing session
+    doctor.failed_login_attempts = 0
+    doctor.locked_until = None
+    wipe_secrets_for_recipient(db, recipient_kind="staff", recipient_id=doctor.id)
+    db.commit()
+    db.refresh(doctor)
+    log_action(
+        db, doctor, action="password_reset_with_code", target_type="doctor", target_id=doctor.id,
+        target_label=f"{doctor.title} {doctor.name}", hospital_id=doctor.hospital_id
+    )
     token = create_access_token({"sub": str(doctor.id), "role": doctor.role.value})
     return {"access_token": token, "token_type": "bearer", "doctor": doctor}
 

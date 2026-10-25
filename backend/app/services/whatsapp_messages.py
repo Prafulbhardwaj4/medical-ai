@@ -214,11 +214,11 @@ def format_ist_datetime(dt) -> str:
 
 
 def staff_login_link() -> str:
-    return settings.PUBLIC_FRONTEND_URL.rstrip("/") + "/pages/login.html"
+    return settings.PUBLIC_FRONTEND_URL.rstrip("/")
 
 
 def portal_login_link() -> str:
-    return settings.PORTAL_FRONTEND_URL.rstrip("/") + "/pages/login.html"
+    return settings.PORTAL_FRONTEND_URL.rstrip("/")
 
 
 def hospital_mobile(hospital) -> str:

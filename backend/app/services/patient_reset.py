@@ -88,7 +88,7 @@ def issue_reset_code(db: Session, account) -> bool:
         return False
 
 
-def consume_reset_code(db: Session, account, code) -> bool:
+def consume_reset_code(db: Session, account, code, consume: bool = True) -> bool:
     """True only for the right, unexpired, unused code of the newest request. Every try is counted
     BEFORE it is compared, so parallel guesses cannot get past 5. On success the code is dead."""
     code = (code or "").strip()
@@ -110,11 +110,48 @@ def consume_reset_code(db: Session, account, code) -> bool:
         return False
     if not hmac.compare_digest(hash_reset_code(account.id, code), row.code_hash):
         return False
+    if not consume:
+        return True  # only checked, not used up (the try above was still counted)
     consumed = db.query(PatientResetCode).filter(
         PatientResetCode.id == row.id, PatientResetCode.used == False  # noqa: E712
     ).update({PatientResetCode.used: True}, synchronize_session=False)
     db.commit()
     return consumed == 1
+
+
+def issue_verification_code(db: Session, account) -> bool:
+    """For an account that never set its own password (or whose first code expired): after a correct reset
+    code, makes a NEW temporary password (valid 7 days) and adds its WhatsApp message. The patient then
+    signs in with it and chooses a password. Returns False and changes nothing if the key is missing."""
+    from datetime import datetime
+    from app.services.whatsapp_flows import temp_password_expiry
+    from app.utils.auth import generate_temp_password, hash_password
+
+    patient = _registering_patient(db, account)
+    password = generate_temp_password()
+    expires = temp_password_expiry()
+    try:
+        with db.begin_nested():
+            wa.wipe_secrets_for_recipient(db, recipient_kind="portal_account", recipient_id=account.id)
+            full, masked = wa.build_temp_password(password)
+            wa.enqueue_message(
+                db, template_key=wa.T_TEMP_PASSWORD, text=full, masked_text=masked, secret=True,
+                visibility=wa.VIS_ALL, expires_at=expires,
+                hospital_id=patient.hospital_id if patient else None,
+                recipient_kind="portal_account", recipient_id=account.id,
+                recipient_name=patient.name if patient else "Patient", recipient_role="patient",
+                recipient_phone=account.phone,
+            )
+            account.password_hash = hash_password(password)
+            account.must_change_password = True
+            account.temp_password_expires_at = expires
+            account.password_changed_at = datetime.utcnow()
+        db.commit()
+        return True
+    except wa.SecretKeyMissing:
+        db.rollback()
+        logger.warning("Patient verification code not created: WHATSAPP_MESSAGES_KEY is missing")
+        return False
 
 
 def purge_old_reset_codes(db: Session) -> int:

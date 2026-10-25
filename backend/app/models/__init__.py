@@ -40,3 +40,4 @@ from app.models.master_medicine import MasterMedicine
 from app.models.master_import_preview import MasterImportPreview
 from app.models.whatsapp_message import WhatsappMessage
 from app.models.patient_reset_code import PatientResetCode
+from app.models.staff_reset_code import StaffResetCode

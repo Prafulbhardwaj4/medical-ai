@@ -186,6 +186,8 @@ def run_whatsapp_message_tick():
         run_message_maintenance(db)
         from app.services.patient_reset import purge_old_reset_codes
         purge_old_reset_codes(db)  # used / expired forgot-password code rows older than a day
+        from app.services.staff_reset import purge_old_staff_reset_codes
+        purge_old_staff_reset_codes(db)
         # The future automatic sender plugs in here: dispatch_due_messages(db) in services/whatsapp_messages.py.
     except Exception as e:
         db.rollback()

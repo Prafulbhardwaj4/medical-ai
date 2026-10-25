@@ -12,6 +12,8 @@ from app.utils.timezone import now_ist_naive
 
 logger = logging.getLogger("whatsapp")
 
+PASSWORD_MESSAGE_DELAY_SECONDS = 30  # the verification code is due this long after the welcome message
+
 
 def temp_password_expiry():
     """Every temporary password (admin, staff, patient) is valid for 7 days."""
@@ -30,7 +32,8 @@ def _add_account_messages(db: Session, *, kind, recipient_id, name, role, hospit
     full, masked = wa.build_temp_password(password)
     wa.enqueue_message(
         db, template_key=wa.T_TEMP_PASSWORD, visibility=password_visibility, secret=True,
-        text=full, masked_text=masked, expires_at=expires, **common)
+        text=full, masked_text=masked, expires_at=expires,
+        due_at=now_ist_naive() + timedelta(seconds=PASSWORD_MESSAGE_DELAY_SECONDS), **common)
 
 
 def queue_account_messages(db: Session, **kwargs) -> bool:
