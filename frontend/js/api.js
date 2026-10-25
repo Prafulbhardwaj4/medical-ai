@@ -272,6 +272,25 @@ function fillTopbar() {
   if (pmName) pmName.textContent = fullName;
   const pmClinic = document.getElementById("profile-menu-clinic");
   if (pmClinic) pmClinic.textContent = doc.clinic_name || "";
+  syncOwnProfile();
+}
+
+// The saved copy of the person's details is only written at sign-in, so a prefix or name changed later
+// (for example by the super admin) kept showing the old one. Once per page load, fetch the current
+// details from the server and update the saved copy and the header.
+let _profileSynced = false;
+async function syncOwnProfile() {
+  if (_profileSynced || !getToken()) return;
+  _profileSynced = true;
+  try {
+    const doc = getDoctor();
+    if (!doc || doc.role === "patient" || doc.role === "super_admin") return;
+    const fresh = await api("GET", "/auth/me");
+    if (fresh && (fresh.title !== doc.title || fresh.name !== doc.name)) {
+      localStorage.setItem(_SK.d, JSON.stringify({ ...doc, ...fresh }));
+      fillTopbar();
+    }
+  } catch (e) { /* keep the saved copy */ }
 }
 
 // Some Android Chrome/WebView builds fail to repaint the area under a
@@ -503,6 +522,7 @@ function ensureEditDetailsModal() {
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Name</label>
           <div style="display:flex;gap:10px">
             <select class="form-control" id="ed-title" style="width:100px;display:none">
+              <option>Dr.</option>
               <option>Mr.</option>
               <option>Ms.</option>
             </select>
@@ -542,7 +562,7 @@ function openEditDetailsModal() {
   const isDoctorRole = doc.role === 'doctor';
   document.getElementById('ed-title').style.display = isDoctorRole ? 'none' : '';
   document.getElementById('ed-title-fixed').style.display = isDoctorRole ? 'flex' : 'none';
-  if (!isDoctorRole) document.getElementById('ed-title').value = (doc.title === 'Ms.') ? 'Ms.' : 'Mr.';
+  if (!isDoctorRole) document.getElementById('ed-title').value = ['Dr.', 'Mr.', 'Ms.'].includes(doc.title) ? doc.title : 'Mr.';
 
   const isSuperAdmin = doc.role === 'super_admin';
   document.getElementById('ed-upgrade-tab').style.display = isSuperAdmin ? 'none' : '';

@@ -419,7 +419,7 @@ def update_me(
     current_doctor.registration_number = _new_reg
     if current_doctor.role.value == "doctor":
         current_doctor.title = "Dr."
-    elif payload.title in ("Mr.", "Ms."):
+    elif payload.title in ("Dr.", "Mr.", "Ms."):
         current_doctor.title = payload.title
     db.commit()
     db.refresh(current_doctor)
