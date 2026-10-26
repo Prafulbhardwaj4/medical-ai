@@ -17,6 +17,7 @@ from app.utils.auth import get_current_doctor
 from app.utils.timezone import now_ist_naive
 from app.utils.portal_billing import current_doctor_fee, create_patient_cancellation_refund
 from app.utils.notify import resolve_notification
+from app.services import reception_appointments as ra
 from app.utils.portal_checkin import convert_appointment_to_checkin
 from app.services.whatsapp_appointments import (
     queue_appointment_messages, queue_appointment_cancelled, queue_appointment_rescheduled, release_token_message,
@@ -102,7 +103,7 @@ def book_appointment_for_caller(
     if db.query(DoctorUnavailability).filter(
         DoctorUnavailability.doctor_id == slot.doctor_id, DoctorUnavailability.date == slot.slot_date
     ).first():
-        raise HTTPException(status_code=400, detail="This doctor is unavailable on this date. Please pick another date or doctor.")
+        raise HTTPException(status_code=400, detail="Doctor on leave on this day. Please pick another day or doctor.")
 
     _check_no_duplicate_active_booking(db, account, link.id, None, slot.doctor_id)
 
@@ -629,6 +630,8 @@ def _noshow_appt_or_404(db: Session, appointment_id: int, hospital_id: int) -> A
     ).with_for_update().first()
     if not appt:
         raise HTTPException(status_code=404, detail="Appointment not found")
+    if appt.status == AppointmentStatus.cancelled:
+        raise HTTPException(status_code=400, detail="This appointment was already handled (refunded or cancelled). Please refresh the list.")
     if (appt.status != AppointmentStatus.confirmed or appt.payment_status != "paid"
             or not appt.no_show_detected_at):
         raise HTTPException(status_code=400, detail="This is not a paid no-show waiting for action")
@@ -765,28 +768,59 @@ def refund_no_show(
     that reception settles from the Refunds list)."""
     if current_doctor.role.value not in _STAFF_ROLES:
         raise HTTPException(status_code=403, detail="Not authorized")
-    if body.percent < 1 or body.percent > 100:
-        raise HTTPException(status_code=400, detail="Refund percent must be between 1 and 100")
+    # Always the full amount the patient paid (the screen no longer sends a percent). The row is locked, so a
+    # double tap or two receptionists create only one refund; the second one gets a plain message.
     appt = _noshow_appt_or_404(db, appointment_id, current_doctor.hospital_id)
-
-    create_patient_cancellation_refund(
-        db, appt, reason="No-show refund approved by reception", percent=body.percent,
-    )
-    if appt.slot_id:
-        slot = db.query(DoctorSlot).filter(DoctorSlot.id == appt.slot_id).with_for_update().first()
-        if slot and slot.booked_count > 0:
-            slot.booked_count -= 1
+    paid = ra.paid_amount(db, appt)
+    if paid <= 0:
+        raise HTTPException(status_code=400, detail="Nothing was paid for this appointment, so there is nothing to refund.")
+    old_time = appt.requested_time
+    doctor = db.query(Doctor).filter(Doctor.id == appt.doctor_id).first() if appt.doctor_id else None
+    refund = ra.add_refund(db, appt, paid, "No show - refunded by reception", current_doctor, cap=paid)
+    ra.release_slot(db, appt.slot_id)
     _park_stale_checkin(db, appt, detach=False)
-    appt.status = AppointmentStatus.cancelled
+    appt.status = AppointmentStatus.cancelled  # handled: it leaves the No show to handle card
+    appt.cancelled_by = "reception"
     queue_appointment_cancelled(db, appt, send_message=False, commit=False)  # WhatsApp: only cancels the unsent messages
-    db.commit()
-    log_action(
-        db, current_doctor,
-        action="appointment_noshow_refunded",
-        target_type="appointment", target_id=appt.id,
-        details=f"{body.percent}% of Rs.{(appt.fee_amount or 0):.2f}" + (f". Note: {body.note}" if body.note else ""),
+    from app.utils.audit import stage_action
+    stage_action(
+        db, current_doctor, action="appointment_noshow_refunded", target_type="appointment", target_id=appt.id,
+        target_label=ra.patient_name(appt)[:120],
+        details=(f"no-show of {old_time.isoformat()} with {(doctor.title + ' ' + doctor.name).strip() if doctor else 'Unassigned'}: "
+                 f"status confirmed -> cancelled, refund Rs.{refund.amount:.2f} by {refund.channel} (refund #{refund.id})"
+                 + (f". Note: {body.note}" if body.note else ""))[:1500],
     )
-    return {"message": "Cancelled. A refund is pending in the Refunds list."}
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Could not create the refund. Nothing was changed. Please try again.")
+    return {
+        "message": f"Refund of Rs.{refund.amount:.2f} created. It is waiting on the Refunds page.",
+        "refund_id": refund.id,
+        "refund_amount": refund.amount,
+    }
+
+
+@router.get("/{appointment_id}/no-show/refund-preview")
+def refund_no_show_preview(
+    appointment_id: int,
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """What the 'Yes, refund' confirm step shows: patient, doctor, appointment time, amount and refund method."""
+    if current_doctor.role.value not in _STAFF_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    appt = _noshow_appt_or_404(db, appointment_id, current_doctor.hospital_id)
+    doctor = db.query(Doctor).filter(Doctor.id == appt.doctor_id).first() if appt.doctor_id else None
+    paid = ra.paid_amount(db, appt)
+    return {
+        "patient_name": ra.patient_name(appt),
+        "doctor_name": f"{doctor.title} {doctor.name}".strip() if doctor else "Unassigned",
+        "requested_time": appt.requested_time.isoformat(),
+        "refund_amount": paid,
+        "refund_method": ra.default_channel(appt),
+    }
 
 
 @router.get("/today")
@@ -808,10 +842,13 @@ def list_expected_today(
     q = db.query(Appointment).filter(
         Appointment.hospital_id == current_doctor.hospital_id,
         Appointment.status.in_([AppointmentStatus.confirmed, AppointmentStatus.completed]),
+        Appointment.payment_status == "paid",  # Expected today = fee already collected
+        (Appointment.status == AppointmentStatus.completed) | Appointment.no_show_detected_at.is_(None),  # paid no-shows wait on their own card
         Appointment.requested_time >= today_start,
         Appointment.requested_time < today_end,
     )
     if doctor_id:
+        ra.require_hospital_doctor(db, doctor_id, current_doctor.hospital_id)
         q = q.filter(Appointment.doctor_id == doctor_id)
 
     appts = q.order_by(Appointment.requested_time).all()
@@ -867,6 +904,7 @@ def list_upcoming_bookings(
         Appointment.requested_time < window_end,
     )
     if doctor_id:
+        ra.require_hospital_doctor(db, doctor_id, current_doctor.hospital_id)
         q = q.filter(Appointment.doctor_id == doctor_id)
 
     appts = q.order_by(Appointment.requested_time).all()
@@ -925,6 +963,8 @@ def list_pending_review(
 
     _expire_stale_pending_reviews(db, current_doctor.hospital_id)
     _expire_stale_awaiting_payment(db, current_doctor.hospital_id)
+    ra.finish_expired_cancellations(db, current_doctor.hospital_id)
+    db.commit()
 
     needs_q = db.query(Appointment).filter(
         Appointment.hospital_id == current_doctor.hospital_id,
@@ -946,6 +986,7 @@ def list_pending_review(
         Appointment.review_deadline_at > now_ist_naive(),
     )
     if doctor_id:
+        ra.require_hospital_doctor(db, doctor_id, current_doctor.hospital_id)
         needs_q = needs_q.filter(Appointment.doctor_id == doctor_id)
         awaiting_q = awaiting_q.filter(Appointment.doctor_id == doctor_id)
         offers_q = offers_q.filter(Appointment.doctor_id == doctor_id)
@@ -1254,6 +1295,8 @@ def suggest_new_slot(
         _s_start = datetime.combine(new_slot.slot_date, datetime.strptime(new_slot.slot_time, "%H:%M").time())
         if _s_start + timedelta(minutes=new_slot.window_minutes or 0) <= now_ist_naive():
             raise HTTPException(status_code=400, detail="That slot has already passed")
+        from app.routers.portal_appointments import _ensure_slot_bookable
+        _ensure_slot_bookable(db, new_slot, current_doctor.hospital_id)  # refuses a day the doctor is on leave
 
         if old_slot_id:
             old_slot = db.query(DoctorSlot).filter(DoctorSlot.id == old_slot_id).with_for_update().first()

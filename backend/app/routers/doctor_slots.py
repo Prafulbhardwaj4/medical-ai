@@ -208,6 +208,32 @@ def my_slots(date: str, doctor_id: int = None, current_doctor: Doctor = Depends(
     ).order_by(DoctorSlot.slot_time).all()
 
 
+@router.get("/preview")
+def preview_slots(date: str, doctor_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    """Slot preview for reception: one doctor of the user's own hospital, one day. A day the doctor is on leave
+    shows no slots."""
+    target = _resolve_target_doctor(doctor_id, current_doctor, db)
+    try:
+        slot_date = dt.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, expected YYYY-MM-DD")
+    if db.query(DoctorUnavailability.id).filter(
+        DoctorUnavailability.doctor_id == target.id, DoctorUnavailability.date == slot_date
+    ).first():
+        return {"on_leave": True, "message": "Doctor on leave on this day", "slots": []}
+    rows = db.query(DoctorSlot).filter(
+        DoctorSlot.doctor_id == target.id, DoctorSlot.hospital_id == current_doctor.hospital_id,
+        DoctorSlot.slot_date == slot_date,
+    ).order_by(DoctorSlot.slot_time).all()
+    return {
+        "on_leave": False, "message": None,
+        "slots": [{
+            "id": s.id, "slot_date": s.slot_date.isoformat(), "slot_time": s.slot_time, "period": s.period,
+            "capacity": s.capacity, "booked_count": s.booked_count,
+        } for s in rows],
+    }
+
+
 @router.delete("/{slot_id}")
 def delete_slot(slot_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
     _require_slot_manager(current_doctor)

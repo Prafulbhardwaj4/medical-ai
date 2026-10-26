@@ -135,6 +135,56 @@ def patient_name(appt: Appointment) -> str:
     return patient.name if patient else (appt.new_patient_name or "Portal patient")
 
 
+def require_hospital_doctor(db: Session, doctor_id: Optional[int], hospital_id: int) -> None:
+    """A doctor chosen on a screen filter must be a doctor of the user's own hospital."""
+    if not doctor_id:
+        return
+    from app.models.doctor import Doctor
+    if not db.query(Doctor.id).filter(Doctor.id == doctor_id, Doctor.hospital_id == hospital_id).first():
+        raise HTTPException(status_code=404, detail="Doctor not found")
+
+
+def cancelled_message_row(db: Session, appt: Appointment):
+    """The 'cancelled / rescheduled' message of this appointment that is waiting or already sent, else None."""
+    return (db.query(WhatsappMessage)
+            .filter(WhatsappMessage.appointment_id == appt.id, WhatsappMessage.template_key == wa.T_APPT_CANCELLED,
+                    WhatsappMessage.status != "cancelled")
+            .order_by(WhatsappMessage.id.desc()).first())
+
+
+def queue_cancelled_only_message(db: Session, appt: Appointment, created_by: Optional[int]) -> None:
+    """The CANCELLED-ONLY version ("We are sorry for the inconvenience."). Never a second one for the same appointment."""
+    if cancelled_message_row(db, appt) is None:
+        wa_appt.queue_appointment_cancelled(db, appt, send_message=True, created_by=created_by, commit=False)
+
+
+def queue_rescheduled_old_message(db: Session, appt: Appointment, created_by: Optional[int]) -> None:
+    """The RESCHEDULED version for the OLD appointment ("details of your new appointment will be provided shortly").
+    A cancelled message still waiting to be sent is replaced by it; one already sent is left alone."""
+    row = cancelled_message_row(db, appt)
+    if row is not None and row.status in wa.OPEN_STATUSES:
+        wa.cancel_unsent(db, appointment_id=appt.id, template_keys=[wa.T_APPT_CANCELLED])
+        row = None
+    if row is None:
+        wa_appt.queue_old_appointment_rescheduled(db, appt, created_by=created_by, commit=False)
+
+
+def finish_expired_cancellations(db: Session, hospital_id: int) -> None:
+    """A booking reception cancelled but never rescheduled or closed with the X (screen closed, phone died): when its
+    24 hours are over the patient still gets the cancelled-only message. The caller commits."""
+    rows = db.query(Appointment).filter(
+        Appointment.hospital_id == hospital_id,
+        Appointment.status == AppointmentStatus.cancelled,
+        Appointment.cancelled_by == "reception",
+        Appointment.payment_status == "unpaid",
+        Appointment.review_deadline_at.isnot(None),
+        Appointment.review_deadline_at <= now_ist_naive(),
+    ).with_for_update(skip_locked=True).all()
+    for appt in rows:
+        queue_cancelled_only_message(db, appt, None)
+        appt.review_deadline_at = None
+
+
 def add_refund(db: Session, appt: Appointment, amount: float, reason: str, staff, cap: float) -> Optional[Refund]:
     """A pending refund (reception pays it out from the Refunds page). Never above `cap`, never for money that was
     not collected, and never a second time for the same reason."""

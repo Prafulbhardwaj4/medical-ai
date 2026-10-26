@@ -201,6 +201,24 @@ def queue_appointment_cancelled(db: Session, appt: Appointment, *, send_message=
         return False
 
 
+def queue_old_appointment_rescheduled(db: Session, appt: Appointment, *, created_by=None, commit=True) -> bool:
+    """Reception moved this (cancelled) booking to a NEW appointment. The OLD appointment gets template 7 with the
+    reschedule line and its unsent messages are cancelled. The new appointment gets its own confirmation, reminder
+    and token message from queue_appointment_messages()."""
+    try:
+        db.flush()
+        with db.begin_nested():
+            wa.cancel_unsent(db, appointment_id=appt.id, template_keys=TIMED_KEYS)
+            doctor = db.query(Doctor).filter(Doctor.id == appt.doctor_id).first() if appt.doctor_id else None
+            _add_cancelled_message(db, appt, appt.requested_time, doctor, True, created_by)
+        _finish(db, commit)
+        return True
+    except Exception:
+        logger.exception("Could not queue the old appointment rescheduled message")
+        _undo_partial(db, commit)
+        return False
+
+
 def queue_appointment_rescheduled(db: Session, appt: Appointment, old_time, *, old_doctor_id=None,
                                   created_by=None, commit=True) -> bool:
     """The appointment moved to a new time (and maybe a new doctor). The OLD appointment gets template 7 with

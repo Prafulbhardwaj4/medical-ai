@@ -155,7 +155,7 @@ def _ensure_slot_bookable(db: Session, slot: DoctorSlot, hospital_id: int) -> No
     if db.query(DoctorUnavailability).filter(
         DoctorUnavailability.doctor_id == slot.doctor_id, DoctorUnavailability.date == slot.slot_date
     ).first():
-        raise HTTPException(status_code=400, detail="The doctor is not available on that date. Please pick another day.")
+        raise HTTPException(status_code=400, detail="Doctor on leave on this day. Please pick another day.")
 
 
 def _clean_patient_name(raw) -> str:
@@ -267,7 +267,7 @@ def book_appointment(
         if db.query(DoctorUnavailability).filter(
             DoctorUnavailability.doctor_id == slot.doctor_id, DoctorUnavailability.date == slot.slot_date
         ).first():
-            raise HTTPException(status_code=400, detail="This doctor is unavailable on this date. Please pick another date or doctor.")
+            raise HTTPException(status_code=400, detail="Doctor on leave on this day. Please pick another day or doctor.")
 
         _held = db.query(Appointment).filter(
             Appointment.account_id == account.id,

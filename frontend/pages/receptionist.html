@@ -1068,9 +1068,6 @@
               you
               check anyone in — it's just a heads-up.
             </p>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:8px;cursor:pointer">
-              <input type="checkbox" id="leave-only-today"> Show only "Doctor on leave"
-            </label>
             <div id="expected-today-list">
               <p style="color:var(--slate-light);font-size:13px">Loading...</p>
             </div>
@@ -1121,9 +1118,6 @@
                 <option value="">All doctors</option>
               </select>
             </div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:8px;cursor:pointer">
-              <input type="checkbox" id="leave-only-upcoming"> Show only "Doctor on leave"
-            </label>
             <div id="upcoming-list">
               <p style="color:var(--slate-light);font-size:13px">Loading...</p>
             </div>
@@ -1147,14 +1141,14 @@
             <div class="card-header" style="flex-wrap:wrap;gap:10px">
               <h2>Pending Appointment Reviews <span class="badge badge-red" id="pending-review-count"
                   style="margin-left:8px">0</span></h2>
+              <select class="form-control" id="pending-review-doctor-filter" style="max-width:220px">
+                <option value="">All doctors</option>
+              </select>
             </div>
             <p style="font-size:13px;color:var(--slate-light);margin-bottom:12px">
               Paid bookings that need a human decision — usually because the doctor went unavailable after the patient
               booked.
             </p>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:8px;cursor:pointer">
-              <input type="checkbox" id="leave-only-pending"> Show only "Doctor on leave"
-            </label>
             <div id="pending-review-list">
               <p style="color:var(--slate-light);font-size:13px">Loading...</p>
             </div>
@@ -4770,15 +4764,10 @@
     async function loadUpcomingBookings() {
       const el = document.getElementById("upcoming-list");
       const doctorId = document.getElementById("upcoming-doctor-filter").value;
-      if (!doctorId) {
-        document.getElementById("upcoming-count").textContent = "0";
-        el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Select a particular doctor to see their upcoming bookings.</p>';
-        return;
-      }
       try {
-        const data = await api("GET", `/portal-appointments-staff/upcoming?doctor_id=${doctorId}`, null, false, true);
+        const path = doctorId ? `/portal-appointments-staff/upcoming?doctor_id=${encodeURIComponent(doctorId)}` : `/portal-appointments-staff/upcoming`;
+        const data = await api("GET", path, null, false, true);
         document.getElementById("upcoming-count").textContent = data.count;
-        data.appointments = leaveFilter(data.appointments, 'leave-only-upcoming');
         if (!data.appointments.length) { el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Nothing booked in the next 15 days.</p>'; return; }
         el.innerHTML = data.appointments.map(a => {
           const d = new Date(a.requested_time);
@@ -4953,7 +4942,6 @@
         const path = doctorId ? `/portal-appointments-staff/today?doctor_id=${doctorId}` : `/portal-appointments-staff/today`;
         const data = await api("GET", path);
         document.getElementById("expected-today-count").textContent = data.count;
-        data.appointments = leaveFilter(data.appointments, 'leave-only-today');
 
         if (!data.appointments.length) {
           el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No portal bookings for today.</p>`;
@@ -5255,10 +5243,11 @@
 
     async function loadPendingReview() {
       const el = document.getElementById("pending-review-list");
+      const doctorId = document.getElementById("pending-review-doctor-filter").value;
       try {
-        const data = await api("GET", "/portal-appointments-staff/pending-review");
+        const path = doctorId ? `/portal-appointments-staff/pending-review?doctor_id=${encodeURIComponent(doctorId)}` : "/portal-appointments-staff/pending-review";
+        const data = await api("GET", path);
         document.getElementById("pending-review-count").textContent = data.count;
-        data.appointments = leaveFilter(data.appointments, 'leave-only-pending');
 
         if (!data.appointments.length) {
           el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">Nothing awaiting review.</p>`;
@@ -5373,10 +5362,6 @@
     function lateMinutes(a) {
       return Math.max(1, Math.round((new Date(a.arrived_at) - new Date(a.requested_time)) / 60000));
     }
-    function leaveFilter(list, boxId) {
-      const box = document.getElementById(boxId);
-      return box && box.checked ? list.filter(x => x.doctor_on_leave) : list;
-    }
     function setApptMsg(el, text, ok) {
       if (!el) return;
       el.textContent = text || '';
@@ -5416,9 +5401,19 @@
       else if (act === 'resend') apptResendToken(a, btn);
     });
 
-    document.getElementById('leave-only-today').addEventListener('change', loadExpectedToday);
-    document.getElementById('leave-only-pending').addEventListener('change', loadPendingReview);
-    document.getElementById('leave-only-upcoming').addEventListener('change', loadUpcomingBookings);
+    document.getElementById('pending-review-doctor-filter').addEventListener('change', loadPendingReview);
+    (async function fillPendingReviewDoctorFilter() {
+      const sel = document.getElementById('pending-review-doctor-filter');
+      try {
+        const doctors = await api("GET", "/patients/hospital-doctors");
+        doctors.forEach(d => {
+          const opt = document.createElement('option');
+          opt.value = d.id;
+          opt.textContent = `${d.title} ${d.name}`;
+          sel.appendChild(opt);
+        });
+      } catch (e) { /* the filter just stays at "All doctors" if this fails */ }
+    })();
 
     // ---- Resend token number ----
     async function apptResendToken(a, btn) {

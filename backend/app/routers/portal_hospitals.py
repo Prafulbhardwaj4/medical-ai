@@ -133,7 +133,7 @@ def list_doctor_slots(request: Request, hospital_id: int, doctor_id: int, date: 
         DoctorUnavailability.doctor_id == doctor_id, DoctorUnavailability.date == slot_date
     ).first() is not None
     if is_unavailable:
-        return {"morning": [], "afternoon": [], "evening": [], "doctor_unavailable": True}
+        return {"morning": [], "afternoon": [], "evening": [], "doctor_unavailable": True, "message": "Doctor on leave on this day"}
 
     slots = db.query(DoctorSlot).filter(
         DoctorSlot.hospital_id == hospital_id, DoctorSlot.doctor_id == doctor_id,
