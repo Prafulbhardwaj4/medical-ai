@@ -16,6 +16,7 @@ from app.routers.portal_appointments import (
 )
 from app.routers.portal_appointments_staff import _park_stale_checkin
 from app.services import reception_appointments as ra
+from app.services import whatsapp_messages as wa
 from app.services.whatsapp_appointments import queue_appointment_cancelled, queue_appointment_rescheduled
 from app.utils.audit import stage_action
 from app.utils.auth import get_current_doctor
@@ -135,6 +136,10 @@ def reception_cancel_appointment(
     appt.reschedule_balance_due = None
     appt.mass_reschedule_notice = False
     _clear_review_state(db, appt)
+    if appt.payment_status != "paid":
+        # An unpaid booking stays on Pending Appointment Reviews for 24 hours, so reception can still give the
+        # patient another day. The same column holds the end of that window while the booking is cancelled.
+        appt.review_deadline_at = now_ist_naive() + timedelta(hours=24)
     queue_appointment_cancelled(db, appt, created_by=current_doctor.id, commit=False)  # unsent messages cancelled + "cancelled" message
 
     stage_action(
@@ -272,6 +277,92 @@ def reception_reschedule_appointment(
         "refund_amount": refund.amount if refund else 0,
         "balance_due": balance_due or 0,
         "arrived_at": appt.arrived_at.isoformat() if appt.arrived_at else None,
+    }
+
+
+class ReceptionRebookIn(BaseModel):
+    slot_id: int
+    doctor_id: Optional[int] = None
+    note: Optional[str] = None
+
+
+@router.post("/{appointment_id}/rebook-after-cancel")
+def reception_rebook_after_cancel(
+    appointment_id: int,
+    body: ReceptionRebookIn,
+    current_doctor=Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """A patient whose UNPAID booking reception just cancelled asks for another day. Allowed for 24 hours after the
+    cancellation. The booking becomes a normal unpaid booking at the new time, with its own confirmation, reminder
+    and token messages. Nothing was paid, so there is no money to move."""
+    _require_staff(current_doctor)
+    note = ra.clean_note(body.note)
+
+    appt = ra.lock_appointment(db, appointment_id, current_doctor.hospital_id)
+    now = now_ist_naive()
+    if (appt.status != AppointmentStatus.cancelled or appt.cancelled_by != "reception" or appt.payment_status == "paid"
+            or not appt.review_deadline_at or appt.review_deadline_at <= now):
+        raise HTTPException(status_code=400, detail="This appointment can no longer be rescheduled from here. Please make a new booking.")
+
+    new_slot = db.query(DoctorSlot).filter(DoctorSlot.id == body.slot_id).with_for_update().first()
+    if not new_slot or new_slot.hospital_id != appt.hospital_id:
+        raise HTTPException(status_code=404, detail="That time slot was not found")
+    if body.doctor_id and body.doctor_id != new_slot.doctor_id:
+        raise HTTPException(status_code=400, detail="That time slot does not belong to the chosen doctor")
+    new_doctor = db.query(Doctor).filter(
+        Doctor.id == new_slot.doctor_id, Doctor.hospital_id == appt.hospital_id, Doctor.is_active == True  # noqa: E712
+    ).first()
+    if not new_doctor:
+        raise HTTPException(status_code=400, detail="That doctor is not available in this hospital")
+    if not db.query(Hospital.id).filter(Hospital.id == appt.hospital_id, Hospital.is_active == True).first():  # noqa: E712
+        raise HTTPException(status_code=400, detail="This hospital is not active")
+
+    _ensure_slot_bookable(db, new_slot, appt.hospital_id)  # same hospital, not over, doctor not on leave that day
+    _release_abandoned_holds(db, new_slot)
+    if new_slot.booked_count >= new_slot.capacity:
+        raise HTTPException(status_code=400, detail="That time slot is full. Please pick another.")
+    if _estimated_slot_datetime(new_slot, new_slot.booked_count + 1) <= now:
+        raise HTTPException(status_code=400, detail="That time has already passed. Please pick a later slot.")
+
+    account = db.query(PatientAccount).filter(PatientAccount.id == appt.account_id).first()
+    try:
+        _check_no_duplicate_active_booking(db, account, appt.profile_link_id, appt.new_patient_name, new_slot.doctor_id)
+    except HTTPException:
+        raise HTTPException(status_code=400, detail="This patient already has an active appointment with that doctor.")
+
+    old_time, old_doctor_id = appt.requested_time, appt.doctor_id
+    doctor_changed = new_slot.doctor_id != appt.doctor_id
+
+    ra.take_slot_place(db, new_slot)
+    new_time = _estimated_slot_datetime(new_slot, new_slot.booked_count)
+    appt.slot_id = new_slot.id
+    appt.doctor_id = new_slot.doctor_id
+    appt.requested_time = new_time
+    appt.status = AppointmentStatus.booked
+    appt.cancelled_by = None
+    appt.review_deadline_at = None
+    appt.arrived_at = None
+    if doctor_changed:
+        appt.fee_amount = None  # the new doctor's fee is picked up when the payment is collected
+
+    # The "cancelled" message, if it has not gone out yet, is replaced by the "rescheduled" one.
+    wa.cancel_unsent(db, appointment_id=appt.id, template_keys=[wa.T_APPT_CANCELLED])
+    queue_appointment_rescheduled(db, appt, old_time, old_doctor_id=old_doctor_id, created_by=current_doctor.id, commit=False)
+
+    stage_action(
+        db, current_doctor, action="appointment_rebooked_after_cancel", target_type="appointment", target_id=appt.id,
+        target_label=ra.patient_name(appt)[:120],
+        details=(f"cancelled booking of {old_time.isoformat()} ({_doctor_label(db, old_doctor_id)}) moved to "
+                 f"{new_time.isoformat()} ({_doctor_label(db, appt.doctor_id)}), still unpaid"
+                 + (f". Note: {note}" if note else ""))[:1500],
+    )
+    _commit_or_fail(db, "reschedule this appointment")
+    return {
+        "message": "Appointment rescheduled. It is back in Pending Appointment Reviews until payment is collected.",
+        "requested_time": new_time.isoformat(),
+        "doctor_id": appt.doctor_id,
+        "doctor_name": _doctor_label(db, appt.doctor_id),
     }
 
 

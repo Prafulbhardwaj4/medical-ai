@@ -26,6 +26,26 @@ class AttendanceMark(BaseModel):
     doctor_ids: Optional[list[int]] = None  # nurse/assistant only — doctors/rooms being covered
     location: Optional[str] = None  # doctor only, status == "present" — "in_cabin" / "on_rounds"
 
+LEAVE_FIRST_MESSAGE = "Your leave is marked for today. Remove your leave first, then mark yourself present."
+
+
+def _on_leave_today(db: Session, doctor_id: int) -> bool:
+    from app.models.doctor_availability import DoctorUnavailability
+    return db.query(DoctorUnavailability.id).filter(
+        DoctorUnavailability.doctor_id == doctor_id,
+        DoctorUnavailability.date == now_ist_naive().date(),
+    ).first() is not None
+
+
+@router.get("/attendance/leave-today")
+def my_leave_today(
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor),
+):
+    on_leave = current_doctor.role.value in ("doctor", "sub_admin") and _on_leave_today(db, current_doctor.id)
+    return {"on_leave": on_leave, "message": LEAVE_FIRST_MESSAGE if on_leave else None}
+
+
 def get_today_attendance(db: Session, doctor_id: int):
     record = db.query(AttendanceRecord).filter(
         AttendanceRecord.doctor_id == doctor_id,
@@ -114,6 +134,9 @@ def mark_attendance(
     status = payload.status.strip().lower()
     if status not in VALID_STATUSES:
         raise HTTPException(status_code=400, detail=f"status must be one of {', '.join(VALID_STATUSES)}")
+
+    if status == "present" and current_doctor.role.value in ("doctor", "sub_admin") and _on_leave_today(db, current_doctor.id):
+        raise HTTPException(status_code=400, detail=LEAVE_FIRST_MESSAGE)
 
     location = (payload.location or "").strip().lower() or None
     if location and location not in VALID_LOCATIONS:

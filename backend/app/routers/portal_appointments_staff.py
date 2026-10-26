@@ -862,6 +862,7 @@ def list_upcoming_bookings(
     q = db.query(Appointment).filter(
         Appointment.hospital_id == current_doctor.hospital_id,
         Appointment.status.in_([AppointmentStatus.booked, AppointmentStatus.confirmed]),
+        Appointment.payment_status == "paid",  # unpaid bookings are handled on the Pending Appointment Reviews card
         Appointment.requested_time >= today_start + timedelta(days=1),  # today itself stays on the Expected Today card
         Appointment.requested_time < window_end,
     )
@@ -905,6 +906,7 @@ def list_upcoming_bookings(
 
 @router.get("/pending-review")
 def list_pending_review(
+    doctor_id: int = Query(None),
     current_doctor=Depends(get_current_doctor),
     db: Session = Depends(get_db),
 ):
@@ -924,16 +926,32 @@ def list_pending_review(
     _expire_stale_pending_reviews(db, current_doctor.hospital_id)
     _expire_stale_awaiting_payment(db, current_doctor.hospital_id)
 
-    needs_review = db.query(Appointment).filter(
+    needs_q = db.query(Appointment).filter(
         Appointment.hospital_id == current_doctor.hospital_id,
         Appointment.status == AppointmentStatus.pending_review,
-    ).order_by(Appointment.review_deadline_at).all()
-
-    awaiting_payment = db.query(Appointment).filter(
+    )
+    awaiting_q = db.query(Appointment).filter(
         Appointment.hospital_id == current_doctor.hospital_id,
         Appointment.status == AppointmentStatus.booked,
         Appointment.payment_status == "unpaid",
-    ).order_by(Appointment.requested_time).all()
+    )
+    # Unpaid bookings cancelled by reception stay visible for 24 hours (review_deadline_at holds that moment),
+    # so reception can still offer the patient another day.
+    offers_q = db.query(Appointment).filter(
+        Appointment.hospital_id == current_doctor.hospital_id,
+        Appointment.status == AppointmentStatus.cancelled,
+        Appointment.cancelled_by == "reception",
+        Appointment.payment_status == "unpaid",
+        Appointment.review_deadline_at.isnot(None),
+        Appointment.review_deadline_at > now_ist_naive(),
+    )
+    if doctor_id:
+        needs_q = needs_q.filter(Appointment.doctor_id == doctor_id)
+        awaiting_q = awaiting_q.filter(Appointment.doctor_id == doctor_id)
+        offers_q = offers_q.filter(Appointment.doctor_id == doctor_id)
+    needs_review = needs_q.order_by(Appointment.review_deadline_at).all()
+    awaiting_payment = awaiting_q.order_by(Appointment.requested_time).all()
+    cancelled_offers = offers_q.order_by(Appointment.review_deadline_at).all()
 
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
 
@@ -987,6 +1005,28 @@ def list_pending_review(
             "requested_time": a.requested_time.isoformat(),
             "fee_amount": _resolve_fee(a, doctor),
             "review_deadline_at": None,
+            "followup_sent": False,
+        })
+    for a in cancelled_offers:
+        patient_name = a.new_patient_name
+        if a.profile_link_id and a.profile_link and a.profile_link.patient:
+            patient_name = a.profile_link.patient.name
+        doctor = db.query(Doctor).filter(Doctor.id == a.doctor_id).first() if a.doctor_id else None
+        result.append({
+            "id": a.id,
+            "reason": "cancelled_offer",
+            "status": "cancelled",
+            "doctor_on_leave": _doctor_on_leave(db, a),
+            "hospital_id": a.hospital_id,
+            "arrived_at": None,
+            "late_unresolved": False,
+            "patient_name": patient_name,
+            "doctor_id": a.doctor_id,
+            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
+            "requested_time": a.requested_time.isoformat(),
+            "fee_amount": _resolve_fee(a, doctor),
+            "review_deadline_at": None,
+            "offer_expires_at": a.review_deadline_at.isoformat(),
             "followup_sent": False,
         })
     return {"count": len(result), "appointments": result}
