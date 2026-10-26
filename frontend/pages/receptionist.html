@@ -2187,6 +2187,7 @@
       showRecSection(__startTab === 'attendance' ? 'home' : __startTab);
     }
     checkEmergencyWardAvailable();
+    if (new URLSearchParams(location.search).get('dayend') === '1') openDayEndModal();
     if (__startTab === 'portal') {
       loadPendingReview();
       loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter();

@@ -30,19 +30,25 @@ const RECEPTIONIST_NAV_ITEMS = {
     href: "receptionist.html?tab=patients", label: "Patients",
     icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0",
   },
+  dayend: {
+    href: "receptionist.html?dayend=1", label: "Day-End Summary",
+    icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
+  },
   refunds: {
     href: "refunds.html", label: "Refunds",
     icon: "M3 10h11a5 5 0 010 10H9m-6-10l4-4m-4 4l4 4",
   },
 };
 
-const RECEPTIONIST_SIDEBAR_KEYS = ["home", "appointments", "admissions", "availability", "patients", "refunds"];
+const RECEPTIONIST_SIDEBAR_KEYS = ["home", "appointments", "admissions", "availability", "patients"];
+const RECEPTIONIST_QUICK_KEYS = ["dayend", "refunds"];
 const RECEPTIONIST_BOTTOM_KEYS = ["home", "appointments", "admissions", "attendance"];
 // "Appointments" is a bottom tab, so it is not repeated in More.
 const RECEPTIONIST_MENU_KEYS = ["patients", "availability", "refunds"];
 
-function _recSvg(path) {
-  return `<svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="${path}"/></svg>`;
+function _recSvg(path, sized) {
+  const size = sized === false ? "" : ' width="20" height="20"';
+  return `<svg${size} fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="${path}"/></svg>`;
 }
 
 function renderReceptionistNav(activeKey) {
@@ -51,7 +57,12 @@ function renderReceptionistNav(activeKey) {
     let html = '<div class="sidebar-section-label">Navigation</div>';
     RECEPTIONIST_SIDEBAR_KEYS.forEach((key) => {
       const it = RECEPTIONIST_NAV_ITEMS[key];
-      html += `<a class="nav-item${key === activeKey ? " active" : ""}" href="${it.href}">${_recSvg(it.icon)}${it.label}</a>`;
+      html += `<a class="nav-item${key === activeKey ? " active" : ""}" href="${it.href}">${_recSvg(it.icon, false)}${it.label}</a>`;
+    });
+    html += '<div class="nav-divider"></div><div class="sidebar-section-label">Quick Actions</div>';
+    RECEPTIONIST_QUICK_KEYS.forEach((key) => {
+      const it = RECEPTIONIST_NAV_ITEMS[key];
+      html += `<a class="nav-item${key === activeKey ? " active" : ""}" href="${it.href}">${_recSvg(it.icon, false)}${it.label}</a>`;
     });
     sidebarEl.innerHTML = html;
     sidebarEl.style.display = "";
