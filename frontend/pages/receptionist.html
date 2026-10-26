@@ -1721,8 +1721,8 @@
   <div class="modal-overlay" id="modal-appt-resched">
     <div class="modal" style="max-width:520px;width:92vw">
       <div class="modal-header">
-        <h2>Reschedule appointment</h2>
-        <button type="button" class="modal-close" onclick="closeModal('modal-appt-resched')">&times;</button>
+        <h2 id="ar-title">Reschedule appointment</h2>
+        <button type="button" class="modal-close" aria-label="Close" onclick="closeApptReschedule()">&times;</button>
       </div>
       <p id="ar-info" style="font-size:13px;color:var(--slate);margin-bottom:8px"></p>
       <p id="ar-late" style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:8px"></p>
@@ -1744,7 +1744,25 @@
       </div>
       <p class="err-msg" id="ar-error" style="display:none"></p>
       <button type="button" class="btn btn-primary" style="width:100%" id="ar-confirm" onclick="confirmApptReschedule()" disabled>Reschedule</button>
-      <button type="button" class="btn btn-outline" style="width:100%;margin-top:8px" onclick="closeModal('modal-appt-resched')">Close</button>
+      <button type="button" class="btn btn-outline" style="width:100%;margin-top:8px" id="ar-close" onclick="closeApptReschedule()">Close</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-pend-cancel">
+    <div class="modal" style="max-width:440px;width:92vw">
+      <div class="modal-header">
+        <h2>Cancel this appointment?</h2>
+      </div>
+      <p style="font-size:14px;margin-bottom:10px">Do you want to cancel this appointment?</p>
+      <div style="font-size:14px;line-height:1.7;margin-bottom:12px">
+        <div><strong>Patient:</strong> <span id="pc-patient"></span></div>
+        <div><strong>Doctor:</strong> <span id="pc-doctor"></span></div>
+        <div><strong>Date and time:</strong> <span id="pc-when"></span></div>
+      </div>
+      <p id="pc-refund" style="display:none;font-size:14px;font-weight:600;margin-bottom:12px"></p>
+      <p class="err-msg" id="pc-error" style="display:none"></p>
+      <button type="button" class="btn btn-danger" style="width:100%" id="pc-yes" onclick="confirmPendingCancel()" disabled>Yes, cancel</button>
+      <button type="button" class="btn btn-outline" style="width:100%;margin-top:8px" id="pc-no" onclick="closePendingCancel()">No</button>
     </div>
   </div>
 
@@ -5264,11 +5282,18 @@
                   ${leaveBadge(a)}
                 </div>
               </div>
-              ${a.reason === 'awaiting_payment'
+              ${a.reason === 'cancelled_offer'
+            ? `<span class="badge badge-red">Cancelled</span>`
+            : a.reason === 'awaiting_payment'
             ? `<span class="badge badge-amber">Unpaid</span>`
             : `<span class="badge ${a.followup_sent ? 'badge-red' : 'badge-amber'}">${a.followup_sent ? 'Overdue' : 'Awaiting review'}</span>`}
             </div>
-            ${a.reason === 'awaiting_payment' ? `
+            ${a.reason === 'cancelled_offer' ? `
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
+              ${apptActionsHtml(a, 'pending', true)}
+              <span style="font-size:12px;color:var(--slate-light)">You can still give this patient another day until ${sanitize(fmtApptWhen(a.offer_expires_at))}.</span>
+            </div>
+            ` : a.reason === 'awaiting_payment' ? `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
               ${!a.arrived_at
               ? `<button class="btn btn-primary btn-sm" onclick='markUnpaidArrived(${jsArg(a)}, this)'>Patient arrived</button>`
@@ -5347,7 +5372,8 @@
     const apptRows = {};
     let apptDoctorsCache = null;
     const apptCancelState = { a: null, busy: false };
-    const apptReschedState = { a: null, late: false, slotId: null, busy: false, token: 0 };
+    const pendCancelState = { a: null, busy: false };
+    const apptReschedState = { a: null, late: false, offer: false, slotId: null, busy: false, token: 0 };
 
     // Appointment times are IST wall-clock strings; they are shown exactly as stored, never shifted.
     function fmtApptWhen(iso) {
@@ -5378,6 +5404,13 @@
 
     // Buttons for one appointment row. Rows are kept in apptRows and found again by data- attributes (no inline handlers).
     function apptActionsHtml(a, list, withMsg) {
+      if (list === 'pending' && a.reason === 'cancelled_offer') {
+        // Unpaid booking that reception cancelled: for 24 hours it keeps ONE button, "Reschedule".
+        const offerId = Number(a.id);
+        apptRows[list + ':' + offerId] = a;
+        return `<button type="button" class="btn btn-primary btn-sm" data-appt-act="offer-reschedule" data-appt-id="${offerId}" data-list="${list}">Reschedule</button>`
+          + (withMsg ? `<span class="appt-msg" data-appt-msg="${offerId}" data-list="${list}" style="flex-basis:100%;font-size:12px"></span>` : '');
+      }
       if (a.status === 'completed' || a.status === 'cancelled') return '';
       const id = Number(a.id);
       apptRows[list + ':' + id] = a;
@@ -5385,6 +5418,11 @@
       const attr = act => `data-appt-act="${act}" data-appt-id="${id}" data-list="${list}"`;
       const resend = (list === 'today' || (list === 'pending' && a.reason === 'awaiting_payment'))
         ? `<button type="button" class="btn btn-outline btn-sm" ${attr('resend')}>Resend token number</button>` : '';
+      if (list === 'pending' && a.reason === 'awaiting_payment') {
+        // Unpaid booking: one red button. The reschedule step opens after the cancel is confirmed.
+        return `${resend}<button type="button" class="btn btn-danger btn-sm" ${attr('cancel-pending')}>Cancel appointment</button>`
+          + (withMsg ? `<span class="appt-msg" data-appt-msg="${id}" data-list="${list}" style="flex-basis:100%;font-size:12px"></span>` : '');
+      }
       return `${resend}<button type="button" class="btn ${late ? 'btn-primary' : 'btn-outline'} btn-sm" ${attr('reschedule')}>Reschedule</button>`
         + `<button type="button" class="btn btn-danger btn-sm" ${attr('cancel')}>Cancel</button>`
         + (withMsg ? `<span class="appt-msg" data-appt-msg="${id}" data-list="${list}" style="flex-basis:100%;font-size:12px"></span>` : '');
@@ -5397,6 +5435,8 @@
       if (!a) return;
       const act = btn.dataset.apptAct;
       if (act === 'cancel') openApptCancel(a);
+      else if (act === 'cancel-pending') openPendingCancel(a);
+      else if (act === 'offer-reschedule') openApptReschedule(a, false, true);
       else if (act === 'reschedule') openApptReschedule(a, btn.dataset.list === 'pending' && !!a.late_unresolved);
       else if (act === 'resend') apptResendToken(a, btn);
     });
@@ -5506,12 +5546,84 @@
       }
     }
 
+    // ---- Pending Appointment Reviews: red "Cancel appointment", then the reschedule modal ----
+    async function openPendingCancel(a) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
+      const st = pendCancelState;
+      st.a = a;
+      st.busy = false;
+      showApptError('pc-error', '');
+      const yes = document.getElementById('pc-yes');
+      yes.disabled = true;
+      document.getElementById('pc-patient').textContent = a.patient_name || 'Patient';
+      document.getElementById('pc-doctor').textContent = a.doctor_name || '';
+      document.getElementById('pc-when').textContent = fmtApptWhen(a.requested_time);
+      const refundEl = document.getElementById('pc-refund');
+      refundEl.style.display = 'none';
+      refundEl.textContent = '';
+      openModal('modal-pend-cancel');
+      try {
+        const p = await api("GET", `/portal-appointments-staff/${a.id}/cancel-preview`);
+        if (st.a !== a) return;
+        if (!p.can_cancel) {
+          showApptError('pc-error', p.blocked_reason || 'This appointment cannot be cancelled.');
+          return;
+        }
+        const amt = Number(p.refund_amount || 0);
+        if (amt > 0) {
+          refundEl.textContent = `Rs.${amt.toFixed(2)} was paid. It will be refunded in full by ${p.refund_method || 'cash'}. The refund waits on the Refunds page.`;
+          refundEl.style.display = 'block';
+        }
+        yes.disabled = false;
+      } catch (e) {
+        if (st.a === a) showApptError('pc-error', e.message);
+      }
+    }
+
+    function closePendingCancel() {
+      if (pendCancelState.busy) return;
+      pendCancelState.a = null;
+      closeModal('modal-pend-cancel');
+    }
+
+    async function confirmPendingCancel() {
+      const st = pendCancelState;
+      const a = st.a;
+      if (!a || st.busy) return;
+      const yes = document.getElementById('pc-yes');
+      st.busy = true;
+      yes.disabled = true;
+      showApptError('pc-error', '');
+      try {
+        const res = await api("POST", `/portal-appointments-staff/${a.id}/cancel`, {
+          expected_requested_time: a.requested_time,
+        });
+        st.a = null;
+        st.busy = false;
+        closeModal('modal-pend-cancel');
+        toast(res.message, "success");
+        if (res.offer_reschedule) openApptReschedule(a, false, true);
+        refreshApptLists();
+      } catch (e) {
+        showApptError('pc-error', e.message);
+        st.busy = false;
+        yes.disabled = false;
+        refreshApptLists();
+      }
+    }
+
     // ---- Reschedule ----
-    async function openApptReschedule(a, late) {
+    // offer = true: the reschedule step after cancelling an UNPAID booking (title with an X, saves a new unpaid booking).
+    async function openApptReschedule(a, late, offer) {
       if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       const st = apptReschedState;
       st.a = a;
       st.late = !!late;
+      st.offer = !!offer;
+      document.getElementById('ar-title').textContent = st.offer ? 'Reschedule this appointment for another day?' : 'Reschedule appointment';
+      document.getElementById('ar-close').style.display = st.offer ? 'none' : '';
+
+      // The X (or Close) closes the window. After a cancel it also tells the server the appointment stays cancelled.
       st.slotId = null;
       st.busy = false;
       showApptError('ar-error', '');
@@ -5549,6 +5661,20 @@
       sel.dispatchEvent(new Event('change'));  // refreshes the dropdown label and loads the slots
     }
 
+    async function closeApptReschedule() {
+      const st = apptReschedState;
+      if (st.busy) return;
+      const a = st.a;
+      const wasOffer = st.offer;
+      st.a = null;
+      closeModal('modal-appt-resched');
+      if (!a || !wasOffer) return;
+      try {
+        await api("POST", `/portal-appointments-staff/${a.id}/cancel-keep`);
+      } catch (e) { /* the card stays with its Reschedule button */ }
+      refreshApptLists();
+    }
+
     async function loadApptSlots() {
       const st = apptReschedState;
       const a = st.a;
@@ -5560,7 +5686,7 @@
       st.slotId = null;
       document.getElementById('ar-confirm').disabled = true;
       showApptError('ar-error', '');
-      if (doctorId && a.doctor_id && Number(doctorId) !== Number(a.doctor_id)) {
+      if (!st.offer && doctorId && a.doctor_id && Number(doctorId) !== Number(a.doctor_id)) {
         hint.textContent = "A different doctor may have a different fee. If it is higher, the difference is due at payment. If it is lower, the difference is refunded.";
         hint.style.display = 'block';
       } else {
@@ -5604,7 +5730,8 @@
       btn.disabled = true;
       showApptError('ar-error', '');
       try {
-        const res = await api("POST", `/portal-appointments-staff/${a.id}/reschedule`, {
+        const path = st.offer ? 'rebook-after-cancel' : 'reschedule';
+        const res = await api("POST", `/portal-appointments-staff/${a.id}/${path}`, {
           slot_id: st.slotId,
           doctor_id: Number(document.getElementById('ar-doctor').value) || null,
           note: document.getElementById('ar-note').value.trim() || null,
