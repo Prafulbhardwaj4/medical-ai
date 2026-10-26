@@ -2187,7 +2187,13 @@
       showRecSection(__startTab === 'attendance' ? 'home' : __startTab);
     }
     checkEmergencyWardAvailable();
-    if (new URLSearchParams(location.search).get('dayend') === '1') openDayEndModal();
+    {
+      const __qp = new URLSearchParams(location.search);
+      if (__qp.get('dayend') === '1') openDayEndModal();
+      if (__qp.get('bills') === '1') openBillsModal();
+      if (__qp.get('notifs') === '1') toggleNotifPanel();
+      if (__qp.get('tutorial') === '1') replayReceptionistTutorial();
+    }
     if (__startTab === 'portal') {
       loadPendingReview();
       loadUpcomingBookings(); loadSlotPreviewDoctorFilter(); loadUpcomingDoctorFilter();
