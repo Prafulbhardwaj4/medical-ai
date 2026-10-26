@@ -12,11 +12,10 @@ from app.models.doctor import Doctor
 from app.models.hospital import Hospital
 from app.schemas.portal import (
     BookAppointmentIn, AppointmentOut, NoShowReasonIn, RequestRescheduleIn,
-    FamilyBookingRequestIn, FamilyBookingConfirmIn, ReportIssueIn,
+    ReportIssueIn,
 )
 from app.utils.portal_auth import get_current_patient_account
 from app.utils.timezone import now_ist_naive
-from app.utils.phone import normalize_phone
 from app.services.whatsapp_appointments import (
     queue_appointment_messages, queue_appointment_cancelled, queue_appointment_rescheduled, release_token_message,
 )
@@ -159,6 +158,21 @@ def _ensure_slot_bookable(db: Session, slot: DoctorSlot, hospital_id: int) -> No
         raise HTTPException(status_code=400, detail="The doctor is not available on that date. Please pick another day.")
 
 
+def _clean_patient_name(raw) -> str:
+    """A new patient's name typed on the portal: single spaces, 2 to 60 characters, letters and . ' - only."""
+    import re
+    import unicodedata
+    name = re.sub(r"\s+", " ", raw or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Please enter the patient's name")
+    if len(name) < 2 or len(name) > 60:
+        raise HTTPException(status_code=400, detail="The patient's name must be 2 to 60 characters")
+    if not all(unicodedata.category(ch)[0] in ("L", "M") or ch in " .'-" for ch in name) \
+            or not any(unicodedata.category(ch)[0] == "L" for ch in name):
+        raise HTTPException(status_code=400, detail="The name can only have letters, spaces, dots, hyphens and apostrophes")
+    return name
+
+
 ACTIVE_APPOINTMENT_STATUSES = (AppointmentStatus.booked, AppointmentStatus.pending_review, AppointmentStatus.confirmed)
 
 
@@ -198,8 +212,9 @@ def book_appointment(
         if not _link.patient or _link.patient.hospital_id != body.hospital_id:
             raise HTTPException(status_code=400, detail="This patient is not registered at the selected hospital")
     else:
-        if not (body.new_patient_name or "").strip():
-            raise HTTPException(status_code=400, detail="Please enter the patient's name — this hospital hasn't seen this account before")
+        body.new_patient_name = _clean_patient_name(body.new_patient_name)
+        # A new patient is added by name only; the hospital collects the rest at arrival.
+        body.new_patient_gender = body.new_patient_age = body.new_patient_blood_group = None
 
     hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id, Hospital.is_active == True).first()  # noqa: E712
     if not hospital:
@@ -232,6 +247,11 @@ def book_appointment(
 
         if body.doctor_id and body.doctor_id != slot.doctor_id:
             raise HTTPException(status_code=400, detail="Selected doctor does not match this slot")
+
+        if not db.query(Doctor.id).filter(
+            Doctor.id == slot.doctor_id, Doctor.hospital_id == body.hospital_id, Doctor.is_active == True  # noqa: E712
+        ).first():
+            raise HTTPException(status_code=400, detail="This doctor is not available for booking")
 
         _slot_start = datetime.combine(slot.slot_date, datetime.strptime(slot.slot_time, "%H:%M").time())
         _slot_end = _slot_start + timedelta(minutes=slot.window_minutes or 0)
@@ -588,185 +608,6 @@ def request_reschedule(
         link_type="portal_appointment", link_id=appt.id,
     ))
 
-    db.commit()
-    db.refresh(appt)
-    return _to_out(appt, db)
-
-
-@router.post("/family-booking-request")
-@limiter.limit("10/hour")
-def request_family_booking(
-    request: Request,
-    body: FamilyBookingRequestIn,
-    account: PatientAccount = Depends(get_current_patient_account),
-    db: Session = Depends(get_db),
-):
-    """Family member has their own separate account — no duplicate profile
-    gets created. Instead of an (undeliverable, no-WhatsApp) OTP, the target
-    account sees and confirms this the next time they open their own
-    portal, same pattern as the pending-confirmation profile flow."""
-    from app.models.portal import CrossBookingRequest
-
-    phone = normalize_phone(body.other_account_phone)
-    if phone == account.phone:
-        raise HTTPException(status_code=400, detail="That's your own account — book under one of your existing profiles instead")
-
-    if body.type != "scheduled":
-        raise HTTPException(status_code=400, detail="Only scheduled appointments can be requested right now")
-
-    # Same reply whether or not the number has an account, so this can't be used
-    # to find out who is registered.
-    _sent = {"message": "Sent — if that number has a portal account, they'll see this the next time they open their portal"}
-    target = db.query(PatientAccount).filter(PatientAccount.phone == phone).first()
-    if not target:
-        return _sent
-    from app.models.portal import CrossBookingRequest as _CBR
-    if db.query(_CBR).filter(
-        _CBR.requesting_account_id == account.id, _CBR.target_account_id == target.id, _CBR.status == "pending"
-    ).first():
-        return _sent
-
-    hospital = db.query(Hospital).filter(Hospital.id == body.hospital_id, Hospital.is_active == True).first()  # noqa: E712
-    if not hospital:
-        raise HTTPException(status_code=404, detail="Hospital not found")
-
-    req = CrossBookingRequest(
-        requesting_account_id=account.id,
-        target_account_id=target.id,
-        hospital_id=body.hospital_id,
-        doctor_id=body.doctor_id,
-        slot_id=body.slot_id,
-        type=body.type,
-        notes=body.notes,
-        address=body.custom_address,
-        status="pending",
-    )
-    db.add(req)
-    db.commit()
-    return {"message": "Sent — they'll see this the next time they open their portal"}
-
-
-@router.get("/family-booking-requests")
-def list_family_booking_requests(
-    account: PatientAccount = Depends(get_current_patient_account),
-    db: Session = Depends(get_db),
-):
-    """Requests where I'M the target — someone wants to book an appointment
-    for me using my own account, and I need to confirm it's really me."""
-    from app.models.portal import CrossBookingRequest
-
-    rows = db.query(CrossBookingRequest).filter(
-        CrossBookingRequest.target_account_id == account.id,
-        CrossBookingRequest.status == "pending",
-    ).order_by(CrossBookingRequest.created_at.desc()).all()
-
-    result = []
-    for r in rows:
-        requester = db.query(PatientAccount).filter(PatientAccount.id == r.requesting_account_id).first()
-        hospital = db.query(Hospital).filter(Hospital.id == r.hospital_id).first()
-        doctor = db.query(Doctor).filter(Doctor.id == r.doctor_id).first() if r.doctor_id else None
-        result.append({
-            "id": r.id,
-            "requester_phone": requester.phone if requester else "Unknown",
-            "hospital_name": hospital.name if hospital else "Unknown hospital",
-            "doctor_name": f"{doctor.title} {doctor.name}" if doctor else None,
-            "type": r.type,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        })
-    return result
-
-
-@router.post("/family-booking-requests/{request_id}/reject")
-def reject_family_booking_request(
-    request_id: int,
-    account: PatientAccount = Depends(get_current_patient_account),
-    db: Session = Depends(get_db),
-):
-    from app.models.portal import CrossBookingRequest
-
-    req = db.query(CrossBookingRequest).filter(
-        CrossBookingRequest.id == request_id, CrossBookingRequest.target_account_id == account.id
-    ).first()
-    if not req or req.status != "pending":
-        raise HTTPException(status_code=404, detail="Request not found")
-    req.status = "rejected"
-    db.commit()
-    return {"message": "Rejected"}
-
-
-@router.post("/family-booking-requests/{request_id}/confirm", response_model=AppointmentOut)
-def confirm_family_booking_request(
-    request_id: int,
-    body: FamilyBookingConfirmIn,
-    account: PatientAccount = Depends(get_current_patient_account),
-    db: Session = Depends(get_db),
-):
-    """Confirming links the booking to MY existing account/profile instead
-    of a new duplicate profile. Slot capacity and doctor availability are
-    checked here, not at request time, so a pending request never holds a
-    slot hostage while waiting on the other person."""
-    from app.models.portal import CrossBookingRequest, PatientProfileLink
-
-    req = db.query(CrossBookingRequest).filter(
-        CrossBookingRequest.id == request_id, CrossBookingRequest.target_account_id == account.id
-    ).first()
-    if not req or req.status != "pending":
-        raise HTTPException(status_code=404, detail="Request not found")
-
-    self_link = next(
-        (p for p in account.profiles if p.relation == "self" and p.patient and p.patient.hospital_id == req.hospital_id),
-        None,
-    )
-    profile_link_id = self_link.id if self_link else None
-    if not profile_link_id and not (body.new_patient_name or "").strip():
-        raise HTTPException(status_code=400, detail="Please enter your name — this hospital hasn't seen your account before")
-
-    doctor_id = req.doctor_id
-    requested_time = now_ist_naive()
-    slot_id = None
-
-    if req.type == "scheduled":
-        if not req.slot_id:
-            raise HTTPException(status_code=400, detail="No slot was specified on this request")
-        slot = db.query(DoctorSlot).filter(DoctorSlot.id == req.slot_id, DoctorSlot.hospital_id == req.hospital_id).with_for_update().first()
-        if not slot:
-            raise HTTPException(status_code=404, detail="That slot no longer exists")
-        _release_abandoned_holds(db, slot)
-        if slot.booked_count >= slot.capacity:
-            raise HTTPException(status_code=400, detail="This slot has since filled up. Ask them to pick another.")
-        from app.models.doctor_availability import DoctorUnavailability
-        if db.query(DoctorUnavailability).filter(
-            DoctorUnavailability.doctor_id == slot.doctor_id, DoctorUnavailability.date == slot.slot_date
-        ).first():
-            raise HTTPException(status_code=400, detail="This doctor is unavailable on this date now. Ask them to pick another.")
-        _check_no_duplicate_active_booking(db, account, profile_link_id, body.new_patient_name, slot.doctor_id)
-        slot.booked_count += 1
-        doctor_id = slot.doctor_id
-        requested_time = _estimated_slot_datetime(slot, slot.booked_count)
-        slot_id = slot.id
-    elif req.doctor_id:
-        _check_no_duplicate_active_booking(db, account, profile_link_id, body.new_patient_name, req.doctor_id)
-
-    appt = Appointment(
-        account_id=account.id,
-        profile_link_id=profile_link_id,
-        hospital_id=req.hospital_id,
-        doctor_id=doctor_id,
-        slot_id=slot_id,
-        type=AppointmentType(req.type),
-        requested_time=requested_time,
-        notes=req.notes,
-        status=AppointmentStatus.booked,
-        payment_status="unpaid",
-        address=req.address,
-        new_patient_name=(body.new_patient_name or "").strip() or None if not profile_link_id else None,
-        new_patient_gender=body.new_patient_gender if not profile_link_id else None,
-        new_patient_age=body.new_patient_age if not profile_link_id else None,
-        requested_by_account_id=req.requesting_account_id,
-    )
-    db.add(appt)
-    req.status = "confirmed"
-    queue_appointment_messages(db, appt, commit=False)  # WhatsApp: confirmation, 24-hour reminder, token message
     db.commit()
     db.refresh(appt)
     return _to_out(appt, db)

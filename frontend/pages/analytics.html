@@ -1708,7 +1708,8 @@
         const ADM_DOC_LABEL = {
             prescription: "📋 Prescription",
             test_report: "🧪 Test Report",
-            invoice: "🧾 Invoice"
+            invoice: "🧾 Invoice",
+            token_slip: "🎫 Token Slip"
         };
         function admParseDocDate(d) {
             return new Date(d.date && /[+-]\d\d:\d\d$|Z$/.test(d.date) ? d.date : d.date + "+05:30");
@@ -1720,7 +1721,7 @@
             document.getElementById('modal-adm-documents').classList.add('open');
             try {
                 const docs = await api("GET", `/patients/${patientId}/documents`);
-                const shown = docs.filter(d => d.type !== 'token_slip')
+                const shown = docs.slice()
                     .sort((a, b) => admParseDocDate(b) - admParseDocDate(a));
                 if (!shown.length) {
                     list.innerHTML = '<p style="color:var(--slate-light);padding:12px 0">No documents yet for this patient.</p>';
@@ -1744,12 +1745,42 @@
                 list.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
             }
         }
+        async function openAdminSlip(checkinId) {
+            try {
+                const t = await api("GET", `/patients/checkins/${encodeURIComponent(checkinId)}/slip`);
+                const parse = iso => new Date(/[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30");
+                const set = (id, v) => { document.getElementById(id).textContent = v; };
+                set('adm-slip-hospital', getDoctor()?.clinic_name || '');
+                set('adm-slip-token', t.token_number || '—');
+                set('adm-slip-name', t.patient_uid ? `${t.patient_name} (${t.patient_uid})` : (t.patient_name || '—'));
+                set('adm-slip-date', t.visit_date ? new Date(t.visit_date + 'T00:00:00+05:30').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+                set('adm-slip-time', t.checked_in_at ? parse(t.checked_in_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—');
+                const docs = document.getElementById('adm-slip-doctors');
+                docs.textContent = '';
+                const rows = [{ doctor_name: t.doctor_name, token_number: t.token_number, room_number: t.doctor_room_number }]
+                    .concat((t.additional_tokens || []).map(x => ({ doctor_name: x.doctor_name, token_number: x.token_number, room_number: x.room_number })));
+                rows.forEach(r => {
+                    const line = document.createElement('div');
+                    line.style.cssText = 'display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:13px';
+                    const left = document.createElement('span');
+                    left.textContent = r.doctor_name || '—';
+                    const right = document.createElement('span');
+                    right.textContent = (rows.length > 1 && r.token_number ? r.token_number + ' · ' : '') + 'Room ' + (r.room_number || '—');
+                    line.appendChild(left);
+                    line.appendChild(right);
+                    docs.appendChild(line);
+                });
+                document.getElementById('modal-adm-slip').classList.add('open');
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
         async function viewAdminDocument(type, refId) {
             try {
                 let url = null;
                 if (type === 'prescription') url = `${BASE}/patients/prescriptions/${refId}/download`;
                 else if (type === 'test_report') url = `${BASE}/lab/reports/combined?order_ids=${refId}`;
                 else if (type === 'invoice') url = `${BASE}/billing/invoices/${refId}/pdf`;
+                else if (type === 'token_slip') { openAdminSlip(refId); return; }
                 else return;
                 const response = await fetch(url, { headers: { "Authorization": `Bearer ${getToken()}` } });
                 if (!response.ok) throw new Error("Could not load document");
@@ -2164,6 +2195,33 @@
                 <button class="modal-close" onclick="closeModal('modal-adm-documents')">×</button>
             </div>
             <div id="adm-documents-list" style="max-height:60vh;overflow-y:auto"></div>
+        </div>
+    </div>
+
+    <style>
+        @media print {
+            body * { visibility: hidden; }
+            #adm-slip-print, #adm-slip-print * { visibility: visible; }
+            #adm-slip-print { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+    </style>
+    <div class="modal-overlay" id="modal-adm-slip">
+        <div class="modal" style="max-width:360px">
+            <div class="modal-header">
+                <h2>Token Slip</h2>
+                <button class="modal-close" onclick="closeModal('modal-adm-slip')">×</button>
+            </div>
+            <div id="adm-slip-print" style="text-align:center;padding:4px 8px 12px">
+                <p id="adm-slip-hospital" style="font-weight:700;margin:0 0 6px"></p>
+                <p style="font-size:12px;color:var(--slate);margin:0">Token</p>
+                <div id="adm-slip-token" style="font-size:30px;font-weight:700;margin:2px 0 10px"></div>
+                <div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:13px"><span>Patient</span><span id="adm-slip-name"></span></div>
+                <div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:13px"><span>Date</span><span id="adm-slip-date"></span></div>
+                <div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:13px"><span>Time</span><span id="adm-slip-time"></span></div>
+                <div style="border-top:1px dashed var(--border);margin:8px 0"></div>
+                <div id="adm-slip-doctors"></div>
+            </div>
+            <button class="btn btn-outline" style="width:100%" onclick="window.print()">Print Slip</button>
         </div>
     </div>
 

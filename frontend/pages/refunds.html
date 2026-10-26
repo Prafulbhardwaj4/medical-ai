@@ -12,14 +12,27 @@
     .rf-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
     .rf-sub { font-size: 12px; color: var(--slate); }
     .rf-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .rf-actions select { width: 100px; min-width: 100px; padding: 4px 8px; font-size: 0.85rem; }
+    .rf-actions select { width: 150px; min-width: 150px; padding: 4px 8px; font-size: 0.85rem; }
+    @media (max-width: 700px) {
+      .rf-actions { width: 100%; }
+      .rf-actions select { width: 100%; min-width: 0; }
+      .rf-actions .btn { flex: 1 1 auto; min-height: 40px; }
+    }
     .rf-note { font-size: 12.5px; color: var(--slate); margin-bottom: 12px; }
   </style>
 </head>
 
 <body>
+  <div class="app-shell">
   <header class="topbar" style="justify-content:space-between">
-    <div class="topbar-brand">Med<span>Scribe</span></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+      <div class="topbar-brand">Med<span>Scribe</span></div>
+    </div>
     <div class="topbar-doctor">
       <span><strong id="topbar-doctor-name"></strong></span>
       <div class="topbar-divider"></div>
@@ -28,13 +41,24 @@
     </div>
   </header>
 
+  <nav class="sidebar" id="app-sidebar"></nav>
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+  <div class="mobile-menu-sheet" id="mobile-menu-sheet">
+    <div class="mobile-menu-header">
+      <h2>More</h2>
+      <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
+    </div>
+    <div class="mobile-menu-body" id="app-mobile-menu-body"></div>
+  </div>
+  <nav class="bottom-nav" id="app-bottom-nav"></nav>
+
+  <main class="main-content">
   <div class="rf-wrap">
     <div class="rf-top">
       <div>
         <h1 style="margin:0">Refunds</h1>
         <p class="rf-sub">Money owed back to patients. You pay it here, then mark it refunded.</p>
       </div>
-      <a class="btn btn-outline btn-sm" href="receptionist.html">← Back to Reception</a>
     </div>
 
     <div class="card" style="margin-bottom:20px">
@@ -43,7 +67,7 @@
         <span class="rf-sub" id="rf-pending-count"></span>
       </div>
       <div class="table-wrap">
-        <table>
+        <table class="responsive-cards">
           <thead>
             <tr>
               <th>Patient</th>
@@ -68,7 +92,7 @@
       </div>
       <p class="rf-note">IPD deposit balances are paid on the admission page at discharge. They are listed here as a record.</p>
       <div class="table-wrap">
-        <table>
+        <table class="responsive-cards">
           <thead>
             <tr>
               <th>Patient</th>
@@ -87,20 +111,33 @@
       </div>
     </div>
   </div>
+  </main>
+  </div>
 
   <script src="../js/api.js"></script>
+  <script src="../js/nav-receptionist.js"></script>
   <script src="../js/whatsapp-messages.js"></script>
   <script>
     const doc = getDoctor();
     if (!doc || doc.role !== "receptionist") window.location.href = "dashboard.html";
     if (!requireAuth()) throw new Error("Not authenticated");
     fillTopbar();
+    renderReceptionistNav("refunds");
 
     function fmtDT(iso) {
       if (!iso) return '—';
       const d = new Date(/[+-]\d\d:\d\d$|Z$/.test(iso) ? iso : iso + "+05:30");
       return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ' · ' +
         d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    const REFUND_METHODS = [['cash', 'Cash'], ['upi', 'UPI'], ['card', 'Card'], ['bank_transfer', 'Bank transfer'], ['online', 'Online']];
+    function methodLabel(ch) {
+      const hit = REFUND_METHODS.find(m => m[0] === ch);
+      return hit ? hit[1] : String(ch || '').replace(/_/g, ' ');
+    }
+    function forLabel(r) {
+      return sanitize(r.source_label) + (r.source_type === 'appointment' && r.source_id ? ' #' + Number(r.source_id) : '');
     }
 
     function patientCell(r) {
@@ -127,7 +164,7 @@
       body.innerHTML = rows.map(r => `
         <tr>
           <td data-label="Patient">${patientCell(r)}</td>
-          <td data-label="For">${sanitize(r.source_label)}</td>
+          <td data-label="For">${forLabel(r)}</td>
           <td data-label="Amount" style="font-weight:600">Rs.${Number(r.amount).toFixed(2)}</td>
           <td data-label="Reason" style="color:var(--slate);font-size:13px;max-width:320px">${sanitize(r.reason || '—')}</td>
           <td data-label="Raised" style="color:var(--slate);font-size:13px;white-space:nowrap">${fmtDT(r.raised_at)}</td>
@@ -137,7 +174,7 @@
                    <button class="btn btn-outline btn-sm" onclick="dismissRefund(${r.id})">Close without paying</button></div>`
               : `<div class="rf-actions">
                    <select class="form-control" id="rf-ch-${r.id}">
-                     ${['cash', 'card', 'upi'].map(c => `<option value="${c}" ${c === r.suggested_channel ? 'selected' : ''}>${c.toUpperCase()}</option>`).join('')}
+                     ${REFUND_METHODS.map(([v, label]) => `<option value="${v}" ${v === r.suggested_channel ? 'selected' : ''}>${label}</option>`).join('')}
                    </select>
                    <button class="btn btn-primary btn-sm" onclick="settleRefund(${r.id}, ${Number(r.amount)})">Mark Refunded</button>
                    <button class="btn btn-outline btn-sm" onclick="dismissRefund(${r.id})">Can't refund</button>
@@ -157,12 +194,12 @@
         const paid = r.status === 'completed';
         const forCell = r.admission_token
           ? `<a href="admission-detail.html?id=${encodeURIComponent(r.admission_token)}">${sanitize(r.source_label)}</a>`
-          : sanitize(r.source_label);
+          : forLabel(r);
         return `
         <tr>
           <td data-label="Patient">${patientCell(r)}</td>
           <td data-label="For">${forCell}</td>
-          <td data-label="Amount" style="font-weight:600">Rs.${Number(r.amount).toFixed(2)}${paid && r.channel ? `<div class="rf-sub">${sanitize(String(r.channel).toUpperCase())}</div>` : ''}</td>
+          <td data-label="Amount" style="font-weight:600">Rs.${Number(r.amount).toFixed(2)}${paid && r.channel ? `<div class="rf-sub">${sanitize(methodLabel(r.channel))}</div>` : ''}</td>
           <td data-label="Paid by" style="color:var(--slate)">${sanitize(r.paid_by_name || '—')}</td>
           <td data-label="Reason" style="color:var(--slate);font-size:13px;max-width:320px">${sanitize(r.reason || '—')}</td>
           <td data-label="Status">${paid ? '<span class="badge badge-green">Refunded</span>' : '<span class="badge badge-grey">Closed, not paid</span>'}</td>
@@ -173,7 +210,7 @@
 
     async function settleRefund(id, amount) {
       const channel = document.getElementById(`rf-ch-${id}`).value;
-      const ok = await confirmModal(`Confirm you have refunded Rs.${amount.toFixed(2)} by ${channel.toUpperCase()}?`, { title: 'Mark refunded' });
+      const ok = await confirmModal(`Confirm you have refunded Rs.${amount.toFixed(2)} by ${methodLabel(channel)}?`, { title: 'Mark refunded' });
       if (!ok) return;
       try {
         await api("POST", `/refunds/${id}/settle`, { channel });

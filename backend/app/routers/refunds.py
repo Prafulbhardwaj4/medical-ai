@@ -13,7 +13,7 @@ from app.models.opd_charge import OpdCharge
 from app.schemas.billing import RefundIn
 from app.utils.auth import get_current_doctor
 from app.utils.receipts import next_note_number
-from app.utils.audit import log_action
+from app.utils.audit import log_action, stage_action
 from app.utils.timezone import now_ist_naive
 
 router = APIRouter(prefix="/refunds", tags=["refunds"])
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/refunds", tags=["refunds"])
 VALID_SOURCE_TYPES = {"appointment", "pharmacy", "ipd_deposit", "opd_charge", "test", "other"}
 VALID_CHANNELS = {"cash", "card", "upi", "online"}
 # Money only physically leaves by one of these; "online" stays only because older records and pharmacy still use the label.
-SETTLE_CHANNELS = {"cash", "card", "upi"}
+SETTLE_CHANNELS = {"cash", "card", "upi", "bank_transfer", "online"}
 SOURCE_LABELS = {
     "appointment": "Appointment fee",
     "test": "Test fee",
@@ -49,8 +49,10 @@ def create_refund(body: RefundIn, db: Session = Depends(get_db), current_doctor:
     _require_refund_staff(current_doctor)
     if body.source_type not in VALID_SOURCE_TYPES:
         raise HTTPException(status_code=400, detail="Invalid source_type")
+    if body.source_type == "appointment":
+        raise HTTPException(status_code=400, detail="An appointment refund is made with the Cancel or Reschedule button on that appointment, so the amount is checked against what the patient paid.")
     if body.channel not in SETTLE_CHANNELS:
-        raise HTTPException(status_code=400, detail="Refund channel must be cash, card or UPI")
+        raise HTTPException(status_code=400, detail="Choose how the refund is paid: cash, card, UPI, bank transfer or online")
     if body.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than zero")
 
@@ -87,6 +89,11 @@ def create_refund(body: RefundIn, db: Session = Depends(get_db), current_doctor:
     db.add(refund)
     db.flush()
     notify_admin_refund(db, refund, current_doctor, patient.name)
+    stage_action(
+        db, current_doctor,
+        action="refund_created", target_type="refund", target_id=refund.id, target_label=(patient.name or "")[:120],
+        details=f"{refund.source_type} #{refund.source_id}, Rs.{refund.amount:.2f} by {refund.channel}, paid out now. Reason: {refund.reason or 'not given'}"[:1500],
+    )
     db.commit()
     db.refresh(refund)
 
@@ -158,13 +165,26 @@ def _suggested_channel(db: Session, r: Refund) -> str:
     return r.channel if r.channel in SETTLE_CHANNELS else "cash"
 
 
+def _refund_patient_name(db: Session, r: Refund, patient=None):
+    """Name shown for a refund: the patient record, else the portal profile on the appointment, else the name typed at
+    booking (a patient who has no record yet)."""
+    if patient is not None and patient.name:
+        return patient.name
+    if r.source_type == "appointment" and r.source_id:
+        from app.models.portal import Appointment
+        appt = db.query(Appointment).filter(Appointment.id == r.source_id).first()
+        if appt:
+            linked = appt.profile_link.patient if appt.profile_link_id and appt.profile_link else None
+            if linked is not None and linked.name:
+                return linked.name
+            if appt.new_patient_name:
+                return appt.new_patient_name
+    return None
+
+
 def _serialize_refund(db: Session, r: Refund, patients: dict, staff: dict) -> dict:
     p = patients.get(r.patient_id)
-    name = p.name if p else None
-    if not name and r.source_type == "appointment" and r.source_id:
-        from app.models.portal import Appointment
-        row = db.query(Appointment.new_patient_name).filter(Appointment.id == r.source_id).first()
-        name = row[0] if row and row[0] else None
+    name = _refund_patient_name(db, r, p)
     admission_token = None
     if r.source_type == "ipd_deposit" and r.source_id:
         from app.models.admission import Admission
@@ -177,6 +197,7 @@ def _serialize_refund(db: Session, r: Refund, patients: dict, staff: dict) -> di
         "patient_uid": p.patient_uid if p else None,
         "source_type": r.source_type,
         "source_label": SOURCE_LABELS.get(r.source_type, r.source_type),
+        "source_id": r.source_id,
         "amount": r.amount,
         "reason": r.reason,
         "channel": r.channel,
@@ -225,8 +246,9 @@ def settle_refund(refund_id: int, body: SettleRefundIn, db: Session = Depends(ge
     _require_refund_staff(current_doctor)
     require_present(db, current_doctor)
     if body.channel not in SETTLE_CHANNELS:
-        raise HTTPException(status_code=400, detail="Refund channel must be cash, card or UPI")
-    r = db.query(Refund).filter(Refund.id == refund_id, Refund.hospital_id == current_doctor.hospital_id).first()
+        raise HTTPException(status_code=400, detail="Choose how the refund is paid: cash, card, UPI, bank transfer or online")
+    # Row lock: two clicks (or two receptionists) at the same moment cannot both pay the same refund.
+    r = db.query(Refund).filter(Refund.id == refund_id, Refund.hospital_id == current_doctor.hospital_id).with_for_update().first()
     if not r:
         raise HTTPException(status_code=404, detail="Refund not found")
     if r.status != "pending":
@@ -234,21 +256,21 @@ def settle_refund(refund_id: int, body: SettleRefundIn, db: Session = Depends(ge
     if _already_billed(db, r):
         raise HTTPException(status_code=400, detail="This fee is already on an issued invoice. Billed money cannot be refunded — close this refund instead.")
 
+    old_channel = r.channel
     r.channel = body.channel
     r.status = "completed"
     r.settled_at = now_ist_naive()
     r.settled_by = current_doctor.id
     db.flush()
     patient = db.query(Patient).filter(Patient.id == r.patient_id).first() if r.patient_id else None
-    notify_admin_refund(db, r, current_doctor, patient.name if patient else None, kind="paid")
-    db.commit()
-    log_action(
+    _who = _refund_patient_name(db, r, patient)
+    notify_admin_refund(db, r, current_doctor, _who, kind="paid")
+    stage_action(
         db, current_doctor,
-        action="refund_paid",
-        target_type="refund",
-        target_id=r.id,
-        details=f"{r.source_type} #{r.source_id}, Rs.{r.amount:.2f} by {r.channel}",
+        action="refund_paid", target_type="refund", target_id=r.id, target_label=(_who or "")[:120],
+        details=f"{r.source_type} #{r.source_id}, Rs.{r.amount:.2f}. Status pending -> completed. Method {old_channel} -> {r.channel}",
     )
+    db.commit()
     return {"message": "Refund recorded as paid"}
 
 
@@ -260,7 +282,7 @@ def dismiss_refund(refund_id: int, body: DismissRefundIn, db: Session = Depends(
     why = (body.reason or "").strip()
     if len(why) < 3:
         raise HTTPException(status_code=400, detail="Please give a reason")
-    r = db.query(Refund).filter(Refund.id == refund_id, Refund.hospital_id == current_doctor.hospital_id).first()
+    r = db.query(Refund).filter(Refund.id == refund_id, Refund.hospital_id == current_doctor.hospital_id).with_for_update().first()
     if not r:
         raise HTTPException(status_code=404, detail="Refund not found")
     if r.status != "pending":
@@ -272,13 +294,12 @@ def dismiss_refund(refund_id: int, body: DismissRefundIn, db: Session = Depends(
     r.settled_by = current_doctor.id
     db.flush()
     patient = db.query(Patient).filter(Patient.id == r.patient_id).first() if r.patient_id else None
-    notify_admin_refund(db, r, current_doctor, patient.name if patient else None, kind="dismissed")
-    db.commit()
-    log_action(
+    _who = _refund_patient_name(db, r, patient)
+    notify_admin_refund(db, r, current_doctor, _who, kind="dismissed")
+    stage_action(
         db, current_doctor,
-        action="refund_dismissed",
-        target_type="refund",
-        target_id=r.id,
-        details=f"{r.source_type} #{r.source_id}, Rs.{r.amount:.2f}. Reason: {why}",
+        action="refund_dismissed", target_type="refund", target_id=r.id, target_label=(_who or "")[:120],
+        details=f"{r.source_type} #{r.source_id}, Rs.{r.amount:.2f}. Status pending -> dismissed. Reason: {why}"[:1500],
     )
+    db.commit()
     return {"message": "Refund closed without payment"}

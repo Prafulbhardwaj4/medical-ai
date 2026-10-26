@@ -764,14 +764,7 @@
         <button class="mobile-menu-close" onclick="closeMobileMenu()">×</button>
       </div>
       <div class="mobile-menu-body">
-        <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();showRecSection('portal');return false;">
-          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round"
-              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          Appointments
-        </a>
-        <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();showRecDesktopTab('patients');return false;">
+        <a class="mobile-menu-item" href="#" onclick="closeMobileMenu();showRecSection('patients');return false;">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round"
               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
@@ -1075,6 +1068,9 @@
               you
               check anyone in — it's just a heads-up.
             </p>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:8px;cursor:pointer">
+              <input type="checkbox" id="leave-only-today"> Show only "Doctor on leave"
+            </label>
             <div id="expected-today-list">
               <p style="color:var(--slate-light);font-size:13px">Loading...</p>
             </div>
@@ -1125,6 +1121,9 @@
                 <option value="">All doctors</option>
               </select>
             </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:8px;cursor:pointer">
+              <input type="checkbox" id="leave-only-upcoming"> Show only "Doctor on leave"
+            </label>
             <div id="upcoming-list">
               <p style="color:var(--slate-light);font-size:13px">Loading...</p>
             </div>
@@ -1153,6 +1152,9 @@
               Paid bookings that need a human decision — usually because the doctor went unavailable after the patient
               booked.
             </p>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:8px;cursor:pointer">
+              <input type="checkbox" id="leave-only-pending"> Show only "Doctor on leave"
+            </label>
             <div id="pending-review-list">
               <p style="color:var(--slate-light);font-size:13px">Loading...</p>
             </div>
@@ -1626,7 +1628,6 @@
       <div class="form-group">
         <label class="form-label">What's being refunded?</label>
         <select class="form-control" id="refund-source-type">
-          <option value="appointment">Appointment cancellation</option>
           <option value="pharmacy">Pharmacy return (OPD)</option>
           <option value="ipd_deposit">IPD deposit balance</option>
           <option value="opd_charge">OPD charge reversal</option>
@@ -1649,6 +1650,7 @@
           <option value="cash">Cash</option>
           <option value="card">Card</option>
           <option value="upi">UPI</option>
+          <option value="bank_transfer">Bank transfer</option>
           <option value="online">Online (same channel — 48–72 hrs)</option>
         </select>
       </div>
@@ -1699,6 +1701,58 @@
   </div>
 
   <div id="toast"></div>
+
+  <div class="modal-overlay" id="modal-appt-cancel">
+    <div class="modal" style="max-width:480px;width:92vw">
+      <div class="modal-header">
+        <h2>Cancel appointment</h2>
+        <button type="button" class="modal-close" onclick="closeModal('modal-appt-cancel')">&times;</button>
+      </div>
+      <p id="ac-info" style="font-size:13px;color:var(--slate);margin-bottom:8px"></p>
+      <p id="ac-refund" style="font-size:14px;font-weight:600;margin-bottom:12px"></p>
+      <div class="form-group">
+        <label>Reason</label>
+        <select class="form-control" id="ac-reason"></select>
+      </div>
+      <div class="form-group">
+        <label>Note (optional)</label>
+        <input type="text" class="form-control" id="ac-note" maxlength="200">
+      </div>
+      <p class="err-msg" id="ac-error" style="display:none"></p>
+      <button type="button" class="btn btn-danger" style="width:100%" id="ac-confirm" onclick="confirmApptCancel()" disabled>Cancel appointment</button>
+      <button type="button" class="btn btn-outline" style="width:100%;margin-top:8px" onclick="closeModal('modal-appt-cancel')">Keep appointment</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-appt-resched">
+    <div class="modal" style="max-width:520px;width:92vw">
+      <div class="modal-header">
+        <h2>Reschedule appointment</h2>
+        <button type="button" class="modal-close" onclick="closeModal('modal-appt-resched')">&times;</button>
+      </div>
+      <p id="ar-info" style="font-size:13px;color:var(--slate);margin-bottom:8px"></p>
+      <p id="ar-late" style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:8px"></p>
+      <div class="form-group">
+        <label>Doctor</label>
+        <select class="form-control" id="ar-doctor" onchange="loadApptSlots()"></select>
+      </div>
+      <p id="ar-fee-hint" style="display:none;font-size:12px;color:var(--slate-light);margin:-6px 0 10px"></p>
+      <div class="form-group">
+        <label>New date</label>
+        <input type="date" class="form-control" id="ar-date" onchange="loadApptSlots()">
+      </div>
+      <div id="ar-slots">
+        <p style="color:var(--slate-light);font-size:13px">Pick a date to see free slots.</p>
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label>Note (optional)</label>
+        <input type="text" class="form-control" id="ar-note" maxlength="200">
+      </div>
+      <p class="err-msg" id="ar-error" style="display:none"></p>
+      <button type="button" class="btn btn-primary" style="width:100%" id="ar-confirm" onclick="confirmApptReschedule()" disabled>Reschedule</button>
+      <button type="button" class="btn btn-outline" style="width:100%;margin-top:8px" onclick="closeModal('modal-appt-resched')">Close</button>
+    </div>
+  </div>
 
   <script src="../js/api.js"></script>
   <script src="../js/whatsapp-messages.js"></script>
@@ -3550,7 +3604,7 @@
       if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
       refundPatientId = patientId;
       document.getElementById('refund-patient-label').textContent = `For: ${patientName}`;
-      document.getElementById('refund-source-type').value = 'appointment';
+      document.getElementById('refund-source-type').value = 'other';
       document.getElementById('refund-amount').value = '';
       document.getElementById('refund-channel').value = '';
       document.getElementById('refund-reason').value = '';
@@ -3632,7 +3686,7 @@
 
       const refundChannels = Object.keys(summary.refunds_by_channel || {}).filter(ch => summary.refunds_by_channel[ch] > 0);
       const refundsHtml = refundChannels.length
-        ? `<div class="de-refunds"><b>Refunds paid back:</b> ${refundChannels.map(ch => `${ch.toUpperCase()} −₹${summary.refunds_by_channel[ch].toFixed(2)}`).join(' · ')}<br>Already deducted from the totals below.</div>`
+        ? `<div class="de-refunds"><b>Refunds paid back:</b> ${refundChannels.map(ch => `${ch.replace('_', ' ').toUpperCase()} −₹${summary.refunds_by_channel[ch].toFixed(2)}`).join(' · ')}<br>Already deducted from the totals below.</div>`
         : '';
 
       const modesHtml = modes.map(m => {
@@ -3705,7 +3759,7 @@
 
       body.innerHTML = `
         <p style="font-size:12.5px;color:var(--slate);margin-bottom:8px">Today's collections so far — closes automatically at midnight.</p>
-        ${Object.keys(summary.refunds_by_channel || {}).filter(ch => summary.refunds_by_channel[ch] > 0).map(ch => `<p style="font-size:12.5px;color:var(--slate)">${ch.toUpperCase()} refunds today: −₹${summary.refunds_by_channel[ch].toFixed(2)} (already netted out below)</p>`).join('')}
+        ${Object.keys(summary.refunds_by_channel || {}).filter(ch => summary.refunds_by_channel[ch] > 0).map(ch => `<p style="font-size:12.5px;color:var(--slate)">${ch.replace('_', ' ').toUpperCase()} refunds today: −₹${summary.refunds_by_channel[ch].toFixed(2)} (already netted out below)</p>`).join('')}
         ${totalsHtml}
         ${breakdownHtml}`;
     }
@@ -4717,6 +4771,7 @@
       try {
         const data = await api("GET", `/portal-appointments-staff/upcoming?doctor_id=${doctorId}`, null, false, true);
         document.getElementById("upcoming-count").textContent = data.count;
+        data.appointments = leaveFilter(data.appointments, 'leave-only-upcoming');
         if (!data.appointments.length) { el.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Nothing booked in the next 15 days.</p>'; return; }
         el.innerHTML = data.appointments.map(a => {
           const d = new Date(a.requested_time);
@@ -4726,10 +4781,13 @@
           ].filter(Boolean).join(' · ');
           return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;gap:10px">
             <span>
-              <strong>${sanitize(a.patient_name || 'New Patient')}</strong> — ${sanitize(a.doctor_name)}
+              <strong>${sanitize(a.patient_name || 'New Patient')}</strong> — ${sanitize(a.doctor_name)}${leaveBadge(a)}
               ${details ? `<br><span style="color:var(--slate-light);font-size:12px">${sanitize(details)}</span>` : ''}
             </span>
-            <span style="color:var(--slate);white-space:nowrap">${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+            <span style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+              <span style="color:var(--slate);white-space:nowrap">${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+              <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${apptActionsHtml(a, 'upcoming', false)}</span>
+            </span>
           </div>`;
         }).join('');
       } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
@@ -4888,6 +4946,7 @@
         const path = doctorId ? `/portal-appointments-staff/today?doctor_id=${doctorId}` : `/portal-appointments-staff/today`;
         const data = await api("GET", path);
         document.getElementById("expected-today-count").textContent = data.count;
+        data.appointments = leaveFilter(data.appointments, 'leave-only-today');
 
         if (!data.appointments.length) {
           el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">No portal bookings for today.</p>`;
@@ -4903,15 +4962,17 @@
         }));
 
         el.innerHTML = data.appointments.map(a => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
             <div>
               <div style="font-weight:500">${sanitize(a.patient_name || 'Name not linked yet')}</div>
               <div style="font-size:12px;color:var(--slate-light)">
                 ${sanitize(a.doctor_name)} · ${a.type === 'queue_home' ? 'Queue from home' : 'Booked appointment'} · ${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                 ${a.notes ? ' · ' + sanitize(a.notes) : ''}
+                ${leaveBadge(a)}
+                <span class="appt-msg" data-appt-msg="${Number(a.id)}" data-list="today" style="display:block;font-size:12px"></span>
               </div>
             </div>
-            <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <!-- a.status becomes "completed" the instant a token is generated for a
                    paid appointment (see sweep_todays_online_checkins) — that's an
                    internal "booking's job is done" state, not the patient's visit
@@ -4921,6 +4982,7 @@
               ${a.arrived_at ? `<span class="badge badge-green">Arrived</span>` : ''}
               ${(!a.arrived_at && a.payment_status === 'paid' && a.status === 'confirmed') ? `<button class="btn btn-outline btn-sm" onclick="markPortalArrived(${a.id}, this)">Mark Arrived</button>` : ''}
               ${(a.arrived_at && a.doctor_id) ? `<button class="btn btn-outline btn-sm" onclick="notifyDoctorNoAssistant(${a.doctor_id}, this)">Notify</button>` : ''}
+              ${apptActionsHtml(a, 'today', false)}
             </div>
           </div>`).join('');
       } catch (e) {
@@ -5069,7 +5131,8 @@
       try {
         const t = await api("POST", `/portal-appointments-staff/${a.id}/arrived-before-payment`);
         if (t.late) {
-          await runLateArrival(a, t);
+          toast(`Patient arrived ${lateMinutes({ arrived_at: t.arrived_at, requested_time: t.slot_time })} minutes late. Reschedule to continue.`, "info");
+          loadPendingReview();
         } else {
           toast("Arrived on time. Now collect payment.", "success");
           loadPendingReview();
@@ -5188,6 +5251,7 @@
       try {
         const data = await api("GET", "/portal-appointments-staff/pending-review");
         document.getElementById("pending-review-count").textContent = data.count;
+        data.appointments = leaveFilter(data.appointments, 'leave-only-pending');
 
         if (!data.appointments.length) {
           el.innerHTML = `<p style="color:var(--slate-light);font-size:13px">Nothing awaiting review.</p>`;
@@ -5201,6 +5265,7 @@
                 <div style="font-size:12px;color:var(--slate-light)">
                   ${sanitize(a.doctor_name)} · ${new Date(a.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   ${a.fee_amount != null ? ' · Rs.' + a.fee_amount : ''}
+                  ${leaveBadge(a)}
                 </div>
               </div>
               ${a.reason === 'awaiting_payment'
@@ -5212,14 +5277,16 @@
               ${!a.arrived_at
               ? `<button class="btn btn-primary btn-sm" onclick='markUnpaidArrived(${jsArg(a)}, this)'>Patient arrived</button>`
               : a.late_unresolved
-                ? `<span class="badge badge-red">Arrived late</span><button class="btn btn-primary btn-sm" onclick='reopenLateArrival(${jsArg(a)})'>Walk-in queue / new slot</button>`
-                : `<span class="badge badge-green">Arrived</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${jsArg(a)})'>Collect Payment</button>`}
+                ? `<span class="badge badge-red">Late by ${lateMinutes(a)} minutes</span><span style="font-size:12px;color:var(--slate-light)">Next: Reschedule, then collect payment.</span>`
+                : `<span class="badge badge-green">On time</span><button class="btn btn-primary btn-sm" onclick='openCollectPaymentConfirm(${jsArg(a)})'>Collect payment</button>`}
+              ${apptActionsHtml(a, 'pending', true)}
             </div>
             ` : `
             <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
               <button class="btn btn-primary btn-sm" onclick="acceptReview(${a.id})">Accept</button>
               <button class="btn btn-outline btn-sm" onclick="toggleReviewPanel('suggest', ${a.id})">Suggest new slot/doctor</button>
               <button class="btn btn-outline btn-sm" onclick="toggleReviewPanel('decline', ${a.id})">Decline</button>
+              ${apptActionsHtml(a, 'pending', false)}
             </div>
             <div id="pr-suggest-${a.id}" class="pr-panel" style="display:none;margin-top:8px;gap:8px;flex-wrap:wrap">
               <input class="form-control" style="max-width:160px;display:inline-block" id="pr-slot-${a.id}" placeholder="New slot ID (optional)" />
@@ -5279,6 +5346,285 @@
     loadAllPatients();
     loadPendingPayments();
     setInterval(() => loadPendingPayments(true), 15000);
+
+    // ---- Reception: cancel, reschedule, resend token, "Doctor on leave" ----
+    const apptRows = {};
+    let apptDoctorsCache = null;
+    const apptCancelState = { a: null, busy: false };
+    const apptReschedState = { a: null, late: false, slotId: null, busy: false, token: 0 };
+
+    // Appointment times are IST wall-clock strings; they are shown exactly as stored, never shifted.
+    function fmtApptWhen(iso) {
+      return new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    }
+    function todayIst() {
+      return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    }
+    function leaveBadge(a) {
+      return a.doctor_on_leave ? '<span class="badge badge-red" style="margin-left:6px">Doctor on leave</span>' : '';
+    }
+    function lateMinutes(a) {
+      return Math.max(1, Math.round((new Date(a.arrived_at) - new Date(a.requested_time)) / 60000));
+    }
+    function leaveFilter(list, boxId) {
+      const box = document.getElementById(boxId);
+      return box && box.checked ? list.filter(x => x.doctor_on_leave) : list;
+    }
+    function setApptMsg(el, text, ok) {
+      if (!el) return;
+      el.textContent = text || '';
+      el.style.color = ok ? '#16794f' : 'var(--danger)';
+    }
+    function showApptError(id, text) {
+      const el = document.getElementById(id);
+      el.textContent = text || '';
+      el.style.display = text ? 'block' : 'none';
+    }
+    function refreshApptLists() {
+      return Promise.all([loadExpectedToday(), loadPendingReview(), loadUpcomingBookings()]);
+    }
+
+    // Buttons for one appointment row. Rows are kept in apptRows and found again by data- attributes (no inline handlers).
+    function apptActionsHtml(a, list, withMsg) {
+      if (a.status === 'completed' || a.status === 'cancelled') return '';
+      const id = Number(a.id);
+      apptRows[list + ':' + id] = a;
+      const late = list === 'pending' && !!a.late_unresolved;
+      const attr = act => `data-appt-act="${act}" data-appt-id="${id}" data-list="${list}"`;
+      const resend = (list === 'today' || (list === 'pending' && a.reason === 'awaiting_payment'))
+        ? `<button type="button" class="btn btn-outline btn-sm" ${attr('resend')}>Resend token number</button>` : '';
+      return `${resend}<button type="button" class="btn ${late ? 'btn-primary' : 'btn-outline'} btn-sm" ${attr('reschedule')}>Reschedule</button>`
+        + `<button type="button" class="btn btn-danger btn-sm" ${attr('cancel')}>Cancel</button>`
+        + (withMsg ? `<span class="appt-msg" data-appt-msg="${id}" data-list="${list}" style="flex-basis:100%;font-size:12px"></span>` : '');
+    }
+
+    document.addEventListener('click', ev => {
+      const btn = ev.target.closest('[data-appt-act]');
+      if (!btn) return;
+      const a = apptRows[btn.dataset.list + ':' + btn.dataset.apptId];
+      if (!a) return;
+      const act = btn.dataset.apptAct;
+      if (act === 'cancel') openApptCancel(a);
+      else if (act === 'reschedule') openApptReschedule(a, btn.dataset.list === 'pending' && !!a.late_unresolved);
+      else if (act === 'resend') apptResendToken(a, btn);
+    });
+
+    document.getElementById('leave-only-today').addEventListener('change', loadExpectedToday);
+    document.getElementById('leave-only-pending').addEventListener('change', loadPendingReview);
+    document.getElementById('leave-only-upcoming').addEventListener('change', loadUpcomingBookings);
+
+    // ---- Resend token number ----
+    async function apptResendToken(a, btn) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
+      const box = document.querySelector(`[data-appt-msg="${Number(a.id)}"][data-list="${btn.dataset.list}"]`);
+      btn.disabled = true;
+      setApptMsg(box, 'Sending…', true);
+      try {
+        const res = await api("POST", `/portal-appointments-staff/${a.id}/resend-token`, { expected_requested_time: a.requested_time });
+        setApptMsg(box, res.message, true);
+      } catch (e) {
+        setApptMsg(box, e.message, false);
+      }
+      btn.disabled = false;
+    }
+
+    // ---- Cancel ----
+    async function openApptCancel(a) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
+      const st = apptCancelState;
+      st.a = a;
+      st.busy = false;
+      showApptError('ac-error', '');
+      const btn = document.getElementById('ac-confirm');
+      btn.disabled = true;
+      btn.textContent = 'Cancel appointment';
+      document.getElementById('ac-info').textContent = `${a.patient_name || 'Patient'} · ${a.doctor_name || ''} · ${fmtApptWhen(a.requested_time)}`;
+      document.getElementById('ac-refund').textContent = 'Checking what was paid…';
+      document.getElementById('ac-note').value = '';
+      const sel = document.getElementById('ac-reason');
+      sel.innerHTML = '';
+      openModal('modal-appt-cancel');
+      try {
+        const p = await api("GET", `/portal-appointments-staff/${a.id}/cancel-preview`);
+        if (st.a !== a) return;
+        if (!p.can_cancel) {
+          document.getElementById('ac-refund').textContent = '';
+          showApptError('ac-error', p.blocked_reason || 'This appointment cannot be cancelled.');
+          return;
+        }
+        const first = document.createElement('option');
+        first.value = '';
+        first.textContent = 'Choose a reason…';
+        sel.appendChild(first);
+        (p.reasons || []).forEach(r => {
+          const o = document.createElement('option');
+          o.value = r.value;
+          o.textContent = r.label;
+          sel.appendChild(o);
+        });
+        const amt = Number(p.refund_amount || 0);
+        document.getElementById('ac-refund').textContent = amt > 0
+          ? `Refund to patient: Rs.${amt.toFixed(2)} (everything they paid, back by ${p.refund_method || 'cash'}). It waits on the Refunds page.`
+          : 'Nothing was paid, so there is nothing to refund.';
+        btn.textContent = amt > 0 ? `Cancel and refund Rs.${amt.toFixed(2)}` : 'Cancel appointment';
+        btn.disabled = false;
+      } catch (e) {
+        if (st.a === a) {
+          document.getElementById('ac-refund').textContent = '';
+          showApptError('ac-error', e.message);
+        }
+      }
+    }
+
+    async function confirmApptCancel() {
+      const st = apptCancelState;
+      const a = st.a;
+      if (!a || st.busy) return;
+      const reason = document.getElementById('ac-reason').value;
+      if (!reason) { showApptError('ac-error', 'Please choose a reason.'); return; }
+      const btn = document.getElementById('ac-confirm');
+      st.busy = true;
+      btn.disabled = true;
+      showApptError('ac-error', '');
+      try {
+        const res = await api("POST", `/portal-appointments-staff/${a.id}/cancel`, {
+          reason,
+          note: document.getElementById('ac-note').value.trim() || null,
+          expected_requested_time: a.requested_time,
+        });
+        st.a = null;
+        closeModal('modal-appt-cancel');
+        toast(res.message, "success");
+        refreshApptLists();
+      } catch (e) {
+        showApptError('ac-error', e.message);
+        st.busy = false;
+        btn.disabled = false;
+        refreshApptLists();
+      }
+    }
+
+    // ---- Reschedule ----
+    async function openApptReschedule(a, late) {
+      if (!isRecPresent()) { toast("Mark yourself Present first.", "info"); return; }
+      const st = apptReschedState;
+      st.a = a;
+      st.late = !!late;
+      st.slotId = null;
+      st.busy = false;
+      showApptError('ar-error', '');
+      document.getElementById('ar-confirm').disabled = true;
+      document.getElementById('ar-note').value = '';
+      document.getElementById('ar-info').textContent = `${a.patient_name || 'Patient'} · ${a.doctor_name || ''} · ${fmtApptWhen(a.requested_time)}`;
+      document.getElementById('ar-late').textContent = late && a.arrived_at
+        ? `Patient arrived ${lateMinutes(a)} minutes late. Pick a new time, then collect payment.` : '';
+      document.getElementById('ar-slots').innerHTML = '<p style="color:var(--slate-light);font-size:13px">Loading…</p>';
+      const sel = document.getElementById('ar-doctor');
+      sel.innerHTML = '';
+      openModal('modal-appt-resched');
+      try {
+        if (!apptDoctorsCache) apptDoctorsCache = await api("GET", "/patients/hospital-doctors");
+      } catch (e) {
+        apptDoctorsCache = null;
+        showApptError('ar-error', 'Could not load the doctors. Close this window and try again.');
+        return;
+      }
+      if (st.a !== a) return;
+      const docs = apptDoctorsCache.slice();
+      if (a.doctor_id && !docs.some(d => d.id === a.doctor_id)) docs.unshift({ id: a.doctor_id, title: '', name: a.doctor_name || 'Current doctor' });
+      docs.forEach(d => {
+        const o = document.createElement('option');
+        o.value = String(d.id);
+        o.textContent = `${d.title || ''} ${d.name}`.trim() + (d.id === a.doctor_id ? ' (same doctor)' : '');
+        sel.appendChild(o);
+      });
+      sel.value = String(a.doctor_id || '');
+      const today = todayIst();
+      const dateEl = document.getElementById('ar-date');
+      dateEl.min = today;
+      const apptDay = String(a.requested_time).slice(0, 10);
+      dateEl.value = (!late && apptDay >= today) ? apptDay : today;
+      sel.dispatchEvent(new Event('change'));  // refreshes the dropdown label and loads the slots
+    }
+
+    async function loadApptSlots() {
+      const st = apptReschedState;
+      const a = st.a;
+      if (!a) return;
+      const doctorId = document.getElementById('ar-doctor').value;
+      const date = document.getElementById('ar-date').value;
+      const box = document.getElementById('ar-slots');
+      const hint = document.getElementById('ar-fee-hint');
+      st.slotId = null;
+      document.getElementById('ar-confirm').disabled = true;
+      showApptError('ar-error', '');
+      if (doctorId && a.doctor_id && Number(doctorId) !== Number(a.doctor_id)) {
+        hint.textContent = "A different doctor may have a different fee. If it is higher, the difference is due at payment. If it is lower, the difference is refunded.";
+        hint.style.display = 'block';
+      } else {
+        hint.style.display = 'none';
+      }
+      if (!doctorId || !date) { box.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Pick a date to see free slots.</p>'; return; }
+      const mine = ++st.token;
+      box.innerHTML = '<p style="color:var(--slate-light);font-size:13px">Loading slots…</p>';
+      try {
+        const data = await api("GET", `/portal/hospitals/${a.hospital_id}/doctors/${encodeURIComponent(doctorId)}/slots?date=${encodeURIComponent(date)}`);
+        if (mine !== st.token) return;
+        if (data.doctor_unavailable) { box.innerHTML = '<p style="color:var(--danger);font-size:13px">This doctor is not available on this date.</p>'; return; }
+        const periods = [['morning', 'Morning'], ['afternoon', 'Afternoon'], ['evening', 'Evening']];
+        const free = k => (data[k] || []).filter(s => !s.full);
+        if (!periods.some(([k]) => free(k).length)) { box.innerHTML = '<p style="color:var(--slate-light);font-size:13px">No free slots on this date.</p>'; return; }
+        box.innerHTML = periods.map(([k, label]) => free(k).length ? `
+          <div class="slot-period-title">${label}</div>
+          <div class="slot-grid">${free(k).map(s => `<div class="slot-chip ${sanitize(s.level)}" data-slot-id="${Number(s.id)}"><span class="dot"></span>${sanitize(s.time)}</div>`).join('')}</div>` : '').join('');
+      } catch (e) {
+        if (mine === st.token) box.innerHTML = `<p style="color:var(--danger);font-size:13px">${sanitize(e.message)}</p>`;
+      }
+    }
+
+    document.getElementById('ar-slots').addEventListener('click', ev => {
+      const chip = ev.target.closest('[data-slot-id]');
+      if (!chip) return;
+      apptReschedState.slotId = Number(chip.dataset.slotId);
+      document.querySelectorAll('#ar-slots .slot-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      document.getElementById('ar-confirm').disabled = false;
+      showApptError('ar-error', '');
+    });
+
+    async function confirmApptReschedule() {
+      const st = apptReschedState;
+      const a = st.a;
+      if (!a || st.busy) return;
+      if (!st.slotId) { showApptError('ar-error', 'Please choose a time slot.'); return; }
+      const btn = document.getElementById('ar-confirm');
+      st.busy = true;
+      btn.disabled = true;
+      showApptError('ar-error', '');
+      try {
+        const res = await api("POST", `/portal-appointments-staff/${a.id}/reschedule`, {
+          slot_id: st.slotId,
+          doctor_id: Number(document.getElementById('ar-doctor').value) || null,
+          note: document.getElementById('ar-note').value.trim() || null,
+          expected_requested_time: a.requested_time,
+        });
+        const wasLate = st.late;
+        st.a = null;
+        closeModal('modal-appt-resched');
+        toast(res.message, "success");
+        await refreshApptLists();
+        if (wasLate) {
+          const fresh = apptRows['pending:' + a.id];
+          if (res.arrived_at && fresh) openCollectPaymentConfirm(fresh);  // payment comes last
+          else toast('The new time is on another day. Press "Patient arrived" when the patient comes.', "info");
+        }
+      } catch (e) {
+        showApptError('ar-error', e.message);
+        st.busy = false;
+        btn.disabled = false;
+        refreshApptLists();
+      }
+    }
   </script>
 </body>
 

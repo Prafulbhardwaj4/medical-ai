@@ -68,8 +68,6 @@ async function runAppointmentDemoTour(isReplay) {
     { target_selector: "#demo-profile-list", placement: "top", device: "both",
       title: "Your Linked Accounts", description: "Accounts already linked to you show up here — pick one to book for them.",
       onBack: () => { _renderDemoDoctorStep(); } },
-    { target_selector: "#family-account-card", placement: "top", device: "both",
-      title: "Someone With Their Own Account", description: "Booking for a family member who already has a separate portal login? Add them here." },
     { target_selector: "#new-patient-card", placement: "top", device: "both", nextLabel: "Next",
       title: "First Time at This Hospital", description: "Never been to this hospital before? Book as a new patient here.",
       onNext: () => { _renderDemoDatetimeStep(); } },
@@ -119,10 +117,6 @@ function _renderDemoProfileStep() {
   const area = document.getElementById("wizard-area");
   area.innerHTML = `<div id="demo-profile-list"></div>`;
 
-  const familyAccountCard = `
-    <div class="select-row-card" id="family-account-card" style="border:1px dashed var(--slate)" onclick="toast('Just for the tutorial — nothing to add here.','info')">
-      <div><div class="src-name">+ Someone with their own account</div><div class="src-sub">Book for a family member who already has a separate portal login</div></div>
-    </div>`;
   const newPatientCard = `
     <div class="select-row-card" id="new-patient-card" style="border:1px dashed var(--teal);cursor:pointer" onclick="_renderDemoDatetimeStep(); advanceLocalTour();">
       <div><div class="src-name">+ First time at this hospital</div><div class="src-sub">Book as a new patient here</div></div>
@@ -141,7 +135,7 @@ function _renderDemoProfileStep() {
       "Search profiles..."
     );
   }
-  area.insertAdjacentHTML("beforeend", familyAccountCard + newPatientCard);
+  area.insertAdjacentHTML("beforeend", newPatientCard);
 }
 
 function _renderDemoDatetimeStep() {

@@ -37,6 +37,17 @@ _STAFF_ROLES = ["admin", "sub_admin", "receptionist"]
 _APPT_VIEW_ROLES = ["admin", "sub_admin", "receptionist", "doctor", "nurse", "assistant"]
 
 
+def _doctor_on_leave(db, appt) -> bool:
+    """True when the appointment's doctor is marked unavailable (on leave) on the appointment date."""
+    from app.models.doctor_availability import DoctorUnavailability
+    if not appt.doctor_id:
+        return False
+    return db.query(DoctorUnavailability.id).filter(
+        DoctorUnavailability.doctor_id == appt.doctor_id,
+        DoctorUnavailability.date == appt.requested_time.date(),
+    ).first() is not None
+
+
 @router.post("/book-for-caller", response_model=None)
 def book_appointment_for_caller(
     body: BookForCallerIn,
@@ -828,6 +839,8 @@ def list_expected_today(
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
             "arrived_at": a.arrived_at.isoformat() if a.arrived_at else None,
             "payment_status": a.payment_status,
+            "hospital_id": a.hospital_id,
+            "doctor_on_leave": _doctor_on_leave(db, a),
         })
     return {"count": len(result), "appointments": result}
 
@@ -882,6 +895,8 @@ def list_upcoming_bookings(
             "patient_phone": patient_phone,
             "patient_age": patient_age,
             "patient_gender": patient_gender,
+            "hospital_id": a.hospital_id,
+            "doctor_on_leave": _doctor_on_leave(db, a),
             "doctor_id": a.doctor_id,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
         })
@@ -943,6 +958,8 @@ def list_pending_review(
         result.append({
             "id": a.id,
             "reason": "doctor_unavailable",
+            "hospital_id": a.hospital_id,
+            "doctor_on_leave": _doctor_on_leave(db, a),
             "patient_name": patient_name,
             "doctor_id": a.doctor_id,
             "doctor_name": f"{doctor.title} {doctor.name}" if doctor else "Unassigned",
@@ -959,6 +976,7 @@ def list_pending_review(
         result.append({
             "id": a.id,
             "reason": "awaiting_payment",
+            "doctor_on_leave": _doctor_on_leave(db, a),
             "hospital_id": a.hospital_id,
             "arrived_at": a.arrived_at.isoformat() if a.arrived_at else None,
             "late_unresolved": _late_unresolved(a),

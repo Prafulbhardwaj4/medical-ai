@@ -526,7 +526,6 @@
         <h2>My Appointments</h2>
         <button class="modal-close" onclick="closeMyAppointmentsModal()">&times;</button>
       </div>
-      <div id="family-request-banner"></div>
       <div id="appt-list">
         <p>Loading...</p>
       </div>
@@ -645,28 +644,15 @@
 
     function confirmNewPatientProfile() {
       const err = document.getElementById("np-err");
-      const name = document.getElementById("np-name").value.trim();
-      const age = document.getElementById("np-age").value;
+      const name = document.getElementById("np-name").value.replace(/\s+/g, " ").trim();
       if (!name) { err.textContent = "Please enter the patient's name"; return; }
-      if (!age || age < 0 || age > 120) { err.textContent = "Please enter a valid age"; return; }
+      if (name.length < 2 || name.length > 60) { err.textContent = "The name must be 2 to 60 characters"; return; }
+      if (!/^[\p{L}\p{M}][\p{L}\p{M} .'-]*$/u.test(name)) { err.textContent = "Use letters, spaces, dots, hyphens and apostrophes only"; return; }
       captureAddressChoice();
       if (state.addressId === null && !state.customAddress) { err.textContent = "Please enter an address"; return; }
       state.profileLinkId = null;
       state.profileName = name;
       state.newPatientName = name;
-      state.newPatientAge = parseInt(age, 10);
-      state.newPatientGender = document.getElementById("np-gender").value;
-      state.newPatientBloodGroup = document.getElementById("np-blood-group").value || null;
-      setStep("datetime");
-    }
-
-    function confirmFamilyAccountProfile() {
-      const err = document.getElementById("fa-err");
-      const phone = document.getElementById("fa-phone").value.trim();
-      if (!phone) { err.textContent = "Please enter their phone number"; return; }
-      state.profileLinkId = null;
-      state.profileName = "Family member (their own account)";
-      state.familyAccountPhone = phone;
       setStep("datetime");
     }
 
@@ -852,36 +838,13 @@
 
           document.querySelectorAll('input[name="addr-choice"]').forEach || null; // no-op guard
 
-          const familyAccountCard = `
-            <div class="select-row-card" id="family-account-card" style="border:1px dashed var(--slate)">
-              <div><div class="src-name">+ Someone with their own account</div><div class="src-sub">Book for a family member who already has a separate portal login</div></div>
-            </div>
-            <div id="family-account-form" style="display:none;margin-top:10px">
-              <div class="form-group"><label class="form-label">Their phone number</label><input class="form-control" id="fa-phone" placeholder="e.g. 9876543210" /></div>
-              <div class="err-msg" id="fa-err"></div>
-              <button class="btn btn-primary" style="width:100%" onclick="confirmFamilyAccountProfile()">Continue</button>
-            </div>`;
-
-          const newPatientCard = familyAccountCard + `
+          const newPatientCard = `
             <div class="select-row-card" id="new-patient-card" style="border:1px dashed var(--teal)">
               <div><div class="src-name">+ First time at this hospital</div><div class="src-sub">Book as a new patient here</div></div>
             </div>
             <div id="new-patient-form" style="display:none;margin-top:10px">
               <div class="form-group"><label class="form-label">Patient Name</label><input class="form-control" id="np-name" /></div>
-              <div class="form-row">
-                <div class="form-group"><label class="form-label">Age</label><input class="form-control" type="number" min="0" max="120" id="np-age" /></div>
-                <div class="form-group">
-                  <label class="form-label">Gender</label>
-                  <select class="form-control" id="np-gender"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select>
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Blood Group (optional)</label>
-                <select class="form-control" id="np-blood-group">
-                  <option value="">Not sure / skip</option>
-                  ${['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => `<option value="${bg}">${bg}</option>`).join('')}
-                </select>
-              </div>
+              <div class="src-sub" style="margin-bottom:10px">Only the name is needed. The hospital will take the other details when you arrive.</div>
               <div class="err-msg" id="np-err"></div>
               <button class="btn btn-primary" style="width:100%" onclick="confirmNewPatientProfile()">Continue</button>
             </div>`;
@@ -892,9 +855,6 @@
               : '') + newPatientCard + addressBlockHtml;
             document.getElementById("new-patient-card").addEventListener("click", () => {
               document.getElementById("new-patient-form").style.display = "block";
-            });
-            document.getElementById("family-account-card").addEventListener("click", () => {
-              document.getElementById("family-account-form").style.display = "block";
             });
             attachAddressToggle();
             return;
@@ -914,12 +874,9 @@
           document.getElementById("new-patient-card").addEventListener("click", () => {
             document.getElementById("new-patient-form").style.display = "block";
           });
-          document.getElementById("family-account-card").addEventListener("click", () => {
-            document.getElementById("family-account-form").style.display = "block";
-          });
           area.addEventListener('click', function handler(e) {
             const card = e.target.closest('.select-row-card');
-            if (!card || card.id === "new-patient-card" || card.id === "family-account-card") return;
+            if (!card || card.id === "new-patient-card") return;
             state.profileLinkId = parseInt(card.dataset.id);
             state.profileName = card.dataset.name;
             captureAddressChoice();
@@ -1140,20 +1097,6 @@
       const btn = document.getElementById("btn-pay-book");
       btn.disabled = true;
       try {
-        if (state.familyAccountPhone) {
-          await api("POST", "/portal/appointments/family-booking-request", {
-            other_account_phone: state.familyAccountPhone,
-            hospital_id: state.hospitalId, doctor_id: state.doctorId,
-            slot_id: state.slotId, type: "scheduled",
-            custom_address: state.customAddress || null,
-          });
-          closeConfirmModal();
-          toast("Sent — they'll confirm it from their own portal", "success");
-          state.familyAccountPhone = null;
-          state.history = [];
-          setStep("location", false);
-          return;
-        }
 
         // Booking lands as status=booked / payment_status=unpaid — the same
         // state reception's own phone-booking flow produces (see
@@ -1168,9 +1111,6 @@
           use_saved_address: !state.customAddress,
           custom_address: state.customAddress || null,
           new_patient_name: state.profileLinkId ? null : state.newPatientName,
-          new_patient_gender: state.profileLinkId ? null : state.newPatientGender,
-          new_patient_age: state.profileLinkId ? null : state.newPatientAge,
-          new_patient_blood_group: state.profileLinkId ? null : state.newPatientBloodGroup,
         });
         state.confirmedAppointmentId = appt.id;
         if (appt.requested_time) {
@@ -1205,53 +1145,8 @@
       setStep("location", false);
     }
 
-    function openMyAppointmentsModal() { document.getElementById("modal-my-appointments").classList.add("open"); loadAppointments(); loadFamilyRequests(); }
+    function openMyAppointmentsModal() { document.getElementById("modal-my-appointments").classList.add("open"); loadAppointments(); }
     function closeMyAppointmentsModal() { document.getElementById("modal-my-appointments").classList.remove("open"); }
-
-    async function loadFamilyRequests() {
-      const banner = document.getElementById("family-request-banner");
-      try {
-        const reqs = await api("GET", "/portal/appointments/family-booking-requests");
-        if (!reqs.length) { banner.innerHTML = ""; return; }
-        banner.innerHTML = reqs.map(r => `
-          <div class="card" style="background:#fffbea;border-color:#f5d76e;margin-bottom:12px">
-            <p style="font-weight:600;margin-bottom:4px">${sanitize(formatPhone(r.requester_phone))} wants to book you an appointment</p>
-            <p style="font-size:13px;color:var(--slate);margin-bottom:10px">${sanitize(r.hospital_name)}${r.doctor_name ? ' · ' + sanitize(r.doctor_name) : ''}</p>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-primary btn-sm" onclick="confirmFamilyRequest(${r.id})">Yes, that's me</button>
-              <button class="btn btn-outline btn-sm" onclick="rejectFamilyRequest(${r.id})">Not me</button>
-            </div>
-          </div>`).join('');
-      } catch (e) { /* banner just stays empty if this fails */ }
-    }
-
-    async function confirmFamilyRequest(id) {
-      let namePrompt = null;
-      try {
-        await api("POST", `/portal/appointments/family-booking-requests/${id}/confirm`, {});
-        toast("Booking confirmed to your account", "success");
-        loadFamilyRequests();
-        loadAppointments();
-      } catch (e) {
-        if ((e.message || "").toLowerCase().includes("enter your name")) {
-          namePrompt = await promptModal("This hospital hasn't seen your account before — please enter your name:");
-          if (!namePrompt) return;
-          try {
-            await api("POST", `/portal/appointments/family-booking-requests/${id}/confirm`, { new_patient_name: namePrompt });
-            toast("Booking confirmed to your account", "success");
-            loadFamilyRequests();
-            loadAppointments();
-          } catch (e2) { toast(e2.message, "error"); }
-        } else {
-          toast(e.message, "error");
-        }
-      }
-    }
-
-    async function rejectFamilyRequest(id) {
-      try { await api("POST", `/portal/appointments/family-booking-requests/${id}/reject`); toast("Declined", "success"); loadFamilyRequests(); }
-      catch (e) { toast(e.message, "error"); }
-    }
 
     async function loadAppointments() {
       const list = document.getElementById("appt-list");

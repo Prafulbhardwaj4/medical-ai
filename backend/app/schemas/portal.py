@@ -178,22 +178,6 @@ class PortalSuggestionIn(BaseModel):
     hospital_id: Optional[int] = None
 
 
-class FamilyBookingRequestIn(BaseModel):
-    other_account_phone: str
-    hospital_id: int
-    type: str  # "scheduled" | "queue_home"
-    doctor_id: Optional[int] = None
-    slot_id: Optional[int] = None
-    notes: Optional[str] = Field(default=None, max_length=500)
-    custom_address: Optional[str] = Field(default=None, max_length=300)
-
-
-class FamilyBookingConfirmIn(BaseModel):
-    new_patient_name: Optional[str] = None
-    new_patient_gender: Optional[str] = None
-    new_patient_age: Optional[int] = None
-
-
 class SaveTemplateIn(BaseModel):
     doctor_id: Optional[int] = None  # required if caller is admin/sub_admin/super_admin/receptionist
     weekdays: List[int] = Field(min_length=1, max_length=7)   # 0=Monday ... 6=Sunday
