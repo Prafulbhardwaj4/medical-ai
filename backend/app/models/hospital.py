@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Text, Date
 from app.database import Base
 from app.utils.timezone import now_ist_naive
 
@@ -33,7 +33,7 @@ class Hospital(Base):
     contact_numbers = Column(Text, nullable=True)  # JSON list of {"type": "mobile"|"landline", "number": str} — mobile numbers stored pre-formatted as "+91XXXXXXXXXX", landline stored exactly as entered (no fixed pattern)
     emails = Column(Text, nullable=True)  # JSON list of email strings
     logo_base64 = Column(Text, nullable=True)  # optional — full data URI; stored in-DB since Render's disk is ephemeral
-    tier = Column(String, nullable=False, default="foundation")  # "foundation" | "growth" | "scale" | "enterprise" — manually set by super admin, gates feature access
+    tier = Column(String, nullable=False, default="foundation")  # "foundation" | "growth" | "scale" | "enterprise" | "pilot_1" | "pilot_2" — manually set by super admin, gates feature access
     pcpndt_registration_number = Column(String, nullable=True)  # Registration No. under PC&PNDT Act, 1994 — required on every Form F (item 2 of the statutory form); only relevant to hospitals doing ultrasound
 
     # --- Billing cycle / AI Scribe usage ---
@@ -43,4 +43,10 @@ class Hospital(Base):
     plan_end_date = Column(DateTime, nullable=True)  # yearly hospitals only: end of the paid term (anchor + 12 months Growth / 13 months Foundation); NULL for monthly
     ai_scribe_yearly_allowance = Column(Integer, nullable=True)  # yearly hospitals only: pooled AI Scribe allowance for the whole term, snapshotted at term start; NULL for monthly
     is_active = Column(Boolean, default=True)
+
+    # --- Pilot 1 / Pilot 2 (see app/utils/pilot.py). Kept after the pilot ends, for history. ---
+    pilot_start_date = Column(Date, nullable=True)  # IST calendar date the pilot started
+    pilot_end_date = Column(Date, nullable=True)  # start + 42 days (Pilot 1) or + 21 days (Pilot 2); the deadline day
+    pilot_weekly_cap = Column(Integer, nullable=True)  # AI Scribe consultations per pilot week; NULL = default 150
+    pilot_result_note = Column(String(300), nullable=True)  # one-line pilot result the Super Admin keeps as a reference
     created_at = Column(DateTime, default=now_ist_naive)

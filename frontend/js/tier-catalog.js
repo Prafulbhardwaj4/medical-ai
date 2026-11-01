@@ -95,11 +95,17 @@ const TIER_CATALOG = [
   },
 ];
 
+// Pilot plans are internal (Super Admin only): never listed in TIER_CATALOG, never shown on the
+// website. They rank equal to Growth wherever a tier position is compared.
+const INTERNAL_TIER_LABELS = { pilot_1: "Pilot 1", pilot_2: "Pilot 2" };
+const INTERNAL_TIER_AS = { pilot_1: "growth", pilot_2: "growth" };
+
 function tierLabel(key) {
   const t = TIER_CATALOG.find((t) => t.key === key);
-  return t ? t.label : "Unknown plan";
+  if (t) return t.label;
+  return INTERNAL_TIER_LABELS[key] || "Unknown plan";
 }
 
 function tierIndex(key) {
-  return TIER_CATALOG.findIndex((t) => t.key === key);
+  return TIER_CATALOG.findIndex((t) => t.key === (INTERNAL_TIER_AS[key] || key));
 }

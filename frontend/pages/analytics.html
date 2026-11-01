@@ -1566,9 +1566,13 @@
                     document.getElementById("stat-scribe").textContent =
                         sc.cap === null ? `${sc.used} (Unlimited)` : `${sc.used} / ${sc.cap}`;
                     let sub = sc.cap === null ? "this cycle" : `${sc.total_remaining} left`;
+                    if (sc.pilot) sub = `this week · ${sc.total_remaining} left`;
                     if (sc.topup_remaining) sub += ` (incl. ${sc.topup_remaining} top-up)`;
                     if (!sc.allowed && sc.reason === "cycle_ended") sub = "Billing cycle ended";
                     if (!sc.allowed && sc.reason === "cycle_not_started") sub = "Billing cycle not started";
+                    if (sc.pilot && !sc.allowed && sc.reason === "weekly_cap_reached") sub = "Weekly limit reached";
+                    if (sc.pilot && !sc.allowed && sc.reason === "pilot_ended") sub = "Pilot ended";
+                    if (sc.pilot && !sc.allowed && sc.reason === "pilot_not_started") sub = "Pilot not started";
                     document.getElementById("stat-scribe-sub").textContent = sub;
                 } else {
                     scribeCard.style.display = "none";

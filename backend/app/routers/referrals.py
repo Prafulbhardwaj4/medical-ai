@@ -27,7 +27,7 @@ from app.utils.notify import (
 
 router = APIRouter(prefix="/referrals", tags=["referrals"])
 
-TIER_ORDER = {"foundation": 0, "growth": 1, "scale": 2, "enterprise": 3}
+TIER_ORDER = {"foundation": 0, "growth": 1, "pilot_1": 1, "pilot_2": 1, "scale": 2, "enterprise": 3}  # pilots rank equal to Growth
 
 
 def _require_scale_or_above(hospital: Hospital):

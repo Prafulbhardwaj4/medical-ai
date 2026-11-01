@@ -91,7 +91,9 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
     # can't be used to find out which emails exist or which accounts are switched off.
     if not doctor.is_active:
         raise HTTPException(status_code=403, detail="Account is deactivated. Contact your admin.")
-    if doctor.hospital_id and doctor.hospital and not doctor.hospital.is_active:
+    from app.utils.pilot_lifecycle import ensure_pilot_lifecycle
+    _pilot_expired = ensure_pilot_lifecycle(db, doctor.hospital) if (doctor.hospital_id and doctor.hospital) else False
+    if doctor.hospital_id and doctor.hospital and (not doctor.hospital.is_active or _pilot_expired):
         raise HTTPException(status_code=403, detail="Your hospital account has been deactivated. Contact support.")
 
     # A temporary password works for 7 days only (checked after the password is proven correct).

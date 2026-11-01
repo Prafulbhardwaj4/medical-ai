@@ -12,7 +12,7 @@ from app.utils.auth import hash_password, get_current_doctor, now_ist_naive, ist
 from app.services.whatsapp_flows import queue_staff_account_messages, temp_password_expiry
 from app.services.whatsapp_messages import wipe_secrets_for_recipient
 from app.utils.inventory import line_total
-from app.utils.audit import log_action
+from app.utils.audit import log_action, stage_action
 import re
 from app.models.consultation import Consultation
 from app.models.patient import Patient
@@ -23,6 +23,12 @@ from datetime import datetime, timedelta
 from app.utils.ai_scribe_gate import get_ai_scribe_status, has_ai_scribe_at_all
 from app.utils.billing_cycle import get_billing_cycle_info, is_renew_window_open, AI_SCRIBE_TOPUP_PRICING, AI_SCRIBE_TIER_CAPS, effective_ai_scribe_cap, cycle_months, validate_billing_period, apply_plan_term, plan_summary, YEARLY_SELLABLE_TIERS, monthly_equivalent_price, YEARLY_LIST_PRICE
 from app.models.suggestion import Suggestion
+from app.utils.pilot import pilot_state
+from app.utils.pilot import (
+    is_pilot, pilot_label, pilot_block, pilot_dates, pilot_end_date, pilot_fee_label, pilot_total_weeks,
+    parse_pilot_start, validate_weekly_cap, apply_pilot_schedule,
+    PILOT_DAYS, PILOT_FEE, PILOT_DEFAULT_WEEKLY_CAP, PILOT_MIN_WEEKLY_CAP, PILOT_MAX_WEEKLY_CAP,
+)
 from app.models.ai_scribe_topup import AiScribeTopup
 from app.models.upgrade_request import UpgradeRequest
 from app.models.hospital_lead import HospitalLead
@@ -30,6 +36,7 @@ from app.models.plan_inquiry import PlanInquiry
 from app.models.portal import PatientProfileLink
 from app.models.audit_log import AuditLog
 from app.models.superadmin_alert_seen import SuperAdminAlertSeen
+from app.models.superadmin_event import SuperAdminEvent
 from dateutil.relativedelta import relativedelta
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -113,6 +120,23 @@ def get_notifications_feed(
                 "created_at": now, "unread": True, "nav_section": "hospitals", "hospital_id": h.id,
             })
 
+    # Stored pilot events (cap reached / deadline day / grace over). Each exists once; seen state is per Super Admin.
+    from app.utils.pilot import PILOT_TIERS
+    _pilot_events = (
+        db.query(SuperAdminEvent)
+        .join(Hospital, Hospital.id == SuperAdminEvent.hospital_id)
+        .filter(Hospital.tier.in_(PILOT_TIERS))  # a hospital moved to a paid plan no longer shows pilot notifications
+        .order_by(SuperAdminEvent.created_at.desc()).limit(50).all()
+    )
+    for ev in _pilot_events:
+        ev_id = f"pilot_event-{ev.id}"
+        items.append({
+            "id": ev_id, "notif_type": ev.event_type, "severity": ev.severity,
+            "title": ev.title, "message": ev.message,
+            "created_at": ev.created_at, "unread": (ev_id, ev.dedupe_key) not in seen,
+            "nav_section": "hospitals", "hospital_id": ev.hospital_id, "computed": True,
+        })
+
     hospital_by_id = {x.id: x for x in db.query(Hospital).filter(Hospital.is_active == True).all()}
     for it in items:
         if it["notif_type"] in ("hospital_limit", "billing_cycle"):
@@ -138,6 +162,18 @@ class AlertSeenIn(BaseModel):
 
 def _mark_alert_seen(db: Session, doctor: Doctor, alert_id: str):
     kind, _, hid = alert_id.rpartition("-")
+    if kind == "pilot_event" and hid.isdigit():
+        ev = db.query(SuperAdminEvent).filter(SuperAdminEvent.id == int(hid)).first()
+        if not ev:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        already = db.query(SuperAdminAlertSeen).filter(
+            SuperAdminAlertSeen.doctor_id == doctor.id,
+            SuperAdminAlertSeen.alert_key == alert_id,
+            SuperAdminAlertSeen.marker == ev.dedupe_key,
+        ).first()
+        if not already:
+            db.add(SuperAdminAlertSeen(doctor_id=doctor.id, alert_key=alert_id, marker=ev.dedupe_key))
+        return
     if kind not in ("hospital_limit", "billing_cycle") or not hid.isdigit():
         raise HTTPException(status_code=400, detail="Invalid alert")
     h = db.query(Hospital).filter(Hospital.id == int(hid)).first()
@@ -447,6 +483,30 @@ def mark_plan_inquiry_contacted(
     return {"id": inquiry.id, "status": inquiry.status}
 
 
+@router.get("/pilot-preview")
+def pilot_preview(
+    tier: str,
+    start_date: str = None,  # YYYY-MM-DD, defaults to today
+    current_doctor: Doctor = Depends(require_super_admin)
+):
+    """Computed pilot dates for the create-hospital form. The form never does date math itself."""
+    tier = tier.strip().lower()
+    if not is_pilot(tier):
+        raise HTTPException(status_code=400, detail="tier must be pilot_1 or pilot_2")
+    try:
+        start = parse_pilot_start(start_date or ist_today().isoformat(), ist_today())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    d = pilot_dates(tier, start)
+    return {
+        "tier": tier, "label": pilot_label(tier), "days": PILOT_DAYS[tier], "weeks": pilot_total_weeks(tier),
+        "fee": PILOT_FEE[tier], "fee_label": pilot_fee_label(tier),
+        "default_weekly_cap": PILOT_DEFAULT_WEEKLY_CAP, "min_weekly_cap": PILOT_MIN_WEEKLY_CAP, "max_weekly_cap": PILOT_MAX_WEEKLY_CAP,
+        "start_date": d["start"].isoformat(), "end_date": d["end"].isoformat(),
+        "grace_end_date": d["grace_end"].isoformat(), "deactivation_date": d["deactivation"].isoformat(),
+    }
+
+
 @router.get("/plan-terms")
 def get_plan_terms(current_doctor: Doctor = Depends(require_super_admin)):
     """Prices and entitlements for the hospital-creation preview. yearly is null for tiers
@@ -471,10 +531,29 @@ def _term_fields(hospital) -> dict:
 
 
 def serialize_billing_block(db: Session, hospital: Hospital) -> dict:
+    """Pilot hospitals get the pilot block. After a move to a paid plan the normal billing block is
+    returned, plus the stored pilot dates, weekly limit and result as history."""
+    block = _serialize_billing_block_core(db, hospital)
+    if not is_pilot(hospital.tier) and hospital.pilot_start_date:
+        block["pilot_history"] = {
+            "start_date": hospital.pilot_start_date.isoformat(),
+            "end_date": hospital.pilot_end_date.isoformat() if hospital.pilot_end_date else None,
+            "weekly_cap": hospital.pilot_weekly_cap or PILOT_DEFAULT_WEEKLY_CAP,
+            "result_note": hospital.pilot_result_note,
+        }
+    return block
+
+
+def _serialize_billing_block_core(db: Session, hospital: Hospital) -> dict:
     """Shared by the hospital list and hospital detail endpoints so the two
     views can never disagree on used/total or renew-button state. Returns
     has_ai_scribe=False for Foundation with everything else null — per
     Praful, Foundation shows no topup/usage UI at all, not a 0/0 counter."""
+    if is_pilot(hospital.tier):
+        block = pilot_block(hospital)  # pilots never show the monthly billing block
+        block["pilot_week_used"] = get_ai_scribe_status(db, hospital)["used"]  # "AI scribe this week: x of cap"
+        return block
+
     cycle = get_billing_cycle_info(hospital)
     now = now_ist_naive()
 
@@ -532,7 +611,32 @@ def validate_fields(name, email, phone):
         raise HTTPException(status_code=400, detail="Name too short")
 
 VALID_HOSPITAL_TYPES = {"government", "private"}
-VALID_TIERS = {"foundation", "growth", "scale", "enterprise"}
+VALID_TIERS = {"foundation", "growth", "scale", "enterprise", "pilot_1", "pilot_2"}
+
+
+def _pilot_setup_or_400(tier, start_str, weekly_cap, fee_collected):
+    """Validates the pilot inputs for create / change-to-pilot. Returns (start, end, cap)."""
+    if not fee_collected:
+        raise HTTPException(status_code=400, detail=f"Tick 'Pilot fee collected' ({pilot_fee_label(tier)}) before using a pilot plan")
+    try:
+        start = parse_pilot_start(start_str, ist_today())
+        cap = validate_weekly_cap(weekly_cap)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return start, pilot_end_date(tier, start), cap
+
+
+def _stage_pilot_fee(db, hospital, tier, start, end, actor):
+    """Adds the upfront pilot fee payment record to the current transaction (no commit)."""
+    from app.models.subscription_payment import SubscriptionPayment
+    db.add(SubscriptionPayment(
+        hospital_id=hospital.id, tier=tier, billing_period="pilot",
+        amount=PILOT_FEE[tier],
+        period_start=datetime(start.year, start.month, start.day),
+        period_end=datetime(end.year, end.month, end.day),
+        collected_by=actor.id,
+        note=f"{pilot_label(tier)} fee collected upfront",
+    ))
 
 
 def _check_cycle_start_window(parsed):
@@ -1528,6 +1632,8 @@ def set_hospital_billing_cycle_start(
         raise HTTPException(status_code=400, detail="cycle_start_date must be YYYY-MM-DD")
 
     _check_cycle_start_window(parsed)
+    if is_pilot(hospital.tier):
+        raise HTTPException(status_code=400, detail="Pilot plans do not use a billing cycle. Change the plan to a paid plan first, then set the cycle start.")
     previous_start = hospital.billing_cycle_start
     if previous_start and len(reason.strip()) < 5:
         raise HTTPException(status_code=400, detail="A reason (at least 5 characters) is required to change an existing billing cycle start")
@@ -1548,6 +1654,105 @@ def set_hospital_billing_cycle_start(
     )
 
     return {"id": hospital.id, "billing_cycle_start": hospital.billing_cycle_start.isoformat()}
+
+
+def _pilot_hospital_or_400(db, hospital_id):
+    hospital = db.query(Hospital).filter(Hospital.id == hospital_id).first()
+    if not hospital:
+        raise HTTPException(status_code=404, detail="Hospital not found")
+    if not is_pilot(hospital.tier):
+        raise HTTPException(status_code=400, detail="This hospital is not on a pilot plan")
+    return hospital
+
+
+def _pilot_reason_or_400(reason):
+    reason = (reason or "").strip()
+    if len(reason) < 5:
+        raise HTTPException(status_code=400, detail="A short reason (at least 5 characters) is required")
+    if len(reason) > 200:
+        raise HTTPException(status_code=400, detail="Reason must be 200 characters or less")
+    return reason
+
+
+@router.patch("/hospitals/{hospital_id}/pilot-dates")
+def change_pilot_dates(
+    hospital_id: int,
+    start_date: str,  # YYYY-MM-DD, today or up to 60 days ago; the end date follows
+    reason: str = "",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(require_super_admin)
+):
+    hospital = _pilot_hospital_or_400(db, hospital_id)
+    reason = _pilot_reason_or_400(reason)
+    try:
+        start = parse_pilot_start(start_date, ist_today())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    old_start, old_end = hospital.pilot_start_date, hospital.pilot_end_date
+    if old_start == start:
+        raise HTTPException(status_code=400, detail="That is already the pilot start date")
+    apply_pilot_schedule(hospital, hospital.tier, start)
+    stage_action(
+        db, current_doctor, "pilot_dates_changed", "hospital", hospital.id, hospital.name,
+        f"Pilot start {old_start.isoformat() if old_start else 'none'} -> {start.isoformat()}; "
+        f"end {old_end.isoformat() if old_end else 'none'} -> {hospital.pilot_end_date.isoformat()}; reason: {reason}",
+        hospital_id=hospital.id,
+    )
+    db.commit()
+    d = pilot_dates(hospital.tier, start)
+    return {
+        "id": hospital.id, "pilot_start_date": d["start"].isoformat(), "pilot_end_date": d["end"].isoformat(),
+        "pilot_grace_end_date": d["grace_end"].isoformat(), "pilot_deactivation_date": d["deactivation"].isoformat(),
+    }
+
+
+@router.patch("/hospitals/{hospital_id}/pilot-weekly-cap")
+def change_pilot_weekly_cap(
+    hospital_id: int,
+    weekly_cap: int,  # whole number 1-1000
+    reason: str = "",
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(require_super_admin)
+):
+    hospital = _pilot_hospital_or_400(db, hospital_id)
+    reason = _pilot_reason_or_400(reason)
+    try:
+        cap = validate_weekly_cap(weekly_cap)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    old_cap = hospital.pilot_weekly_cap or PILOT_DEFAULT_WEEKLY_CAP
+    if old_cap == cap:
+        raise HTTPException(status_code=400, detail="That is already the weekly scribe limit")
+    hospital.pilot_weekly_cap = cap
+    stage_action(
+        db, current_doctor, "pilot_weekly_cap_changed", "hospital", hospital.id, hospital.name,
+        f"Weekly scribe limit {old_cap} -> {cap}; reason: {reason}",
+        hospital_id=hospital.id,
+    )
+    db.commit()
+    return {"id": hospital.id, "pilot_weekly_cap": cap}
+
+
+@router.patch("/hospitals/{hospital_id}/pilot-result")
+def save_pilot_result(
+    hospital_id: int,
+    note: str = "",  # one line, up to 300 characters; empty clears it
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(require_super_admin)
+):
+    hospital = _pilot_hospital_or_400(db, hospital_id)
+    note = " ".join((note or "").split())
+    if len(note) > 300:
+        raise HTTPException(status_code=400, detail="Pilot result must be 300 characters or less")
+    old_note = hospital.pilot_result_note
+    hospital.pilot_result_note = note or None
+    stage_action(
+        db, current_doctor, "pilot_result_saved", "hospital", hospital.id, hospital.name,
+        f"Pilot result changed from '{old_note or ''}' to '{note}'",
+        hospital_id=hospital.id,
+    )
+    db.commit()
+    return {"id": hospital.id, "pilot_result_note": hospital.pilot_result_note}
 
 
 @router.post("/hospitals/{hospital_id}/ai-scribe-topup", status_code=201)
@@ -1574,6 +1779,8 @@ def buy_ai_scribe_topup(
         raise HTTPException(status_code=404, detail="Hospital not found")
     if not hospital.is_active:
         raise HTTPException(status_code=400, detail="This hospital is deactivated — a topup would sit unused. Reactivate first.")
+    if is_pilot(hospital.tier):
+        raise HTTPException(status_code=400, detail="Pilot plans have no top-ups. The weekly scribe limit is fixed per pilot.")
     if not has_ai_scribe_at_all(hospital.tier):
         raise HTTPException(status_code=400, detail="This hospital's tier doesn't include AI Scribe — a topup wouldn't be usable")
 
@@ -1658,6 +1865,8 @@ def renew_hospital_billing_cycle(
         raise HTTPException(status_code=404, detail="Hospital not found")
     if not hospital.is_active:
         raise HTTPException(status_code=400, detail="This hospital is deactivated — use Activate, not Renew, to bring it back")
+    if is_pilot(hospital.tier):
+        raise HTTPException(status_code=400, detail="Pilot plans have no monthly renewal. Change the plan to a paid plan first.")
     if not hospital.billing_cycle_start:
         raise HTTPException(status_code=400, detail="No billing cycle has been set for this hospital yet")
 
@@ -1707,6 +1916,9 @@ def set_hospital_tier(
     hospital_id: int,
     tier: str,
     confirm: bool = False,
+    pilot_start_date: str = None,  # YYYY-MM-DD — required when moving to a pilot plan
+    pilot_weekly_cap: int = None,  # pilot plans only, 1-1000, default 150
+    pilot_fee_collected: bool = False,  # pilot plans only — must be True
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(require_super_admin)
 ):
@@ -1724,6 +1936,22 @@ def set_hospital_tier(
     if hospital.billing_period == "yearly" and tier not in YEARLY_SELLABLE_TIERS:
         raise HTTPException(status_code=400, detail="This hospital is on a yearly plan, and Scale/Enterprise can't be yearly. Switch it to monthly first.")
     previous_tier = hospital.tier
+    if is_pilot(tier):
+        start, end, cap = _pilot_setup_or_400(tier, pilot_start_date, pilot_weekly_cap, pilot_fee_collected)
+        hospital.tier = tier
+        apply_pilot_schedule(hospital, tier, start, cap)
+        hospital.billing_cycle_start = None  # the monthly cycle does not apply to pilots
+        hospital.billing_period = "monthly"
+        hospital.ai_scribe_consultations_used = 0
+        apply_plan_term(hospital)
+        _stage_pilot_fee(db, hospital, tier, start, end, current_doctor)
+        stage_action(
+            db, current_doctor, "hospital_tier_changed", "hospital", hospital.id, hospital.name,
+            f"Tier changed from {previous_tier} to {tier}; pilot start {start.isoformat()}, ends {end.isoformat()}, weekly cap {cap}",
+            hospital_id=hospital.id,
+        )
+        db.commit()
+        return {"id": hospital.id, "tier": hospital.tier}
     hospital.tier = tier
     apply_plan_term(hospital)
     db.commit()
@@ -1734,7 +1962,7 @@ def set_hospital_tier(
         target_type="hospital",
         target_id=hospital.id,
         target_label=hospital.name,
-        details=f"Tier changed from {previous_tier} to {tier}",
+        details=f"Tier changed from {previous_tier} to {tier}" + ("; pilot rules stopped, pilot dates kept for history" if is_pilot(previous_tier) else ""),
         hospital_id=hospital.id
     )
 
@@ -1824,6 +2052,10 @@ def toggle_hospital_active(
         raise HTTPException(status_code=404, detail="Hospital not found")
 
     was_active = hospital.is_active
+    if not was_active and is_pilot(hospital.tier):
+        _ps = pilot_state(hospital)
+        if _ps and _ps["phase"] == "expired":
+            raise HTTPException(status_code=400, detail="This pilot is past its grace period. Change the plan to a paid plan first and then Activate, or change the pilot dates.")
     hospital.is_active = not hospital.is_active
 
     reanchored = False
@@ -1860,6 +2092,9 @@ def create_hospital_jwt(
     hospital_type: str = "private",
     tier: str = "foundation",
     billing_period: str = "monthly",  # "monthly" | "yearly" (yearly: Foundation and Growth only)
+    pilot_start_date: str = None,  # YYYY-MM-DD — pilot plans only (today or up to 60 days ago)
+    pilot_weekly_cap: int = None,  # pilot plans only, 1-1000, default 150
+    pilot_fee_collected: bool = False,  # pilot plans only — creation is refused unless True
     billing_cycle_start: str = None,  # "YYYY-MM-DD" — required, asked at creation time now instead of set separately after the fact
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(require_super_admin)
@@ -1879,14 +2114,19 @@ def create_hospital_jwt(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    if not billing_cycle_start:
-        raise HTTPException(status_code=400, detail="billing_cycle_start is required")
-    try:
-        parsed_cycle_start = datetime.strptime(billing_cycle_start, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="billing_cycle_start must be YYYY-MM-DD")
+    pilot_start = pilot_end = pilot_cap = None
+    if is_pilot(tier):
+        pilot_start, pilot_end, pilot_cap = _pilot_setup_or_400(tier, pilot_start_date, pilot_weekly_cap, pilot_fee_collected)
+        parsed_cycle_start = None  # pilots never use the monthly billing cycle
+    else:
+        if not billing_cycle_start:
+            raise HTTPException(status_code=400, detail="billing_cycle_start is required")
+        try:
+            parsed_cycle_start = datetime.strptime(billing_cycle_start, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="billing_cycle_start must be YYYY-MM-DD")
 
-    _check_cycle_start_window(parsed_cycle_start)
+        _check_cycle_start_window(parsed_cycle_start)
 
     duplicate = db.query(Hospital).filter(
         func.lower(Hospital.name) == name.strip().lower(), func.lower(Hospital.city) == city.strip().lower()
@@ -1904,8 +2144,19 @@ def create_hospital_jwt(
         name=name, address=address, city=city, state=state, hospital_code=hospital_code,
         hospital_type=hospital_type, billing_enabled=(hospital_type == "private"),
         tier=tier, billing_period=billing_period, billing_cycle_start=parsed_cycle_start,
+        pilot_start_date=pilot_start, pilot_end_date=pilot_end, pilot_weekly_cap=pilot_cap,
     )
     apply_plan_term(hospital)  # yearly: stores plan_end_date + pooled allowance; monthly: leaves both NULL
+    if is_pilot(tier):
+        # Pilot fee record and its audit entry are saved in the same transaction as the hospital row.
+        db.add(hospital)
+        db.flush()
+        _stage_pilot_fee(db, hospital, tier, pilot_start, pilot_end, current_doctor)
+        stage_action(
+            db, current_doctor, "pilot_hospital_created", "hospital", hospital.id, hospital.name,
+            f"{pilot_label(tier)}: start {pilot_start.isoformat()}, ends {pilot_end.isoformat()}, weekly cap {pilot_cap}, fee {pilot_fee_label(tier)} collected",
+            hospital_id=hospital.id,
+        )
     db.add(hospital)
     db.commit()
     db.refresh(hospital)
@@ -2004,7 +2255,7 @@ def superadmin_stats(
     from app.utils.billing_cycle import TIER_MONTHLY_PRICE
     monthly_revenue = sum(monthly_equivalent_price(h) for h in active_hospitals)
 
-    hospitals_by_tier = {"foundation": 0, "growth": 0, "scale": 0, "enterprise": 0}
+    hospitals_by_tier = {"foundation": 0, "growth": 0, "scale": 0, "enterprise": 0, "pilot_1": 0, "pilot_2": 0}
     for h in active_hospitals:
         if h.tier in hospitals_by_tier:
             hospitals_by_tier[h.tier] += 1
@@ -2039,7 +2290,7 @@ def platform_growth_analytics(
     all_hospitals = db.query(Hospital).all()
     total_hospitals = len(all_hospitals)
 
-    by_tier = {t: 0 for t in TIER_ORDER}
+    by_tier = {t: 0 for t in TIER_ORDER + ["pilot_1", "pilot_2"]}
     for h in all_hospitals:
         if h.tier in by_tier:
             by_tier[h.tier] += 1
@@ -2050,7 +2301,11 @@ def platform_growth_analytics(
     grace_period_count = 0
     for h in active_hospitals:
         info = get_billing_cycle_info(h)
-        if info and info["cycle_end"] <= now < info["deactivation_at"]:
+        if is_pilot(h.tier):
+            _ps = pilot_state(h)
+            if _ps and _ps["phase"] == "grace":
+                grace_period_count += 1
+        elif info and info["cycle_end"] <= now < info["deactivation_at"]:
             grace_period_count += 1
 
     # ── Build bucket boundaries (12 buckets, monthly or weekly) ──
@@ -2108,7 +2363,7 @@ def platform_tier_changes(
         raise HTTPException(status_code=400, detail="filter must be one of: all, upgrades, downgrades")
 
     TIER_ORDER = ["foundation", "growth", "scale", "enterprise"]
-    TIER_RANK = {t: i for i, t in enumerate(TIER_ORDER)}
+    TIER_RANK = {**{t: i for i, t in enumerate(TIER_ORDER)}, "pilot_1": 1, "pilot_2": 1}  # pilots rank equal to Growth
 
     logs = (
         db.query(AuditLog)
@@ -2126,7 +2381,7 @@ def platform_tier_changes(
         from_tier, to_tier = m.group(1), m.group(2)
         if from_tier not in TIER_RANK or to_tier not in TIER_RANK:
             continue
-        direction = "upgrade" if TIER_RANK[to_tier] > TIER_RANK[from_tier] else "downgrade"
+        direction = "upgrade" if (TIER_RANK[to_tier] > TIER_RANK[from_tier] or (is_pilot(from_tier) and not is_pilot(to_tier) and TIER_RANK[to_tier] >= TIER_RANK[from_tier])) else "downgrade"
         if filter == "upgrades" and direction != "upgrade":
             continue
         if filter == "downgrades" and direction != "downgrade":

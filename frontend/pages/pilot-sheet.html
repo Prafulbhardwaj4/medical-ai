@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedScribe Pilot Sheet</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; background: #f3f4f6; margin: 0; }
+    .toolbar { max-width: 780px; margin: 16px auto 0; padding: 0 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .toolbar button { padding: 9px 18px; border: 0; border-radius: 6px; background: #0d9488; color: #fff; font-size: 14px; cursor: pointer; }
+    .toolbar .hint { font-size: 13px; color: #555; }
+    .sheet { max-width: 780px; margin: 12px auto 24px; background: #fff; padding: 28px 34px; border: 1px solid #ddd; }
+    h1 { font-size: 22px; margin: 0 0 2px; }
+    .sub { font-size: 13px; color: #444; margin-bottom: 16px; }
+    .hosp { font-size: 18px; font-weight: 700; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid #111; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 14px; }
+    td { padding: 7px 8px; border: 1px solid #bbb; vertical-align: top; }
+    td.k { width: 34%; font-weight: 700; background: #f5f5f5; }
+    h2 { font-size: 14px; margin: 14px 0 4px; text-transform: uppercase; letter-spacing: .4px; }
+    p { font-size: 14px; line-height: 1.5; margin: 0 0 6px; }
+    .fill { border: 0; border-bottom: 1px solid #111; font-size: 14px; padding: 2px 4px; min-width: 190px; background: transparent; font-family: inherit; }
+    .sign { display: flex; gap: 40px; margin-top: 34px; }
+    .sign div { flex: 1; border-top: 1px solid #111; padding-top: 4px; font-size: 12.5px; color: #333; }
+    #msg { max-width: 780px; margin: 16px auto; padding: 0 16px; font-size: 14px; color: #b91c1c; }
+    @page { size: A4; margin: 12mm; }
+    @media print {
+      body { background: #fff; }
+      .toolbar, #msg { display: none !important; }
+      .sheet { border: 0; margin: 0; padding: 0; max-width: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="toolbar">
+    <button id="print-btn" type="button">Print</button>
+    <span class="hint">Type the decision meeting date below, then print.</span>
+  </div>
+  <div id="msg"></div>
+
+  <div class="sheet" id="sheet" style="display:none">
+    <h1>MedScribe Pilot Sheet</h1>
+    <div class="sub">Please read before the pilot starts.</div>
+    <div class="hosp" id="s-hospital"></div>
+
+    <table>
+      <tr><td class="k">Plan</td><td id="s-plan"></td></tr>
+      <tr><td class="k">Fee paid</td><td id="s-fee"></td></tr>
+      <tr><td class="k">AI scribe limit</td><td id="s-cap"></td></tr>
+      <tr><td class="k">Pilot starts</td><td id="s-start"></td></tr>
+      <tr><td class="k">Pilot ends (deadline day)</td><td id="s-end"></td></tr>
+      <tr><td class="k">Grace period</td><td id="s-grace"></td></tr>
+    </table>
+
+    <h2>What happens at the limit</h2>
+    <p>When the weekly limit is reached, the AI scribe pauses until the next week starts. Everything else in MedScribe keeps working. There is no extra charge for going over, because the scribe simply pauses. Unused consultations in a week do not carry over.</p>
+
+    <h2>After the pilot</h2>
+    <p>Price after the pilot: Rs 29,999 per month on Growth.</p>
+    <p id="s-plan-rule"></p>
+
+    <h2>Decision meeting</h2>
+    <p>Decision meeting date: <input type="date" class="fill" id="s-meeting" /></p>
+
+    <div class="sign">
+      <div>Hospital representative (name and signature)</div>
+      <div>MedScribe (name and signature)</div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    function fmtDay(iso) {
+      if (!iso) return '-';
+      const [y, m, d] = iso.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+    function setText(id, text) { document.getElementById(id).textContent = text; }
+
+    async function loadSheet() {
+      const msg = document.getElementById('msg');
+      if (!requireAuth()) return;
+      const doc = getDoctor();
+      if (!doc || doc.role !== 'super_admin') { window.location.href = '/pages/login.html'; return; }
+      const id = Number(new URLSearchParams(window.location.search).get('id'));
+      if (!id) { msg.textContent = 'No hospital selected.'; return; }
+      try {
+        const h = await api('GET', `/admin/hospital/${id}`);
+        if (!h.is_pilot) { msg.textContent = 'This hospital is not on a pilot plan.'; return; }
+        const weeks = Number(h.pilot_total_weeks);
+        setText('s-hospital', h.name);
+        setText('s-plan', `${h.pilot_label} (${weeks} weeks)`);
+        setText('s-fee', `Rs ${Number(h.pilot_fee).toLocaleString('en-IN')}, paid upfront`);
+        setText('s-cap', `${Number(h.pilot_weekly_cap)} AI scribe consultations per week. The count starts again at the beginning of each week.`);
+        setText('s-start', fmtDay(h.pilot_start_date));
+        setText('s-end', fmtDay(h.pilot_end_date));
+        setText('s-grace', `2 days: ${fmtDay(h.pilot_end_date)} to ${fmtDay(h.pilot_grace_end_date)}. The AI scribe is stopped; everything else keeps working. From ${fmtDay(h.pilot_deactivation_date)} the hospital account is switched off unless it has moved to a paid plan.`);
+        setText('s-plan-rule', h.tier === 'pilot_1'
+          ? 'Pilot 1: if you move to a paid plan early, the fee for the unused weeks is adjusted against the plan.'
+          : 'Pilot 2: decide after the trial; after subscribing you may receive extra scribe consultations in the first month.');
+        document.getElementById('sheet').style.display = '';
+      } catch (e) {
+        msg.textContent = e.message || 'Could not load the hospital.';
+      }
+    }
+
+    document.getElementById('print-btn').addEventListener('click', () => window.print());
+    loadSheet();
+  </script>
+</body>
+
+</html>

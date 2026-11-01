@@ -1037,7 +1037,7 @@
             cycle_ended: "This hospital's billing cycle has ended — AI Scribe is paused until renewal. Continuing with manual entry.",
             cycle_not_started: "AI Scribe hasn't been activated for this hospital yet — continuing with manual entry.",
           };
-          switchToManualEntryMode(reasonMessages[e.data.reason] || "AI Scribe isn't available right now — continuing with manual entry.");
+          switchToManualEntryMode(e.data.message || reasonMessages[e.data.reason] || "AI Scribe isn't available right now — continuing with manual entry.");
         } else {
           toast(e.message, "error");
         }
@@ -1245,7 +1245,7 @@
             cycle_ended: "This hospital's billing cycle has ended — AI Scribe is paused until renewal. Continuing with manual entry.",
             cycle_not_started: "AI Scribe hasn't been activated for this hospital yet — continuing with manual entry.",
           };
-          switchToManualEntryMode(reasonMessages[status.reason] || "AI Scribe isn't available right now — continuing with manual entry.");
+          switchToManualEntryMode(status.message || reasonMessages[status.reason] || "AI Scribe isn't available right now — continuing with manual entry.");
         }
       } catch (e) { /* if the check itself fails, fall through to the normal flow — /structure's own 402 is the safety net */ }
     }

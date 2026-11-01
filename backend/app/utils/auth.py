@@ -264,7 +264,9 @@ def get_current_doctor(
         raise credentials_exception
     if doctor.role.value != "super_admin":
         hospital = db.query(Hospital).filter(Hospital.id == doctor.hospital_id).first()
-        if not hospital or not hospital.is_active:
+        from app.utils.pilot_lifecycle import ensure_pilot_lifecycle
+        pilot_expired = ensure_pilot_lifecycle(db, hospital) if hospital else False  # pilot past grace: deactivated at the first request
+        if not hospital or not hospital.is_active or pilot_expired:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="This hospital's account is deactivated. Please contact MedScribe support.",

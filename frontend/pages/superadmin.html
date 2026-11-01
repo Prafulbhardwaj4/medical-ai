@@ -1013,12 +1013,45 @@
         <option value="yearly">Yearly</option>
       </select>
       <div id="h-plan-preview" style="background:#f0faf9;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6;color:var(--navy);margin-bottom:14px"></div>
+      <div id="h-pilot-box" style="display:none;background:#f0faf9;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px">
+        <label class="form-label" style="font-size:12.5px;color:var(--slate)">Pilot start date</label>
+        <input type="date" class="form-control" id="h-pilot-start" style="margin-bottom:10px" />
+        <label class="form-label" style="font-size:12.5px;color:var(--slate)">Weekly scribe limit</label>
+        <input type="number" class="form-control" id="h-pilot-cap" min="1" max="1000" step="1" value="150" style="margin-bottom:10px" />
+        <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:10px">
+          <input type="checkbox" id="h-pilot-fee" />
+          <span id="h-pilot-fee-label">Pilot fee collected (Rs 6,000 / Rs 4,000)</span>
+        </label>
+        <div id="h-pilot-dates" style="font-size:13px;line-height:1.6;color:var(--navy)"></div>
+      </div>
       <label class="form-label" style="font-size:12.5px;color:var(--slate)">Billing Cycle Start Date</label>
       <input type="date" class="form-control" id="h-billing-cycle-start" style="margin-bottom:20px" />
       <div class="err-msg" id="hospital-err" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:12px">
         <button class="btn btn-primary" style="flex:1" onclick="submitHospital()">Create</button>
         <button class="btn btn-outline" style="flex:1" onclick="closeHospitalModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pilot edit modal (change pilot start date / weekly scribe limit) -->
+  <div class="modal-overlay" id="pilot-edit-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="pe-title">Change pilot</h2>
+        <button class="modal-close" data-pilot-action="close-edit">×</button>
+      </div>
+      <input type="hidden" id="pe-hospital-id" />
+      <input type="hidden" id="pe-kind" />
+      <label class="form-label" id="pe-label" style="font-size:12.5px;color:var(--slate)"></label>
+      <input class="form-control" id="pe-value" style="margin-bottom:6px" />
+      <div id="pe-hint" style="font-size:12.5px;color:var(--slate);margin-bottom:12px;line-height:1.5"></div>
+      <label class="form-label" style="font-size:12.5px;color:var(--slate)">Reason (required)</label>
+      <input class="form-control" id="pe-reason" maxlength="200" placeholder="Short reason" style="margin-bottom:14px" />
+      <div class="err-msg" id="pe-err" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-primary" style="flex:1" data-pilot-action="save-edit">Save</button>
+        <button class="btn btn-outline" style="flex:1" data-pilot-action="close-edit">Cancel</button>
       </div>
     </div>
   </div>
@@ -1480,7 +1513,7 @@
       document.getElementById('notif-backdrop').classList.remove('open');
     }
 
-    const NOTIF_ICON = { critical: 'critical', warning: 'warning', info: 'info' };
+    const NOTIF_ICON = { critical: 'critical', danger: 'critical', warning: 'warning', info: 'info' };
 
     async function loadNotifList() {
       const body = document.getElementById('notif-panel-body');
@@ -1547,7 +1580,7 @@
         document.getElementById('stat-arr').textContent = `Rs.${(data.monthly_revenue * 12).toLocaleString('en-IN')}`;
         document.getElementById('stat-new-hospitals').textContent = `+${data.new_hospitals_this_month} this month`;
 
-        const tierNames = { foundation: 'Foundation', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise' };
+        const tierNames = { foundation: 'Foundation', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise', pilot_1: 'Pilot 1', pilot_2: 'Pilot 2' };
         document.getElementById('stat-tier-breakdown').innerHTML = Object.entries(data.hospitals_by_tier || {})
           .map(([tier, count]) => `<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--slate)">${tierNames[tier] || tier}</span><strong>${count}</strong></div>`)
           .join('');
@@ -1735,7 +1768,7 @@
           mrrTierChart = new Chart(mrrCtx, {
             type: 'bar',
             data: {
-              labels: Object.keys(data.mrr_by_tier).map(t => tierLabels[t] || t),
+              labels: Object.keys(data.mrr_by_tier).map(t => tierLabels[t] || (t === 'pilot_1' ? 'Pilot 1' : t === 'pilot_2' ? 'Pilot 2' : 'Unknown plan')),
               datasets: [{ label: 'MRR (Rs.)', data: Object.values(data.mrr_by_tier), backgroundColor: ['#94a3b8', '#0d9488', '#1e3a5f', '#c9a227'] }]
             },
             options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
@@ -1851,6 +1884,7 @@
         document.getElementById('ga-deactivated-count').textContent = data.deactivated_count;
 
         const tierLabels = { foundation: 'Foundation', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise' };
+        tierLabels.pilot_1 = 'Pilot 1'; tierLabels.pilot_2 = 'Pilot 2';
         document.getElementById('ga-tier-breakdown').innerHTML = Object.entries(data.by_tier)
           .map(([tier, count]) => `<div style="display:flex;justify-content:space-between;font-size:13px"><span>${sanitize(tierLabels[tier] || tier)}</span><strong>${count}</strong></div>`)
           .join('');
@@ -1906,7 +1940,7 @@
       scale: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>',
       enterprise: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 4.5v9L12 20l-9-4.5v-9z"/></svg>',
     };
-    const TIER_LABEL = { foundation: 'Foundation', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise' };
+    const TIER_LABEL = { foundation: 'Foundation', growth: 'Growth', scale: 'Scale', enterprise: 'Enterprise', pilot_1: 'Pilot 1', pilot_2: 'Pilot 2' };
 
     function setTierChangeFilter(filter) {
       tierChangeFilter = filter;
@@ -2086,6 +2120,11 @@
     // Shared by the hospital cards and the detail page (item 5/6). Foundation
     // shows nothing at all — no 0/0 counter — per Praful's instruction.
     function aiScribeUsageBadgeHtml(h) {
+      if (h.is_pilot) {
+        const weekBadge = `<span class="badge ${(h.pilot_phase === 'active' && Number(h.pilot_week_used) >= Number(h.pilot_weekly_cap)) ? 'badge-red' : 'badge-grey'}">${Number(h.pilot_week_used || 0)}/${Number(h.pilot_weekly_cap)} this week</span>`;
+        const phaseBadge = h.pilot_phase === 'grace' ? ' <span class="badge badge-amber">Grace period</span>' : '';
+        return weekBadge + phaseBadge;
+      }
       if (!h.has_ai_scribe) return '';
       if (h.ai_scribe_cap === null) return '<span class="badge badge-grey">Unlimited</span>';
       const isExhausted = h.ai_scribe_total_remaining <= 0;
@@ -2126,7 +2165,10 @@
       const toT = cat.find(t => t.key === tier);
       const fromT = cat.find(t => t.key === from);
       const isDowngrade = from && order.indexOf(tier) < order.indexOf(from);
-      let msg = `Change plan from ${fromT ? fromT.label : from} (${fromT ? fromT.price : '-'}${fromT ? fromT.period : ''}) to ${toT ? toT.label : tier} (${toT ? toT.price : '-'}${toT ? toT.period : ''})? Has the hospital agreed and any payment difference been settled?`;
+      let msg = `Change plan from ${fromT ? fromT.label : (typeof tierLabel === 'function' ? tierLabel(from) : from)} (${fromT ? fromT.price : 'pilot'}${fromT ? fromT.period : ''}) to ${toT ? toT.label : tier} (${toT ? toT.price : '-'}${toT ? toT.period : ''})? Has the hospital agreed and any payment difference been settled?`;
+      if (from === 'pilot_1' || from === 'pilot_2') {
+        msg += ' The pilot rules stop at once (weekly scribe limit, pilot deadline and grace period). Afterwards set the billing cycle start date. If the hospital was deactivated, press Activate after this change. Any credit for unused pilot weeks is handled by you manually.';
+      }
       if (isDowngrade && currentHospitalData && currentHospitalData.ai_scribe_topup_remaining) {
         msg += ` WARNING: this hospital still has ${currentHospitalData.ai_scribe_topup_remaining} unused AI Scribe top-up consultations that will be stranded.`;
       }
@@ -2432,7 +2474,8 @@
         currentHospitalData = h;
         document.getElementById('detail-name').textContent = h.name;
         document.getElementById('detail-status-badge').className = `badge ${h.is_active ? 'badge-teal' : 'badge-grey'}`;
-        document.getElementById('detail-status-badge').textContent = h.is_active ? 'Active' : 'Inactive';
+        document.getElementById('detail-status-badge').textContent = h.is_pilot ? pilotStatusLabel(h) : (h.is_active ? 'Active' : 'Inactive');
+        if (h.is_pilot && h.is_active && h.pilot_phase === 'grace') document.getElementById('detail-status-badge').className = 'badge badge-amber';
 
         document.getElementById('detail-info').innerHTML = `
           <div class="hosp-info-hero">
@@ -2444,6 +2487,7 @@
           </div>
           <div class="info-row"><span class="info-label">Plan</span><span class="info-value">
             <select class="form-control" style="width:auto;padding:5px 10px;font-weight:600" onchange="updateHospitalTier(${h.id}, this.value)">
+              ${(h.tier === 'pilot_1' || h.tier === 'pilot_2') ? `<option value="${h.tier}" selected>${tierLabel(h.tier)}</option>` : ''}
               ${(typeof TIER_CATALOG !== 'undefined' ? TIER_CATALOG : []).map(t => `<option value="${t.key}" ${h.tier === t.key ? 'selected' : ''}>${t.label}</option>`).join('')}
             </select>
           </span></div>
@@ -2525,6 +2569,13 @@
       downloadFile(`/admin/hospitals/${currentHospitalId}/usage-history.csv`, `hospital-${currentHospitalId}-usage.csv`);
     }
 
+    function pilotHistoryHtml(h) {
+      const p = h.pilot_history;
+      if (!p) return '';
+      const note = p.result_note ? ` · Result: ${sanitize(p.result_note)}` : '';
+      return `<div class="info-row"><span class="info-label">Earlier pilot</span><span class="info-value">${fmtYmd(p.start_date)} – ${fmtYmd(p.end_date)} · weekly limit ${Number(p.weekly_cap)}${note}</span></div>`;
+    }
+
     function fmtCycleDate(iso) {
       if (!iso) return '—';
       return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -2533,6 +2584,11 @@
     function renderAiScribeDetailCard(h) {
       const card = document.getElementById('detail-ai-scribe-card');
       const body = document.getElementById('detail-ai-scribe');
+      if (h.is_pilot) {
+        card.style.display = '';
+        renderPilotBlock(h, body);  // pilots show the Pilot block instead of the monthly billing block
+        return;
+      }
       card.style.display = '';
 
       const capLine = h.ai_scribe_cap === null
@@ -2556,6 +2612,7 @@
           </select></span></div>
         <div class="info-row"><span class="info-label">Billing Cycle</span><span class="info-value">${fmtCycleDate(h.billing_cycle_start)} → ${fmtCycleDate(h.billing_cycle_end)}</span></div>
         ${cycleSetControl}
+        ${pilotHistoryHtml(h)}
         ${h.billing_period === 'yearly' ? `<div class="info-row"><span class="info-label">Plan Term</span><span class="info-value">Yearly · ${h.plan_service_months} months · ends ${fmtCycleDate(h.plan_end_date || h.billing_cycle_end)}</span></div>` : ''}
         <div class="info-row"><span class="info-label">Grace Period Ends</span><span class="info-value">${fmtCycleDate(h.grace_end)}</span></div>
         <div class="info-row"><span class="info-label">Full Deactivation From</span><span class="info-value" style="color:var(--danger)">${fmtCycleDate(h.deactivation_at)}</span></div>
@@ -2564,6 +2621,170 @@
           <button class="btn btn-primary btn-sm" ${renewDisabled ? 'disabled title="Opens 2 days before cycle-end, through the end of the grace period"' : ''} onclick="renewHospital(${h.id})">Renew</button>
         </div>
       `;
+    }
+
+    // ── PILOT BLOCK (Pilot 1 / Pilot 2). All dates and numbers come from the server; no date math here. ──
+    function pilotStatusLabel(h) {
+      if (!h.is_active || h.pilot_phase === 'expired') return 'Deactivated';
+      if (h.pilot_phase === 'grace') return 'Grace period';
+      if (h.pilot_phase === 'not_started') return 'Not started';
+      return 'Active';
+    }
+
+    function renderPilotBlock(h, body) {
+      const id = Number(h.id);
+      const phase = h.pilot_phase;
+      const weekLine = phase === 'not_started' ? '—' : `Week ${Number(h.pilot_week)} of ${Number(h.pilot_total_weeks)}`;
+      let daysLine = '—';
+      if (phase === 'active') daysLine = `${Number(h.pilot_days_left)} day(s) left`;
+      else if (phase === 'grace') daysLine = `Grace period: ${Number(h.pilot_grace_days_left)} day(s) left (scribe stopped)`;
+      else if (phase === 'expired') daysLine = 'Pilot over';
+      const usedLabel = phase === 'active' ? 'AI scribe this week' : 'AI scribe (last pilot week)';
+      const badgeClass = phase === 'grace' ? 'badge-amber' : ((!h.is_active || phase === 'expired') ? 'badge-grey' : 'badge-teal');
+      body.innerHTML = `
+        <div class="info-row"><span class="info-label">Plan</span><span class="info-value">${sanitize(h.pilot_label)} <span class="badge ${badgeClass}">${sanitize(pilotStatusLabel(h))}</span></span></div>
+        <div class="info-row"><span class="info-label">Pilot week</span><span class="info-value">${weekLine}</span></div>
+        <div class="info-row"><span class="info-label">${usedLabel}</span><span class="info-value"><strong>${Number(h.pilot_week_used || 0)} of ${Number(h.pilot_weekly_cap)}</strong></span></div>
+        <div class="info-row"><span class="info-label">Start date</span><span class="info-value">${fmtYmd(h.pilot_start_date)}</span></div>
+        <div class="info-row"><span class="info-label">End date (deadline day)</span><span class="info-value">${fmtYmd(h.pilot_end_date)}</span></div>
+        <div class="info-row"><span class="info-label">Days left</span><span class="info-value">${daysLine}</span></div>
+        <div class="info-row"><span class="info-label">Grace period ends</span><span class="info-value">${fmtYmd(h.pilot_grace_end_date)}</span></div>
+        <div class="info-row"><span class="info-label">Deactivation from</span><span class="info-value" style="color:var(--danger)">${fmtYmd(h.pilot_deactivation_date)}</span></div>
+        <div style="display:flex;gap:8px;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)">
+          <span class="info-label" style="flex-shrink:0">Pilot result</span>
+          <input class="form-control" id="pilot-result-input" maxlength="300" placeholder="One line, e.g. wait time 25 min to 12 min" style="flex:1" />
+          <button class="btn btn-outline btn-sm" data-pilot-action="save-result" data-hid="${id}">Save</button>
+        </div>
+        <div class="detail-actions-row">
+          <button class="btn btn-outline btn-sm" data-pilot-action="dates" data-hid="${id}">Change pilot dates</button>
+          <button class="btn btn-outline btn-sm" data-pilot-action="cap" data-hid="${id}">Change weekly limit</button>
+          <button class="btn btn-outline btn-sm" data-pilot-action="print-sheet" data-hid="${id}">Print pilot sheet</button>
+        </div>
+      `;
+      document.getElementById('pilot-result-input').value = h.pilot_result_note || '';  // value, never innerHTML
+    }
+
+    function openPilotEdit(kind, hospitalId) {
+      const h = currentHospitalData;
+      if (!h || Number(h.id) !== Number(hospitalId)) return;
+      const input = document.getElementById('pe-value');
+      document.getElementById('pe-hospital-id').value = hospitalId;
+      document.getElementById('pe-kind').value = kind;
+      document.getElementById('pe-reason').value = '';
+      document.getElementById('pe-err').textContent = '';
+      document.getElementById('pe-hint').textContent = '';
+      input.onchange = null;
+      if (kind === 'dates') {
+        document.getElementById('pe-title').textContent = 'Change pilot dates';
+        document.getElementById('pe-label').textContent = 'Pilot start date (the end date follows)';
+        input.type = 'date';
+        input.removeAttribute('min'); input.removeAttribute('max');
+        input.value = h.pilot_start_date || '';
+        input.onchange = updatePilotDatesHint;
+        updatePilotDatesHint();
+      } else {
+        document.getElementById('pe-title').textContent = 'Change weekly limit';
+        document.getElementById('pe-label').textContent = 'Weekly scribe limit (1 to 1000)';
+        input.type = 'number'; input.min = '1'; input.max = '1000'; input.step = '1';
+        input.value = String(h.pilot_weekly_cap);
+      }
+      document.getElementById('pilot-edit-modal').classList.add('open');
+    }
+
+    function closePilotEdit() {
+      document.getElementById('pilot-edit-modal').classList.remove('open');
+    }
+
+    async function updatePilotDatesHint() {
+      const hint = document.getElementById('pe-hint');
+      const val = document.getElementById('pe-value').value;
+      if (!val || !currentHospitalData) { hint.textContent = ''; return; }
+      try {
+        const p = await api('GET', `/admin/pilot-preview?tier=${encodeURIComponent(currentHospitalData.tier)}&start_date=${encodeURIComponent(val)}`);
+        hint.textContent = `Pilot ends ${fmtYmd(p.end_date)}. Grace ends ${fmtYmd(p.grace_end_date)}. Deactivation ${fmtYmd(p.deactivation_date)}.`;
+      } catch (e) { hint.textContent = e.message; }
+    }
+
+    async function savePilotEdit() {
+      const err = document.getElementById('pe-err');
+      const hospitalId = Number(document.getElementById('pe-hospital-id').value);
+      const kind = document.getElementById('pe-kind').value;
+      const val = document.getElementById('pe-value').value.trim();
+      const reason = document.getElementById('pe-reason').value.trim();
+      if (!val) { err.textContent = 'Enter a value.'; return; }
+      if (reason.length < 5) { err.textContent = 'A short reason (at least 5 characters) is required.'; return; }
+      if (kind === 'cap' && !/^\d+$/.test(val)) { err.textContent = 'Weekly limit must be a whole number.'; return; }
+      const url = kind === 'dates'
+        ? `/admin/hospitals/${hospitalId}/pilot-dates?start_date=${encodeURIComponent(val)}&reason=${encodeURIComponent(reason)}`
+        : `/admin/hospitals/${hospitalId}/pilot-weekly-cap?weekly_cap=${encodeURIComponent(val)}&reason=${encodeURIComponent(reason)}`;
+      try {
+        await api('PATCH', url);
+        closePilotEdit();
+        toast(kind === 'dates' ? 'Pilot dates updated.' : 'Weekly limit updated.', 'success');
+        openDetail(hospitalId);
+      } catch (e) { err.textContent = e.message; }
+    }
+
+    async function savePilotResult(hospitalId) {
+      const note = document.getElementById('pilot-result-input').value;
+      try {
+        await api('PATCH', `/admin/hospitals/${hospitalId}/pilot-result?note=${encodeURIComponent(note)}`);
+        toast('Pilot result saved.', 'success');
+        if (currentHospitalData && Number(currentHospitalData.id) === Number(hospitalId)) currentHospitalData.pilot_result_note = note.trim() || null;
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    document.addEventListener('click', (ev) => {
+      const el = ev.target.closest('[data-pilot-action]');
+      if (!el) return;
+      const action = el.dataset.pilotAction;
+      const hid = Number(el.dataset.hid);
+      if (action === 'dates' || action === 'cap') openPilotEdit(action, hid);
+      else if (action === 'save-result') savePilotResult(hid);
+      else if (action === 'save-edit') savePilotEdit();
+      else if (action === 'close-edit') closePilotEdit();
+      else if (action === 'print-sheet') window.open(`pilot-sheet.html?id=${hid}`, '_blank', 'noopener');
+    });
+
+    // ── Create-hospital form: pilot fields ──
+    function ensurePilotTierOptions() {
+      const sel = document.getElementById('h-tier');
+      [['pilot_1', 'Pilot 1'], ['pilot_2', 'Pilot 2']].forEach(([v, label]) => {
+        if (!sel.querySelector(`option[value="${v}"]`)) {
+          const o = document.createElement('option');
+          o.value = v; o.textContent = label;
+          sel.appendChild(o);
+        }
+      });
+    }
+
+    function togglePilotFields(isPilotTier) {
+      const periodEl = document.getElementById('h-period');
+      const cycleEl = document.getElementById('h-billing-cycle-start');
+      const hide = isPilotTier ? 'none' : '';
+      periodEl.style.display = hide;
+      if (periodEl.previousElementSibling) periodEl.previousElementSibling.style.display = hide;  // "Plan Duration" label
+      document.getElementById('h-plan-preview').style.display = hide;
+      cycleEl.style.display = hide;
+      if (cycleEl.previousElementSibling) cycleEl.previousElementSibling.style.display = hide;  // "Billing Cycle Start Date" label
+      document.getElementById('h-pilot-box').style.display = isPilotTier ? '' : 'none';
+    }
+
+    async function refreshPilotPreview() {
+      const tier = document.getElementById('h-tier').value;
+      if (tier !== 'pilot_1' && tier !== 'pilot_2') return;
+      const startEl = document.getElementById('h-pilot-start');
+      const out = document.getElementById('h-pilot-dates');
+      try {
+        const p = await api('GET', `/admin/pilot-preview?tier=${encodeURIComponent(tier)}` + (startEl.value ? `&start_date=${encodeURIComponent(startEl.value)}` : ''));
+        if (!startEl.value) startEl.value = p.start_date;  // default = today (IST), from the server
+        document.getElementById('h-pilot-fee-label').textContent = `Pilot fee collected (${p.fee_label})`;
+        out.innerHTML = [
+          `Pilot ends: ${fmtYmd(p.end_date)} (${Number(p.days)} days)`,
+          `Grace ends: ${fmtYmd(p.grace_end_date)}`,
+          `Deactivation: ${fmtYmd(p.deactivation_date)}`,
+        ].map(sanitize).join('<br>');
+      } catch (e) { out.textContent = e.message; }
     }
 
     async function setBillingPeriod(hospitalId, period) {
@@ -2672,6 +2893,15 @@
       const periodEl = document.getElementById(prefix + '-period');
       const box = document.getElementById(prefix + '-plan-preview');
       const yearlyOpt = periodEl.querySelector('option[value="yearly"]');
+      if (prefix === 'h') {
+        const isPilotTier = tier === 'pilot_1' || tier === 'pilot_2';
+        togglePilotFields(isPilotTier);
+        if (isPilotTier) {
+          periodEl.value = 'monthly';
+          await refreshPilotPreview();
+          return;
+        }
+      }
       if (tier === 'scale' || tier === 'enterprise') {
         periodEl.value = 'monthly';
         yearlyOpt.disabled = true;
@@ -2685,6 +2915,10 @@
     }
 
     function openHospitalModal() {
+      ensurePilotTierOptions();
+      document.getElementById('h-pilot-start').value = '';
+      document.getElementById('h-pilot-cap').value = '150';
+      document.getElementById('h-pilot-fee').checked = false;
       document.getElementById('h-period').value = 'monthly';
       refreshPlanPreview('h');
       document.getElementById('hospital-modal').classList.add('open');
@@ -2709,12 +2943,25 @@
       if (name.length < 3) {
         err.textContent = 'Hospital name must be at least 3 characters.'; return;
       }
-      if (!billing_cycle_start) {
+      const isPilotTier = tier === 'pilot_1' || tier === 'pilot_2';
+      if (!isPilotTier && !billing_cycle_start) {
         err.textContent = 'Billing cycle start date is required.'; return;
       }
 
       const billing_period = document.getElementById('h-period').value;
-      const params = new URLSearchParams({ name, city, state, address, hospital_type, tier, billing_period, billing_cycle_start });
+      const params = new URLSearchParams({ name, city, state, address, hospital_type, tier, billing_period });
+      if (isPilotTier) {
+        const pilotStart = document.getElementById('h-pilot-start').value;
+        const pilotCap = document.getElementById('h-pilot-cap').value.trim();
+        if (!pilotStart) { err.textContent = 'Pick the pilot start date.'; return; }
+        if (!/^\d+$/.test(pilotCap)) { err.textContent = 'Weekly scribe limit must be a whole number.'; return; }
+        if (!document.getElementById('h-pilot-fee').checked) { err.textContent = 'Tick "Pilot fee collected" before creating a pilot hospital.'; return; }
+        params.set('pilot_start_date', pilotStart);
+        params.set('pilot_weekly_cap', pilotCap);
+        params.set('pilot_fee_collected', 'true');
+      } else {
+        params.set('billing_cycle_start', billing_cycle_start);
+      }
       try {
         await api('POST', `/admin/hospitals-jwt?${params.toString()}`);
         toast('Hospital created.', 'success');

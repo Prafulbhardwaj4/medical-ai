@@ -12,7 +12,7 @@ from app.models.doctor import Doctor
 from app.models.hospital import Hospital
 from app.utils.auth import get_current_doctor
 
-TIER_ORDER = {"foundation": 0, "growth": 1, "scale": 2, "enterprise": 3}
+TIER_ORDER = {"foundation": 0, "growth": 1, "pilot_1": 1, "pilot_2": 1, "scale": 2, "enterprise": 3}  # pilots rank equal to Growth
 
 
 def tier_at_least(tier: str, minimum: str) -> bool:

@@ -15,6 +15,8 @@ nothing downstream can misread a placeholder as a real ceiling.
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 
+from app.utils.pilot import is_pilot
+
 AI_SCRIBE_TIER_CAPS = {
     "foundation": 0,        # no AI Scribe on Foundation at all — never show topup/used-total UI for this tier
     "growth": 5000,
@@ -24,6 +26,8 @@ AI_SCRIBE_TIER_CAPS = {
 
 
 def is_unlimited(hospital_tier: str) -> bool:
+    if is_pilot(hospital_tier):
+        return False  # pilots have a weekly cap (app/utils/pilot.py), never unlimited
     return AI_SCRIBE_TIER_CAPS.get(hospital_tier) is None
 
 
@@ -111,6 +115,8 @@ def monthly_equivalent_price(hospital, tier=None):
     """Per-month revenue contribution for MRR/ARR. Yearly = term price / service months
     (Foundation 119988/13, Growth 349999/12); monthly = list monthly price."""
     tier = tier or hospital.tier
+    if is_pilot(tier):
+        return 0  # pilots are not part of Expected MRR (list price)
     if getattr(hospital, "billing_period", "monthly") == "yearly" and tier in YEARLY_LIST_PRICE:
         return round(YEARLY_LIST_PRICE[tier] / YEARLY_TERM_MONTHS[tier])
     return TIER_MONTHLY_PRICE.get(tier, 0)
@@ -145,6 +151,9 @@ def get_billing_cycle_info(hospital):
     derived from the single billing_cycle_start anchor."""
     if not hospital.billing_cycle_start:
         return None
+
+    if is_pilot(hospital.tier):
+        return None  # pilots never use the monthly billing cycle (see app/utils/pilot.py)
 
     cycle_start = hospital.billing_cycle_start
     stored_end = getattr(hospital, "plan_end_date", None)

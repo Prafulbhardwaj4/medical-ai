@@ -11,6 +11,7 @@ from app.utils.ai_scribe_gate import get_ai_scribe_status, consume_ai_scribe_cre
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem, StructureRequest
 from app.utils.auth import get_current_doctor, now_ist_naive, ist_day_bounds, ist_today, decode_access_token, is_token_blacklisted
 from app.utils.audit import log_action
+from app.utils.pilot import is_pilot
 from app.utils.tier_gate import hospital_has_tier
 from app.services.groq_service import structure_transcript, match_tests_to_catalog, match_radiology_to_catalog
 from app.services.pdf_service import generate_prescription_pdf
@@ -620,11 +621,11 @@ async def structure(
     # Re-structuring a consultation that already consumed a credit is free, so a
     # doctor who edits the transcript isn't blocked by (or charged against) the cap.
     # Foundation / cycle-ended still block.
-    if not ai_scribe_status["allowed"] and not (already_paid and ai_scribe_status["reason"] == "cap_reached"):
+    if not ai_scribe_status["allowed"] and not (already_paid and ai_scribe_status["reason"] in ("cap_reached", "weekly_cap_reached")):
         # 402, not 400/403 — a distinct status the frontend checks for
         # specifically, to fall back to manual entry instead of showing a
         # generic error (item 2: "same as Foundation", not a broken screen).
-        raise HTTPException(status_code=402, detail={"ai_scribe_blocked": True, "reason": ai_scribe_status["reason"]})
+        raise HTTPException(status_code=402, detail={"ai_scribe_blocked": True, "reason": ai_scribe_status["reason"], "message": ai_scribe_status.get("message")})
 
     previous = (
         db.query(Consultation)
@@ -654,7 +655,7 @@ async def structure(
         raise HTTPException(status_code=502, detail="AI structuring is temporarily unavailable. Please try again in a moment.")
 
     if not already_paid:
-        consume_ai_scribe_credit(db, hospital)  # only counts against the cap once structuring actually succeeds
+        consume_ai_scribe_credit(db, hospital, consultation)  # only counts against the cap once structuring actually succeeds
         consultation.ai_scribe_credit_consumed = True
 
     consultation.chief_complaint = structured.get("chief_complaint", "")
@@ -1833,7 +1834,24 @@ def admin_dashboard(
 
     # Same counter ai_scribe_gate.py enforces, so this page and the real limit agree.
     _hosp = db.query(Hospital).filter(Hospital.id == hospital_id).first() if hospital_id else None
-    if _hosp and has_ai_scribe_at_all(_hosp.tier):
+    if _hosp and is_pilot(_hosp.tier):
+        _sc = get_ai_scribe_status(db, _hosp)
+        ai_scribe_block = {
+            "included": True,
+            "pilot": True,
+            "period": "week",
+            "week": _sc["week"],
+            "total_weeks": _sc["total_weeks"],
+            "resets_on": _sc["resets_on"],
+            "used": _sc["used"],
+            "cap": _sc["cap"],
+            "topup_remaining": 0,
+            "total_remaining": _sc["total_remaining"],
+            "allowed": _sc["allowed"],
+            "reason": _sc["reason"],
+            "message": _sc["message"],
+        }
+    elif _hosp and has_ai_scribe_at_all(_hosp.tier):
         _sc = get_ai_scribe_status(db, _hosp)
         ai_scribe_block = {
             "included": True,

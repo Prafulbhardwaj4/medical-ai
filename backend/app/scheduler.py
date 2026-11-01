@@ -18,6 +18,7 @@ from app.models.hospital import Hospital
 from app.models.day_end_close import DayEndClose
 from app.utils.timezone import ist_today, now_ist, now_ist_naive
 from app.utils.billing_cycle import is_past_grace
+from app.utils.pilot import PILOT_TIERS
 from app.utils.audit import log_action
 
 logger = logging.getLogger("scheduler")
@@ -37,6 +38,7 @@ def run_billing_deactivation_sweep_for_all_hospitals():
         hospitals = db.query(Hospital).filter(
             Hospital.is_active == True,  # noqa: E712
             Hospital.billing_cycle_start.isnot(None),
+            Hospital.tier.notin_(PILOT_TIERS),  # pilots have their own lifecycle, not the monthly cycle
         ).all()
         deactivated = []
         for hospital in hospitals:
@@ -53,6 +55,23 @@ def run_billing_deactivation_sweep_for_all_hospitals():
                 details="Grace window passed with no renewal",
                 hospital_id=hospital.id
             )
+    finally:
+        db.close()
+
+
+def run_pilot_lifecycle_sweep_for_all_hospitals():
+    """Nightly (00:00 IST): deadline-day notification, and deactivation once the pilot grace period is over.
+    All logic lives in app/utils/pilot_lifecycle.py; request-time enforcement uses the same function."""
+    from app.utils.pilot_lifecycle import run_pilot_lifecycle_sweep
+
+    db = SessionLocal()
+    try:
+        n = run_pilot_lifecycle_sweep(db)
+        if n:
+            logger.info(f"Pilot sweep deactivated {n} hospital(s) after their grace period.")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Pilot lifecycle sweep failed: {e}")
     finally:
         db.close()
 
@@ -212,6 +231,7 @@ async def midnight_close_loop():
         run_midnight_close_for_all_hospitals()  # catch up on any day missed while the server was down
         from app.utils.usage_history import finalize_usage_snapshots_for_all_hospitals
         finalize_usage_snapshots_for_all_hospitals()  # store ended months/cycles not stored yet (add-only)
+        run_pilot_lifecycle_sweep_for_all_hospitals()  # catch up on a pilot deadline missed while the server was down
         purge_generated_files()
     except Exception as e:
         logger.warning(f"Startup day-end catch-up failed: {e}")
@@ -222,6 +242,7 @@ async def midnight_close_loop():
             purge_generated_files()
             run_midnight_close_for_all_hospitals()
             run_billing_deactivation_sweep_for_all_hospitals()
+            run_pilot_lifecycle_sweep_for_all_hospitals()
             from app.utils.usage_history import finalize_usage_snapshots_for_all_hospitals
             finalize_usage_snapshots_for_all_hospitals()
         except Exception as e:

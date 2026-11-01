@@ -21,7 +21,7 @@ It refuses to run against anything except a local SQLite database.
 """
 import os
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -49,6 +49,8 @@ from app.routers.patients import generate_patient_uid, generate_url_token  # noq
 from app.utils.auth import hash_password  # noqa: E402
 from app.utils.portal_auth import hash_password as hash_portal_password  # noqa: E402
 from app.utils.timezone import ist_today, now_ist_naive  # noqa: E402
+from app.models.subscription_payment import SubscriptionPayment  # noqa: E402
+from app.utils.pilot import is_pilot, pilot_end_date, pilot_label, PILOT_FEE, PILOT_DEFAULT_WEEKLY_CAP  # noqa: E402
 
 PASSWORD = "Local@1234"
 PORTAL_PHONE = "9811111111"  # patient portal login (same phone exists in every hospital)
@@ -60,6 +62,8 @@ PORTAL_PHONE = "9811111111"  # patient portal login (same phone exists in every 
 HOSPITALS = [
     ("DEMO", "Demo Foundation Hospital", "foundation"),
     ("GROW", "Demo Growth Hospital", "growth"),
+    ("PIL1", "Demo Pilot 1 Hospital", "pilot_1"),   # started 10 days ago -> week 2 of 6
+    ("PIL2", "Demo Pilot 2 Hospital", "pilot_2"),   # started 19 days ago -> deadline in 2 days
 ]
 
 # ---------------------------------------------------------------------------
@@ -202,6 +206,42 @@ def seed_master_catalog(db):
         db.commit()
 
 
+# Pilot demo hospitals: how many days ago the pilot started (IST).
+PILOT_DEMO_START_DAYS_AGO = {"PIL1": 10, "PIL2": 19}
+
+
+def pilot_fields(code, tier):
+    """Pilot columns for a new pilot demo hospital; nothing for any other tier."""
+    if not is_pilot(tier):
+        return {}
+    start = ist_today() - timedelta(days=PILOT_DEMO_START_DAYS_AGO[code])
+    return {
+        "pilot_start_date": start,
+        "pilot_end_date": pilot_end_date(tier, start),
+        "pilot_weekly_cap": PILOT_DEFAULT_WEEKLY_CAP,
+    }
+
+
+def seed_pilot_fee(db, hospital, superadmin):
+    """The upfront pilot fee payment record (added once)."""
+    if not is_pilot(hospital.tier):
+        return
+    if db.query(SubscriptionPayment).filter(
+        SubscriptionPayment.hospital_id == hospital.id, SubscriptionPayment.billing_period == "pilot"
+    ).first():
+        return
+    start, end = hospital.pilot_start_date, hospital.pilot_end_date
+    db.add(SubscriptionPayment(
+        hospital_id=hospital.id, tier=hospital.tier, billing_period="pilot",
+        amount=PILOT_FEE[hospital.tier],
+        period_start=datetime(start.year, start.month, start.day),
+        period_end=datetime(end.year, end.month, end.day),
+        collected_by=superadmin.id if superadmin else None,
+        note=f"{pilot_label(hospital.tier)} fee collected upfront",
+    ))
+    db.commit()
+
+
 def get_or_create_hospital(db, code, name, tier):
     h = db.query(Hospital).filter(Hospital.hospital_code == code).first()
     if h:
@@ -210,6 +250,7 @@ def get_or_create_hospital(db, code, name, tier):
         name=name, hospital_code=code, tier=tier, city="Panipat", state="Haryana",
         address="Local test address", hospital_type="private", billing_enabled=True,
         default_consultation_fee=300.0, is_active=True,
+        **pilot_fields(code, tier),
     )
     db.add(h)
     db.commit()
@@ -339,6 +380,7 @@ def main():
     db = SessionLocal()
     try:
         seed_superadmin(db)
+        superadmin = db.query(Doctor).filter(Doctor.email == "superadmin@example.com").first()
         seed_master_catalog(db)
         all_staff, hospitals = [], []
         for code, name, tier in HOSPITALS:
@@ -349,6 +391,7 @@ def main():
             seed_medicines(db, hospital)
             seed_tests(db, hospital)
             seed_patients(db, hospital, next(s for s in staff if s.role == UserRole.doctor))
+            seed_pilot_fee(db, hospital, superadmin)
         seed_portal_account(db, hospitals)
         mark_present_today(db, all_staff)
     finally:
@@ -366,6 +409,7 @@ def main():
     print(f"\nEvery hospital has the same {len(MEDICINES)} medicines, {len(TESTS)} lab tests and {len(PATIENTS)} patients,")
     print("including an expired lot (Ibuprofen IBU-OLD), a medicine with ONLY expired stock (Metformin),")
     print("a near-expiry one (Cetirizine), a Schedule H1 (Alprazolam) and a Schedule X (Morphine) drug.\n")
+    print("Pilot demo hospitals: PIL1 (Pilot 1, started 10 days ago, week 2) and PIL2 (Pilot 2, started 19 days ago, deadline in 2 days).\n")
 
 
 if __name__ == "__main__":
