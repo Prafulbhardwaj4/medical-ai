@@ -290,6 +290,7 @@
   </div>
 
   <div id="toast"></div>
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
@@ -373,7 +374,7 @@
         return `
           <div class="doc-picker-row" onclick="toggleDocPickerDoctor(${d.id})">
             <input type="checkbox" ${checked ? 'checked' : ''} />
-            <span>${d.title} ${d.name}</span>
+            <span>${sanitize(d.title)} ${sanitize(d.name)}</span>
             <span class="doc-picker-status badge ${b.cls}">${b.label}</span>
           </div>`;
       }).join('');
@@ -475,7 +476,7 @@
         return `
           <div class="doc-picker-row" style="padding:10px 8px" onclick="toggleCoverageModalDoctor(${d.id})">
             <input type="checkbox" id="cov-chk-${d.id}" ${nurseSelectedDoctorIds.includes(d.id) ? 'checked' : ''} />
-            <span>${d.title} ${d.name}</span>
+            <span>${sanitize(d.title)} ${sanitize(d.name)}</span>
             <span class="doc-picker-status badge ${b.cls}">${b.label}</span>
           </div>`;
       }).join('') : `<p style="color:var(--slate-light);font-size:13px;padding:8px">No doctors found.</p>`;
@@ -540,8 +541,8 @@
       }
       return `
       <tr>
-        <td data-label="Token"><strong>${v.token_number || '—'}</strong></td>
-        <td data-label="Patient">${v.patient_name}${v.is_emergency ? ' <span class="badge badge-red">Emergency</span>' : ''}${isReturningToday ? ' <span class="badge badge-teal" title="This patient also has another visit today — this is a separate return visit, treat normally">Returning today</span>' : ''}</td>
+        <td data-label="Token"><strong>${sanitize(v.token_number || '—')}</strong></td>
+        <td data-label="Patient">${sanitize(v.patient_name)}${v.is_emergency ? ' <span class="badge badge-red">Emergency</span>' : ''}${isReturningToday ? ' <span class="badge badge-teal" title="This patient also has another visit today — this is a separate return visit, treat normally">Returning today</span>' : ''}</td>
         <td data-label="${timeField === 'created_at' ? 'Checked In' : 'Est. Time'}" class="col-checkin-time" style="color:var(--slate)">${timeLabel(v[timeField])}</td>
         <td data-label="Vitals">${vitalsCellHtml(v)}</td>
         <td data-label="Status">${statusCell}</td>
@@ -661,9 +662,9 @@
         return `
           <div class="roster-row ${mine ? 'assigned-to-me' : ''}">
             <div>
-              <strong>${d.title} ${d.name}</strong>
+              <strong>${sanitize(d.title)} ${sanitize(d.name)}</strong>
               ${mine ? '<span class="badge badge-navy" style="margin-left:8px">Assisting</span>' : ''}
-              <div style="color:var(--slate);font-size:13px;margin-top:4px">${d.specialization || ''}</div>
+              <div style="color:var(--slate);font-size:13px;margin-top:4px">${sanitize(d.specialization || '')}</div>
             </div>
             <span class="badge ${b.cls}">${b.label}</span>
           </div>`;
@@ -698,10 +699,10 @@
       overlay.innerHTML = `
         <div class="modal" style="max-width:400px;text-align:center">
           <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:space-between;align-items:center">
-            <h2 style="margin:0;font-size:18px;color:#dc2626;flex:1;text-align:center">${n.title.replace('🚨 ', '🚨 ')}</h2>
+            <h2 style="margin:0;font-size:18px;color:#dc2626;flex:1;text-align:center">${sanitize(n.title)}</h2>
             <button class="modal-close" id="aea-close-btn">&times;</button>
           </div>
-          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${n.message}</p>
+          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${sanitize(n.message)}</p>
           <button type="button" class="btn btn-primary" id="aea-ack-btn" style="background:#dc2626;border-color:#dc2626;width:100%">Acknowledge</button>
         </div>
       `;
@@ -732,10 +733,10 @@
       overlay.innerHTML = `
         <div class="modal" style="max-width:400px;text-align:center">
           <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:space-between;align-items:center">
-            <h2 style="margin:0;font-size:18px;color:#dc2626;flex:1;text-align:center">${n.title}</h2>
+            <h2 style="margin:0;font-size:18px;color:#dc2626;flex:1;text-align:center">${sanitize(n.title)}</h2>
             <button class="modal-close" id="eh-close-btn">&times;</button>
           </div>
-          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${n.message}</p>
+          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${sanitize(n.message)}</p>
           <button type="button" class="btn btn-primary" id="eh-ack-btn" style="background:#dc2626;border-color:#dc2626;width:100%">Acknowledge</button>
         </div>
       `;

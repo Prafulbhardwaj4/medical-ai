@@ -898,6 +898,7 @@
   </div>
 
   <div id="toast"></div>
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
@@ -925,7 +926,7 @@
         billsRows = await api("GET", "/patients/reception/pending-payments");
         setBillsFilter(billsFilter);
       } catch (e) {
-        document.getElementById('bills-modal-list').innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        document.getElementById('bills-modal-list').innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -955,7 +956,7 @@
             <div style="padding:8px 0;border-top:1px solid var(--border)">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
                 <div>
-                  ${d.doctor_name ? `<span style="font-size:12.5px;font-weight:600;color:var(--slate)">${d.doctor_name}</span>` : ''}
+                  ${d.doctor_name ? `<span style="font-size:12.5px;font-weight:600;color:var(--slate)">${sanitize(d.doctor_name)}</span>` : ''}
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="confirmGenerateBill(${d.checkin_id}, this)" ${d.needs_regenerate ? '' : 'disabled title="Nothing new to bill since it was generated"'}>🧾 Generate Bill</button>
               </div>
@@ -974,7 +975,7 @@
         return `
           <div style="padding:12px 0;border-bottom:1px solid var(--border)">
             <div>
-              <strong>${r.patient_name}</strong> ${firstVisitTime ? `<span style="font-size:12px;color:var(--slate-light)">Checked in ${firstVisitTime}</span>` : ''}
+              <strong>${sanitize(r.patient_name)}</strong> ${firstVisitTime ? `<span style="font-size:12px;color:var(--slate-light)">Checked in ${firstVisitTime}</span>` : ''}
               <span class="badge ${r.is_finalized ? 'badge-green' : 'badge-amber'}" style="margin-left:6px">${r.is_finalized ? 'Generated' : 'Pending'}</span>
             </div>
             ${doctorBlocks}
@@ -1185,7 +1186,7 @@
         admissionPharmQueueData = await api("GET", "/pharmacy/admission-queue");
         renderAdmissionPharmQueue();
       } catch (e) {
-        targets.forEach(el => el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`);
+        targets.forEach(el => el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`);
       }
     }
 
@@ -1428,9 +1429,9 @@
 
       el.innerHTML = items.map(i => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;cursor:pointer"
-          onclick="openPrescription('${i.token_number}')">
+          onclick="openPrescription(${jsArg(i.token_number)})">
           <div style="flex:1;min-width:200px">
-            <span class="badge badge-navy">${i.token_number}</span>
+            <span class="badge badge-navy">${sanitize(i.token_number)}</span>
             <strong style="margin-left:8px">${sanitize(i.patient_name)}</strong>
           </div>
           <div style="font-size:12px;color:var(--slate);min-width:120px">${timeSince(i.confirmed_at)}</div>
@@ -1458,7 +1459,7 @@
       try {
         const results = await api("GET", `/pharmacy/pending-tasks?q=${encodeURIComponent(q)}`);
         renderPharmPendingResults(results);
-      } catch (e) { el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; }
+      } catch (e) { el.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`; }
     }
 
     function renderPharmPendingResults(results) {
@@ -1512,7 +1513,7 @@
       try {
         const data = await api("GET", `/patients/?search=${encodeURIComponent(search)}&limit=200`);
         renderPharmPatients(data);
-      } catch (e) { el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; }
+      } catch (e) { el.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`; }
     }
 
     function renderPharmPatients(data) {
@@ -1534,7 +1535,7 @@
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick="openDocumentsModal(${p.id}, ${jsArg(p.name)})">📄 Docs</button>
             ${inQueue
-            ? `<button class="btn btn-primary btn-sm" onclick="openPrescription('${p.last_token}')">💊 Medicine</button>`
+            ? `<button class="btn btn-primary btn-sm" onclick="openPrescription(${jsArg(p.last_token)})">💊 Medicine</button>`
             : `<button class="btn btn-outline btn-sm" disabled title="No active order in today's queue">💊 No Active Order</button>`}
           </div>
         </div>
@@ -1863,7 +1864,7 @@
         allDocuments = docs.slice().sort((a, b) => parseDocDate(b) - parseDocDate(a));
         renderDocuments(allDocuments);
       } catch (e) {
-        document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+        document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -1895,7 +1896,7 @@
         return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div>
-              <strong>${DOC_TYPE_LABEL[d.type] || d.label}</strong>
+              <strong>${sanitize(DOC_TYPE_LABEL[d.type] || d.label)}</strong>
               <div style="font-size:12px;color:var(--slate)">${dateStr} · ${timeStr}</div>
             </div>
             <div style="display:flex;gap:8px">
@@ -2216,7 +2217,7 @@
         const result = await api("GET", `${endpoint}?${params.toString()}`);
         renderRegister(result.entries || []);
       } catch (e) {
-        body.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+        body.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -2616,9 +2617,9 @@
           ])}
           ${previewFieldRow([
             ['Schedule', `<select class="form-control" onchange="previewData[${i}].schedule=this.value">${['otc','h','h1','x'].map(s => `<option value="${s}" ${m.schedule === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}</select>`],
-            ['Units per Pack', `<input class="form-control" type="number" value="${m.pack_size}" oninput="previewData[${i}].pack_size=this.value" />`],
-            ['Price per Pack (Rs.)', `<input class="form-control" type="number" value="${m.price_per_pack}" oninput="previewData[${i}].price_per_pack=this.value" />`],
-            ['GST %', `<input class="form-control" type="number" value="${m.gst_percent}" oninput="previewData[${i}].gst_percent=this.value" />`]
+            ['Units per Pack', `<input class="form-control" type="number" value="${sanitize(m.pack_size)}" oninput="previewData[${i}].pack_size=this.value" />`],
+            ['Price per Pack (Rs.)', `<input class="form-control" type="number" value="${sanitize(m.price_per_pack)}" oninput="previewData[${i}].price_per_pack=this.value" />`],
+            ['GST %', `<input class="form-control" type="number" value="${sanitize(m.gst_percent)}" oninput="previewData[${i}].gst_percent=this.value" />`]
           ])}
         </div>
       `).join('');
@@ -2718,7 +2719,7 @@
         const batches = await api("GET", `/admin/medicines/${medicineId}/batches`);
         renderBatches(batches, medicineId, medicineName, packSize);
       } catch (e) {
-        document.getElementById('batches-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+        document.getElementById('batches-list').innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -2741,7 +2742,7 @@
             <div>
               <strong>${b.quantity} units</strong>
               ${b.batch_number ? ` · Lot ${sanitize(b.batch_number)}` : ''}
-              <div style="font-size:12px;color:var(--slate)">Expiry: ${b.expiry_date || 'Not set'} · Received: ${b.received_date || '—'}</div>
+              <div style="font-size:12px;color:var(--slate)">Expiry: ${sanitize(b.expiry_date || 'Not set')} · Received: ${sanitize(b.received_date || '—')}</div>
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               ${badge}

@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: med
+          POSTGRES_PASSWORD: med
+          POSTGRES_DB: medtest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U med"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      ENVIRONMENT: test
+      SECRET_KEY: ci-secret-key-not-used-anywhere-else-0123456789
+      MEDSCRIBE_TEST_PG_URL: postgresql+psycopg2://med:med@localhost:5432/medtest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Migrations apply to an empty PostgreSQL database
+        env:
+          DATABASE_URL: postgresql+psycopg2://med:med@localhost:5432/medtest
+        run: |
+          python scripts/run_migrations.py
+          python scripts/check_alembic_head.py
+          python scripts/check_schema_drift.py
+      - name: Tests
+        run: python -m pytest tests -q -p no:cacheprovider
+
+  migration-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: No destructive operations in new migrations
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+          fi
+          python backend/scripts/check_migration_safety.py --base "$BASE"
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Known vulnerabilities in dependencies
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

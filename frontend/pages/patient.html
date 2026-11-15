@@ -423,6 +423,7 @@
 
   <div id="toast"></div>
 
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/whatsapp-messages.js"></script>
   <script src="../js/tier-catalog.js"></script>
@@ -509,13 +510,13 @@
         <div class="visit-card">
           <div class="visit-header" onclick="toggleVisit(${i}, ${v.id})">
             <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;min-width:0">
-              <span class="badge badge-navy">${v.token_number || "Draft"}</span>
+              <span class="badge badge-navy">${sanitize(v.token_number || "Draft")}</span>
               <span style="font-size:0.875rem;font-weight:600;color:var(--navy)">${formatDate(v.created_at)}</span>
-              <span style="font-size:0.82rem;color:var(--slate)">${v.chief_complaint || "—"}</span>
-              <span style="font-size:0.82rem;color:var(--teal);font-weight:500">${v.doctor_name || ""}${v.doctor_specialization ? ` · ${v.doctor_specialization}` : ""}</span>
+              <span style="font-size:0.82rem;color:var(--slate)">${sanitize(v.chief_complaint || "—")}</span>
+              <span style="font-size:0.82rem;color:var(--teal);font-weight:500">${sanitize(v.doctor_name || "")}${v.doctor_specialization ? ` · ${sanitize(v.doctor_specialization)}` : ""}</span>
             </div>
             <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px">
-              <span class="badge ${waClass}">WhatsApp: ${v.whatsapp_status}</span>
+              <span class="badge ${waClass}">WhatsApp: ${sanitize(v.whatsapp_status)}</span>
               <button class="btn btn-outline btn-sm" onclick="event.stopPropagation(); voidConsultation(${v.id})" style="color:var(--danger);border-color:var(--danger)">Void</button>
               <span class="chevron" id="chevron-${i}">▾</span>
             </div>
@@ -524,33 +525,33 @@
             <div class="visit-detail-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">
               <div class="detail-section">
                 <div class="detail-label">Chief Complaint</div>
-                <div class="detail-value">${v.chief_complaint || "—"}</div>
+                <div class="detail-value">${sanitize(v.chief_complaint || "—")}</div>
               </div>
               <div class="detail-section">
                 <div class="detail-label">Diagnosis</div>
-                <div class="detail-value">${v.diagnosis || "—"}</div>
+                <div class="detail-value">${sanitize(v.diagnosis || "—")}</div>
               </div>
             </div>
             ${vitalItems.length ? `
             <div class="detail-section">
               <div class="detail-label">Vitals</div>
               <div style="display:flex;flex-wrap:wrap;gap:8px">
-                ${vitalItems.map(([k, val]) => `<span style="background:var(--smoke);padding:3px 10px;border-radius:6px;font-size:0.82rem"><strong>${k}:</strong> ${val}</span>`).join("")}
+                ${vitalItems.map(([k, val]) => `<span style="background:var(--smoke);padding:3px 10px;border-radius:6px;font-size:0.82rem"><strong>${sanitize(k)}:</strong> ${sanitize(val)}</span>`).join("")}
               </div>
             </div>` : ""}
             <div class="detail-section">
               <div class="detail-label">Medicines</div>
-              <div>${meds.length ? meds.map(m => `<span class="med-pill">${m.name} ${m.dosage} — ${m.frequency}${m.duration ? " × " + m.duration : ""}</span>`).join("") : "—"}</div>
+              <div>${meds.length ? meds.map(m => `<span class="med-pill">${sanitize(m.name)} ${sanitize(m.dosage)} — ${sanitize(m.frequency)}${m.duration ? " × " + sanitize(m.duration) : ""}</span>`).join("") : "—"}</div>
               <div id="schedule-x-status-${v.id}" style="margin-top:8px"></div>
             </div>
             ${tests.length ? `<div class="detail-section">
               <div class="detail-label">Tests</div>
-              <div>${tests.map(t => `<span class="test-pill">${t}</span>`).join("")}</div>
+              <div>${tests.map(t => `<span class="test-pill">${sanitize(t)}</span>`).join("")}</div>
             </div>` : ""}
             ${(testOrdersByConsultation[v.id] || []).length ? `<div class="detail-section">
               <div class="detail-label">Lab Reports</div>
               <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-                ${(testOrdersByConsultation[v.id] || []).map(o => `<span class="test-pill">${o.test_name}${o.status !== 'verified_released' ? ` <span class="badge badge-grey" style="font-size:10px">${o.status.replace('_',' ')}</span>` : ''}</span>`).join("")}
+                ${(testOrdersByConsultation[v.id] || []).map(o => `<span class="test-pill">${sanitize(o.test_name)}${o.status !== 'verified_released' ? ` <span class="badge badge-grey" style="font-size:10px">${sanitize(o.status.replace('_',' '))}</span>` : ''}</span>`).join("")}
                 ${(() => {
                   const allOrders = testOrdersByConsultation[v.id] || [];
                   const readyOrders = allOrders.filter(o => o.status === 'verified_released');
@@ -562,8 +563,8 @@
                 })()}
               </div>
             </div>` : ""}
-            ${v.advice ? `<div class="detail-section"><div class="detail-label">Advice</div><div class="detail-value">${v.advice}</div></div>` : ""}
-            ${v.followup ? `<div class="detail-section"><div class="detail-label">Follow-up</div><div class="detail-value">${v.followup}</div></div>` : ""}
+            ${v.advice ? `<div class="detail-section"><div class="detail-label">Advice</div><div class="detail-value">${sanitize(v.advice)}</div></div>` : ""}
+            ${v.followup ? `<div class="detail-section"><div class="detail-label">Follow-up</div><div class="detail-value">${sanitize(v.followup)}</div></div>` : ""}
           </div>
         </div>`;
         }).join("");
@@ -588,7 +589,7 @@
         const url = URL.createObjectURL(blob);
         if (w) w.location = url; else window.open(url, "_blank");
       } catch (e) {
-        if (w) w.document.write(`<p style="font-family:sans-serif;padding:20px;color:#c0392b">${e.message}</p>`);
+        if (w) w.document.write(`<p style="font-family:sans-serif;padding:20px;color:#c0392b">${sanitize(e.message)}</p>`);
         toast("Could not load report", "error");
       }
     }
@@ -612,7 +613,7 @@
         el.innerHTML = result.orders.map(o => `
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;background:#fff9f9;border:1px solid #fecaca;border-radius:6px;margin-top:4px">
             <span class="badge badge-red">Schedule X</span>
-            <span style="font-size:0.82rem">${o.medicine_name} — ${o.status}</span>
+            <span style="font-size:0.82rem">${sanitize(o.medicine_name)} — ${sanitize(o.status)}</span>
             ${o.repeat_authorized
               ? `<span style="font-size:0.8rem;color:var(--success);font-weight:600">✓ Repeat Authorized</span>`
               : `<button class="btn btn-outline btn-sm" style="border-color:#b91c1c;color:#b91c1c" onclick="authorizeScheduleXRepeatFromPatientPage(${o.id}, ${consultationId})">Authorize Repeat</button>`}

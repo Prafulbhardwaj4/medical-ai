@@ -16,3 +16,6 @@ def require_roles(*roles):
 
 
 require_super_admin = require_roles("super_admin")
+
+# Staff who may see admitted-patient (IPD) records. Lab, pharmacy and radiology screens never open these.
+ADMISSION_ROLES = ("doctor", "nurse", "receptionist", "assistant", "admin", "sub_admin")

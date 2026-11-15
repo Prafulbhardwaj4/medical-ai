@@ -1,9 +1,13 @@
+# Direct dependencies. For repeatable builds generate and use the fully pinned requirements.lock:
+#   scripts/pin_requirements.sh      (the list it works from is requirements.in)
+# Until requirements.lock exists and is the build command, this file stays the one that is installed.
 fastapi
 uvicorn[standard]
-sqlalchemy
+# SQLAlchemy 2.1 makes "postgresql://" mean the psycopg 3 driver; this project uses psycopg2.
+sqlalchemy<2.1
 python-dotenv
 passlib[bcrypt]
-python-jose[cryptography]
+PyJWT
 python-multipart
 openai
 groq
@@ -14,11 +18,14 @@ email-validator
 pytz
 python-dateutil
 slowapi
+redis
 alembic
 qrcode[pil]
 websockets
 bcrypt==4.0.1
 psycopg2-binary
-psycopg[binary]
+boto3
 pdfplumber
 openpyxl
+sentry-sdk
+cryptography

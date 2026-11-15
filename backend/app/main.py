@@ -51,9 +51,11 @@ from app.routers import referrals as referrals_router
 from app.routers import tutorials
 from app.routers import plan_inquiries as plan_inquiries_router
 from app.routers import consents as consents_router
+from app.routers import data_rights as data_rights_router
 from app.routers import whatsapp_messages as whatsapp_messages_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
+import app.utils.hospital_stamp  # noqa: F401  (stamps hospital_id on admission child rows)
 from app.models.captcha_challenge import CaptchaChallenge
 from app.models.medicine_order_batch import MedicineOrderBatch
 from app.models.audit_log import AuditLog
@@ -76,26 +78,38 @@ from app.models.opd_charge import OpdCharge
 from app.models.admission_deposit import AdmissionDeposit, AdmissionDepositTopupRequest
 from app.models.refund import Refund
 from app.models.day_end_close import DayEndClose
-from app.config import settings, validate_startup_secrets, _is_production
+from app.config import settings, validate_startup_secrets, log_startup_warnings, _is_production
 import warnings
 import os
 import logging
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
-logging.basicConfig(level=logging.INFO, force=True)
+from app.utils.logging_setup import configure_logging
+from app.utils.log_redact import redact_path, install_access_log_redaction
+from app.utils.http_safety import SecurityHeadersMiddleware, BodyLimitMiddleware, DefaultRateLimitMiddleware
+from app.utils.boot import boot_lock, check_runtime_flags, log_proxy_settings
+from app.utils.monitoring import init_sentry, record_server_error, snapshot as monitoring_snapshot
+
+configure_logging(settings.LOG_LEVEL)
+install_access_log_redaction()
 logger = logging.getLogger("medscribe")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    force=True,
-)
-logger = logging.getLogger("medscribe")
+check_runtime_flags()
 
 validate_startup_secrets(settings)
+log_startup_warnings(settings)
+init_sentry()
 
 def _run_migrations():
+    if not settings.RUN_MIGRATIONS_ON_BOOT:
+        logger.warning("RUN_MIGRATIONS_ON_BOOT is off: no migrations were run at startup. "
+                       "Run `python scripts/run_migrations.py` as a release step.")
+        return
+    _run_migrations_locked()
+
+
+def _run_migrations_locked():
     from alembic.config import Config as AlembicConfig
     from alembic import command as alembic_command
 
@@ -118,7 +132,8 @@ def _run_migrations():
     alembic_cfg.set_main_option("sqlalchemy.url", db_url)
 
     try:
-        alembic_command.upgrade(alembic_cfg, "heads")
+        with boot_lock(engine, "migrations"):  # only one instance migrates at a time
+            alembic_command.upgrade(alembic_cfg, "heads")
     except Exception as e:
         logger.exception("Alembic migration failed; runtime schema sync will try to repair missing columns")
         warnings.warn(f"WARNING: alembic upgrade failed at startup: {e}")
@@ -129,8 +144,8 @@ _run_migrations()
 # Import every model before create_all/schema sync.
 import app.models  # noqa: F401
 
-Base.metadata.create_all(bind=engine)
-
+with boot_lock(engine, "schema"):
+    Base.metadata.create_all(bind=engine)
 
 def _sql_literal(value):
     if value is None:
@@ -144,9 +159,10 @@ def _sql_literal(value):
 
 def _runtime_sync_schema():
     """
-    Production rescue: Alembic in this repo has multiple heads and can leave
-    Render's DB behind the SQLAlchemy models. create_all() will not add missing
-    columns, so patch missing columns/tables at startup.
+    Safety net, not the source of truth: Alembic (one head, run above) owns the schema. create_all()
+    does not add missing columns, so this patches any column still missing compared with the models.
+    Every column it adds is logged as SCHEMA DRIFT at startup. Switch it off with RUNTIME_SCHEMA_SYNC=false
+    once `python scripts/check_alembic_head.py` shows current == head.
     """
     bind = engine
     inspector = inspect(bind)
@@ -179,10 +195,21 @@ def _runtime_sync_schema():
 
             logger.warning("Adding missing column: %s.%s", table.name, column.name)
             conn.execute(text(sql))
+            _SCHEMA_DRIFT.append(f"{table.name}.{column.name}")
 
+
+_SCHEMA_DRIFT = []
 
 try:
-    _runtime_sync_schema()
+    if settings.RUNTIME_SCHEMA_SYNC:
+        with boot_lock(engine, "schema"):
+            _runtime_sync_schema()
+        if _SCHEMA_DRIFT:
+            logger.warning("SCHEMA DRIFT: columns added at startup outside Alembic: %s", ", ".join(_SCHEMA_DRIFT))
+        else:
+            logger.info("Runtime schema sync: no drift, the database matches the models.")
+    else:
+        logger.info("RUNTIME_SCHEMA_SYNC is off: columns are not patched at startup.")
 except SQLAlchemyError:
     logger.exception("Runtime schema sync failed")
     raise
@@ -201,8 +228,6 @@ def _seed_tutorial_content():
         logger.exception("Tutorial content seeding failed at startup")
 
 
-_seed_tutorial_content()
-
 def _seed_master_catalog():
     """Adds any missing items from scripts/master_data_*.py to the master lists on every startup.
     Add-only and idempotent. Non-fatal: a problem here must not take the API down."""
@@ -212,8 +237,6 @@ def _seed_master_catalog():
     except Exception:
         logger.exception("Master list auto-load failed at startup")
 
-
-_seed_master_catalog()
 
 def _backfill_billing_period():
     """Existing hospitals default to monthly. Add-only: fills NULLs only, never overwrites a value.
@@ -233,10 +256,27 @@ def _backfill_billing_period():
         logger.exception("billing_period backfill failed at startup")
 
 
-_backfill_billing_period()
+def _run_boot_tasks():
+    """Seeding and back-fills. Runs in a background thread once the server is answering requests
+    (so a cold start is not held up), under a database lock so two instances never seed at once."""
+    try:
+        with boot_lock(engine, "seeding"):
+            if settings.SEED_TUTORIAL_ON_BOOT:
+                _seed_tutorial_content()
+            else:
+                logger.info("SEED_TUTORIAL_ON_BOOT is off: tutorial content not seeded at startup.")
+            if settings.MASTER_CATALOG_AUTOLOAD_ON_BOOT:
+                _seed_master_catalog()
+            else:
+                logger.info("MASTER_CATALOG_AUTOLOAD_ON_BOOT is off: master lists not topped up at startup.")
+            _backfill_billing_period()
+    except Exception:
+        logger.exception("Background boot tasks failed")
+
 
 security = HTTPBearer()
 from app.utils.rate_limit import limiter
+log_proxy_settings()
 
 app = FastAPI(
     title="MedScribe API",
@@ -253,9 +293,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.on_event("startup")
 async def _start_midnight_scheduler():
-    from app.scheduler import midnight_close_loop, lab_escalation_loop
-    asyncio.create_task(midnight_close_loop())
-    asyncio.create_task(lab_escalation_loop())
+    import threading
+    threading.Thread(target=_run_boot_tasks, name="boot-tasks", daemon=True).start()
+    from app.scheduler import start_scheduler
+    start_scheduler()
 
 # Single source of truth for CORS: the middleware AND the 500 handler below both
 # use these, so they can't drift.
@@ -280,6 +321,11 @@ def _cors_origin_ok(origin: str) -> bool:
     )
 
 
+# Added BEFORE the CORS middleware so they sit inside it: their 413 / 429 answers still carry the CORS headers.
+app.add_middleware(DefaultRateLimitMiddleware, limit=settings.DEFAULT_RATE_LIMIT, storage_uri=settings.REDIS_URL or "memory://")
+app.add_middleware(BodyLimitMiddleware, max_bytes=settings.MAX_BODY_BYTES)
+app.add_middleware(SecurityHeadersMiddleware, hsts=_is_production(settings))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(_CORS_ALLOWED_ORIGINS),
@@ -292,14 +338,15 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
-    logger.info("REQ %s %s origin=%s xff=%s", request.method, request.url.path, request.headers.get("origin"), request.headers.get("x-forwarded-for"))
+    _safe_path = redact_path(request.url.path)  # token segments hidden, query string never logged
+    logger.info("REQ %s %s origin=%s xff=%s", request.method, _safe_path, request.headers.get("origin"), request.headers.get("x-forwarded-for"))
     try:
         response = await call_next(request)
     except Exception:
-        logger.error("ERR %s %s\n%s", request.method, request.url.path, traceback.format_exc())
+        logger.error("ERR %s %s\n%s", request.method, _safe_path, traceback.format_exc())
         raise
     elapsed_ms = int((time.perf_counter() - start) * 1000)
-    logger.info("RES %s %s status=%s duration_ms=%s", request.method, request.url.path, response.status_code, elapsed_ms)
+    logger.info("RES %s %s status=%s duration_ms=%s", request.method, _safe_path, response.status_code, elapsed_ms)
     return response
 
 
@@ -317,7 +364,8 @@ async def no_store_authenticated_get(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    logger.error("UNHANDLED %s %s\n%s", request.method, request.url.path, traceback.format_exc())
+    logger.error("UNHANDLED %s %s\n%s", request.method, redact_path(request.url.path), traceback.format_exc())
+    record_server_error(exc)  # counter + Sentry (scrubbed)
     # Full detail stays in the server log above; the client only ever gets a
     # generic message (exception text can include SQL and patient data).
     response = JSONResponse(
@@ -374,6 +422,7 @@ app.include_router(referrals_router.router)
 app.include_router(tutorials.router)
 app.include_router(plan_inquiries_router.router)
 app.include_router(consents_router.router)
+app.include_router(data_rights_router.router)
 app.include_router(whatsapp_messages_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
@@ -382,6 +431,27 @@ os.makedirs("prescriptions", exist_ok=True)
 def root():
     return {"status": "MedScribe API running"}
 
-@app.get("/health")
-def health():
+@app.get("/health/live")
+def health_live():
+    """Is the process up. Never touches the database."""
     return {"status": "ok"}
+
+
+@app.get("/health")
+async def health():
+    """Is the app AND its database up: runs SELECT 1 with a short timeout, 503 when the database cannot answer."""
+    counters = monitoring_snapshot()
+    body = {"status": "ok", "database": "ok",
+            "audit_write_failures": counters["audit_write_failures"], "server_errors": counters["server_errors"]}
+
+    def _probe():
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+
+    try:
+        await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, _probe),
+                               timeout=settings.HEALTH_DB_TIMEOUT_SECONDS)
+    except Exception as e:
+        logger.warning("Health check: the database did not answer (%s)", type(e).__name__)
+        return JSONResponse(status_code=503, content={**body, "status": "unavailable", "database": "down"})
+    return body

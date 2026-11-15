@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, Response
+from fastapi import APIRouter, Depends, HTTPException, Header, Request, Response
 from pydantic import BaseModel, Field, EmailStr, Field, validator
+from app.utils.text_safety import SafeTextModel
 from typing import Optional, List, Literal
 from sqlalchemy.orm import Session
 import json
@@ -13,6 +14,9 @@ from app.services.whatsapp_flows import queue_staff_account_messages, temp_passw
 from app.services.whatsapp_messages import wipe_secrets_for_recipient
 from app.utils.inventory import line_total
 from app.utils.audit import log_action, stage_action
+from app.utils.rate_limit import limiter, client_ip
+from app.utils.auth import check_password_strength
+import hmac
 import re
 from app.models.consultation import Consultation
 from app.models.patient import Patient
@@ -324,7 +328,7 @@ def mark_hospital_lead_contacted(
     return {"id": lead.id, "status": lead.status}
 
 
-class FollowUpIn(BaseModel):
+class FollowUpIn(SafeTextModel):
     status: Optional[Literal["new", "contacted", "closed"]] = None
     owner: Optional[str] = Field(default=None, max_length=100)
     next_follow_up_at: Optional[str] = None  # YYYY-MM-DD; empty string clears it
@@ -400,7 +404,7 @@ def update_upgrade_request_follow_up(
     return {"id": req.id, "status": req.status}
 
 
-class LeadToHospitalIn(BaseModel):
+class LeadToHospitalIn(SafeTextModel):
     name: Optional[str] = Field(default=None, max_length=150)
     address: str = Field(default="", max_length=300)
     hospital_type: Literal["government", "private"] = "private"
@@ -657,7 +661,7 @@ def generate_doctor_uid(db: Session, hospital_code: str) -> str:
             return uid
 
 
-class CreateDoctorIn(BaseModel):
+class CreateDoctorIn(SafeTextModel):
     hospital_id: int
     name: str = Field(max_length=100)
     email: str = Field(max_length=150)
@@ -979,7 +983,7 @@ class ContactNumberIn(BaseModel):
         return v
 
 
-class HospitalDetailsUpdate(BaseModel):
+class HospitalDetailsUpdate(SafeTextModel):
     address: Optional[str] = None
     gstin: Optional[str] = None
     clinical_establishment_reg_no: Optional[str] = Field(default=None, max_length=60)
@@ -1540,7 +1544,7 @@ def toggle_nurse_assistant_role(
 
     return {"id": doctor.id, "role": doctor.role.value}
 
-class CreateSuperAdminBody(BaseModel):
+class CreateSuperAdminBody(SafeTextModel):
     name: str
     email: str
     phone: str
@@ -1548,13 +1552,24 @@ class CreateSuperAdminBody(BaseModel):
 
 
 @router.post("/create-superadmin", status_code=201)
+@limiter.limit("5/minute")
 def create_superadmin(
+    request: Request,
     body: CreateSuperAdminBody,
+    x_super_admin_key: str = Header(default=""),
     db: Session = Depends(get_db),
-    _: None = Depends(verify_super_admin_key)
 ):
     # Password comes in the JSON body, never the URL, so it stays out of
     # proxy and platform access logs.
+    ip = client_ip(request)
+    expected = settings.SUPER_ADMIN_KEY
+    if not expected:
+        # No key configured on the server: this route does not exist.
+        raise HTTPException(status_code=404, detail="Not found")
+    if not hmac.compare_digest((x_super_admin_key or "").encode("utf-8"), expected.encode("utf-8")):
+        log_action(db, None, action="create_superadmin_failed", target_type="doctor",
+                   details=f"ip={ip}; reason=bad_key", hospital_id=None)
+        raise HTTPException(status_code=403, detail="Invalid super admin key")
     name = body.name.strip()
     email = body.email.lower().strip()
     phone = body.phone.strip()
@@ -1562,6 +1577,7 @@ def create_superadmin(
     validate_fields(name, email, phone)
     if len(password) < 10:
         raise HTTPException(status_code=400, detail="Password must be at least 10 characters")
+    check_password_strength(password, email, name)
     existing = db.query(Doctor).filter(Doctor.email == email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -1581,11 +1597,16 @@ def create_superadmin(
     db.add(superadmin)
     db.commit()
     db.refresh(superadmin)
+    log_action(db, None, action="create_superadmin", target_type="doctor", target_id=superadmin.id,
+               target_label=superadmin.email, details=f"ip={ip}; account starts without 2FA and must enrol with a one-time code",
+               hospital_id=None)
     return {
         "id": superadmin.id,
         "name": superadmin.name,
         "email": superadmin.email,
-        "role": superadmin.role.value
+        "role": superadmin.role.value,
+        # The new account cannot sign in until it enrols 2FA with a one-time code made for it by this script:
+        "next_step": "python scripts/issue_totp_enrolment_code.py " + superadmin.email,
     }
 
 @router.get("/hospitals-list")
@@ -2100,6 +2121,12 @@ def create_hospital_jwt(
     current_doctor: Doctor = Depends(require_super_admin)
 ):
 
+    from app.utils.text_safety import ensure_safe_text_or_400
+    ensure_safe_text_or_400(name, "Hospital name")
+    ensure_safe_text_or_400(city, "City")
+    ensure_safe_text_or_400(state, "State")
+    ensure_safe_text_or_400(address, "Address", multiline=True)
+
     hospital_type = hospital_type.strip().lower()
     if hospital_type not in VALID_HOSPITAL_TYPES:
         raise HTTPException(status_code=400, detail="hospital_type must be 'government' or 'private'")
@@ -2172,7 +2199,7 @@ def create_hospital_jwt(
     )
     return {"id": hospital.id, "name": hospital.name, "hospital_code": hospital.hospital_code, "hospital_type": hospital.hospital_type, "billing_enabled": hospital.billing_enabled, "billing_period": hospital.billing_period, "plan_end_date": hospital.plan_end_date.isoformat() if hospital.plan_end_date else None}
 
-class CreateAdminIn(BaseModel):
+class CreateAdminIn(SafeTextModel):
     hospital_id: int
     name: str = Field(max_length=100)
     email: str = Field(max_length=150)
@@ -2699,6 +2726,12 @@ def update_hospital(
     if not hospital:
         raise HTTPException(status_code=404, detail="Hospital not found")
 
+    from app.utils.text_safety import ensure_safe_text_or_400
+    ensure_safe_text_or_400(name, "Hospital name")
+    ensure_safe_text_or_400(city, "City")
+    ensure_safe_text_or_400(state, "State")
+    ensure_safe_text_or_400(address, "Address", multiline=True)
+
     hospital.name = name
     hospital.city = city
     hospital.state = state
@@ -2715,7 +2748,7 @@ def update_hospital(
     )
     return {"id": hospital.id, "name": hospital.name, "city": hospital.city, "state": hospital.state, "address": hospital.address}
 
-class UpdateAccountIn(BaseModel):
+class UpdateAccountIn(SafeTextModel):
     name: str = Field(max_length=100)
     email: str = Field(max_length=150)
     phone: str = Field(max_length=20)

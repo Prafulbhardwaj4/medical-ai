@@ -2,6 +2,7 @@ from datetime import datetime, date
 from typing import Optional, List
 import re as _re
 from pydantic import BaseModel, Field, validator
+from app.utils.text_safety import SafeTextModel
 
 _HHMM = _re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
@@ -77,7 +78,7 @@ class DashboardOut(BaseModel):
     records: dict  # {profile_link_id: {prescriptions, tests, invoices}}
 
 
-class BookAppointmentIn(BaseModel):
+class BookAppointmentIn(SafeTextModel):
     profile_link_id: Optional[int] = None
     hospital_id: int
     doctor_id: Optional[int] = None
@@ -94,7 +95,7 @@ class BookAppointmentIn(BaseModel):
     new_patient_blood_group: Optional[str] = None  # optional
 
 
-class BookForCallerIn(BaseModel):
+class BookForCallerIn(SafeTextModel):
     """Reception booking an online-appointment slot on behalf of a phone
     caller — same slot/capacity system the patient portal itself uses.
     Reception resolves patient_id beforehand via the normal /patients/
@@ -107,11 +108,11 @@ class BookForCallerIn(BaseModel):
     address: Optional[str] = None
 
 
-class AddressUpdateIn(BaseModel):
+class AddressUpdateIn(SafeTextModel):
     address: str
 
 
-class PatientAddressIn(BaseModel):
+class PatientAddressIn(SafeTextModel):
     label: str = "Address"
     address: str
 
@@ -151,7 +152,7 @@ class AppointmentOut(BaseModel):
         from_attributes = True
 
 
-class DeclineAppointmentIn(BaseModel):
+class DeclineAppointmentIn(SafeTextModel):
     reason: Optional[str] = None
 
 
@@ -168,12 +169,12 @@ class RequestRescheduleIn(BaseModel):
     new_slot_id: int
 
 
-class VisitFeedbackIn(BaseModel):
+class VisitFeedbackIn(SafeTextModel):
     rating: int  # 1-5
     comment: Optional[str] = Field(default=None, max_length=1000)
 
 
-class PortalSuggestionIn(BaseModel):
+class PortalSuggestionIn(SafeTextModel):
     message: str
     hospital_id: Optional[int] = None
 
@@ -240,7 +241,7 @@ class TemplateOut(BaseModel):
     capacity_evening: int
 
 
-class MarkUnavailableIn(BaseModel):
+class MarkUnavailableIn(SafeTextModel):
     doctor_id: Optional[int] = None
     date: str
     reason: Optional[str] = None
@@ -401,7 +402,7 @@ class DeactivateAccountIn(BaseModel):
     password: str  # re-confirmation for a destructive, self-service action
 
 
-class ReportIssueIn(BaseModel):
+class ReportIssueIn(SafeTextModel):
     context: str  # "booking_payment" | "checkin" | "other"
     hospital_id: int  # a PatientAccount has no single hospital of its own (it can link to Patient rows across many hospitals) — the booking/check-in screen this is reported from always knows which hospital it's on, so that's passed explicitly rather than guessed at
     appointment_id: Optional[int] = None  # best-effort — may not resolve to anything if the drop happened mid-flow

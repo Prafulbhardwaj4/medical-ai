@@ -119,13 +119,21 @@
 
         <!-- SUPER ADMIN TWO-FACTOR -->
         <div id="form-totp" style="display:none">
+          <div id="totp-enrol-box" style="display:none;margin-bottom:16px">
+            <p style="color:var(--slate);font-size:13px;text-align:center;margin-bottom:12px">First-time setup needs a one-time enrolment code from the platform owner. It works once and expires in 24 hours.</p>
+            <div class="form-group">
+              <label class="form-label">Enrolment code</label>
+              <input class="form-control" id="totp-enrol-code" type="text" autocomplete="off" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" />
+            </div>
+            <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-totp-enrol" onclick="startTotpSetup()">Continue</button>
+          </div>
           <div id="totp-setup-box" style="display:none;text-align:center;margin-bottom:16px">
             <p style="color:var(--slate);font-size:13px">Set up two-factor sign-in. Scan this QR code with an authenticator app (Google Authenticator, Authy, Microsoft Authenticator), then enter the 6-digit code it shows.</p>
             <img id="totp-qr" alt="QR code" style="width:200px;height:200px;margin:8px auto;display:block" />
             <p style="font-size:12px;color:var(--slate-light);word-break:break-all">Can't scan? Enter this key manually: <strong id="totp-secret"></strong></p>
           </div>
           <p id="totp-login-hint" style="color:var(--slate);font-size:13px;text-align:center;margin-bottom:12px">Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
-          <div class="form-group">
+          <div class="form-group" id="totp-code-group">
             <label class="form-label">Authentication code</label>
             <input class="form-control" id="totp-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="123456" />
           </div>
@@ -172,6 +180,7 @@
     </div>
   </div>
 
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/password-reset.js" defer></script>
   <script>
@@ -401,23 +410,49 @@
       document.getElementById("totp-code").value = "";
       const box = document.getElementById("totp-setup-box");
       const hint = document.getElementById("totp-login-hint");
+      document.getElementById("totp-enrol-box").style.display = "none";
+      document.getElementById("totp-code-group").style.display = "";
+      document.getElementById("btn-totp").style.display = "";
       if (totpMode === "setup") {
-        box.style.display = "block";
+        // First-time setup needs the one-time enrolment code before the QR code is shown.
+        box.style.display = "none";
         hint.style.display = "none";
-        const res = await fetch(`${BASE}/auth/totp/setup`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ totp_token: token })
-        });
-        const json = await res.json();
-        if (!res.ok) { document.getElementById("totp-err").textContent = json.detail || "Could not start two-factor setup."; return; }
-        document.getElementById("totp-qr").src = json.qr_data_uri;
-        document.getElementById("totp-secret").textContent = json.secret;
+        document.getElementById("totp-code-group").style.display = "none";
+        document.getElementById("btn-totp").style.display = "none";
+        document.getElementById("totp-enrol-code").value = "";
+        document.getElementById("totp-enrol-box").style.display = "block";
+        document.getElementById("totp-enrol-code").focus();
+        return;
       } else {
         box.style.display = "none";
         hint.style.display = "block";
       }
       document.getElementById("totp-code").focus();
+    }
+
+    async function startTotpSetup() {
+      const err = document.getElementById("totp-err");
+      err.textContent = "";
+      const enrolment = document.getElementById("totp-enrol-code").value.trim();
+      if (!enrolment) { err.textContent = "Enter the enrolment code."; return; }
+      try {
+        const res = await fetch(`${BASE}/auth/totp/setup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ totp_token: pendingTotpToken, enrolment_code: enrolment })
+        });
+        const json = await res.json();
+        if (!res.ok) { err.textContent = json.detail || "Could not start two-factor setup."; return; }
+        document.getElementById("totp-enrol-box").style.display = "none";
+        document.getElementById("totp-setup-box").style.display = "block";
+        document.getElementById("totp-code-group").style.display = "";
+        document.getElementById("btn-totp").style.display = "";
+        document.getElementById("totp-qr").src = json.qr_data_uri;
+        document.getElementById("totp-secret").textContent = json.secret;
+        document.getElementById("totp-code").focus();
+      } catch (e) {
+        err.textContent = "Could not start two-factor setup. Please try again.";
+      }
     }
 
     async function doTotpSubmit() {

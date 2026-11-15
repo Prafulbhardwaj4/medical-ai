@@ -9,7 +9,8 @@ from app.models.patient import Patient
 from app.models.doctor import Doctor, UserRole
 from app.utils.ai_scribe_gate import get_ai_scribe_status, consume_ai_scribe_credit, has_ai_scribe_at_all, has_ai_scribe_at_all
 from app.schemas.consultation import ConsultationOut, ConsultationHistoryItem, ConsultationStructured, MedicineItem, StructureRequest
-from app.utils.auth import get_current_doctor, now_ist_naive, ist_day_bounds, ist_today, decode_access_token, is_token_blacklisted
+from app.utils.auth import get_current_doctor, now_ist_naive, ist_day_bounds, ist_today, decode_access_token, is_token_blacklisted, blacklist_token
+from app.utils.roles import require_roles
 from app.utils.audit import log_action
 from app.utils.pilot import is_pilot
 from app.utils.tier_gate import hospital_has_tier
@@ -39,12 +40,13 @@ import os
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.utils.rate_limit import limiter
+from app.utils.rate_limit import limiter, client_ip
+from app.utils.qr_hash import hash_equals
 router = APIRouter(prefix="/consultations", tags=["consultations"])
 
 
 @router.get("/today")
-def today_consultations(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def today_consultations(current_doctor: Doctor = Depends(require_roles("doctor")), db: Session = Depends(get_db)):
     start_of_day, _ = ist_day_bounds()
     count = db.query(Consultation).filter(
         Consultation.doctor_id == current_doctor.id,
@@ -54,7 +56,7 @@ def today_consultations(current_doctor: Doctor = Depends(get_current_doctor), db
     return {"count": count}
 
 @router.get("/active-draft")
-def get_active_draft(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def get_active_draft(current_doctor: Doctor = Depends(require_roles("doctor")), db: Session = Depends(get_db)):
     """The exact draft this doctor was mid-session with, if any — used to resume
     after an Away-Emergency interruption without guessing which patient it was."""
     if not current_doctor.active_consultation_id:
@@ -78,11 +80,36 @@ def get_active_draft(current_doctor: Doctor = Depends(get_current_doctor), db: S
         "url_token": patient.url_token if patient else None
     }
 
+@router.post("/start/{patient_id}")
+def mark_consultation_started(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(require_roles("doctor"))
+):
+    """Called when the doctor presses Consult. Records the start time on today's token (only the first press
+    counts) so the patient's portal can show an honest expected time. Never blocks the consultation."""
+    checkin = db.query(Checkin).filter(
+        Checkin.patient_id == patient_id,
+        Checkin.doctor_id == current_doctor.id,
+        Checkin.hospital_id == current_doctor.hospital_id,
+        Checkin.visit_date == ist_today()
+    ).order_by(desc(Checkin.created_at)).first()
+    if not checkin:
+        return {"started": False}
+    since = checkin.returned_at if checkin.is_returned else None  # a same-day return starts a fresh consultation
+    fresh = checkin.consult_started_at is not None and (since is None or checkin.consult_started_at > since)
+    if not fresh:
+        checkin.consult_started_at = now_ist_naive()
+        checkin.consult_finished_at = None
+        db.commit()
+    return {"started": True}
+
+
 @router.post("/draft/{patient_id}")
 def create_draft_consultation(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("doctor"))
 ):
     """Creates (or reuses) a blank consultation row with no transcript —
     needed for the Foundation-tier / AI-Scribe-unavailable manual-entry
@@ -133,25 +160,69 @@ def _ws_ticket_key() -> str:
     return settings.SECRET_KEY + ":ws-ticket"
 
 
+def _scribe_block(db, hospital, doctor_id, patient_id):
+    """None when live transcription may start; otherwise the same 402 detail the structuring step returns.
+    A draft that already used its credit may continue when only the cap is reached (same rule as /structure)."""
+    status_ = get_ai_scribe_status(db, hospital)
+    if status_["allowed"]:
+        return None
+    if status_["reason"] in ("cap_reached", "weekly_cap_reached"):
+        paid_draft = db.query(Consultation).filter(
+            Consultation.patient_id == patient_id,
+            Consultation.doctor_id == doctor_id,
+            Consultation.token_number == None,
+            Consultation.is_voided == False,
+            Consultation.ai_scribe_credit_consumed == True,
+        ).first()
+        if paid_draft:
+            return None
+    return {"ai_scribe_blocked": True, "reason": status_["reason"], "message": status_.get("message")}
+
+
 @router.post("/ws-ticket/{patient_id}")
 def create_ws_ticket(
     patient_id: int,
     current_doctor: Doctor = Depends(get_current_doctor),
     db: Session = Depends(get_db),
 ):
-    from jose import jwt as _jwt
+    from app.utils.jwt_compat import jwt as _jwt
     from datetime import timedelta as _td
+    if current_doctor.role.value != "doctor":
+        raise HTTPException(status_code=403, detail="Not authorized")
     patient = db.query(Patient).filter(
         Patient.id == patient_id, Patient.hospital_id == current_doctor.hospital_id
     ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    from app.routers.consents import has_recording_consent
+    if not has_recording_consent(db, patient.id):
+        raise HTTPException(status_code=409, detail="Recording can start only after the patient has agreed to AI recording.")
+    hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
+    if not hospital or hospital.is_active is False:
+        raise HTTPException(status_code=403, detail="This hospital account is not active.")
+    blocked = _scribe_block(db, hospital, current_doctor.id, patient_id)
+    if blocked:
+        raise HTTPException(status_code=402, detail=blocked)
+    import secrets as _secrets
     ticket = _jwt.encode(
-        {"sub": str(current_doctor.id), "pid": patient_id, "typ": "ws_ticket",
+        {"sub": str(current_doctor.id), "pid": patient_id, "typ": "ws_ticket", "jti": _secrets.token_hex(8),
          "exp": datetime.utcnow() + _td(seconds=30)},
         _ws_ticket_key(), algorithm=settings.ALGORITHM,
     )
     return {"ticket": ticket}
+
+
+async def _ws_keep_alive(websocket, interval_seconds):
+    """Sends {"type": "ping"} every few seconds so a long silent stretch (a paused recording can last minutes)
+    never reaches a load balancer's idle timeout (AWS ALB closes idle connections after 60 s).
+    The browser ignores the ping and answers {"type": "pong"}."""
+    interval = max(float(interval_seconds), 0.05)
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            await websocket.send_json({"type": "ping"})
+    except Exception:
+        return  # the connection is gone; the main handler does the clean-up
 
 
 @router.websocket("/ws/transcribe/{patient_id}")
@@ -161,7 +232,7 @@ async def websocket_transcribe(
     ticket: str,
     db: Session = Depends(get_db)
 ):
-    from jose import jwt as _jwt, JWTError as _JWTError
+    from app.utils.jwt_compat import jwt as _jwt, JWTError as _JWTError
     try:
         payload = _jwt.decode(ticket, _ws_ticket_key(), algorithms=[settings.ALGORITHM])
     except _JWTError:
@@ -174,7 +245,11 @@ async def websocket_transcribe(
     doctor = db.query(DoctorModel).filter(
         DoctorModel.id == int(payload.get("sub"))
     ).first()
-    if not doctor or not doctor.is_active:
+    if not doctor or not doctor.is_active or doctor.role.value != "doctor":
+        await websocket.close(code=4001)
+        return
+    ws_hospital = db.query(Hospital).filter(Hospital.id == doctor.hospital_id).first()
+    if not ws_hospital or ws_hospital.is_active is False:
         await websocket.close(code=4001)
         return
 
@@ -184,6 +259,36 @@ async def websocket_transcribe(
     ).first()
     if not patient:
         await websocket.close(code=4003)
+        return
+
+    from app.routers.consents import has_recording_consent
+    if not has_recording_consent(db, patient.id):
+        await websocket.close(code=4004)  # patient has not agreed to AI recording (or the notice version changed)
+        return
+
+    # A ticket works once: its hash is kept in the blacklist table (purged after 8 days, far past the 30 s life).
+    try:
+        if is_token_blacklisted(ticket, db):
+            await websocket.close(code=4001)
+            return
+        blacklist_token(ticket, db)
+    except Exception:
+        db.rollback()
+        await websocket.close(code=4001)
+        return
+
+    ws_blocked = _scribe_block(db, ws_hospital, doctor.id, patient_id)
+    if ws_blocked:
+        await websocket.accept()
+        try:
+            await websocket.send_json({
+                "type": "blocked",
+                "reason": ws_blocked["reason"],
+                "message": ws_blocked.get("message") or "AI Scribe isn't available right now. Please continue with manual entry.",
+            })
+        except Exception:
+            pass
+        await websocket.close()
         return
 
     await websocket.accept()
@@ -347,11 +452,13 @@ async def websocket_transcribe(
             except Exception:
                 pass
 
+    ping_task = asyncio.create_task(_ws_keep_alive(websocket, settings.WS_PING_INTERVAL_SECONDS))
     try:
         await asyncio.gather(receive_audio(), send_transcript())
     except Exception:
         pass
     finally:
+        ping_task.cancel()
         stream_task.cancel()
         try:
             await websocket.close()
@@ -399,7 +506,7 @@ def get_history(
 
     result = []
     from app.utils.audit import log_record_access
-    log_record_access(db, current_doctor, "patient_history_viewed", "patient", patient.id, patient.name)
+    log_record_access(db, current_doctor, "patient_history_viewed", "patient", patient.id, f"Patient {patient.id}")
     for c, doctor in consultations:
         medicine_statuses = {}
         orders = db.query(MedicineOrder).filter(MedicineOrder.consultation_id == c.id).all()
@@ -474,7 +581,7 @@ def get_prescription_pdf(
 
     safe_token = os.path.basename(token_number)
     from app.utils.audit import log_record_access
-    log_record_access(db, current_doctor, "prescription_pdf_downloaded", "consultation", consultation.id, f"{patient.name} · {safe_token}")
+    log_record_access(db, current_doctor, "prescription_pdf_downloaded", "consultation", consultation.id, f"Prescription {consultation.id} · {safe_token}")
     pdf_path = generate_prescription_pdf(prescribing_doctor, patient, consultation, safe_token, consultation.verify_hash or "")
 
     return FileResponse(pdf_path, media_type="application/pdf", filename=f"{safe_token}.pdf", headers={"Cache-Control": "no-store"})
@@ -490,7 +597,7 @@ def verify_prescription(request: Request, token_number: str, hash: str, db: Sess
     if not consultation:
         return {"valid": False, "reason": "Token not found"}
 
-    if consultation.verify_hash != hash:
+    if not hash_equals(consultation.verify_hash, hash):
         return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
 
     if consultation.is_voided:
@@ -499,7 +606,11 @@ def verify_prescription(request: Request, token_number: str, hash: str, db: Sess
     patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
     doctor = db.query(DoctorModel).filter(DoctorModel.id == consultation.doctor_id).first()
 
-    medicines = json.loads(consultation.medicines or "[]")
+    # Public page: only what an outside pharmacy needs to dispense. Nothing else stored on a medicine line is exposed.
+    medicines = [
+        {key: m.get(key) for key in ("name", "brand_name", "dosage", "frequency", "duration", "schedule")}
+        for m in json.loads(consultation.medicines or "[]") if isinstance(m, dict)
+    ]
 
     name_parts = patient.name.split()
     masked_name = name_parts[0]
@@ -520,24 +631,47 @@ def verify_prescription(request: Request, token_number: str, hash: str, db: Sess
     }
 
 
+def _dispense_token_key(request: Request) -> str:
+    return "dispense-token:" + str(request.path_params.get("token_number", ""))[:64]
+
+
 @router.post("/verify/{token_number}/dispense")
 @limiter.limit("10/minute")
+@limiter.limit("5/hour", key_func=_dispense_token_key)
 def mark_dispensed(
     request: Request,
     token_number: str,
     hash: str,
     db: Session = Depends(get_db)
 ):
-    consultation = db.query(Consultation).filter(
+    _ip = client_ip(request)
+    _candidates = db.query(Consultation).filter(
         Consultation.token_number == token_number,
-        Consultation.verify_hash == hash,
         Consultation.is_voided == False
-    ).first()
+    ).all()
+    consultation = next((c for c in _candidates if hash_equals(c.verify_hash, hash)), None)
 
     if not consultation:
+        log_action(
+            db, None,
+            action="prescription_dispense_refused",
+            target_type="consultation",
+            target_label=(token_number or "")[:60],
+            details=json.dumps({"ip": _ip, "result": "invalid_token_or_code"}),
+        )
         raise HTTPException(status_code=404, detail="Invalid token or verification code")
 
     if consultation.is_dispensed:
+        _owner = db.query(DoctorModel).filter(DoctorModel.id == consultation.doctor_id).first()
+        log_action(
+            db, None,
+            action="prescription_dispense_refused",
+            target_type="consultation",
+            target_id=consultation.id,
+            target_label=consultation.token_number,
+            details=json.dumps({"token_id": consultation.id, "ip": _ip, "result": "already_dispensed"}),
+            hospital_id=_owner.hospital_id if _owner else None,
+        )
         raise HTTPException(status_code=400, detail="Already marked as dispensed")
 
     consultation.is_dispensed = True
@@ -566,6 +700,7 @@ def mark_dispensed(
         target_type="consultation",
         target_id=consultation.id,
         target_label=consultation.token_number + " (dispensed outside — no hospital stock deducted)",
+        details=json.dumps({"token_id": consultation.id, "ip": _ip, "result": "dispensed"}),
         hospital_id=_prescriber.hospital_id if _prescriber else None
     )
 
@@ -575,7 +710,7 @@ def mark_dispensed(
 @router.get("/ai-scribe-status")
 def get_my_ai_scribe_status(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("doctor"))
 ):
     """Lets the frontend check before showing the recording UI at all,
     rather than only finding out via a failed /structure call. The
@@ -593,7 +728,7 @@ async def structure(
     consultation_id: int,
     payload: StructureRequest = StructureRequest(),
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("doctor"))
 ):
     consultation = db.query(Consultation).filter(
         Consultation.id == consultation_id,
@@ -648,7 +783,10 @@ async def structure(
         history_text = "\n".join(lines)
 
     try:
-        structured = await structure_transcript(consultation.raw_transcript, history_text)
+        from app.utils.transcript_mask import mask_identifiers
+        _pt = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
+        _safe_text = mask_identifiers(consultation.raw_transcript, _pt.name if _pt else "", _pt.phone if _pt else "")
+        structured = await structure_transcript(_safe_text, history_text)
     except Exception as e:
         import logging as _lg
         _lg.getLogger(__name__).exception("AI structuring failed")
@@ -725,7 +863,7 @@ def confirm_prescription(
     consultation_id: int,
     payload: ConfirmPrescriptionPayload = ConfirmPrescriptionPayload(),
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("doctor"))
 ):
     consultation = db.query(Consultation).filter(
         Consultation.id == consultation_id,
@@ -1037,9 +1175,12 @@ def confirm_prescription(
             ))
 
     consultation.token_number = token_number
+    todays_checkin.consult_finished_at = now_ist_naive()
+    if not todays_checkin.consult_started_at:
+        todays_checkin.consult_started_at = consultation.created_at or todays_checkin.consult_finished_at
 
-    hash_input = f"{token_number}-{current_doctor.id}-{consultation.id}-{settings.SECRET_KEY}"
-    verify_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:16].upper()
+    from app.utils.qr_hash import qr_hash
+    verify_hash = qr_hash(f"{token_number}-{current_doctor.id}-{consultation.id}")
     consultation.verify_hash = verify_hash
 
     try:
@@ -1079,7 +1220,7 @@ def update_consultation(
     consultation_id: int,
     payload: ConsultationStructured,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("doctor"))
 ):
     consultation = db.query(Consultation).filter(
         Consultation.id == consultation_id,
@@ -1512,7 +1653,7 @@ def void_consultation(
     consultation_id: int,
     body: VoidConsultationIn,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("doctor"))
 ):
     from app.models.test_order import TestOrder
     from app.models.medicine_order import MedicineOrder
@@ -1925,7 +2066,7 @@ def admin_dashboard(
 @router.get("/patient-feedback/{patient_id}")
 def get_patient_feedback(
     patient_id: int,
-    current_doctor: Doctor = Depends(get_current_doctor),
+    current_doctor: Doctor = Depends(require_roles("doctor", "receptionist", "admin", "sub_admin")),
     db: Session = Depends(get_db),
 ):
     """All visit-feedback entries a patient has left, most recent first —

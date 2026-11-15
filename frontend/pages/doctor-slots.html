@@ -303,6 +303,7 @@
     </div>
   </div>
 
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/whatsapp-messages.js"></script>
   <script src="../js/tier-catalog.js"></script>
@@ -556,7 +557,7 @@
         const res = await fetch(`${BASE}/doctors`, { headers: { Authorization: `Bearer ${getToken()}` } });
         const doctors = await res.json();
         const sel = document.getElementById("pick-doctor");
-        sel.innerHTML = doctors.filter(d => d.role === 'doctor').map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
+        sel.innerHTML = doctors.filter(d => d.role === 'doctor').map(d => `<option value="${d.id}">${sanitize(d.title)} ${sanitize(d.name)}</option>`).join('');
 
         const requestedId = new URLSearchParams(window.location.search).get("doctor_id");
         if (requestedId && [...sel.options].some(o => o.value === requestedId)) {
@@ -695,14 +696,14 @@
         const rows = await api("GET", `/doctor-slots/unavailable${qs}`);
         listEl.innerHTML = !rows.length ? `<p style="color:var(--slate-light);font-size:13px">No upcoming unavailable dates.</p>` : rows.map(r => `
           <div class="unavail-row">
-            <span>${new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${r.reason ? ' — ' + r.reason : ''}${r.mass_reschedule_triggered_at ? ` <span class="badge badge-green" style="margin-left:6px">Reschedule notice sent ${new Date(r.mass_reschedule_triggered_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>` : ''}</span>
+            <span>${new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${r.reason ? ' — ' + sanitize(r.reason) : ''}${r.mass_reschedule_triggered_at ? ` <span class="badge badge-green" style="margin-left:6px">Reschedule notice sent ${new Date(r.mass_reschedule_triggered_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>` : ''}</span>
             <span style="display:flex;gap:8px;align-items:center">
               <button class="btn btn-outline btn-sm" onclick="viewAffected('${r.date}')">View Affected</button>
               ${!r.mass_reschedule_triggered_at ? `<button class="btn btn-primary btn-sm" onclick="triggerMassReschedule(${r.id})">Notify Patients to Reschedule</button>` : ''}
               <button class="btn btn-outline btn-sm" onclick="unmarkUnavailable(${r.id})">Undo</button>
             </span>
           </div>`).join('');
-      } catch (e) { listEl.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      } catch (e) { listEl.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
     }
 
     async function unmarkUnavailable(id) {
@@ -728,9 +729,9 @@
         el.innerHTML = !rows.length ? `<p style="color:var(--slate-light);font-size:13px">No paid appointments on this date — safe to leave as is.</p>` : `
           <div class="card" style="background:#fdecec;border-color:#f5b5b5">
             <p style="font-weight:600;color:var(--danger);margin-bottom:8px">These paid appointments need manual rescheduling:</p>
-            ${rows.map(r => `<div class="unavail-row"><span>${r.patient_name}</span><span>${new Date(r.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span></div>`).join('')}
+            ${rows.map(r => `<div class="unavail-row"><span>${sanitize(r.patient_name)}</span><span>${new Date(r.requested_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span></div>`).join('')}
           </div>`;
-      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
     }
 
     async function loadPreview() {
@@ -750,7 +751,7 @@
               ${s.booked_count === 0 ? `<button class="btn btn-outline btn-sm" onclick="deleteSlot(${s.id})">Remove</button>` : ''}
             </span>
           </div>`).join('');
-      } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
     }
 
     async function deleteSlot(id) {

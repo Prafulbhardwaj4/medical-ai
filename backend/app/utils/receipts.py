@@ -76,8 +76,8 @@ def generate_verify_hash(record_id, hospital_id: int, kind: str = "invoice") -> 
     is a generalization, not a behavior change for invoices."""
     import hashlib
     from app.config import settings
-    hash_input = f"{kind}-{record_id}-{hospital_id}-{settings.SECRET_KEY}"
-    return hashlib.sha256(hash_input.encode()).hexdigest()[:16].upper()
+    from app.utils.qr_hash import qr_hash
+    return qr_hash(f"{kind}-{record_id}-{hospital_id}")
 
 
 def next_report_number(db: Session, hospital, report_type: str) -> str:

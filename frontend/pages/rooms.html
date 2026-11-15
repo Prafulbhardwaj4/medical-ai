@@ -198,6 +198,7 @@
     </main>
   </div>
   <div id="toast"></div>
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/whatsapp-messages.js"></script>
   <script src="../js/nav-admin.js"></script>
@@ -341,8 +342,8 @@
       document.getElementById('rooms-list').innerHTML = rooms.length ? rooms.map(r => `
         <div class="room-row">
           <div>
-            <strong>${r.display || r.name}</strong>
-            ${r.room_number || r.name ? `<span style="font-size:12px;color:var(--slate);margin-left:8px">${r.room_number ? 'No. ' + r.room_number : ''}${r.room_number && r.name ? ' · ' : ''}${r.name || ''}</span>` : ''}
+            <strong>${sanitize(r.display || r.name)}</strong>
+            ${r.room_number || r.name ? `<span style="font-size:12px;color:var(--slate);margin-left:8px">${r.room_number ? 'No. ' + sanitize(r.room_number) : ''}${r.room_number && r.name ? ' · ' : ''}${sanitize(r.name || '')}</span>` : ''}
             ${roomTypeBadge(r.room_type, r.type_confirmed)}
             ${r.sequence_number != null ? `<span class="badge badge-navy" style="margin-left:8px">Seq ${r.sequence_number}</span>` : ''}
           </div>

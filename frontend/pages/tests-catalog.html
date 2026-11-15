@@ -468,6 +468,7 @@
   </div>
 
   <div id="toast"></div>
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/whatsapp-messages.js"></script>
   <script src="../js/nav-admin.js"></script>
@@ -669,7 +670,7 @@
           </div>
           <div class="test-row-meta">
             <div style="font-size:12px;color:var(--slate)">${sanitize(t.category || '—')}</div>
-            <div style="font-size:13px">Rs.${t.price}</div>
+            <div style="font-size:13px">Rs.${sanitize(t.price)}</div>
             <div style="font-size:13px">${t.turnaround_hours != null ? t.turnaround_hours + ' hrs' : '—'}</div>
           </div>
           <div class="test-row-actions">
@@ -854,8 +855,8 @@
           <div style="display:grid;grid-template-columns:1.6fr 1fr 0.8fr 0.8fr 40px;gap:6px;margin-bottom:6px">
             <input class="form-control" placeholder="Test Name" value="${sanitize(t.test_name)}" oninput="previewData[${i}].test_name=this.value" />
             <input class="form-control" placeholder="Category" value="${sanitize(t.category)}" oninput="previewData[${i}].category=this.value" />
-            <input class="form-control" type="number" placeholder="Price" value="${t.price}" oninput="previewData[${i}].price=this.value" />
-            <input class="form-control" type="number" placeholder="TAT hrs" value="${t.turnaround_hours}" oninput="previewData[${i}].turnaround_hours=this.value" />
+            <input class="form-control" type="number" placeholder="Price" value="${sanitize(t.price)}" oninput="previewData[${i}].price=this.value" />
+            <input class="form-control" type="number" placeholder="TAT hrs" value="${sanitize(t.turnaround_hours)}" oninput="previewData[${i}].turnaround_hours=this.value" />
             <button class="btn btn-outline btn-sm" onclick="removePreviewRow(${i})" title="Remove">×</button>
           </div>
           <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;font-size:13px;color:var(--slate)">

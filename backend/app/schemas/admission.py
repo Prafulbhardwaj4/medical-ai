@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field
+from app.utils.text_safety import SafeTextModel
 
 
 VALID_ADMISSION_TYPES = {"planned", "emergency", "maternity", "transfer_in", "day_care"}
@@ -24,7 +25,7 @@ class UpdateDiagnosisIn(BaseModel):
     diagnosis: str
 
 
-class EmergencyAdmitIn(BaseModel):
+class EmergencyAdmitIn(SafeTextModel):
     name: Optional[str] = None
     approx_age: Optional[int] = None
     approx_gender: Optional[str] = None
@@ -35,7 +36,7 @@ class EmergencyAdmitIn(BaseModel):
     referral_id: Optional[int] = None  # set when this Emergency Intake is the handoff side of a cross-hospital referral's departed notification
 
 
-class SendToAdmissionIn(BaseModel):
+class SendToAdmissionIn(SafeTextModel):
     patient_id: int
     reason: Optional[str] = None
 
@@ -43,7 +44,7 @@ class SendToAdmissionIn(BaseModel):
 VALID_WARD_CATEGORIES = {"general", "icu", "private", "maternity", "nicu", "isolation", "day_care", "other"}
 
 
-class WardTypeCreateIn(BaseModel):
+class WardTypeCreateIn(SafeTextModel):
     name: str
     daily_charge: float
     default_deposit: float = 0
@@ -57,7 +58,7 @@ class WardTypeCreateIn(BaseModel):
     # 0 beds until the admin adds rooms to them.
 
 
-class RoomCreateIn(BaseModel):
+class RoomCreateIn(SafeTextModel):
     room_number: Optional[str] = None
     room_name: Optional[str] = None
     room_type: Optional[str] = None 
@@ -120,7 +121,7 @@ class AddMedicationOrderIn(BaseModel):
     order_batch_id: Optional[str] = None  # shared across every medicine submitted in the same "Advise Medicine(s)" action — lets pharmacy get one notification instead of one per medicine
 
 
-class AddChargeIn(BaseModel):
+class AddChargeIn(SafeTextModel):
     charge_type: str  # "medicine" | "test" | "procedure" | "other"
     description: str
     amount: float
@@ -134,7 +135,7 @@ class ProfessionalFeeIn(BaseModel):
 VALID_CONSENT_TYPES = {"general", "procedure", "anaesthesia", "blood_transfusion", "high_risk", "lama_dama"}
 
 
-class AdmissionConsentIn(BaseModel):
+class AdmissionConsentIn(SafeTextModel):
     consent_type: str
     signer_name: str
     signed_by_guardian: bool = False
@@ -143,18 +144,18 @@ class AdmissionConsentIn(BaseModel):
     notes: Optional[str] = None
 
 
-class ReturnMedicationIn(BaseModel):
+class ReturnMedicationIn(SafeTextModel):
     quantity: int
     restock: bool = False  # deprecated — retained for backward compat, no longer increments stock
     disposition: str  # "returned_to_supplier" | "sent_to_disposal"
     note: Optional[str] = None
 
 
-class AdministerMedicationIn(BaseModel):
+class AdministerMedicationIn(SafeTextModel):
     notes: Optional[str] = None
 
 
-class EmergencyAlertIn(BaseModel):
+class EmergencyAlertIn(SafeTextModel):
     message: Optional[str] = None
 
 
@@ -199,12 +200,12 @@ class AddAdmissionRadiologyOrderIn(BaseModel):
     form_f: Optional[RadiologyFormFIn] = None
 
 
-class RequestWardChangeIn(BaseModel):
+class RequestWardChangeIn(SafeTextModel):
     requested_ward_type_id: int
     note: Optional[str] = None
 
 
-class ChangeWardIn(BaseModel):
+class ChangeWardIn(SafeTextModel):
     ward_type_id: int
     bed_number: str
     patient_name: Optional[str] = None
@@ -220,7 +221,7 @@ class CollectBalanceIn(BaseModel):
     payment_method: str  # "cash" | "card" | "upi"
 
 
-class DischargeIn(BaseModel):
+class DischargeIn(SafeTextModel):
     discharge_type: str = "planned"  # "planned" | "lama_dama" | "death"
     discharge_summary: Optional[str] = None
     refund_channel: Optional[str] = None  # "cash" | "card" | "upi" | "online", required when the deposit exceeds charges
@@ -242,7 +243,7 @@ class DischargeIn(BaseModel):
     follow_up_instructions: Optional[str] = None
 
 
-class TopupRequestIn(BaseModel):
+class TopupRequestIn(SafeTextModel):
     requested_amount: float
     reason: Optional[str] = None
 
@@ -251,7 +252,7 @@ class CollectTopupIn(BaseModel):
     payment_method: str  # "cash" | "card" | "upi"
 
 
-class ProgressNoteIn(BaseModel):
+class ProgressNoteIn(SafeTextModel):
     note: str
 
 

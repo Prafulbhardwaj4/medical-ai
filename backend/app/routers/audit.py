@@ -10,6 +10,24 @@ from datetime import datetime
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
+# Actions taken by MedScribe staff on this hospital's data are shown to the
+# hospital admin, but only under this generic label (never a name or email).
+PLATFORM_SUPPORT_LABEL = "MedScribe platform support"
+
+
+def _is_platform(l):
+    return l.actor_role == "super_admin"
+
+
+def _who(l):
+    if _is_platform(l):
+        return PLATFORM_SUPPORT_LABEL, "platform_support"
+    return l.actor_name, l.actor_role
+
+
+def _details(l):
+    return None if _is_platform(l) else l.details
+
 LOGGED_ACTIONS = [
     "account_created", "account_activated", "account_deactivated", "account_updated",
     "role_changed",
@@ -61,8 +79,7 @@ def get_audit_logs(
     limit = min(max(1, limit), 200)
 
     query = db.query(AuditLog).filter(
-        AuditLog.hospital_id == current_doctor.hospital_id,
-        AuditLog.actor_role != "super_admin"
+        AuditLog.hospital_id == current_doctor.hospital_id
     )
 
     if category:
@@ -77,7 +94,8 @@ def get_audit_logs(
     if target_type:
         query = query.filter(AuditLog.target_type == target_type)
     if actor_id:
-        query = query.filter(AuditLog.actor_id == actor_id)
+        # Filtering by person only ever matches this hospital's own staff.
+        query = query.filter(AuditLog.actor_id == actor_id, AuditLog.actor_role != "super_admin")
 
     if from_date:
         try:
@@ -103,13 +121,13 @@ def get_audit_logs(
         "logs": [
             {
                 "id": l.id,
-                "actor_name": l.actor_name,
-                "actor_role": l.actor_role,
+                "actor_name": _who(l)[0],
+                "actor_role": _who(l)[1],
                 "action": l.action,
                 "target_type": l.target_type,
                 "target_id": l.target_id,
                 "target_label": l.target_label,
-                "details": l.details,
+                "details": _details(l),
                 "created_at": l.created_at.isoformat()
             }
             for l in logs
@@ -126,7 +144,7 @@ def list_audit_actions(
         raise HTTPException(status_code=403, detail="Not authorized")
     rows = (
         db.query(AuditLog.action)
-        .filter(AuditLog.hospital_id == current_doctor.hospital_id, AuditLog.actor_role != "super_admin")
+        .filter(AuditLog.hospital_id == current_doctor.hospital_id)
         .distinct().order_by(AuditLog.action).all()
     )
     return [r[0] for r in rows]
@@ -146,8 +164,7 @@ def export_audit_logs(
     if current_doctor.role.value not in ["admin", "sub_admin"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     q = db.query(AuditLog).filter(
-        AuditLog.hospital_id == current_doctor.hospital_id,
-        AuditLog.actor_role != "super_admin"
+        AuditLog.hospital_id == current_doctor.hospital_id
     )
     if category:
         pats = CATEGORY_PATTERNS.get(category)
@@ -165,7 +182,7 @@ def export_audit_logs(
     w = csv.writer(buf)
     w.writerow(["When", "Who", "Role", "Action", "Target", "Details"])
     for l in q.order_by(desc(AuditLog.created_at)).limit(20000).all():
-        row = [l.created_at.isoformat(sep=" ", timespec="seconds"), l.actor_name, l.actor_role, l.action, l.target_label, l.details or ""]
+        row = [l.created_at.isoformat(sep=" ", timespec="seconds"), _who(l)[0], _who(l)[1], l.action, l.target_label, _details(l) or ""]
         w.writerow([("'" + c) if isinstance(c, str) and c[:1] in ("=", "+", "-", "@") else c for c in row])
     return Response(
         content="\ufeff" + buf.getvalue(),
@@ -184,8 +201,7 @@ def get_audit_summary(
 
     from sqlalchemy import func as _func
     query = db.query(AuditLog).filter(
-        AuditLog.hospital_id == current_doctor.hospital_id,
-        AuditLog.actor_role != "super_admin"
+        AuditLog.hospital_id == current_doctor.hospital_id
     )
 
     total = query.count()
@@ -193,8 +209,7 @@ def get_audit_summary(
 
     action_counts = {
         a: n for a, n in db.query(AuditLog.action, _func.count(AuditLog.id)).filter(
-            AuditLog.hospital_id == current_doctor.hospital_id,
-            AuditLog.actor_role != "super_admin"
+            AuditLog.hospital_id == current_doctor.hospital_id
         ).group_by(AuditLog.action).all()
     }
 
@@ -204,7 +219,7 @@ def get_audit_summary(
         "action_breakdown": action_counts,
         "recent": [
             {
-                "actor_name": l.actor_name,
+                "actor_name": _who(l)[0],
                 "action": l.action,
                 "target_label": l.target_label,
                 "created_at": l.created_at.isoformat()

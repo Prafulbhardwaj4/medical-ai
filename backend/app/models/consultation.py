@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.utils.field_crypto import EncryptedText
 from app.utils.timezone import now_ist_naive
 
 class Consultation(Base):
@@ -11,7 +12,7 @@ class Consultation(Base):
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
 
-    raw_transcript = Column(Text, nullable=True)
+    raw_transcript = Column(EncryptedText, nullable=True)
 
     # AI-structured fields (stored as JSON strings)
     chief_complaint = Column(Text, nullable=True)

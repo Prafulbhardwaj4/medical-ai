@@ -655,6 +655,7 @@
   </div>
 
   <div id="toast"></div>
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/whatsapp-messages.js"></script>
   <script src="../js/nav-admin.js"></script>
@@ -1313,7 +1314,7 @@
         const batches = await api("GET", `/admin/medicines/${medicineId}/batches`);
         renderBatches(batches, medicineId, medicineName, packSize);
       } catch (e) {
-        document.getElementById('batches-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+        document.getElementById('batches-list').innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -1336,7 +1337,7 @@
             <div>
               <strong>${b.quantity} units</strong>
               ${b.batch_number ? ` · Lot ${sanitize(b.batch_number)}` : ''}
-              <div style="font-size:12px;color:var(--slate)">Expiry: ${b.expiry_date || 'Not set'} · Received: ${b.received_date || '—'}</div>
+              <div style="font-size:12px;color:var(--slate)">Expiry: ${sanitize(b.expiry_date || 'Not set')} · Received: ${sanitize(b.received_date || '—')}</div>
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               ${badge}
@@ -1576,9 +1577,9 @@
           ])}
           ${previewFieldRow([
             ['Schedule', `<select class="form-control" onchange="previewData[${i}].schedule=this.value">${['otc','h','h1','x'].map(s => `<option value="${s}" ${m.schedule === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}</select>`],
-            ['Units per Pack', `<input class="form-control" type="number" value="${m.pack_size}" oninput="previewData[${i}].pack_size=this.value" />`],
-            ['Price per Pack (Rs.)', `<input class="form-control" type="number" value="${m.price_per_pack}" oninput="previewData[${i}].price_per_pack=this.value" />`],
-            ['GST %', `<input class="form-control" type="number" value="${m.gst_percent}" oninput="previewData[${i}].gst_percent=this.value" />`]
+            ['Units per Pack', `<input class="form-control" type="number" value="${sanitize(m.pack_size)}" oninput="previewData[${i}].pack_size=this.value" />`],
+            ['Price per Pack (Rs.)', `<input class="form-control" type="number" value="${sanitize(m.price_per_pack)}" oninput="previewData[${i}].price_per_pack=this.value" />`],
+            ['GST %', `<input class="form-control" type="number" value="${sanitize(m.gst_percent)}" oninput="previewData[${i}].gst_percent=this.value" />`]
           ])}
         </div>
       `).join('');

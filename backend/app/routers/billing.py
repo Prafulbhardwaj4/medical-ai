@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
 import json, os
 
@@ -31,7 +32,7 @@ from app.models.waiver_request import WaiverRequest
 from app.schemas.billing import DayEndCloseIn, CreditDebitNoteIn, WaiverIn
 from app.utils.gst import apply_gst
 from app.utils.auth import get_current_doctor
-from app.utils.audit import log_action
+from app.utils.audit import log_action, log_record_access
 from app.services.pdf_service import generate_invoice_pdf, generate_credit_debit_note_pdf
 from app.utils.timezone import ist_today, ist_day_bounds, ist_date, now_ist_naive
 from app.utils.money_totals import collection_entries, collected_summary, collected_by_day, billed_total, uninvoiced_appointment_fees
@@ -40,6 +41,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.utils.rate_limit import limiter
+from app.utils.qr_hash import hash_equals
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -441,6 +443,7 @@ def download_invoice_pdf(
     ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    log_record_access(db, current_doctor, "invoice_pdf_downloaded", "invoice", invoice.id, f"Invoice {invoice.id}")
 
     patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == invoice.hospital_id).first()
@@ -609,6 +612,7 @@ def download_credit_debit_note_pdf(
     patient = db.query(Patient).filter(Patient.id == note.patient_id).first()
     hospital = db.query(Hospital).filter(Hospital.id == current_doctor.hospital_id).first()
     pdf_path = generate_credit_debit_note_pdf(note, invoice, hospital, patient)
+    log_record_access(db, current_doctor, "credit_debit_note_downloaded", "credit_debit_note", note.id, f"Note {note.id}")
     return FileResponse(pdf_path, media_type="application/pdf", filename=f"{note.note_number}.pdf")
 
 
@@ -620,7 +624,7 @@ def verify_invoice(request: Request, invoice_id: int, hash: str, db: Session = D
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         return {"valid": False, "reason": "Invoice not found"}
-    if not invoice.verify_hash or invoice.verify_hash != hash:
+    if not hash_equals(invoice.verify_hash, hash):
         return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
 
     patient = db.query(Patient).filter(Patient.id == invoice.patient_id).first()
@@ -948,10 +952,21 @@ def export_revenue_history_daily(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    if current_doctor.role.value not in ["admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
     data = revenue_history_daily(from_date, to_date, db, current_doctor)
     rows = [["Date", "Billed (pre-tax, by invoice date)", "Collected (by payment date, net of refunds and waivers)", "Invoices"]]
     rows += [[d["date"], d["billed"], d["collected"], d["invoice_count"]] for d in data["days"]]
-    return _csv_response(rows, f"billed-{data['from_date']}-to-{data['to_date']}.csv")
+    _filename = f"billed-{data['from_date']}-to-{data['to_date']}.csv"
+    log_action(
+        db, current_doctor,
+        action="billing_report_exported",
+        target_type="billing_report",
+        target_label=_filename,
+        details=json.dumps({"report": "revenue_history_daily", "from": data["from_date"], "to": data["to_date"], "rows": len(rows) - 1}),
+        hospital_id=current_doctor.hospital_id,
+    )
+    return _csv_response(rows, _filename)
 
 
 @router.get("/day-end-summary/export")
@@ -960,6 +975,8 @@ def export_day_end_summary(
     db: Session = Depends(get_db),
     current_doctor: Doctor = Depends(get_current_doctor)
 ):
+    if current_doctor.role.value not in ["receptionist", "admin", "sub_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
     data = day_end_summary(date, db, current_doctor)
     rows = [["Date", "Section", "Item", "Amount (Rs)"]]
     for mode, cats in (data.get("by_mode") or {}).items():
@@ -974,7 +991,16 @@ def export_day_end_summary(
         rows.append([data["date"], "Counted at close", "cash", cl.get("counted_cash")])
         rows.append([data["date"], "Counted at close", "card", cl.get("counted_card")])
         rows.append([data["date"], "Counted at close", "upi", cl.get("counted_upi")])
-    return _csv_response(rows, f"day-end-{data['date']}.csv")
+    _filename = f"day-end-{data['date']}.csv"
+    log_action(
+        db, current_doctor,
+        action="billing_report_exported",
+        target_type="billing_report",
+        target_label=_filename,
+        details=json.dumps({"report": "day_end_summary", "date": data["date"], "rows": len(rows) - 1}),
+        hospital_id=current_doctor.hospital_id,
+    )
+    return _csv_response(rows, _filename)
 
 
 @router.get("/revenue-history/monthly")
@@ -1060,7 +1086,11 @@ def close_day_for_hospital(db: Session, hospital_id: int, d, closed_by: int = No
         notes=note or AUTO_CLOSE_NOTE,
         closed_by=closed_by,
     ))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()  # another process closed this day first (one close per hospital per day): nothing to do
+        return False
     return True
 
 

@@ -483,6 +483,7 @@
           Appointments</button>
       </div>
 
+      <div id="eta-banner"></div>
       <div class="card" id="wizard-card" data-tutorial-id="my-appointments-wizard-card">
         <div class="wizard-topbar">
           <button class="wizard-back-btn" id="wizard-back" style="display:none" onclick="goBack()">
@@ -593,11 +594,19 @@
   </div>
 
   <script src="../js/suggestion-widget.js"></script>
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/tutorial.js"></script>
   <script src="../js/patient-appointment-demo.js"></script> 
   <script>
     if (!requireAuth()) { }
+    // Sign the patient out after 15 minutes without any activity.
+    (function () {
+      const IDLE_LIMIT_MS = 15 * 60 * 1000;
+      let lastActive = Date.now();
+      ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev => window.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true }));
+      setInterval(() => { if (Date.now() - lastActive > IDLE_LIMIT_MS) logout({ confirm: false }); }, 30000);
+    })();
     if (getDoctor()?.role !== 'patient') redirectByRole(getDoctor()?.role);
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = getDoctor()?.name || "Patient";
@@ -730,7 +739,7 @@
             state.city = e.target.value;
             setStep("hospital");
           });
-        } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+        } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
         return;
       }
 
@@ -749,7 +758,7 @@
             (h, q) => h.name.toLowerCase().includes(q),
             "Search hospitals..."
           );
-        } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+        } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
         return;
       }
 
@@ -795,7 +804,7 @@
           document.getElementById("doc-search").addEventListener("input", draw);
           document.getElementById("doc-spec-filter").addEventListener("change", draw);
           draw();
-        } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+        } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
         return;
       }
 
@@ -883,7 +892,7 @@
             area.removeEventListener('click', handler);
             setStep("datetime");
           });
-        } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+        } catch (e) { area.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
         return;
       }
 
@@ -984,7 +993,7 @@
                 </div>`).join('')}
             </div>` : '').join('');
       } catch (e) {
-        wrap.innerHTML = `<p class="err-msg" style="display:block">Could not load time slots right now (${e.message}). Please try again in a moment.</p>`;
+        wrap.innerHTML = `<p class="err-msg" style="display:block">Could not load time slots right now (${sanitize(e.message)}). Please try again in a moment.</p>`;
       }
     }
 
@@ -1179,7 +1188,7 @@
               <button class="btn btn-outline btn-sm" onclick="reportIssue(${a.id}, ${a.hospital_id}, '${a.no_show_detected_at ? 'checkin' : 'other'}')">Report an issue</button>
             </div>
           </div>`).join('');
-      } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
     }
 
     async function reportIssue(appointmentId, hospitalId, context) {
@@ -1258,7 +1267,7 @@
         savedAddresses = await api("GET", "/portal/auth/addresses");
         renderSavedAddressList();
       } catch (e) {
-        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -1304,6 +1313,22 @@
       try { await api("DELETE", `/portal/auth/addresses/${id}`); toast("Address deleted", "success"); loadSavedAddresses(); }
       catch (e) { toast(e.message, "error"); }
     }
+
+    // Expected consultation time for today's appointments. Shows only a time or a delay, never how many patients are ahead.
+    async function loadEtaBanner() {
+      const box = document.getElementById("eta-banner");
+      if (!box || document.hidden) return;
+      try {
+        const items = await api("GET", "/portal/appointments/eta-today");
+        box.innerHTML = items.map(i => `
+          <div class="card" style="margin-bottom:12px;border-left:4px solid ${i.state === 'delayed' ? '#d97706' : '#0d9488'}">
+            <div style="font-weight:600">${sanitize(i.doctor_name || 'Your doctor')}${i.hospital_name ? ' · ' + sanitize(i.hospital_name) : ''}${i.patient_name ? ' · ' + sanitize(i.patient_name) : ''}</div>
+            <div style="margin-top:4px;font-size:14px">${sanitize(i.message || '')}</div>
+          </div>`).join('');
+      } catch (e) { /* the banner is optional: stay quiet */ }
+    }
+    loadEtaBanner();
+    setInterval(loadEtaBanner, 60000);
 
     updateHeader();
     setStep("location", false).then(() => {

@@ -1,8 +1,9 @@
+import calendar
 from datetime import datetime, timedelta
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
+from app.utils.jwt_compat import jwt, JWTError
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
@@ -23,15 +24,29 @@ def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
 
 
-def create_portal_access_token(account_id: int) -> str:
+def create_portal_access_token(account_id: int, auth_at=None) -> str:
+    """auth_at = when this sign-in originally began (UTC, naive). Refreshed tokens keep it, so the
+    session can never be extended past PORTAL_SESSION_MAX_MINUTES from the original sign-in."""
     now = datetime.utcnow()
+    auth_at = auth_at or now
+    hard_stop = auth_at + timedelta(minutes=settings.PORTAL_SESSION_MAX_MINUTES)
     payload = {
         "sub": str(account_id),
         "type": "portal",
         "iat": now,
-        "exp": now + timedelta(minutes=settings.PORTAL_ACCESS_TOKEN_EXPIRE_MINUTES),
+        "auth_at": calendar.timegm(auth_at.utctimetuple()),
+        "exp": min(now + timedelta(minutes=settings.PORTAL_ACCESS_TOKEN_EXPIRE_MINUTES), hard_stop),
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def portal_session_started_at(token: str):
+    """When this sign-in began (UTC, naive). Tokens issued before the auth_at claim existed use iat."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return datetime.utcfromtimestamp(int(payload.get("auth_at") or payload.get("iat")))
+    except (JWTError, TypeError, ValueError):
+        return None
 
 
 def create_invite_token(phone: str, hospital_id: int, patient_id: int) -> str:

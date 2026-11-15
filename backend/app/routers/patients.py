@@ -19,8 +19,9 @@ import os
 from app.schemas.patient import PatientCreate, PatientOut, PatientSummary, CheckinCreate, CheckinOut, DoctorLite, NurseNoteCreate, PaymentMethodIn, PatientMergeIn, ReasonIn
 from sqlalchemy import or_
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
+from app.utils.roles import require_roles
 from app.utils.timezone import now_ist_naive
-from app.utils.audit import log_action
+from app.utils.audit import log_action, log_record_access
 from app.models.attendance import AttendanceRecord
 from app.utils.order_lifecycle import is_order_expired
 from app.models.medicine_order import MedicineOrder
@@ -56,7 +57,7 @@ def _require_roles(current_doctor: Doctor, roles) -> None:
 def unified_patient_lookup(
     query: str,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES, "pharmacy"))
 ):
     """§1 — single reception entry point: search by phone/UID/token and see which
     situations apply to the patient(s) found, instead of hunting across separate screens."""
@@ -397,7 +398,7 @@ def list_patients(
     page: int = 1,
     limit: int = 50,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES, "pharmacy"))
 ):
     page = max(page, 1)
     limit = min(max(limit, 1), 200)
@@ -492,6 +493,8 @@ def list_patients(
             currently_admitted=p.id in admitted_ids,
             address=p.address,
         ))
+    if result:
+        log_record_access(db, current_doctor, "patient_list_viewed", "patient_list", current_doctor.hospital_id, "Patient list")
     return result
 
 @router.get("/hospital-doctors", response_model=List[DoctorLite])
@@ -577,7 +580,7 @@ def doctors_in_room(
 def doctor_coverage_status(
     doctor_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*FRONT_DESK_ROLES))
 ):
     """Used by reception's walk-in check-in flow to gate the 'Notify Doctor'
     (straight-to-doctor, no nurse) option — only available when nobody
@@ -589,7 +592,7 @@ def doctor_coverage_status(
 def resolve_patient_token(
     token: str,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES))
 ):
     patient = db.query(Patient).filter(
         Patient.url_token == token,
@@ -603,7 +606,7 @@ def resolve_patient_token(
 def preferred_doctor(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*FRONT_DESK_ROLES))
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
@@ -625,7 +628,7 @@ def preferred_doctor(
 def checkin_today(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES))
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
@@ -743,7 +746,7 @@ def requeue_checkin(
 def get_checkin_slip(
     checkin_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*FRONT_DESK_ROLES))
 ):
     checkin = db.query(Checkin).filter(
         Checkin.id == checkin_id,
@@ -1104,7 +1107,7 @@ def get_hospital_medicines(
 def get_patient(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES))
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
@@ -1112,6 +1115,7 @@ def get_patient(
     ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    log_record_access(db, current_doctor, "patient_record_viewed", "patient", patient.id, f"Patient {patient.id}")
     return patient
 
 def _age_from_dob(dob, fallback_age):
@@ -1664,6 +1668,7 @@ def revert_radiology_payment(
 ):
     """Mirrors revert_test_payment — only paid, not-yet-imaged radiology
     orders for today's visit can be reverted."""
+    _require_roles(current_doctor, FRONT_DESK_ROLES)
     todays_checkin = db.query(Checkin).filter(
         Checkin.patient_id == patient_id,
         Checkin.hospital_id == current_doctor.hospital_id,
@@ -1692,6 +1697,11 @@ def revert_radiology_payment(
     if not orders:
         raise HTTPException(status_code=400, detail="No paid radiology orders to revert for today's visit — they may already be imaged")
 
+    _reverted = [
+        {"order_id": o.id, "study": o.study_name, "price": o.price, "before": o.status, "after": "payment_pending"}
+        for o in orders
+    ]
+    _was_finalized = bool(todays_checkin.is_finalized)
     for o in orders:
         o.status = "payment_pending"
         o.paid_at = None
@@ -1708,7 +1718,8 @@ def revert_radiology_payment(
         action="radiology_payment_reverted",
         target_type="patient",
         target_id=patient_id,
-        target_label=f"{len(orders)} radiology order(s) reverted to unpaid"
+        target_label=f"{len(orders)} radiology order(s) reverted to unpaid",
+        details=json.dumps({"token": todays_checkin.token_number, "orders": _reverted, "visit_was_finalized": _was_finalized}),
     )
     return {"reverted": len(orders)}
 
@@ -1716,7 +1727,7 @@ def revert_radiology_payment(
 @router.get("/queue/today")
 def todays_queue(
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES))
 ):
     try:
         from app.utils.portal_checkin import sweep_todays_online_checkins
@@ -2044,7 +2055,7 @@ def reception_pending_payments(
 def get_patient_pending_tasks(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*FRONT_DESK_ROLES))
 ):
     """Search-based modal (not the same-day ambient box) — for a patient who
     never paid on consultation day. Shows lab tests still payable (any day,
@@ -2115,7 +2126,7 @@ def collect_radiology_payment_anyday(
     patient_id: int,
     body: PaymentMethodIn,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*FRONT_DESK_ROLES))
 ):
     """Used from the search-based pending-tasks modal — collects payment for
     included, non-expired payment_pending radiology orders regardless of
@@ -2198,7 +2209,7 @@ def collect_test_payment_anyday(
 def get_pending_opd_charges(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES))
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
@@ -2303,7 +2314,7 @@ def collect_opd_charges_anyday(
 def get_pending_test_fees(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*FRONT_DESK_ROLES))
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
@@ -2332,7 +2343,7 @@ def get_pending_test_fees(
 def get_pending_radiology_fees(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*FRONT_DESK_ROLES))
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
@@ -2361,7 +2372,7 @@ def get_pending_radiology_fees(
 def toggle_radiology_order_include(
     order_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*FRONT_DESK_ROLES))
 ):
     order = db.query(RadiologyOrder).filter(
         RadiologyOrder.id == order_id,
@@ -2382,7 +2393,7 @@ def collect_radiology_payment(
     patient_id: int,
     body: PaymentMethodIn,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*FRONT_DESK_ROLES))
 ):
     today_start, today_end = ist_day_bounds()
 
@@ -2589,7 +2600,7 @@ def cancel_test_order(
 def get_patient_test_orders(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES))
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
@@ -2617,7 +2628,7 @@ def get_patient_test_orders(
 def get_checkin_by_token(
     token_number: str,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES, "pharmacy"))
 ):
     checkin = db.query(Checkin).filter(
         Checkin.token_number == token_number,
@@ -2631,7 +2642,7 @@ def get_checkin_by_token(
 def get_patient_documents(
     patient_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES, "pharmacy"))
 ):
     patient = db.query(Patient).filter(
         Patient.id == patient_id,
@@ -2639,6 +2650,7 @@ def get_patient_documents(
     ).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+    log_record_access(db, current_doctor, "patient_documents_viewed", "patient", patient.id, f"Patient {patient.id}")
 
     documents = []
 
@@ -2911,7 +2923,7 @@ VALID_ALLERGY_SEVERITIES = {"mild", "moderate", "severe"}
 
 
 @router.get("/{patient_id}/allergies")
-def list_patient_allergies(patient_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def list_patient_allergies(patient_id: int, current_doctor: Doctor = Depends(require_roles(*CLINICAL_FRONT_ROLES)), db: Session = Depends(get_db)):
     patient = db.query(Patient).filter(Patient.id == patient_id, Patient.hospital_id == current_doctor.hospital_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")

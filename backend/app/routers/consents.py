@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.consent_record import ConsentRecord
 from app.models.doctor import Doctor
@@ -23,18 +24,31 @@ from app.utils.timezone import ist_day_bounds, now_ist_naive
 
 router = APIRouter(tags=["consents"])
 
-NOTICE_VERSION = "v0-PENDING-LEGAL-REVIEW"
+NOTICE_VERSION = settings.CONSENT_NOTICE_VERSION
 STAFF_CONSENT_PURPOSES = {"ai_recording"}
 PORTAL_PURPOSES = ("terms", "privacy")
 DATA_REQUEST_KINDS = {"export", "correction", "erasure"}
 RECORDING_ROLES = ("doctor", "sub_admin", "admin")
 
 
+def has_recording_consent(db: Session, patient_id: int) -> bool:
+    """True when a doctor has confirmed AI recording for this patient under the current notice version."""
+    return db.query(ConsentRecord.id).filter(
+        ConsentRecord.subject_type == "patient",
+        ConsentRecord.subject_id == patient_id,
+        ConsentRecord.purpose == "ai_recording",
+        ConsentRecord.notice_version == NOTICE_VERSION,
+    ).first() is not None
+
+
 class PatientConsentIn(BaseModel):
     purpose: str = Field(max_length=40)
 
 
-class DataRequestIn(BaseModel):
+from app.utils.text_safety import SafeTextModel
+
+
+class DataRequestIn(SafeTextModel):
     kind: str = Field(max_length=20)
     note: Optional[str] = Field(default=None, max_length=500)
 
@@ -84,6 +98,23 @@ def record_patient_consent(
         details=f"{body.purpose}, notice {NOTICE_VERSION}", hospital_id=current_doctor.hospital_id,
     )
     return {"recorded": True, "notice_version": NOTICE_VERSION}
+
+
+@router.get("/consent/patients/{patient_id}/status")
+def recording_consent_status(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_doctor: Doctor = Depends(get_current_doctor),
+):
+    """Whether AI recording has been confirmed for this patient under the current notice version."""
+    if current_doctor.role.value not in RECORDING_ROLES:
+        raise HTTPException(status_code=403, detail="Not authorized for this action")
+    patient = db.query(Patient.id).filter(
+        Patient.id == patient_id, Patient.hospital_id == current_doctor.hospital_id
+    ).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return {"recorded": has_recording_consent(db, patient_id), "notice_version": NOTICE_VERSION}
 
 
 # --------------------------------------------------------------- portal side
@@ -176,6 +207,10 @@ def list_data_requests(
             "kind": c.purpose.replace("data_request_", ""),
             "phone": a.phone,
             "requested_at": c.created_at.isoformat() if c.created_at else None,
+            "status": "done" if db.query(ConsentRecord.id).filter(
+                ConsentRecord.subject_type == "portal_account", ConsentRecord.subject_id == a.id,
+                ConsentRecord.purpose == "done_" + c.purpose, ConsentRecord.created_at >= c.created_at,
+            ).first() else "open",
         }
         for c, a in rows
     ]

@@ -335,6 +335,7 @@
           </div>
           <div class="timer" id="timer">00:00</div>
           <p id="record-hint" class="record-status">Click to start recording</p>
+          <p style="font-size:0.75rem;color:var(--slate-light);margin:6px 0 0;text-align:center">Avoid saying the patient's name or phone number while recording.</p>
         </div>
         </div>
 
@@ -543,6 +544,7 @@
 
   <div id="toast"></div>
 
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
@@ -674,8 +676,8 @@
       }
       wrap.innerHTML = entries.map(([key, value]) => `
         <div class="form-group">
-          <label class="form-label">${VITALS_KEY_TO_LABEL[key] || key}</label>
-          <input class="form-control" data-vital-key="${key.replace(/"/g, '&quot;')}" value="${(value || '').replace(/"/g, '&quot;')}" />
+          <label class="form-label">${VITALS_KEY_TO_LABEL[key] || sanitize(key)}</label>
+          <input class="form-control" data-vital-key="${sanitize(key)}" value="${sanitize(value || '')}" />
         </div>
       `).join('');
     }
@@ -705,15 +707,15 @@
       return `
         <div style="border-bottom:1px solid var(--border);padding:10px 0;${isLast ? 'border-bottom:none' : ''}">
           <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="togglePastVisit(${v.id})">
-            <span style="font-size:0.85rem;font-weight:600;color:var(--navy)">${formatDate(v.created_at)} — ${v.diagnosis || 'No diagnosis recorded'}</span>
+            <span style="font-size:0.85rem;font-weight:600;color:var(--navy)">${formatDate(v.created_at)} — ${sanitize(v.diagnosis || 'No diagnosis recorded')}</span>
             <span style="font-size:0.78rem;color:var(--slate)" id="pv-toggle-${v.id}">Expand ▾</span>
           </div>
           <div id="pv-body-${v.id}" style="display:none;margin-top:8px;font-size:0.85rem;color:var(--navy)">
-            <div style="margin-bottom:4px"><strong>Doctor:</strong> ${v.doctor_name || '—'}</div>
-            <div style="margin-bottom:4px"><strong>Diagnosis:</strong> ${v.diagnosis || '—'}</div>
-            <div style="margin-bottom:4px"><strong>Medicines:</strong> ${medText}</div>
-            <div style="margin-bottom:4px"><strong>Advice:</strong> ${v.advice || '—'}</div>
-            <div><strong>Follow-up:</strong> ${v.followup || '—'}</div>
+            <div style="margin-bottom:4px"><strong>Doctor:</strong> ${sanitize(v.doctor_name || '—')}</div>
+            <div style="margin-bottom:4px"><strong>Diagnosis:</strong> ${sanitize(v.diagnosis || '—')}</div>
+            <div style="margin-bottom:4px"><strong>Medicines:</strong> ${sanitize(medText)}</div>
+            <div style="margin-bottom:4px"><strong>Advice:</strong> ${sanitize(v.advice || '—')}</div>
+            <div><strong>Follow-up:</strong> ${sanitize(v.followup || '—')}</div>
           </div>
         </div>
       `;
@@ -836,7 +838,27 @@
       else pauseRecording();
     }
 
+    // Recording starts only after the patient has agreed to AI recording. The doctor confirms it here once;
+    // the server keeps the record and checks it again when the recording connection opens.
+    async function ensureRecordingConsent() {
+      try {
+        const st = await api("GET", `/consent/patients/${patientId}/status`);
+        if (st.recorded) return true;
+        const ok = await confirmModal("The patient has agreed to AI recording.", { title: "Patient agreement", okLabel: "Yes, patient agreed", cancelLabel: "Not yet" });
+        if (!ok) {
+          toast("Recording needs the patient's agreement first.", "error");
+          return false;
+        }
+        await api("POST", `/consent/patients/${patientId}`, { purpose: "ai_recording" });
+        return true;
+      } catch (e) {
+        toast("Could not save the patient's agreement. Please try again.", "error");
+        return false;
+      }
+    }
+
     async function startRecording() {
+      if (!(await ensureRecordingConsent())) return;
       try {
         currentStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
         isRecording = true;
@@ -863,6 +885,11 @@
 
         wsConnection.onmessage = (event) => {
           const data = JSON.parse(event.data);
+          if (data.type === "ping") {
+            // Keep-alive from the server (load balancers close idle connections): answer and carry on.
+            try { wsConnection.send(JSON.stringify({ type: "pong" })); } catch (e) { /* connection is closing */ }
+            return;
+          }
           if (data.type === "transcript") {
             document.getElementById("transcript").value = data.full;
           } else if (data.type === "done") {
@@ -1081,23 +1108,23 @@
         ${isDispensed ? `<div style="grid-column:1/-1;font-size:11.5px;color:var(--teal);font-weight:600;margin-bottom:2px">✓ Already dispensed — locked (can't be edited or removed; add a new line instead if this needs to change)</div>` : ''}
         <div class="form-group med-name" style="margin:0">
           <label class="form-label">Generic Name</label>
-          <input class="form-control" value="${m.name || ""}" placeholder="Paracetamol" ${dis} />
+          <input class="form-control" value="${sanitize(m.name || "")}" placeholder="Paracetamol" ${dis} />
         </div>
         <div class="form-group med-brand" style="margin:0">
           <label class="form-label">Brand Name</label>
-          <input class="form-control" value="${m.brand_name || ""}" placeholder="Crocin (optional)" ${dis} />
+          <input class="form-control" value="${sanitize(m.brand_name || "")}" placeholder="Crocin (optional)" ${dis} />
         </div>
         <div class="form-group med-dosage" style="margin:0">
           <label class="form-label">Dosage</label>
-          <input class="form-control" value="${m.dosage || ""}" placeholder="500mg" ${dis} />
+          <input class="form-control" value="${sanitize(m.dosage || "")}" placeholder="500mg" ${dis} />
         </div>
         <div class="form-group med-freq" style="margin:0">
           <label class="form-label">Frequency</label>
-          <input class="form-control" value="${m.frequency || ""}" placeholder="Twice daily" ${dis} />
+          <input class="form-control" value="${sanitize(m.frequency || "")}" placeholder="Twice daily" ${dis} />
         </div>
         <div class="form-group med-dur" style="margin:0">
           <label class="form-label">Duration</label>
-          <input class="form-control" value="${m.duration || ""}" placeholder="5 days" ${dis} />
+          <input class="form-control" value="${sanitize(m.duration || "")}" placeholder="5 days" ${dis} />
         </div>
         <div class="form-group med-schedule" style="margin:0">
           <label class="form-label">Schedule</label>
@@ -1149,7 +1176,7 @@
       box.innerHTML = matches.map(m => `
         <div onclick="selectMedicine(${m.id})" style="padding:8px 12px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between"
           onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">
-          <span>${m.name}${m.brand_name ? ' — ' + m.brand_name : ''}${m.strength ? ' (' + m.strength + ')' : ''}</span>
+          <span>${sanitize(m.name)}${m.brand_name ? ' — ' + sanitize(m.brand_name) : ''}${m.strength ? ' (' + sanitize(m.strength) + ')' : ''}</span>
           <span style="color:var(--slate)">${m.price != null ? 'Rs.' + m.price + ' · ' : ''}${m.schedule === 'otc' ? 'OTC' : 'Controlled'}</span>
         </div>
       `).join('');
@@ -1446,13 +1473,13 @@
             setVital(key, value, false);
           });
 
-          const summaryParts = Object.entries(c.vitals_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);
+          const summaryParts = Object.entries(c.vitals_data).map(([label, value]) => `<strong>${sanitize(label)}:</strong> ${sanitize(value)}`);
           document.getElementById('nurse-vitals-summary').innerHTML = summaryParts.join(' &nbsp;·&nbsp; ');
         }
         if (c.post_consult_status === 'done' && c.post_consult_data) {
-          const parts = Object.entries(c.post_consult_data).map(([label, value]) => `<strong>${label}:</strong> ${value}`);
+          const parts = Object.entries(c.post_consult_data).map(([label, value]) => `<strong>${sanitize(label)}:</strong> ${sanitize(value)}`);
           let html = parts.join(' &nbsp;·&nbsp; ');
-          if (c.post_consult_nurse_name) html += ` <span style="color:var(--slate-light)">— by ${c.post_consult_nurse_name}</span>`;
+          if (c.post_consult_nurse_name) html += ` <span style="color:var(--slate-light)">— by ${sanitize(c.post_consult_nurse_name)}</span>`;
           document.getElementById('post-consult-summary').innerHTML = html;
           document.getElementById('post-consult-wrap').style.display = 'block';
         }
@@ -1495,7 +1522,7 @@
       box.innerHTML = matches.map(t => `
         <div onclick="selectRadiology(${t.id})" style="padding:8px 12px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between"
           onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">
-          <span>${t.study_name}</span><span style="color:var(--slate)">Rs.${t.price}</span>
+          <span>${sanitize(t.study_name)}</span><span style="color:var(--slate)">Rs.${Number(t.price)}</span>
         </div>
       `).join('');
       box.style.display = 'block';
@@ -1524,12 +1551,12 @@
         if (isDone) {
           return `
             <span class="badge badge-grey" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
-              ✓ ${t.study_name} — Already Ordered
+              ✓ ${sanitize(t.study_name)} — Already Ordered
             </span>`;
         }
         return `
           <span class="badge badge-teal" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
-            ${t.study_name} — Rs.${t.price}
+            ${sanitize(t.study_name)} — Rs.${Number(t.price)}
             <span onclick="removeRadiology(${t.id})" style="cursor:pointer;font-weight:700">×</span>
           </span>`;
       }).join('');
@@ -1565,7 +1592,7 @@
       box.innerHTML = matches.map(t => `
         <div onclick="selectTest(${t.id})" style="padding:8px 12px;cursor:pointer;font-size:14px;display:flex;justify-content:space-between"
           onmouseover="this.style.background='var(--smoke-mid)'" onmouseout="this.style.background=''">
-          <span>${t.test_name}</span><span style="color:var(--slate)">Rs.${t.price}</span>
+          <span>${sanitize(t.test_name)}</span><span style="color:var(--slate)">Rs.${sanitize(t.price)}</span>
         </div>
       `).join('');
       box.style.display = 'block';
@@ -1594,13 +1621,13 @@
         if (isDone) {
           return `
             <span class="badge badge-grey" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
-              ✓ ${t.test_name} — Already Tested
+              ✓ ${sanitize(t.test_name)} — Already Tested
               <a href="javascript:void(0)" onclick="openReportsModal(patientId)" style="color:var(--teal);font-weight:600">📋 Reports</a>
             </span>`;
         }
         return `
           <span class="badge badge-teal" style="display:flex;align-items:center;gap:6px;padding:6px 10px">
-            ${t.test_name} — Rs.${t.price}
+            ${sanitize(t.test_name)} — Rs.${sanitize(t.price)}
             <span onclick="removeTest(${t.id})" style="cursor:pointer;font-weight:700">×</span>
           </span>`;
       }).join('');

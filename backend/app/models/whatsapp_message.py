@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Index
 from app.database import Base
+from app.utils.field_crypto import EncryptedText
 from app.utils.timezone import now_ist_naive
 
 
@@ -18,7 +19,7 @@ class WhatsappMessage(Base):
     recipient_phone = Column(String, nullable=False)  # real number, normalized by utils/phone.py
 
     template_key = Column(String, nullable=False)
-    message_text = Column(Text, nullable=False)  # exact text to send; for secret messages the secret is masked with dots
+    message_text = Column(EncryptedText, nullable=False)  # exact text to send; for secret messages the secret is masked with dots
     is_secret = Column(Boolean, nullable=False, default=False)
     secret_enc = Column(Text, nullable=True)  # Fernet-encrypted full text of a secret message; NULL once wiped
     visibility = Column(String, nullable=False, default="all")  # all | admin_super | super_only

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from app.utils.text_safety import SafeTextModel
 from typing import Optional
 from sqlalchemy.orm import Session
 
@@ -10,7 +11,7 @@ from app.utils.rate_limit import limiter
 router = APIRouter(prefix="/plan-inquiries", tags=["plan-inquiries"])
 
 
-class PlanInquiryIn(BaseModel):
+class PlanInquiryIn(SafeTextModel):
     requested_tier: str
     billing_period: str  # "monthly" | "yearly"
     hospital_name: str

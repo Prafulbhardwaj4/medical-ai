@@ -17,11 +17,13 @@ from app.services.reset_tokens import create_reset_token, read_reset_token, curr
 from app.services.patient_reset import issue_reset_code, consume_reset_code, issue_verification_code
 from app.models.portal import PatientAddress
 from app.utils.portal_auth import create_portal_access_token, hash_password, verify_password, get_current_patient_account, portal_security
-from app.utils.portal_auth import create_portal_register_token, verify_portal_register_token
+from app.utils.portal_auth import create_portal_register_token, verify_portal_register_token, portal_session_started_at
 from app.utils.portal_otp import is_temp_password, temp_password_enabled
 from app.utils.auth import check_password_strength
 from app.utils.auth import verify_captcha_token, blacklist_token
-from app.utils.rate_limit import limiter, FailureThrottle
+from app.utils.rate_limit import limiter, FailureThrottle, client_ip
+from app.utils.audit import log_action
+from app.utils.monitoring import record_login_failure, record_lockout
 from app.utils.timezone import now_ist_naive
 from app.utils.phone import normalize_phone
 from app.services.whatsapp_messages import wipe_secrets_for_recipient
@@ -32,6 +34,8 @@ router = APIRouter(prefix="/portal/auth", tags=["portal-auth"])
 # phone number: 10 failures in 15 minutes -> blocked until the window clears.
 _login_throttle = FailureThrottle(max_failures=10, window_seconds=15 * 60)
 _otp_throttle = FailureThrottle(max_failures=5, window_seconds=15 * 60)  # wrong OTP guesses per phone
+# Login failures are counted per (phone, network) so a stranger cannot block a patient, plus a network-wide ceiling.
+_login_ip_throttle = FailureThrottle(max_failures=30, window_seconds=15 * 60, name="portal_login_ip")
 
 
 def _patients_for_phone(db: Session, phone: str):
@@ -92,19 +96,31 @@ def login(request: Request, body: LoginIn, db: Session = Depends(get_db)):
     if not verify_captcha_token(body.captcha_token, body.captcha_answer):
         raise HTTPException(status_code=400, detail="Incorrect captcha. Please try again.")
     _phone = normalize_phone(body.phone)
-    if _login_throttle.is_blocked(_phone):
+    _ip = client_ip(request)
+    _pair = f"{_phone}:{_ip}"
+    if _login_ip_throttle.is_blocked(_ip) or _login_throttle.is_blocked(_pair):
         raise HTTPException(status_code=429, detail="Too many failed attempts. Please try again in 15 minutes.")
     account = db.query(PatientAccount).filter(PatientAccount.phone == _phone).first()
 
     # First login with the temporary password, for a number that is already a
     # patient at some hospital but has no portal account yet: they set their own.
     if not account and temp_password_enabled() and is_temp_password(body.password) and _patients_for_phone(db, _phone):
-        _login_throttle.reset(_phone)
+        _login_throttle.reset(_pair)
         return LoginResultOut(status="needs_registration", registration_token=create_portal_register_token(_phone))
 
     # Same generic 401 whether the number has no account or the password is wrong.
     if not account or not verify_password(body.password, account.password_hash):
-        _login_throttle.record_failure(_phone)
+        _login_throttle.record_failure(_pair)
+        _login_ip_throttle.record_failure(_ip)
+        record_login_failure()
+        log_action(db, None, action="portal_login_failed", target_type="patient_account",
+                   target_id=account.id if account else None,
+                   details=f"ip={_ip}; reason={'wrong_password' if account else 'unknown_account'}", hospital_id=None)
+        if _login_throttle.is_blocked(_pair):
+            record_lockout()
+            log_action(db, None, action="portal_login_locked_out", target_type="patient_account",
+                       target_id=account.id if account else None,
+                       details=f"ip={_ip}; reason=too_many_failures_from_this_network", hospital_id=None)
         raise HTTPException(status_code=401, detail="Invalid phone number or password")
     if not account.is_active:
         # They just proved they own the account (correct password + captcha), and
@@ -113,12 +129,14 @@ def login(request: Request, body: LoginIn, db: Session = Depends(get_db)):
         account.is_active = True
         db.commit()
 
-    _login_throttle.reset(_phone)
+    _login_throttle.reset(_pair)
     if account.must_change_password and account.temp_password_expires_at and now_ist_naive() > account.temp_password_expires_at:
         raise HTTPException(status_code=403, detail="Your temporary password has expired. Use Forgot password.")
     if account.must_change_password:
         # Account was created for them (e.g. by reception) with the temporary password.
         return LoginResultOut(status="needs_registration", registration_token=create_portal_register_token(_phone))
+    log_action(db, None, action="portal_login_success", target_type="patient_account", target_id=account.id,
+               details=f"ip={_ip}", hospital_id=None)
     return LoginResultOut(
         status="success",
         access_token=create_portal_access_token(account.id),
@@ -127,13 +145,15 @@ def login(request: Request, body: LoginIn, db: Session = Depends(get_db)):
 
 
 @router.post("/register/complete", response_model=TokenOut)
-def complete_registration(body: CompleteRegisterIn, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+@limiter.limit("40/hour")
+def complete_registration(request: Request, body: CompleteRegisterIn, db: Session = Depends(get_db)):
     # Needs the registration_token from /login (issued only after the temporary
     # password was proven), so a phone number + password alone creates nothing.
     phone = normalize_phone(body.phone)
     if not phone or verify_portal_register_token(body.registration_token) != phone:
         raise HTTPException(status_code=400, detail="Your sign-in step expired. Please sign in again.")
-    check_password_strength(body.new_password)
+    check_password_strength(body.new_password, None, None, (phone,))
     if is_temp_password(body.new_password):
         raise HTTPException(status_code=400, detail="Please choose a different password than the temporary one")
 
@@ -219,8 +239,7 @@ def change_password(
     # 400, not 401: the frontend signs the user out on any 401.
     if not verify_password(body.old_password, account.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    if len(body.new_password) < 8 or not any(c.isdigit() for c in body.new_password) or not any(c.isupper() for c in body.new_password):
-        raise HTTPException(status_code=400, detail="New password must be at least 8 characters, with 1 number and 1 capital letter")
+    check_password_strength(body.new_password, account.email, _session_payload(account).name, (account.phone,))
     if body.new_password == body.old_password:
         raise HTTPException(status_code=400, detail="New password must be different from current password")
 
@@ -234,13 +253,34 @@ def change_password(
     )
 
 
+@router.post("/refresh", response_model=TokenOut)
+@limiter.limit("30/minute")
+def portal_refresh(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(portal_security),
+    account: PatientAccount = Depends(get_current_patient_account),
+):
+    """Sliding session: a still-valid token is swapped for a fresh one, but never beyond
+    PORTAL_SESSION_MAX_MINUTES after the original sign-in. After that the patient signs in again."""
+    started = portal_session_started_at(credentials.credentials)
+    if started is None or datetime.utcnow() - started >= timedelta(minutes=settings.PORTAL_SESSION_MAX_MINUTES):
+        raise HTTPException(status_code=401, detail="Your session has reached its time limit. Please sign in again.")
+    return TokenOut(
+        access_token=create_portal_access_token(account.id, auth_at=started),
+        doctor=_session_payload(account),
+    )
+
+
 @router.post("/logout")
 def portal_logout(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(portal_security),
     account: PatientAccount = Depends(get_current_patient_account),
     db: Session = Depends(get_db),
 ):
     blacklist_token(credentials.credentials, db)
+    log_action(db, None, action="portal_logout", target_type="patient_account", target_id=account.id,
+               details=f"ip={client_ip(request)}", hospital_id=None)
     return {"message": "Logged out successfully"}
 
 
@@ -297,7 +337,7 @@ def forgot_password_reset(request: Request, body: PortalForgotPasswordResetIn, d
     if (not account or not account.is_active or account.must_change_password
             or stamp != current_stamp(account.password_changed_at)):
         raise HTTPException(status_code=400, detail="This reset session has expired. Please start again.")
-    check_password_strength(body.new_password)
+    check_password_strength(body.new_password, account.email, None, (account.phone,))
     if is_temp_password(body.new_password):
         raise HTTPException(status_code=400, detail="Please choose a different password than the temporary one")
     account.password_hash = hash_password(body.new_password)

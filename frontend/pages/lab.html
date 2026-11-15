@@ -860,6 +860,7 @@
   </div>
 
   <div id="toast"></div>
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
@@ -1325,7 +1326,7 @@
           : '';
         const cardBorder = (g.topPriority === 0 || g.tests.some(t => t.sample_overdue)) ? 'border-left:4px solid var(--danger)' : g.topPriority === 1 ? 'border-left:4px solid #f59e0b' : '';
         return `
-        <div class="lq-card" style="${cardBorder}" onclick="openPatientTestsModal('${g.key}')">
+        <div class="lq-card" style="${cardBorder}" onclick="openPatientTestsModal(${jsArg(g.key)})">
           <div class="lq-card-head">
             <div class="lq-top">
               ${priorityBadge}
@@ -1425,7 +1426,7 @@
             ${tubeLine}
             <div class="lp-mlc-status-row">
               <div class="lp-mlc-status-links">${mlcLine}${accessionLine}</div>
-              <span class="badge ${STATUS_BADGE[o.status] || 'badge-grey'}" id="lp-status-${o.id}">${STATUS_LABEL[o.status] || o.status}</span>
+              <span class="badge ${sanitize(STATUS_BADGE[o.status] || 'badge-grey')}" id="lp-status-${o.id}">${sanitize(STATUS_LABEL[o.status] || o.status)}</span>
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
@@ -1499,7 +1500,7 @@
             <div style="font-size:11px;color:var(--slate-light)">${r.accession_number ? 'ULR: ' + sanitize(r.accession_number) + ' · ' : ''}${r.verified_at ? new Date(r.verified_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
           </div>`).join('');
       } catch (e) {
-        body.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        body.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -1568,7 +1569,7 @@
             <div style="font-size:11px;color:var(--slate-light)">Logged by ${sanitize(e.recorded_by || 'System')} — ${e.recorded_at ? new Date(e.recorded_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</div>
           </div>`).join('');
       } catch (e) {
-        body.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        body.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -1621,7 +1622,7 @@
             </div>
           </div>`).join('');
       } catch (e) {
-        document.getElementById('tat-trace-body').innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        document.getElementById('tat-trace-body').innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -2036,7 +2037,7 @@
           `;
         }
       } catch (e) {
-        bodyEl.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+        bodyEl.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -2099,7 +2100,7 @@
         const url = URL.createObjectURL(blob);
         if (w) w.location = url; else window.open(url, "_blank");
       } catch (e) {
-        if (w) w.document.write(`<p style="font-family:sans-serif;padding:20px;color:#c0392b">${e.message}</p>`);
+        if (w) w.document.write(`<p style="font-family:sans-serif;padding:20px;color:#c0392b">${sanitize(e.message)}</p>`);
         toast(e.message, 'error');
       }
     }

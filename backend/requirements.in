@@ -1,0 +1,32 @@
+# DIRECT dependencies only. The exact, fully pinned set is generated into requirements.lock by
+#   scripts/pin_requirements.sh
+# Do not edit requirements.lock by hand. Add or remove a package here, then run the script again.
+
+fastapi
+uvicorn[standard]
+# SQLAlchemy 2.1 makes "postgresql://" mean the psycopg 3 driver; this project uses psycopg2.
+sqlalchemy<2.1
+python-dotenv
+passlib[bcrypt]
+bcrypt==4.0.1
+PyJWT
+cryptography
+python-multipart
+openai
+groq
+reportlab
+httpx
+pydantic-settings
+email-validator
+pytz
+python-dateutil
+slowapi
+redis
+alembic
+qrcode[pil]
+websockets
+psycopg2-binary
+boto3
+pdfplumber
+openpyxl
+sentry-sdk

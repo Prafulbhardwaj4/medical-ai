@@ -620,6 +620,7 @@
 
   <div id="toast"></div>
 
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
@@ -796,7 +797,7 @@
         const rooms = await api("GET", "/admin/rooms?for_picker=doctor");
         document.getElementById('room-select').innerHTML =
           '<option value="">No room</option>' +
-          rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${r.display || r.name || r.room_number}</option>`).join('');
+          rooms.map(r => `<option value="${r.id}" ${r.id === selectedId ? 'selected' : ''}>${sanitize(r.display || r.name || r.room_number)}</option>`).join('');
       } catch (e) { }
     }
 
@@ -966,7 +967,7 @@
         const confirmBtn = overlay.querySelector("#present-room-confirm-btn");
         api("GET", "/admin/rooms?for_picker=doctor").then(rooms => {
           select.innerHTML = '<option value="">Select a room…</option>' +
-            rooms.map(r => `<option value="${r.id}">${r.display || r.name || r.room_number}</option>`).join('');
+            rooms.map(r => `<option value="${r.id}">${sanitize(r.display || r.name || r.room_number)}</option>`).join('');
         }).catch(() => {
           select.innerHTML = '<option value="">Could not load rooms</option>';
         });
@@ -1065,12 +1066,12 @@
 
       tbody.innerHTML = patients.map(p => `
         <tr>
-          <td data-label="Patient"><strong>${p.name}</strong>${p.address ? `<div style="font-size:11.5px;color:var(--slate-light);font-weight:400;margin-top:2px">${p.address}</div>` : ''}</td>
-          <td data-label="ID"><span class="badge badge-navy">${p.patient_uid}</span></td>
-          <td data-label="Phone" style="color:var(--slate)">${p.phone}</td>
-          <td data-label="Age / Gender">${p.age}y / ${capitalize(p.gender)}</td>
+          <td data-label="Patient"><strong>${sanitize(p.name)}</strong>${p.address ? `<div style="font-size:11.5px;color:var(--slate-light);font-weight:400;margin-top:2px">${sanitize(p.address)}</div>` : ''}</td>
+          <td data-label="ID"><span class="badge badge-navy">${sanitize(p.patient_uid)}</span></td>
+          <td data-label="Phone" style="color:var(--slate)">${sanitize(p.phone)}</td>
+          <td data-label="Age / Gender">${sanitize(p.age)}y / ${sanitize(capitalize(p.gender))}</td>
           <td data-label="Last Visit">${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
-          <td data-label="Last Token">${p.last_token ? `<span class="badge badge-teal">${p.last_token}</span>` : '<span style="color:var(--slate-light)">—</span>'}</td>
+          <td data-label="Last Token">${p.last_token ? `<span class="badge badge-teal">${sanitize(p.last_token)}</span>` : '<span style="color:var(--slate-light)">—</span>'}</td>
           <td data-label="">
             <div style="display:flex;gap:6px;align-items:center">
               <button class="btn btn-sm" style="background:var(--teal);color:#fff;border:none" onclick='event.stopPropagation();openSelectPatientModal(${p.id}, ${jsArg(p.name)})'>Select</button>
@@ -1131,7 +1132,7 @@
           .sort((a, b) => parseDocDate(b) - parseDocDate(a));
         renderDocuments(allDocuments);
       } catch (e) {
-        document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+        document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -1160,7 +1161,7 @@
         return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div>
-              <strong>${DOC_TYPE_LABEL[d.type] || d.label}</strong>${d.is_admission ? ' <span class="badge badge-red">Admission</span>' : ''}
+              <strong>${DOC_TYPE_LABEL[d.type] || sanitize(d.label)}</strong>${d.is_admission ? ' <span class="badge badge-red">Admission</span>' : ''}
               <div style="font-size:12px;color:var(--slate)">${dateStr} · ${timeStr}</div>
             </div>
             <div style="display:flex;gap:8px">
@@ -1204,7 +1205,7 @@
           </div>
         `).join('');
       } catch (e) {
-        body.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        body.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -1258,6 +1259,8 @@
           return;
         }
         if (status.exists) {
+          // tell the server the consultation has started (feeds the patient's expected-time banner); never blocks the doctor
+          try { await api("POST", `/consultations/start/${id}`); } catch (_) { /* optional */ }
           window.location.href = `/pages/patient.html?${token}`;
         } else {
           pendingPatientId = id;
@@ -1400,7 +1403,7 @@
       document.getElementById('up-next-vitals-doctor').innerHTML = vitalsCellHtml(next);
       const showConsult = next.status !== 'expected' && next.status !== 'done';
       document.getElementById('up-next-consult-doctor').innerHTML = showConsult
-        ? `<button class="btn btn-primary btn-sm" onclick="goToPatient(${next.patient_id}, '${next.url_token}'${next.status === 'returned' ? ', true' : ''})">Consult</button>`
+        ? `<button class="btn btn-primary btn-sm" onclick="goToPatient(${Number(next.patient_id)}, ${jsArg(next.url_token)}${next.status === 'returned' ? ', true' : ''})">Consult</button>`
         : '';
     }
 
@@ -1433,13 +1436,13 @@
       const isReturnVisit = q.status === 'returned';
       return `
       <tr>
-        <td data-label="Token" style="text-align:center"><strong>${q.token_number || '—'}</strong></td>
-        <td data-label="Patient" style="text-align:center">${q.patient_name}${q.is_referral ? ` <span class="badge badge-navy" title="${(q.referral_note || '').replace(/"/g, '&quot;')}">Referred by ${q.referred_by_name || 'another doctor'}</span>` : ''}${isReturnVisit ? ' <span class="badge badge-purple" title="Same-day recheck — no new token">Recheck</span>' : ''}</td>
-        <td data-label="Phone" style="text-align:center;color:var(--slate)">${q.patient_phone || '—'}</td>
+        <td data-label="Token" style="text-align:center"><strong>${sanitize(q.token_number || '—')}</strong></td>
+        <td data-label="Patient" style="text-align:center">${sanitize(q.patient_name)}${q.is_referral ? ` <span class="badge badge-navy" title="${sanitize(q.referral_note || '')}">Referred by ${sanitize(q.referred_by_name || 'another doctor')}</span>` : ''}${isReturnVisit ? ' <span class="badge badge-purple" title="Same-day recheck — no new token">Recheck</span>' : ''}</td>
+        <td data-label="Phone" style="text-align:center;color:var(--slate)">${sanitize(q.patient_phone || '—')}</td>
         <td data-label="${q.source === 'online' ? 'Est. Time' : 'Checked In'}" style="color:var(--slate);text-align:center">${timeLabel}</td>
         <td data-label="Vitals" style="text-align:center">${vitalsCellHtml(q)}</td>
         <td data-label="" style="text-align:center">${showConsult
-          ? `<button class="btn btn-primary btn-sm" onclick="goToPatient(${q.patient_id}, '${q.url_token}'${isReturnVisit ? ', true' : ''})">Consult</button>`
+          ? `<button class="btn btn-primary btn-sm" onclick="goToPatient(${Number(q.patient_id)}, ${jsArg(q.url_token)}${isReturnVisit ? ', true' : ''})">Consult</button>`
           : (isDone ? `<span class="badge badge-teal">Consulted</span>` : '')}</td>
       </tr>`;
     }
@@ -1502,7 +1505,7 @@
         else {
           const s = staffAlerts[0];
           staffBanner.style.display = 'flex';
-          staffBanner.innerHTML = `<span>${s.title}: ${s.message}</span><button class="btn btn-sm" style="background:#fff;color:#d97706" onclick="dismissEmergencyAlert(${s.id})">Got it</button>`;
+          staffBanner.innerHTML = `<span>${sanitize(s.title)}: ${sanitize(s.message)}</span><button class="btn btn-sm" style="background:#fff;color:#d97706" onclick="dismissEmergencyAlert(${s.id})">Got it</button>`;
         }
 
         // Emergency Ward admission — deferred while mid-consultation, and only ever one popup at a time.
@@ -1528,7 +1531,7 @@
           <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:center">
             <h2 style="margin:0;font-size:18px;color:#dc2626">🚨 Emergency Alert</h2>
           </div>
-          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${n.message}</p>
+          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${sanitize(n.message)}</p>
           <div style="display:flex;flex-direction:column;gap:10px">
             <button type="button" class="btn btn-primary" id="ea-alert-ack-btn" style="background:#dc2626;border-color:#dc2626">Acknowledge</button>
             <button type="button" class="btn btn-outline" id="ea-alert-later-btn">Later</button>
@@ -1559,7 +1562,7 @@
           <div class="modal-header" style="border-bottom:none;margin-bottom:6px;justify-content:center">
             <h2 style="margin:0;font-size:18px;color:#dc2626">🚨 Emergency Admission</h2>
           </div>
-          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${n.message}</p>
+          <p style="color:var(--slate);font-size:14px;margin:0 0 22px">${sanitize(n.message)}</p>
           <div style="display:flex;flex-direction:column;gap:10px">
             <button type="button" class="btn btn-primary" id="ea-accept-btn" style="background:#dc2626;border-color:#dc2626">See Patient Now</button>
             <button type="button" class="btn btn-outline" id="ea-dismiss-btn">Not Right Now</button>

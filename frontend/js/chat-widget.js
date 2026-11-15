@@ -313,7 +313,7 @@
     }
     list.innerHTML = threads.map(t => `
       <div class="chat-thread-item ${t.unread_count > 0 ? 'unread' : ''}" onclick="window.__chatWidgetOpenThread(${t.staff_id})">
-        <div class="chat-thread-avatar">${threadInitials(t.name)}</div>
+        <div class="chat-thread-avatar">${sanitize(threadInitials(t.name))}</div>
         <div class="chat-thread-info">
           <div class="chat-thread-name">${sanitize(t.name)} <span class="chat-thread-role">${sanitize(t.role)}</span></div>
           ${t.last_message ? `<div class="chat-thread-preview">${sanitize(t.last_message)}</div>` : ''}

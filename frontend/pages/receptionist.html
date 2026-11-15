@@ -1766,6 +1766,7 @@
     </div>
   </div>
 
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/whatsapp-messages.js"></script>
   <script src="../js/tier-catalog.js"></script>
@@ -2245,8 +2246,8 @@
         box.innerHTML = data.map(p => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:8px">
             <div>
-              <strong>${p.name}</strong> ${p.checked_in_today ? '<span class="badge badge-amber" style="margin-left:6px">Checked in today</span>' : ''} ${p.currently_admitted ? '<span class="badge badge-red" style="margin-left:6px">Already admitted</span>' : ''}
-              <div style="font-size:0.82rem;color:var(--slate)">${p.patient_uid} · ${p.phone} · ${p.age}y</div>
+              <strong>${sanitize(p.name)}</strong> ${p.checked_in_today ? '<span class="badge badge-amber" style="margin-left:6px">Checked in today</span>' : ''} ${p.currently_admitted ? '<span class="badge badge-red" style="margin-left:6px">Already admitted</span>' : ''}
+              <div style="font-size:0.82rem;color:var(--slate)">${sanitize(p.patient_uid)} · ${sanitize(p.phone)} · ${p.age}y</div>
             </div>
             <button class="btn btn-primary btn-sm" onclick='selectExistingPatient(${jsArg(p)})'>Select</button>
           </div>
@@ -2314,7 +2315,7 @@
       wrap.style.display = '';
       wrap.innerHTML = `<p style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Doctor Visits: ${allDoctors.length}</p>` +
         allDoctors.map(d => `
-          <div class="r-row"><span>${d.doctor_name}${d.specialization ? ', ' + d.specialization : ''}</span><span>${d.room_number || '—'}</span></div>
+          <div class="r-row"><span>${sanitize(d.doctor_name)}${d.specialization ? ', ' + sanitize(d.specialization) : ''}</span><span>${sanitize(d.room_number || '—')}</span></div>
         `).join('');
     }
 
@@ -2436,7 +2437,7 @@
         });
         const sel = document.getElementById('room-select');
         sel.innerHTML = '<option value="">— Select a room —</option>' + sorted.map(r =>
-          `<option value="${r.id}">${r.display || r.name || ('Room ' + r.room_number)} · ${r.room_type}${r.sequence_number != null ? ` (#${r.sequence_number})` : ''}</option>`
+          `<option value="${r.id}">${sanitize(r.display || r.name || ('Room ' + r.room_number))} · ${sanitize(r.room_type)}${r.sequence_number != null ? ` (#${r.sequence_number})` : ''}</option>`
         ).join('');
         jumpInput.disabled = false;
         jumpInput.placeholder = "Type the room's seq # and press Enter";
@@ -2475,7 +2476,7 @@
         billsRows = await api("GET", "/patients/reception/pending-payments");
         setBillsFilter(billsFilter);
       } catch (e) {
-        document.getElementById('bills-modal-list').innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        document.getElementById('bills-modal-list').innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -2510,7 +2511,7 @@
             <div style="padding:8px 0;${dIdx > 0 ? 'border-top:1px solid var(--border)' : ''}">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
                 <div>
-                  ${d.doctor_name ? `<span style="font-size:12.5px;font-weight:600;color:var(--slate)">${d.doctor_name}</span>` : ''}
+                  ${d.doctor_name ? `<span style="font-size:12.5px;font-weight:600;color:var(--slate)">${sanitize(d.doctor_name)}</span>` : ''}
                   ${d.visit_time ? `<span style="font-size:11.5px;color:var(--slate-light);margin-left:6px">${d.is_online ? 'Booked for' : 'Checked in'} ${new Date(d.visit_time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true })}</span>` : ''}
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="confirmGenerateBill(${d.checkin_id}, this)" ${d.needs_regenerate ? '' : 'disabled title="Nothing new to bill since it was generated"'}>🧾 Generate Bill</button>
@@ -2531,7 +2532,7 @@
         return `
           <div style="padding:12px 0;border-bottom:1px solid var(--border)">
             <div>
-              <strong>${r.patient_name}</strong> ${firstVisitTime ? `<span style="font-size:12px;color:var(--slate-light)">Checked in ${firstVisitTime}</span>` : ''}
+              <strong>${sanitize(r.patient_name)}</strong> ${firstVisitTime ? `<span style="font-size:12px;color:var(--slate-light)">Checked in ${firstVisitTime}</span>` : ''}
               <span class="badge ${r.is_finalized ? 'badge-green' : 'badge-amber'}" style="margin-left:6px">${r.is_finalized ? 'Generated' : 'Pending'}</span>
             </div>
             ${doctorBlocks}
@@ -2571,7 +2572,7 @@
         // This modal needs the full hospital roster, independent of that room filter.
         allDoctors = await api("GET", "/patients/hospital-doctors");
       } catch (e) {
-        list.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`;
+        list.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${sanitize(e.message)}</p>`;
         return;
       }
 
@@ -2586,7 +2587,7 @@
             <input type="checkbox" id="add-doc-chk-${d.id}" ${checked ? 'checked' : ''}
               onchange="toggleAdditionalDoctor(${d.id}, ${d.consultation_fee ?? 'null'})" />
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              ${d.title} ${d.name}${d.specialization ? ` <span style="color:var(--slate-light);font-size:12px">— ${d.specialization}</span>` : ''}
+              ${sanitize(d.title)} ${sanitize(d.name)}${d.specialization ? ` <span style="color:var(--slate-light);font-size:12px">— ${sanitize(d.specialization)}</span>` : ''}
             </span>
           </label>
           <input type="number" class="form-control" id="add-doc-fee-${d.id}" style="width:88px;flex-shrink:0;display:${checked ? '' : 'none'}"
@@ -2680,8 +2681,8 @@
       const rowHtml = (name, spec, fee, onFeeInput, onRemove) => `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)">
           <div style="min-width:0">
-            <div style="font-size:13.5px;font-weight:600;color:var(--navy)">${name}</div>
-            ${spec ? `<div style="font-size:12px;color:var(--slate-light)">${spec}</div>` : ''}
+            <div style="font-size:13.5px;font-weight:600;color:var(--navy)">${sanitize(name)}</div>
+            ${spec ? `<div style="font-size:12px;color:var(--slate-light)">${sanitize(spec)}</div>` : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
             ${billingOn
@@ -2736,7 +2737,7 @@
         const sel = document.getElementById('doc-select');
         const defaultId = ordered[0].id;
         sel.innerHTML = ordered.map(d =>
-          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${d.title} ${d.name}${d.specialization ? ` — ${d.specialization}` : ''}${d.status === 'on_break' ? ' (On Break)' : ''}${d.location === 'on_rounds' ? ' (On Round)' : ''}</option>`
+          `<option value="${d.id}" ${d.id === defaultId ? 'selected' : ''}>${sanitize(d.title)} ${sanitize(d.name)}${d.specialization ? ` — ${sanitize(d.specialization)}` : ''}${d.status === 'on_break' ? ' (On Break)' : ''}${d.location === 'on_rounds' ? ' (On Round)' : ''}</option>`
         ).join('');
         document.getElementById('doc-step-room-name').textContent = selectedRoom.display || selectedRoom.name || `Room ${selectedRoom.room_number}`;
         document.getElementById('fee-group').style.display = getDoctor()?.billing_enabled ? '' : 'none';
@@ -2868,7 +2869,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;gap:10px;${o.included ? '' : 'opacity:0.45'}">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" ${o.included ? 'checked' : ''} onchange="toggleRadiologyInclude(${o.id}, ${patientId})" style="width:16px;height:16px" />
-            <span>${o.study_name} — Rs.${o.price}</span>
+            <span>${sanitize(o.study_name)} — Rs.${Number(o.price)}</span>
           </label>
         </div>
       `).join('');
@@ -2909,7 +2910,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;gap:10px;${o.included ? '' : 'opacity:0.45'}">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" ${o.included ? 'checked' : ''} onchange="toggleTestInclude(${o.id}, ${patientId})" style="width:16px;height:16px" />
-            <span>${o.test_name} — Rs.${o.price}</span>
+            <span>${sanitize(o.test_name)} — Rs.${o.price}</span>
           </label>
         </div>
       `).join('');
@@ -2982,7 +2983,7 @@
         allDocuments = docs.slice().sort((a, b) => parseDocDate(b) - parseDocDate(a));
         renderDocuments(allDocuments);
       } catch (e) {
-        document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+        document.getElementById('documents-list').innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -3014,7 +3015,7 @@
         return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div>
-              <strong>${DOC_TYPE_LABEL[d.type] || d.label}</strong>
+              <strong>${DOC_TYPE_LABEL[d.type] || sanitize(d.label)}</strong>
               <div style="font-size:12px;color:var(--slate)">${dateStr} · ${timeStr}</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -3158,7 +3159,7 @@
         return `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div>
-              <strong>${r.patient_name}</strong> <span style="font-size:12px;color:var(--slate-light)">${r.patient_uid || ''}</span>
+              <strong>${sanitize(r.patient_name)}</strong> <span style="font-size:12px;color:var(--slate-light)">${sanitize(r.patient_uid || '')}</span>
               <div style="font-size:12px;color:var(--slate)">${parts.join(' · ')}</div>
             </div>
             <button class="btn btn-outline btn-sm" onclick="openPaymentToggleModal(${idx})">Manage Payments</button>
@@ -3318,7 +3319,7 @@
         list.innerHTML = orders.map(o => `
           <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;${o.included ? '' : 'opacity:0.45'}">
             <input type="checkbox" ${o.included ? 'checked' : ''} onchange="toggleRadiologyIncludeInModal(${o.id}, ${patientId})" style="width:16px;height:16px" />
-            <span>${o.study_name} — Rs.${o.price}</span>
+            <span>${sanitize(o.study_name)} — Rs.${Number(o.price)}</span>
           </label>
         `).join('') || '<p style="color:var(--slate-light)">Nothing pending.</p>';
         const total = orders.filter(o => o.included).reduce((s, o) => s + (o.price || 0), 0);
@@ -3354,7 +3355,7 @@
         list.innerHTML = orders.map(o => `
           <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;${o.included ? '' : 'opacity:0.45'}">
             <input type="checkbox" ${o.included ? 'checked' : ''} onchange="toggleTestIncludeInModal(${o.id}, ${patientId})" style="width:16px;height:16px" />
-            <span>${o.test_name} — Rs.${o.price}</span>
+            <span>${sanitize(o.test_name)} — Rs.${o.price}</span>
           </label>
         `).join('') || '<p style="color:var(--slate-light)">Nothing pending.</p>';
         const total = orders.filter(o => o.included).reduce((s, o) => s + (o.price || 0), 0);
@@ -3452,7 +3453,7 @@
         const data = await api("GET", `/patients/${patientId}/pending-tasks`);
         renderPendingTasks(data, patientId);
       } catch (e) {
-        document.getElementById('pending-tasks-body').innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+        document.getElementById('pending-tasks-body').innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -3467,7 +3468,7 @@
         const total = data.lab.reduce((s, t) => s + (t.price || 0), 0);
         html += data.lab.map(t => `
           <div style="display:flex;justify-content:space-between;padding:6px 0">
-            <span>${t.test_name}</span><span>Rs.${t.price}</span>
+            <span>${sanitize(t.test_name)}</span><span>Rs.${t.price}</span>
           </div>
         `).join('');
         html += `<button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px" onclick="collectAnydayTestPayment(${patientId})">Collect Rs.${total}</button>`;
@@ -3480,7 +3481,7 @@
         const radTotal = data.radiology.reduce((s, r) => s + (r.price || 0), 0);
         html += data.radiology.map(r => `
           <div style="display:flex;justify-content:space-between;padding:6px 0">
-            <span>${r.study_name}</span><span>Rs.${r.price}</span>
+            <span>${sanitize(r.study_name)}</span><span>Rs.${Number(r.price)}</span>
           </div>
         `).join('');
         html += `<button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px" onclick="collectAnydayRadiologyPayment(${patientId})">Collect Rs.${radTotal}</button>`;
@@ -3493,7 +3494,7 @@
         const chargesTotal = data.charges.reduce((s, c) => s + (c.amount * c.quantity || 0), 0);
         html += data.charges.map(c => `
           <div style="display:flex;justify-content:space-between;padding:6px 0">
-            <span>${c.description}${c.quantity > 1 ? ' × ' + c.quantity : ''}</span><span>Rs.${(c.amount * c.quantity).toFixed(2)}</span>
+            <span>${sanitize(c.description)}${c.quantity > 1 ? ' × ' + c.quantity : ''}</span><span>Rs.${(c.amount * c.quantity).toFixed(2)}</span>
           </div>
         `).join('');
         html += `<button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px" onclick="collectAnydayOpdCharges(${patientId})">Collect Rs.${chargesTotal.toFixed(2)}</button>`;
@@ -3505,7 +3506,7 @@
       } else {
         html += data.pharmacy.map(m => `
           <div style="display:flex;justify-content:space-between;padding:6px 0">
-            <span>${m.medicine_name}</span><span class="badge badge-grey">${m.status}</span>
+            <span>${sanitize(m.medicine_name)}</span><span class="badge badge-grey">${m.status}</span>
           </div>
         `).join('');
       }
@@ -3598,7 +3599,7 @@
           </div>
         `).join('');
       } catch (e) {
-        body.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        body.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -3675,7 +3676,7 @@
         const summary = await api("GET", "/billing/day-end-summary");
         renderDayEndBody(summary);
       } catch (e) {
-        body.innerHTML = `<p style="color:var(--red,#c0392b)">${e.message}</p>`;
+        body.innerHTML = `<p style="color:var(--red,#c0392b)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -3896,7 +3897,7 @@
         phoneBookingHospitalId = me.hospital_id;
         const doctors = await api("GET", `/portal/hospitals/${me.hospital_id}/doctors`);
         doctorSel.innerHTML = '<option value="">Select doctor...</option>' +
-          doctors.map(d => `<option value="${d.id}">${d.name}${d.specialization ? ' — ' + d.specialization : ''}</option>`).join('');
+          doctors.map(d => `<option value="${d.id}">${sanitize(d.name)}${d.specialization ? ' — ' + sanitize(d.specialization) : ''}</option>`).join('');
       } catch (e) {
         doctorSel.innerHTML = '<option value="">Could not load doctors</option>';
       }
@@ -4069,7 +4070,7 @@
           </div>
         ` : '').join('');
       } catch (e) {
-        previewEl.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+        previewEl.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -4173,7 +4174,7 @@
         const doctors = await api("GET", "/patients/hospital-doctors");
         const present = doctors.filter(d => d.on_duty_today);
         doctorSel.innerHTML = '<option value="">No doctor present yet — assign later</option>' +
-          present.map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
+          present.map(d => `<option value="${d.id}">${sanitize(d.title)} ${sanitize(d.name)}</option>`).join('');
         hint.style.display = present.length ? 'none' : '';
       } catch (e) {
         doctorSel.innerHTML = '<option value="">No doctor present yet — assign later</option>';
@@ -4326,14 +4327,14 @@
         overlay.innerHTML = `
           <div class="modal" style="max-width:480px">
             <div class="modal-header"><h2>Possible Duplicate</h2><button class="modal-close" id="dup-modal-close">&times;</button></div>
-            <p style="font-size:13px;color:var(--slate);margin-bottom:16px">${message}</p>
+            <p style="font-size:13px;color:var(--slate);margin-bottom:16px">${sanitize(message)}</p>
             <button class="btn btn-primary" style="width:100%;margin-bottom:18px" id="dup-create-anyway">+ Create New Patient</button>
             <p style="font-size:12.5px;color:var(--slate-light);font-weight:600;text-transform:uppercase;letter-spacing:0.3px;margin:0 0 10px">Or use an existing patient</p>
             <div id="dup-patient-list" style="display:flex;flex-direction:column;gap:10px">
               ${existingPatients.map((p, i) => `
                 <button class="btn btn-outline dup-pick-btn" data-idx="${i}" style="width:100%;text-align:left;padding:14px 16px;height:auto">
-                  <strong style="font-size:14px">${p.name}</strong> <span style="color:var(--slate-light);font-size:12.5px">— ${p.patient_uid}</span>
-                  <span style="display:block;font-size:12.5px;color:var(--slate-light);margin-top:4px">${p.age}y / ${p.gender} · ${p.phone}</span>
+                  <strong style="font-size:14px">${sanitize(p.name)}</strong> <span style="color:var(--slate-light);font-size:12.5px">— ${sanitize(p.patient_uid)}</span>
+                  <span style="display:block;font-size:12.5px;color:var(--slate-light);margin-top:4px">${sanitize(p.age)}y / ${sanitize(p.gender)} · ${sanitize(p.phone)}</span>
                 </button>
               `).join('')}
             </div>
@@ -4390,14 +4391,14 @@
         <tr>
           <td data-label="Patient">
             <div class="patient-name-line">
-              <strong>${p.name}</strong>
+              <strong>${sanitize(p.name)}</strong>
               ${p.checked_in_today ? '<span class="badge badge-amber">Today</span>' : ''}
               ${p.currently_admitted ? '<span class="badge badge-red">Already admitted</span>' : ''}
             </div>
-            ${p.address ? `<div style="font-size:11.5px;color:var(--slate-light);font-weight:400;margin-top:2px">${p.address}</div>` : ''}
+            ${p.address ? `<div style="font-size:11.5px;color:var(--slate-light);font-weight:400;margin-top:2px">${sanitize(p.address)}</div>` : ''}
           </td>
-          <td data-label="ID"><span class="badge badge-navy">${p.patient_uid}</span></td>
-          <td data-label="Phone" style="color:var(--slate)">${p.phone}</td>
+          <td data-label="ID"><span class="badge badge-navy">${sanitize(p.patient_uid)}</span></td>
+          <td data-label="Phone" style="color:var(--slate)">${sanitize(p.phone)}</td>
           <td data-label="Age / Gender">${p.age}y / ${capitalize(p.gender)}</td>
           <td data-label="Last Visit">${p.last_visit ? formatDate(p.last_visit) : '<span style="color:var(--slate-light)">—</span>'}</td>
           <td data-label="">
@@ -4530,7 +4531,7 @@
       try {
         availDoctors = await api("GET", "/patients/hospital-doctors");
         renderAvailDoctorList(availDoctors);
-      } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      } catch (e) { list.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
     }
 
     function renderAvailDoctorList(doctors) {
@@ -4539,8 +4540,8 @@
       list.innerHTML = doctors.map(d => `
         <div class="avail-doctor-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer" onclick='openAvailModal(${d.id}, ${jsArg((d.title || "") + " " + d.name)})'>
           <div>
-            <div style="font-weight:600;color:var(--navy)">${d.title} ${d.name}</div>
-            <div style="font-size:12.5px;color:var(--slate-light)">${d.specialization || 'No specialization on file'}</div>
+            <div style="font-weight:600;color:var(--navy)">${sanitize(d.title)} ${sanitize(d.name)}</div>
+            <div style="font-size:12.5px;color:var(--slate-light)">${sanitize(d.specialization || 'No specialization on file')}</div>
           </div>
           <span class="badge badge-teal">Manage</span>
         </div>`).join('');
@@ -4768,10 +4769,10 @@
         const rows = await api("GET", `/doctor-slots/unavailable?doctor_id=${currentAvailDoctorId}`);
         listEl.innerHTML = !rows.length ? `<p class="avail-unavail-empty">No upcoming unavailable dates.</p>` : rows.map(r => `
           <div class="unavail-item">
-            <span>${new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${r.reason ? ' — ' + r.reason : ''}</span>
+            <span>${new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${r.reason ? ' — ' + sanitize(r.reason) : ''}</span>
             <button class="btn btn-outline btn-sm" onclick="unmarkAmUnavailable(${r.id})">Undo</button>
           </div>`).join('');
-      } catch (e) { listEl.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      } catch (e) { listEl.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
     }
 
     async function unmarkAmUnavailable(id) {
@@ -4804,7 +4805,7 @@
             </span>
           </div>`;
         }).join('');
-      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
     }
 
     async function loadSlotPreviewDoctorFilter() {
@@ -4812,7 +4813,7 @@
       if (sel.dataset.loaded) return;
       try {
         const doctors = await api("GET", "/patients/hospital-doctors");
-        sel.innerHTML = '<option value="">Select doctor...</option>' + doctors.map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
+        sel.innerHTML = '<option value="">Select doctor...</option>' + doctors.map(d => `<option value="${d.id}">${sanitize(d.title)} ${sanitize(d.name)}</option>`).join('');
         sel.dataset.loaded = "1";
       } catch (e) { }
     }
@@ -4845,7 +4846,7 @@
             <span>${sanitize(s.slot_time)}</span>
             <span>${s.booked_count} / ${s.capacity} filled</span>
           </div>`).join('');
-      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
     }
 
     async function loadExpectedTodayDoctorFilter() {
@@ -4884,7 +4885,7 @@
             </div>
           </div>`).join('');
       } catch (e) {
-        el.innerHTML = `<p style="color:var(--danger);font-size:13px">${e.message}</p>`;
+        el.innerHTML = `<p style="color:var(--danger);font-size:13px">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -4927,7 +4928,7 @@
           <div class="slot-grid">${data[k].map(s => `
             <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick="pickNoShowSlot(${s.id}, this)"`}><span class="dot"></span>${s.time}</div>`).join('')}
           </div>` : '').join('');
-      } catch (e) { box.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; }
+      } catch (e) { box.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`; }
     }
 
     function pickNoShowSlot(slotId, el) {
@@ -4999,7 +5000,7 @@
             </div>
           </div>`).join('');
       } catch (e) {
-        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -5096,7 +5097,7 @@
           <div class="slot-grid">${data[k].map(s => `
             <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick="pickLateSlot(${s.id}, this)"`}><span class="dot"></span>${s.time}</div>`).join('')}
           </div>` : '').join('');
-      } catch (e) { box.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; }
+      } catch (e) { box.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`; }
     }
 
     function pickLateSlot(slotId, el) {
@@ -5234,7 +5235,7 @@
           <div class="slot-grid">${data[k].map(s => `
             <div class="slot-chip ${s.level}" ${s.full ? '' : `onclick="pickLateArrivalSlot(${s.id}, this)"`}><span class="dot"></span>${s.time}</div>`).join('')}
           </div>` : '').join('');
-      } catch (e) { box.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`; }
+      } catch (e) { box.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`; }
     }
 
     function pickLateArrivalSlot(slotId, el) {
@@ -5321,7 +5322,7 @@
             `}
           </div>`).join('');
       } catch (e) {
-        el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 

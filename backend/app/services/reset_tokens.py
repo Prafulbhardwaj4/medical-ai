@@ -3,7 +3,7 @@ after the 6-digit code was accepted. It carries the account's password-change st
 the moment the password changes (one reset per code), and it expires after 10 minutes."""
 from datetime import datetime, timedelta
 
-from jose import JWTError, jwt
+from app.utils.jwt_compat import JWTError, jwt
 
 from app.config import settings
 

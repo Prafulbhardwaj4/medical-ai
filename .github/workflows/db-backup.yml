@@ -1,0 +1,75 @@
+name: Nightly database backup
+
+# 02:00 IST every night (20:30 UTC the day before). Can also be started by hand from the Actions tab.
+on:
+  schedule:
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Must be the same major version as the database server (or newer). Change the repository variable PG_MAJOR if the server changes.
+      PG_MAJOR: ${{ vars.PG_MAJOR || '16' }}
+      BACKUP_RETENTION_DAYS: ${{ vars.BACKUP_RETENTION_DAYS || '14' }}
+      BACKUP_PREFIX: ${{ vars.BACKUP_PREFIX || 'db-backups/' }}
+      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+      BACKUP_S3_REGION: ${{ secrets.BACKUP_S3_REGION }}
+      BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that every secret is set
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          for name in BACKUP_DATABASE_URL BACKUP_PASSPHRASE BACKUP_S3_BUCKET BACKUP_S3_ACCESS_KEY_ID BACKUP_S3_SECRET_ACCESS_KEY; do
+            if [ -z "${!name}" ]; then echo "::error::Secret $name is not set."; exit 1; fi
+          done
+
+      - name: Install the PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq "postgresql-client-${PG_MAJOR}"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install boto3
+        run: pip install boto3
+
+      - name: Dump, check and encrypt
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          STAMP="$(TZ=Asia/Kolkata date +%Y-%m-%d_%H%M)IST"
+          DUMP="medscribe-${STAMP}.dump"
+          URL="$(echo "$BACKUP_DATABASE_URL" | sed -E 's#^postgresql\+[a-z0-9]+://#postgresql://#')"
+          pg_dump --format=custom --no-owner --no-privileges --file "$DUMP" "$URL"
+          pg_restore --list "$DUMP" > /dev/null          # the dump must be readable
+          test "$(stat -c %s "$DUMP")" -gt 10000          # and not suspiciously small
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" \
+              --symmetric --cipher-algo AES256 --output "${DUMP}.gpg" "$DUMP"
+          rm -f "$DUMP"
+          echo "BACKUP_FILE=${DUMP}.gpg" >> "$GITHUB_ENV"
+
+      - name: Upload to the private bucket and remove old backups
+        run: |
+          python backend/scripts/backup_s3.py upload "$BACKUP_FILE"
+          python backend/scripts/backup_s3.py prune

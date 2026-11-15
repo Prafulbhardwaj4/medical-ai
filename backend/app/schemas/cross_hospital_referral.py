@@ -1,19 +1,20 @@
 from typing import Optional
 from pydantic import BaseModel
+from app.utils.text_safety import SafeTextModel
 
 VALID_REFERRAL_STATUSES = {"pending", "rejected", "departed", "admitted", "expired"}
 
 
-class InitiateReferralIn(BaseModel):
+class InitiateReferralIn(SafeTextModel):
     to_hospital_id: int
     clinical_note: str  # mandatory — diagnosis, reason for referral, urgency
 
 
-class RejectReferralIn(BaseModel):
+class RejectReferralIn(SafeTextModel):
     rejection_note: str  # mandatory on every reject, at every tier
 
 
-class RejectAndForwardIn(BaseModel):
+class RejectAndForwardIn(SafeTextModel):
     rejection_note: str  # mandatory reject note for the hop being rejected
     to_hospital_id: int  # the third hospital (C) being forwarded to
     clinical_note: str  # mandatory note for the new forwarded referral

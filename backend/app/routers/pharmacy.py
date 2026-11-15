@@ -17,6 +17,7 @@ from app.models.hospital_medicine import HospitalMedicine
 from app.models.refund import Refund
 from app.schemas.patient import PaymentMethodIn
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
+from app.utils.roles import require_roles
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
 from app.utils.order_lifecycle import is_order_expired, refresh_consultation_dispensed
@@ -1631,7 +1632,7 @@ def schedule_x_register(
 def schedule_x_status_for_consultation(
     consultation_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("doctor", "nurse", "assistant", "admin", "sub_admin"))
 ):
     """Doctor-facing visibility into this consultation's Schedule X orders —
     lets a doctor see and authorize a repeat from their own patient-history

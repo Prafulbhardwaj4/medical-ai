@@ -18,6 +18,20 @@ from reportlab.platypus import Image
 from reportlab.pdfgen import canvas as pdfcanvas
 import io
 
+from xml.sax.saxutils import escape as _sax_escape
+
+
+def _esc(value) -> str:
+    """Escape untrusted text (patient, doctor, hospital, medicine, notes ...) before it goes into a
+    reportlab Paragraph. Paragraph parses <b>, <font>, <img src=...> and friends, so raw text must never
+    be placed in one. Only & < > need escaping; None becomes an empty string."""
+    if value is None:
+        return ""
+    return _sax_escape(str(value))
+
+
+from app.services.storage import mirror_generated
+
 PRESCRIPTIONS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "prescriptions")
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reports")
 TOKEN_SLIPS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "token_slips")
@@ -111,7 +125,7 @@ def _logo_or_name(hospital, name_style, align="CENTER"):
     if logo_img:
         logo_img.hAlign = align
         return [logo_img]
-    return [Paragraph(hospital.name, name_style)]
+    return [Paragraph(_esc(hospital.name), name_style)]
 
 def _letter_space(text: str, char_gap="\u2009", word_gap="\u00A0\u00A0\u00A0\u00A0") -> str:
     """Adds visual letter-spacing to a short header/label string — thin
@@ -136,7 +150,7 @@ def _hospital_detail_lines(hospital, style, include_gstin=False):
     Label stays normal weight, value is bold. Shared by the invoice, test
     report, and prescription PDFs so all three look identical."""
     def line(label, value):
-        return Paragraph(f"{label} : <b>{value}</b>", style)
+        return Paragraph(f"{label} : <b>{_esc(value)}</b>", style)
 
     lines = [line("Hospital Name", hospital.name)]
 
@@ -146,7 +160,7 @@ def _hospital_detail_lines(hospital, style, include_gstin=False):
         if city_state:
             indent = pdfmetrics.stringWidth("Address : ", style.fontName, style.fontSize)
             indent_style = ParagraphStyle(f"{style.name}_cityindent", parent=style, leftIndent=indent)
-            lines.append(Paragraph(f"<b>{city_state}</b>", indent_style))
+            lines.append(Paragraph(f"<b>{_esc(city_state)}</b>", indent_style))
 
     for email in _parse_emails(hospital):
         lines.append(line("Email", email))
@@ -186,21 +200,21 @@ def _labeled_paragraph(label: str, value: str, base_style: ParagraphStyle, label
         f"{base_style.name}_hang", parent=base_style,
         leftIndent=indent, firstLineIndent=-indent,
     )
-    return Paragraph(f'<font color="{label_color}"><b>{prefix}</b></font>{value}', hanging_style)
+    return Paragraph(f'<font color="{label_color}"><b>{prefix}</b></font>{_esc(value)}', hanging_style)
 
 def _headed_paragraph(label: str, value: str, section_style: ParagraphStyle, body_style: ParagraphStyle) -> list:
     """Heading line in the same style as Vitals / Medicines / Tests, with the text under it.
     The heading is kept on the same page as its text."""
     heading_style = ParagraphStyle(f"{section_style.name}_kwn", parent=section_style, keepWithNext=1)
-    return [Paragraph(label, heading_style), Paragraph(value, body_style)]
+    return [Paragraph(label, heading_style), Paragraph(_esc(value), body_style)]
 
 
 def _patient_summary_line(patient) -> str:
     """'Name | Age | Gender | Blood Group', with blood group left out
     entirely when it isn't recorded (no dangling separator)."""
-    parts = [patient.name.title(), f"{patient.age}yr", patient.gender.capitalize()]
+    parts = [_esc(patient.name.title()), f"{_esc(patient.age)}yr", _esc(patient.gender.capitalize())]
     if getattr(patient, "blood_group", None):
-        parts.append(patient.blood_group)
+        parts.append(_esc(patient.blood_group))
     return " | ".join(parts)
 
 
@@ -301,18 +315,18 @@ def _build_report_header_block(hospital, patient, ordering_doctor, report_dt, to
     patient_lines = [
         Paragraph("PATIENT DETAILS", label_style),
         Paragraph(_patient_summary_line(patient), biz_bold_style),
-        Paragraph(f"Patient ID: <b>{patient.patient_uid}</b>", biz_style),
+        Paragraph(f"Patient ID: <b>{_esc(patient.patient_uid)}</b>", biz_style),
     ]
     if getattr(patient, "phone", None):
-        patient_lines.append(Paragraph(f"Contact Number: <b>{_format_mobile_display(patient.phone)}</b>", biz_style))
+        patient_lines.append(Paragraph(f"Contact Number: <b>{_esc(_format_mobile_display(patient.phone))}</b>", biz_style))
     if token_number:
-        patient_lines.append(Paragraph(f"Token: <b>{token_number}</b>", biz_style))
+        patient_lines.append(Paragraph(f"Token: <b>{_esc(token_number)}</b>", biz_style))
 
     # ── Ordering doctor (right, below hospital details) ──
     if ordering_doctor:
-        doctor_name_line = f"{ordering_doctor.title} {ordering_doctor.name}"
+        doctor_name_line = f"{_esc(ordering_doctor.title)} {_esc(ordering_doctor.name)}"
         if getattr(ordering_doctor, "specialization", None):
-            doctor_name_line += f" | {ordering_doctor.specialization}"
+            doctor_name_line += f" | {_esc(ordering_doctor.specialization)}"
     else:
         doctor_name_line = "—"
     doctor_lines = [
@@ -322,7 +336,7 @@ def _build_report_header_block(hospital, patient, ordering_doctor, report_dt, to
     if report_created_by:
         creator_title = getattr(report_created_by, "title", None)
         creator_name = f"{creator_title} {report_created_by.name}" if creator_title else report_created_by.name
-        doctor_lines.append(Paragraph(f"Report Created By: {creator_name}", biz_style))
+        doctor_lines.append(Paragraph(f"Report Created By: {_esc(creator_name)}", biz_style))
 
     # Date / Time — separate block under patient details, with a gap
     datetime_lines = [
@@ -364,7 +378,7 @@ def build_letterhead(hospital, subtitle=None):
     if city_state:
         location_bits.append(city_state)
     if location_bits:
-        elements.append(Paragraph(" | ".join(location_bits), sub_style))
+        elements.append(Paragraph(_esc(" | ".join(location_bits)), sub_style))
 
     contact_bits = []
     numbers = _parse_contact_numbers(hospital)
@@ -377,14 +391,15 @@ def build_letterhead(hospital, subtitle=None):
     elif getattr(hospital, "phone", None):
         contact_bits.append(f"Ph: {hospital.phone}")
     if contact_bits:
-        elements.append(Paragraph(" | ".join(contact_bits), sub_style))
+        elements.append(Paragraph(_esc(" | ".join(contact_bits)), sub_style))
 
     if subtitle:
         elements.append(Spacer(1, 1.5*mm))
-        elements.append(Paragraph(subtitle, sub_style))
+        elements.append(Paragraph(_esc(subtitle), sub_style))
 
     return elements
 
+@mirror_generated
 def generate_prescription_pdf(
     doctor: object,
     patient: object,
@@ -418,7 +433,7 @@ def generate_prescription_pdf(
     if doctor.hospital:
         header_right = _logo_or_name(doctor.hospital, header_hosp_style, align="RIGHT")
     else:
-        header_right = [Paragraph(doctor.clinic_name, header_hosp_style)]
+        header_right = [Paragraph(_esc(doctor.clinic_name), header_hosp_style)]
 
     header_band = Table([[header_left, header_right]], colWidths=[95*mm, 75*mm])
     header_band.setStyle(TableStyle([
@@ -441,21 +456,21 @@ def generate_prescription_pdf(
     patient_lines = [
         Paragraph("PATIENT DETAILS", label_style),
         Paragraph(_patient_summary_line(patient), biz_bold_style),
-        Paragraph(f"Patient ID: <b>{patient.patient_uid}</b>", biz_style),
+        Paragraph(f"Patient ID: <b>{_esc(patient.patient_uid)}</b>", biz_style),
     ]
     if getattr(patient, "phone", None):
-        patient_lines.append(Paragraph(f"Contact Number: <b>{_format_mobile_display(patient.phone)}</b>", biz_style))
-    patient_lines.append(Paragraph(f"Token: <b>{token_number}</b>", biz_style))
+        patient_lines.append(Paragraph(f"Contact Number: <b>{_esc(_format_mobile_display(patient.phone))}</b>", biz_style))
+    patient_lines.append(Paragraph(f"Token: <b>{_esc(token_number)}</b>", biz_style))
 
-    doctor_name_line = f"{doctor.title} {doctor.name}"
+    doctor_name_line = f"{_esc(doctor.title)} {_esc(doctor.name)}"
     if doctor.specialization:
-        doctor_name_line += f" | {doctor.specialization}"
+        doctor_name_line += f" | {_esc(doctor.specialization)}"
     doctor_lines = [
         Paragraph("CONSULTING DOCTOR", label_style),
         Paragraph(doctor_name_line, biz_bold_style),
     ]
     if getattr(doctor, "registration_number", None):
-        doctor_lines.append(Paragraph(f"Reg. No: <b>{doctor.registration_number}</b>", biz_style))
+        doctor_lines.append(Paragraph(f"Reg. No: <b>{_esc(doctor.registration_number)}</b>", biz_style))
 
     # Date / Time — separate block under patient details, with a gap
     rx_now = now_ist()
@@ -548,14 +563,14 @@ def generate_prescription_pdf(
             if schedule == "controlled":
                 has_controlled = True
             type_label = "Rx" if schedule == "controlled" else "OTC"
-            row = [Paragraph(cap_sentence(m.get("name", "")), med_cell_style)]
+            row = [Paragraph(_esc(cap_sentence(m.get("name", ""))), med_cell_style)]
             if has_brand:
                 brand = (m.get("brand_name") or "").strip()
-                row.append(Paragraph(cap_sentence(brand) if brand else "-", med_cell_style))
+                row.append(Paragraph(_esc(cap_sentence(brand)) if brand else "-", med_cell_style))
             row.extend([
-                Paragraph(m.get("dosage", ""), med_cell_style),
-                Paragraph(cap_sentence(m.get("frequency", "")), med_cell_style),
-                Paragraph(m.get("duration") or "As advised", med_cell_style),
+                Paragraph(_esc(m.get("dosage", "")), med_cell_style),
+                Paragraph(_esc(cap_sentence(m.get("frequency", ""))), med_cell_style),
+                Paragraph(_esc(m.get("duration") or "As advised"), med_cell_style),
                 type_label
             ])
             med_data.append(row)
@@ -707,7 +722,7 @@ def generate_prescription_pdf(
             [
                 qr_image,
                 Paragraph(
-                    f"<b>Token:</b> {token_number}<br/>"
+                    f"<b>Token:</b> {_esc(token_number)}<br/>"
                     f"Scan QR code to authenticate.",
                     verify_text_style
                 )
@@ -733,6 +748,7 @@ def generate_prescription_pdf(
     doc.build(elements, canvasmaker=_make_numbered_canvas(""))
     return filepath
 
+@mirror_generated
 def generate_test_report_pdf(
     order: object,
     patient: object,
@@ -777,16 +793,16 @@ def generate_test_report_pdf(
         elements.append(Paragraph(f"<b>Specimen Collected:</b> {order.collected_at.strftime('%d %b %Y, %I:%M %p')}", styles["Normal"]))
     if getattr(order, "accession_number", None):
         acc_time = f" ({order.accessioned_at.strftime('%d %b %Y, %I:%M %p')})" if order.accessioned_at else ""
-        elements.append(Paragraph(f"<b>Accession No:</b> {order.accession_number}{acc_time}", styles["Normal"]))
+        elements.append(Paragraph(f"<b>Accession No:</b> {_esc(order.accession_number)}{acc_time}", styles["Normal"]))
     if getattr(order, "report_reference", None):
-        elements.append(Paragraph(f"<b>Report Ref:</b> {order.report_reference}", styles["Normal"]))
+        elements.append(Paragraph(f"<b>Report Ref:</b> {_esc(order.report_reference)}", styles["Normal"]))
     elements.append(Spacer(1, 4*mm))
 
     # ── MLC banner (item 2) — proposed wording/placement, for review ──
     if getattr(order, "is_mlc_sample", False):
         mlc_style = ParagraphStyle("mlc", fontSize=10, fontName="Helvetica-Bold", textColor=colors.HexColor("#991b1b"), alignment=TA_CENTER)
-        case_type_label = (order.mlc_case_type or "Not specified").replace("_", " ").title()
-        case_ref = order.mlc_reference_number or "Not yet recorded"
+        case_type_label = _esc((order.mlc_case_type or "Not specified").replace("_", " ").title())
+        case_ref = _esc(order.mlc_reference_number or "Not yet recorded")
         mlc_table = Table([[Paragraph(
             f"MEDICO-LEGAL CASE&nbsp;&nbsp;|&nbsp;&nbsp;Case Type: {case_type_label}&nbsp;&nbsp;|&nbsp;&nbsp;"
             f"Police/Case Ref: {case_ref}&nbsp;&nbsp;|&nbsp;&nbsp;Chain-of-Custody: {mlc_custody_count} entr{'y' if mlc_custody_count == 1 else 'ies'} logged",
@@ -883,12 +899,12 @@ def generate_test_report_pdf(
         if getattr(order, "drawn_from_iv_line", False):
             elements.append(Paragraph("⚠ Sample drawn from an IV-line arm — may affect interpretation on certain analytes.", caveat_style))
         if getattr(order, "sample_condition_caveat", None):
-            elements.append(Paragraph(f"⚠ Sample condition note: {order.sample_condition_caveat} — reported as-is per irreplaceable-sample policy.", caveat_style))
+            elements.append(Paragraph(f"⚠ Sample condition note: {_esc(order.sample_condition_caveat)} — reported as-is per irreplaceable-sample policy.", caveat_style))
 
     if getattr(order, "amended_at", None):
         elements.append(Paragraph(
             f"<b>AMENDED REPORT</b> - corrected on {order.amended_at.strftime('%d %b %Y, %I:%M %p')}. "
-            f"Reason: {(order.amendment_reason or '').replace('<', '&lt;').replace('>', '&gt;')}",
+            f"Reason: {_esc(order.amendment_reason)}",
             body_style))
         elements.append(Spacer(1, 3*mm))
 
@@ -913,7 +929,7 @@ def generate_test_report_pdf(
         qr_buffer.seek(0)
         qr_image = Image(qr_buffer, width=22*mm, height=22*mm)
         verify_text_style = ParagraphStyle("verifytext", fontSize=8, fontName="Helvetica", leading=12, textColor=colors.HexColor("#334155"))
-        token_line = f"<b>Token:</b> {token_number}<br/>" if token_number else ""
+        token_line = f"<b>Token:</b> {_esc(token_number)}<br/>" if token_number else ""
         verify_table = Table([[qr_image, Paragraph(
             f"{token_line}Scan QR code to authenticate.",
             verify_text_style
@@ -999,6 +1015,7 @@ def _flag_for(value_str, range_str):
     return "N"
 
 
+@mirror_generated
 def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, ordering_doctor, lab_staff, hospital, verify_hash: str = None, token_number: str = None, report_created_by: object = None) -> str:
     ensure_reports_dir()
 
@@ -1034,12 +1051,12 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
 
     for test in tests_payload:
         elements.append(Spacer(1, 3*mm))
-        elements.append(Paragraph(test["test_name"], section_style))
+        elements.append(Paragraph(_esc(test["test_name"]), section_style))
         # Item 2's MLC banner isn't repeated per-test here — combined reports
         # only ever bundle routine (non-MLC) results in current usage; flag
         # to Praful if that assumption is wrong before extending this.
         if test.get("report_reference"):
-            elements.append(Paragraph(f"Report Ref: {test['report_reference']}", ref_style))
+            elements.append(Paragraph(f"Report Ref: {_esc(test['report_reference'])}", ref_style))
         meta_bits = []
         if test.get("collected_at"):
             meta_bits.append(f"Specimen Collected: {test['collected_at'].strftime('%d %b %Y, %I:%M %p')}")
@@ -1047,13 +1064,13 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
             acc_time = f" ({test['accessioned_at'].strftime('%d %b %Y, %I:%M %p')})" if test.get("accessioned_at") else ""
             meta_bits.append(f"Accession No: {test['accession_number']}{acc_time}")
         if meta_bits:
-            elements.append(Paragraph(" | ".join(meta_bits), ParagraphStyle("meta", fontSize=8.5, textColor=colors.grey, spaceAfter=2*mm)))
+            elements.append(Paragraph(_esc(" | ".join(meta_bits)), ParagraphStyle("meta", fontSize=8.5, textColor=colors.grey, spaceAfter=2*mm)))
         if test.get("fasting_confirmed") is False:
             elements.append(Paragraph("⚠ Sample was NOT drawn after fasting — interpret this result with this in mind.", caveat_style))
         if test.get("drawn_from_iv_line"):
             elements.append(Paragraph("⚠ Sample drawn from an IV-line arm — may affect interpretation on certain analytes.", caveat_style))
         if test.get("sample_condition_caveat"):
-            elements.append(Paragraph(f"⚠ Sample condition note: {test['sample_condition_caveat']} — reported as-is per irreplaceable-sample policy.", caveat_style))
+            elements.append(Paragraph(f"⚠ Sample condition note: {_esc(test['sample_condition_caveat'])} — reported as-is per irreplaceable-sample policy.", caveat_style))
 
         if test.get("is_nabl_accredited"):
             accreditation_style = ParagraphStyle("accreditation", fontSize=8, fontName="Helvetica-Oblique", textColor=colors.HexColor("#065f46"))
@@ -1087,7 +1104,7 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
 
         if test.get("amended_at"):
             elements.append(Spacer(1, 2*mm))
-            _r = (test.get("amendment_reason") or "").replace("<", "&lt;").replace(">", "&gt;")
+            _r = _esc(test.get("amendment_reason"))
             elements.append(Paragraph(
                 f"<b>AMENDED</b> - corrected on {test['amended_at'].strftime('%d %b %Y, %I:%M %p')}. Reason: {_r}",
                 body_style))
@@ -1117,7 +1134,7 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
         qr_buffer.seek(0)
         qr_image = Image(qr_buffer, width=22*mm, height=22*mm)
         verify_text_style = ParagraphStyle("verifytext", fontSize=8, fontName="Helvetica", leading=12, textColor=colors.HexColor("#334155"))
-        token_line = f"<b>Token:</b> {token_number}<br/>" if token_number else ""
+        token_line = f"<b>Token:</b> {_esc(token_number)}<br/>" if token_number else ""
         verify_table = Table([[qr_image, Paragraph(
             f"{token_line}Scan QR code to authenticate.",
             verify_text_style
@@ -1138,6 +1155,7 @@ def generate_combined_test_report_pdf(order_id_key, tests_payload, patient, orde
     doc.build(elements, canvasmaker=_make_numbered_canvas(""))
     return filepath
 
+@mirror_generated
 def generate_radiology_report_pdf(order: object, patient: object, ordering_doctor: object, radiology_staff: object, hospital: object, verify_hash: str = None, reporting_staff: object = None) -> str:
     ensure_reports_dir()
 
@@ -1270,6 +1288,7 @@ def generate_radiology_report_pdf(order: object, patient: object, ordering_docto
     return filepath
 
 
+@mirror_generated
 def generate_invoice_pdf(
     invoice_id: int, hospital, items: list, grand_total: float, patient, doctor=None,
     receipt_number=None, place_of_supply=None, admission_date=None, discharge_date=None,
@@ -1326,9 +1345,9 @@ def generate_invoice_pdf(
 
     from_lines = [Paragraph("BILL FROM", label_style)] + _hospital_detail_lines(hospital, biz_style, include_gstin=True)
     if doctor:
-        doc_line = f"{doctor.title} {doctor.name}"
+        doc_line = f"{_esc(doctor.title)} {_esc(doctor.name)}"
         if getattr(doctor, "specialization", None):
-            doc_line += f" | {doctor.specialization}"
+            doc_line += f" | {_esc(doctor.specialization)}"
         from_lines.append(Spacer(1, 3*mm))
         from_lines.append(Paragraph("CONSULTING DOCTOR", label_style))
         from_lines.append(Paragraph(doc_line, biz_bold_style))
@@ -1336,10 +1355,10 @@ def generate_invoice_pdf(
     to_lines = [
         Paragraph("BILL TO", label_style),
         Paragraph(_patient_summary_line(patient), biz_bold_style),
-        Paragraph(f"Patient ID: <b>{patient.patient_uid}</b>", biz_style),
+        Paragraph(f"Patient ID: <b>{_esc(patient.patient_uid)}</b>", biz_style),
     ]
     if getattr(patient, "phone", None):
-        to_lines.append(Paragraph(f"Contact Number: <b>{_format_mobile_display(patient.phone)}</b>", biz_style))
+        to_lines.append(Paragraph(f"Contact Number: <b>{_esc(_format_mobile_display(patient.phone))}</b>", biz_style))
 
 
     bill_table = Table([[to_lines, from_lines]], colWidths=[95*mm, 75*mm])
@@ -1374,7 +1393,7 @@ def generate_invoice_pdf(
         for idx, item in enumerate(payable_items, 1):
             table_data.append([
                 str(idx),
-                Paragraph(item["name"], desc_style),
+                Paragraph(_esc(item["name"]), desc_style),
                 item.get("hsn_sac") or "-",
                 str(item.get("qty", 1)),
                 f"{item.get('unit_price', 0):.2f}",
@@ -1394,7 +1413,7 @@ def generate_invoice_pdf(
         table_data = [["Description", "Qty", "Unit Price", "Amount"]]
         for item in payable_items:
             table_data.append([
-                Paragraph(item["name"], desc_style),
+                Paragraph(_esc(item["name"]), desc_style),
                 str(item.get("qty", 1)),
                 f"Rs.{item.get('unit_price', 0):.2f}",
                 f"Rs.{item.get('line_total', 0):.2f}"
@@ -1431,7 +1450,7 @@ def generate_invoice_pdf(
         for item in pharmacy_items:
             ph_subtotal += item.get("line_total", 0)
             ph_data.append([
-                Paragraph(item["name"], desc_style),
+                Paragraph(_esc(item["name"]), desc_style),
                 str(item.get("qty", 1)),
                 f"Rs.{item.get('unit_price', 0):.2f}",
                 f"Rs.{item.get('line_total', 0):.2f}"
@@ -1544,6 +1563,7 @@ def generate_invoice_pdf(
     doc.build(elements, canvasmaker=_make_numbered_canvas(""))
     return filepath
 
+@mirror_generated
 def generate_credit_debit_note_pdf(note, invoice, hospital, patient) -> str:
     """Credit/debit note PDF — mirrors generate_invoice_pdf's letterhead
     conventions (item 4). `note` is a CreditDebitNote row, `invoice` the
@@ -1569,19 +1589,19 @@ def generate_credit_debit_note_pdf(note, invoice, hospital, patient) -> str:
     elements.append(Spacer(1, 4*mm))
 
     body_style = ParagraphStyle("body", fontSize=9.5, fontName="Helvetica", leading=13)
-    elements.append(Paragraph(f"<b>{title.title()} No:</b> {note.note_number} &nbsp;&nbsp; <b>Date:</b> {note.created_at.strftime('%d %b %Y, %I:%M %p')}", body_style))
+    elements.append(Paragraph(f"<b>{title.title()} No:</b> {_esc(note.note_number)} &nbsp;&nbsp; <b>Date:</b> {note.created_at.strftime('%d %b %Y, %I:%M %p')}", body_style))
     elements.append(Paragraph(
-        f"<b>Against Invoice:</b> {note.invoice_number or (invoice.receipt_number if invoice else note.invoice_id)} "
+        f"<b>Against Invoice:</b> {_esc(note.invoice_number or (invoice.receipt_number if invoice else note.invoice_id))} "
         f"dated {note.invoice_date.strftime('%d %b %Y') if note.invoice_date else '-'}", body_style))
     elements.append(Spacer(1, 3*mm))
     if patient:
-        elements.append(Paragraph(f"<b>Bill To:</b> {patient.name.title()} | {patient.age}yr | {patient.gender.capitalize()}", body_style))
-        elements.append(Paragraph(f"<b>Patient ID:</b> {patient.patient_uid}", body_style))
+        elements.append(Paragraph(f"<b>Bill To:</b> {_esc(patient.name.title())} | {_esc(patient.age)}yr | {_esc(patient.gender.capitalize())}", body_style))
+        elements.append(Paragraph(f"<b>Patient ID:</b> {_esc(patient.patient_uid)}", body_style))
     elements.append(Spacer(1, 5*mm))
 
     table_data = [
         ["Description", "Amount"],
-        [Paragraph(note.reason, body_style), f"Rs.{note.amount:.2f}"],
+        [Paragraph(_esc(note.reason), body_style), f"Rs.{note.amount:.2f}"],
         [f"Total {'Credited' if note.note_type == 'credit' else 'Debited'}", f"Rs.{note.amount:.2f}"],
     ]
     t = Table(table_data, colWidths=[130*mm, 40*mm])

@@ -15,11 +15,12 @@ from app.models.portal import PatientAccount
 from app.schemas.portal import HospitalOut
 from app.utils.portal_auth import get_current_patient_account
 from pydantic import BaseModel
+from app.utils.text_safety import SafeTextModel
 
 router = APIRouter(prefix="/portal/hospitals", tags=["portal-hospitals"])
 
 
-class HospitalLeadIn(BaseModel):
+class HospitalLeadIn(SafeTextModel):
     state: str
     city: str
     hospital_name: str

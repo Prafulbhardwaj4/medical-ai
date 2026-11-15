@@ -46,6 +46,9 @@ class Checkin(Base):
     is_returned = Column(Boolean, default=False, nullable=False)  # Same-Day Return Queue — sent back to doctor without new token/payment
     returned_at = Column(DateTime, nullable=True)
 
+    consult_started_at = Column(DateTime, nullable=True)   # IST — set when the doctor presses Consult (feeds the patient's expected-time banner)
+    consult_finished_at = Column(DateTime, nullable=True)  # IST — set when the doctor confirms the prescription
+
     doctor_room = Column(String, nullable=True)  # room this doctor was in when the token was issued — fixed at check-in, never re-derived. "" = doctor wasn't in a room at that moment; NULL = older token from before this column existed (falls back to the live lookup)
 
     emergency_status = Column(String, nullable=True)  # "holding" = in the Emergency Ward, not yet in the doctor's queue; "released" = sent to queue; null = not an emergency

@@ -29,13 +29,16 @@ router = APIRouter(prefix="/portal-appointments-staff", tags=["portal-appointmen
 _STAFF_ROLES = ["admin", "sub_admin", "receptionist"]
 
 
-class ReceptionCancelIn(BaseModel):
+from app.utils.text_safety import SafeTextModel
+
+
+class ReceptionCancelIn(SafeTextModel):
     reason: Optional[str] = None  # needed for a paid appointment; an unpaid one can be cancelled without it
     note: Optional[str] = None
     expected_requested_time: Optional[str] = None
 
 
-class ReceptionRescheduleIn(BaseModel):
+class ReceptionRescheduleIn(SafeTextModel):
     slot_id: int
     doctor_id: Optional[int] = None
     note: Optional[str] = None
@@ -286,7 +289,7 @@ def reception_reschedule_appointment(
     }
 
 
-class ReceptionRebookIn(BaseModel):
+class ReceptionRebookIn(SafeTextModel):
     slot_id: int
     doctor_id: Optional[int] = None
     note: Optional[str] = None

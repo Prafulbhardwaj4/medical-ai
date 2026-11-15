@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field, validator
+from app.utils.text_safety import SafeTextModel
 from datetime import datetime, date
 from typing import Optional, Dict, List
 
@@ -11,7 +12,7 @@ class PatientMergeIn(BaseModel):
     phone_confirmed: bool  # reception ticks this only after confirming with the patient by phone — no ABHA yet to key off of
 
 
-class PatientCreate(BaseModel):
+class PatientCreate(SafeTextModel):
     name: str
     phone: str
     age: int
@@ -124,7 +125,7 @@ class AdditionalDoctorIn(BaseModel):
     doctor_id: int
     consultation_fee: Optional[float] = Field(default=None, ge=0, le=100000)  # reception can override per doctor; falls back to that doctor's own default, same as the primary
 
-class CheckinCreate(BaseModel):
+class CheckinCreate(SafeTextModel):
     issue_category: str
     doctor_id: int
     send_to_nurse: Optional[bool] = True
@@ -159,13 +160,13 @@ class CheckinOut(BaseModel):
 class VitalsSubmit(BaseModel):
     data: Dict[str, str]
 
-class NurseNoteCreate(BaseModel):
+class NurseNoteCreate(SafeTextModel):
     note: str
 
 class NurseTaskComplete(BaseModel):
     data: Dict[str, str] = {}
 
-class AddOpdChargeIn(BaseModel):
+class AddOpdChargeIn(SafeTextModel):
     description: str = Field(..., min_length=1, max_length=200)
     amount: float = Field(..., gt=0, le=1000000)
     quantity: int = Field(1, ge=1, le=1000)
@@ -180,7 +181,7 @@ class PaymentMethodIn(BaseModel):
         return v
 
 
-class ReasonIn(BaseModel):
+class ReasonIn(SafeTextModel):
     reason: str
 
     @validator("reason")
@@ -215,17 +216,17 @@ class DoctorLite(BaseModel):
         from_attributes = True
 
 
-class MergeRequestIn(BaseModel):
+class MergeRequestIn(SafeTextModel):
     primary_patient_id: int   # the record that survives
     duplicate_patient_id: int  # the record that gets merged away
     reason: Optional[str] = None
 
 
-class MergeConfirmIn(BaseModel):
+class MergeConfirmIn(SafeTextModel):
     confirmation_note: str  # what was confirmed on the phone call with the patient — required, this is the human verification step
 
 
-class PatientAllergyIn(BaseModel):
+class PatientAllergyIn(SafeTextModel):
     allergen: str
     reaction: Optional[str] = None
     severity: str = "moderate"  # mild / moderate / severe

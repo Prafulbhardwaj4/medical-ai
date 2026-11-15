@@ -32,6 +32,9 @@ def log_action(
         db.rollback()
         import logging
         logging.getLogger("audit").exception("AUDIT WRITE FAILED action=%s target=%s/%s", action, target_type, target_id)
+        import sys
+        from app.utils.monitoring import record_audit_write_failure
+        record_audit_write_failure(sys.exc_info()[1])
 
 
 def stage_action(db: Session, actor, action: str, target_type: str, target_id: int = None,
@@ -69,3 +72,6 @@ def log_record_access(db: Session, actor, action: str, target_type: str, target_
     except Exception:
         db.rollback()
         logging.getLogger("audit").exception("ACCESS LOG FAILED action=%s target=%s/%s", action, target_type, target_id)
+        import sys
+        from app.utils.monitoring import record_audit_write_failure
+        record_audit_write_failure(sys.exc_info()[1])

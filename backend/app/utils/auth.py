@@ -1,8 +1,9 @@
 import calendar
+import hashlib
 import random
 import secrets
 from passlib.context import CryptContext
-from jose import JWTError, jwt
+from app.utils.jwt_compat import JWTError, jwt
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -29,9 +30,14 @@ def create_access_token(data: dict) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def check_password_strength(new_password: str) -> None:
+def check_password_strength(new_password: str, email: str = None, name: str = None, extras=()) -> None:
     if len(new_password) < 8 or not any(c.isdigit() for c in new_password) or not any(c.isupper() for c in new_password):
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters, with 1 number and 1 capital letter")
+    from app.utils.common_passwords import is_common_password, contains_personal_info
+    if is_common_password(new_password):
+        raise HTTPException(status_code=400, detail="This password is too common. Please choose a harder one.")
+    if contains_personal_info(new_password, email, name, extras):
+        raise HTTPException(status_code=400, detail="Your password must not contain your name, email or phone number.")
 
 
 def generate_temp_password(length: int = 10) -> str:
@@ -56,7 +62,7 @@ def token_predates_password_change(payload: dict, changed_at) -> bool:
     return int(iat) < calendar.timegm(changed_at.utctimetuple())
 
 CAPTCHA_EXPIRE_MINUTES = 5
-CAPTCHA_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"  # no O/o/0, I/i/l/L/1 — avoids ambiguous reads. Verification is already case-insensitive (see verify_captcha_token), so mixing case here is purely visual.
+CAPTCHA_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no O/o/0, I/i/l/L/1 — avoids ambiguous reads. Verification is already case-insensitive (see verify_captcha_token), so mixing case here is purely visual.
 
 def generate_captcha_code(length: int = 5) -> str:
     return "".join(secrets.choice(CAPTCHA_ALPHABET) for _ in range(length))
@@ -64,30 +70,9 @@ def generate_captcha_code(length: int = 5) -> str:
 def generate_captcha_svg(code: str) -> str:
     """Hand-built distorted-text SVG — no image library needed/available in
     this environment. Random rotation + noise lines/dots per render."""
-    width, height = 160, 60
-    colors = ["#0f172a", "#334155", "#0d9488", "#7c3aed", "#b91c1c"]
-    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}">']
-    parts.append(f'<rect width="{width}" height="{height}" fill="#f1f5f9" rx="8"/>')
-    for _ in range(4):
-        x1, y1 = random.randint(0, width), random.randint(0, height)
-        x2, y2 = random.randint(0, width), random.randint(0, height)
-        parts.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#cbd5e1" stroke-width="2"/>')
-    spacing = width / (len(code) + 1)
-    for i, ch in enumerate(code):
-        x = spacing * (i + 1)
-        y = height / 2 + random.randint(-6, 6)
-        rotate = random.randint(-25, 25)
-        color = random.choice(colors)
-        parts.append(
-            f'<text x="{x:.1f}" y="{y:.1f}" font-size="28" font-family="Arial, sans-serif" '
-            f'font-weight="700" fill="{color}" text-anchor="middle" '
-            f'transform="rotate({rotate} {x:.1f} {y:.1f})">{ch}</text>'
-        )
-    for _ in range(15):
-        cx, cy = random.randint(0, width), random.randint(0, height)
-        parts.append(f'<circle cx="{cx}" cy="{cy}" r="1.4" fill="#94a3b8"/>')
-    parts.append('</svg>')
-    return "".join(parts)
+    # Vector shapes only (no <text>): the answer cannot be read from the markup. See utils/captcha_font.py.
+    from app.utils.captcha_font import render_captcha_svg
+    return render_captcha_svg(code)
 
 def create_captcha_token(answer: str) -> str:
     """Stores the expected answer SERVER-SIDE and returns only an opaque id.
@@ -224,12 +209,21 @@ def blacklist_token(token: str, db: Session):
     db.query(BlacklistedToken).filter(
         BlacklistedToken.blacklisted_at < now - timedelta(days=8)
     ).delete(synchronize_session=False)
-    if db.query(BlacklistedToken).filter(BlacklistedToken.token == token).first() is None:
-        db.add(BlacklistedToken(token=token, blacklisted_at=now))
+    token_hash = hash_token(token)
+    if db.query(BlacklistedToken.id).filter(BlacklistedToken.token_hash == token_hash).first() is None:
+        db.add(BlacklistedToken(token_hash=token_hash, blacklisted_at=now))
     db.commit()
 
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+
 def is_token_blacklisted(token: str, db: Session) -> bool:
-    return db.query(BlacklistedToken).filter(BlacklistedToken.token == token).first() is not None
+    # New rows hold only the hash. The old raw column is still checked while old rows exist (they are purged within 8 days).
+    from sqlalchemy import or_
+    return db.query(BlacklistedToken.id).filter(
+        or_(BlacklistedToken.token_hash == hash_token(token), BlacklistedToken.token == token)
+    ).first() is not None
 
 def get_current_doctor(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -249,21 +243,28 @@ def get_current_doctor(
     # key and were previously accepted here.
     if payload.get("type") or payload.get("purpose"):
         raise credentials_exception
-    if is_token_blacklisted(credentials.credentials, db):
-        raise credentials_exception
     doctor_id: int = payload.get("sub")
     if doctor_id is None:
         raise credentials_exception
+    from sqlalchemy import exists, or_
     from app.models.hospital import Hospital
-    doctor = db.query(Doctor).filter(Doctor.id == int(doctor_id)).first()
-    if doctor is None:
+    token = credentials.credentials
+    # ONE query for the account, its hospital and "is this token blacklisted" (checked fresh on every
+    # request: nothing here is cached).
+    blacklisted = exists().where(or_(BlacklistedToken.token_hash == hash_token(token), BlacklistedToken.token == token))
+    row = db.query(Doctor, Hospital, blacklisted.label("token_blacklisted")).outerjoin(
+        Hospital, Hospital.id == Doctor.hospital_id
+    ).filter(Doctor.id == int(doctor_id)).first()
+    if row is None:
+        raise credentials_exception
+    doctor, hospital, token_blacklisted = row
+    if token_blacklisted:
         raise credentials_exception
     if not doctor.is_active:
         raise credentials_exception
     if token_predates_password_change(payload, doctor.password_changed_at):
         raise credentials_exception
     if doctor.role.value != "super_admin":
-        hospital = db.query(Hospital).filter(Hospital.id == doctor.hospital_id).first()
         from app.utils.pilot_lifecycle import ensure_pilot_lifecycle
         pilot_expired = ensure_pilot_lifecycle(db, hospital) if hospital else False  # pilot past grace: deactivated at the first request
         if not hospital or not hospital.is_active or pilot_expired:

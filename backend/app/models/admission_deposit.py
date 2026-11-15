@@ -8,6 +8,7 @@ class AdmissionDeposit(Base):
     deposit at admission, plus every collected top-up. Sum of these rows is
     the running deposit total the accruing bill is measured against."""
     __tablename__ = "admission_deposits"
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)  # copied from the parent admission when the row is created
 
     id = Column(Integer, primary_key=True, index=True)
     admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)
@@ -23,6 +24,7 @@ class AdmissionDepositTopupRequest(Base):
     reception and (later) the patient portal, instead of an informal ask
     that never makes it into the record."""
     __tablename__ = "admission_deposit_topup_requests"
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)  # copied from the parent admission when the row is created
 
     id = Column(Integer, primary_key=True, index=True)
     admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)

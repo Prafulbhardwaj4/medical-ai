@@ -282,6 +282,7 @@
   </div>
 
   <div id="toast"></div>
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/tier-catalog.js"></script>
   <script src="../js/upgrade-gate.js"></script>
@@ -472,7 +473,7 @@
       return `
         <div style="margin-bottom:8px" data-row>
           <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-control" placeholder="Field" value="${(label || '').replace(/"/g, '&quot;')}" style="flex:1;min-width:0${locked ? ';background:var(--smoke,#f5f5f5);color:var(--navy);font-weight:600' : ''}" data-label ${locked ? 'readonly' : ''} />
+            <input class="form-control" placeholder="Field" value="${sanitize(label || '')}" style="flex:1;min-width:0${locked ? ';background:var(--smoke,#f5f5f5);color:var(--navy);font-weight:600' : ''}" data-label ${locked ? 'readonly' : ''} />
             <input class="form-control" placeholder="Value" value="${(value || '').replace(/"/g, '&quot;')}" style="flex:1;min-width:0" data-value${ruleAttr} oninput="validateVitalInput(this)" />
             ${unitHtml}
           </div>
@@ -528,11 +529,11 @@
       document.getElementById('history-list').innerHTML = history.length ? history.map(h => `
           <div class="ns-row">
             <div>
-              <strong>${h.patient_name}</strong>
-              <span class="badge badge-navy" style="margin-left:8px">${h.patient_uid}</span>
+              <strong>${sanitize(h.patient_name)}</strong>
+              <span class="badge badge-navy" style="margin-left:8px">${sanitize(h.patient_uid)}</span>
               <span class="badge ${h.type === 'vitals' ? 'badge-teal' : 'badge-navy'}" style="margin-left:6px">${h.type === 'vitals' ? 'Vitals' : 'Post-Consult'}</span>
-              <div class="ns-row-sub">Token ${h.token_number} · ${fmtRecordedAt(h.recorded_at)}</div>
-              <div class="ns-row-sub">${Object.entries(h.data).map(([k,v]) => `${k}: ${v}`).join(' · ')}</div>
+              <div class="ns-row-sub">Token ${sanitize(h.token_number)} · ${fmtRecordedAt(h.recorded_at)}</div>
+              <div class="ns-row-sub">${Object.entries(h.data).map(([k,v]) => `${sanitize(k)}: ${sanitize(v)}`).join(' · ')}</div>
             </div>
             ${h.type === 'vitals'
               ? `<button class="btn btn-outline btn-sm" onclick='openVitalsModal(${h.checkin_id}, ${jsArg(h.patient_name)}, ${jsArg(h.data)})'>Edit</button>`
@@ -547,12 +548,12 @@
         document.getElementById('vitals-list').innerHTML = vitals.length ? vitals.map(v => `
           <div class="ns-row">
             <div>
-              <strong>${v.patient_name}</strong>
-              <span class="badge badge-navy" style="margin-left:8px">${v.patient_uid}</span>
+              <strong>${sanitize(v.patient_name)}</strong>
+              <span class="badge badge-navy" style="margin-left:8px">${sanitize(v.patient_uid)}</span>
               ${v.is_recheck ? '<span class="badge badge-amber" style="margin-left:8px">Recheck</span>' : ''}
               ${v.source === 'online' ? '<span class="badge badge-teal" style="margin-left:8px">Online</span>' : ''}
-              <div class="ns-row-sub">Token ${v.token_number} · ${v.issue_category} · For ${v.doctor_name}${v.booked_time ? ' · Booked for ' + new Date(toIST(v.booked_time)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : ''}</div>
-              ${v.is_recheck && v.recheck_request ? `<div class="ns-row-sub" style="color:var(--danger)">Doctor's note: ${v.recheck_request}</div>` : ''}
+              <div class="ns-row-sub">Token ${sanitize(v.token_number)} · ${sanitize(v.issue_category)} · For ${sanitize(v.doctor_name)}${v.booked_time ? ' · Booked for ' + new Date(toIST(v.booked_time)).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : ''}</div>
+              ${v.is_recheck && v.recheck_request ? `<div class="ns-row-sub" style="color:var(--danger)">Doctor's note: ${sanitize(v.recheck_request)}</div>` : ''}
             </div>
             <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openVitalsModal(${v.checkin_id}, ${jsArg(v.patient_name)}, ${jsArg(v.prior_vitals || null)})'>${v.is_recheck ? 'Recheck' : 'Record Vitals'}</button>
           </div>
@@ -564,10 +565,10 @@
         document.getElementById('postconsult-list').innerHTML = tasks.length ? tasks.map(t => `
           <div class="ns-row">
             <div>
-              <strong>${t.patient_name}</strong>
-              <span class="badge badge-navy" style="margin-left:8px">${t.patient_uid}</span>
-              <div class="ns-row-sub">Token ${t.token_number} · From ${t.doctor_name}</div>
-              <div class="ns-row-note">${t.note || ''}</div>
+              <strong>${sanitize(t.patient_name)}</strong>
+              <span class="badge badge-navy" style="margin-left:8px">${sanitize(t.patient_uid)}</span>
+              <div class="ns-row-sub">Token ${sanitize(t.token_number)} · From ${sanitize(t.doctor_name)}</div>
+              <div class="ns-row-note">${sanitize(t.note || '')}</div>
             </div>
             <button class="btn btn-primary btn-sm" onclick='if(!isNursePresent()){toast("Mark yourself Present first.","info");return;} openPostConsultModal(${t.checkin_id}, ${jsArg(t.note || "")}, null, ${t.patient_id})'>Mark Done</button>
           </div>
@@ -637,7 +638,7 @@
         const charges = await api("GET", `/patients/${activePostConsultPatientId}/pending-opd-charges`);
         list.innerHTML = charges.length ? charges.map(c => `
           <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13.5px">
-            <span>${c.description}${c.quantity > 1 ? ' × ' + c.quantity : ''}</span><span>Rs.${(c.amount * c.quantity).toFixed(2)}</span>
+            <span>${sanitize(c.description)}${c.quantity > 1 ? ' × ' + c.quantity : ''}</span><span>Rs.${(c.amount * c.quantity).toFixed(2)}</span>
           </div>
         `).join('') : '<p style="color:var(--slate-light);font-size:13px">No charges added yet.</p>';
       } catch (e) { }

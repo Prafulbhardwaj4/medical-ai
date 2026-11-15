@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Boolean, Index
 from sqlalchemy.sql import expression
 from app.database import Base
 from app.utils.timezone import now_ist_naive
@@ -8,6 +8,7 @@ class DayEndClose(Base):
     """One shift-close reconciliation record per hospital per day — system-logged
     totals by mode vs what reception actually counted in hand (Receptionist Flow §9)."""
     __tablename__ = "day_end_closes"
+    __table_args__ = (Index("uq_day_end_closes_hospital_date", "hospital_id", "close_date", unique=True),)
 
     id = Column(Integer, primary_key=True, index=True)
     hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=False)

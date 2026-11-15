@@ -136,7 +136,7 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
             return {"morning": body.capacity_morning, "afternoon": body.capacity_afternoon, "evening": body.capacity_evening}[period]
         return body.capacity_same
 
-    DEFAULT_WINDOW_MINUTES = 60
+    DEFAULT_WINDOW_MINUTES = 120  # the on-screen label of every slot is a 2-hour window (e.g. 10:00 - 12:00)
 
     def _minutes_between(t1: str, t2: str) -> int:
         d1 = dt.strptime(t1, "%H:%M")
@@ -174,8 +174,8 @@ def _regenerate_from_template(db: Session, target: Doctor, body: SaveTemplateIn)
                     window = int(body.custom_windows[t])  # explicit From/To duration wins over any inferred gap
                 elif idx + 1 < len(sorted_times):
                     window = _minutes_between(t, sorted_times[idx + 1])
-                    if window <= 0:
-                        window = DEFAULT_WINDOW_MINUTES
+                    if window <= 0 or window > DEFAULT_WINDOW_MINUTES:
+                        window = DEFAULT_WINDOW_MINUTES  # never longer than the window shown on screen
                 else:
                     window = DEFAULT_WINDOW_MINUTES
                 slot = DoctorSlot(

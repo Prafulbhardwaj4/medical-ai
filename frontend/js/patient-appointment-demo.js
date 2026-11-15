@@ -129,7 +129,7 @@ function _renderDemoProfileStep() {
     searchableFullWidthList(
       listEl, _demoProfiles,
       (p) => `<div class="select-row-card" style="cursor:pointer" onclick="_renderDemoDatetimeStep(); advanceLocalTour();">
-                <div><div class="src-name">${p.display_name}</div><div class="src-sub">${p.relation === 'self' ? 'You' : 'Family member'}</div></div>
+                <div><div class="src-name">${sanitize(p.display_name)}</div><div class="src-sub">${p.relation === 'self' ? 'You' : 'Family member'}</div></div>
               </div>`,
       (p, q) => p.display_name.toLowerCase().includes(q),
       "Search profiles..."

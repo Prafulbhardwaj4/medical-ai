@@ -16,7 +16,8 @@ from app.utils.auth import create_password_setup_token, verify_password_setup_to
 from app.config import settings
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
-from app.utils.rate_limit import limiter, FailureThrottle
+from app.utils.monitoring import record_login_failure, record_lockout
+from app.utils.rate_limit import limiter, FailureThrottle, client_ip
 from app.utils.phone import normalize_phone
 from app.services.whatsapp_messages import wipe_secrets_for_recipient
 import json
@@ -24,11 +25,17 @@ from pydantic import BaseModel
 from app.config import _is_production
 from app.utils.auth import create_totp_pending_token, verify_totp_pending_token
 from app.utils import totp as totp_util
+from app.services import totp_enrolment
 
 security = HTTPBearer()
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 _staff_otp_throttle = FailureThrottle(max_failures=5, window_seconds=15 * 60)  # wrong reset-code guesses per email
+# Wrong passwords are counted per (account, network), so someone elsewhere cannot lock the real user out.
+_login_pair_throttle = FailureThrottle(max_failures=5, window_seconds=15 * 60, name="staff_login_pair")
+# Network-wide ceiling across all accounts (a hospital's staff share one public IP, so this is generous).
+_login_ip_throttle = FailureThrottle(max_failures=20, window_seconds=15 * 60, name="staff_login_ip")
+ACCOUNT_FAILURE_CEILING = 50  # wrong passwords for one account from ANY network before the account itself locks
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
 _TIMING_HASH = hash_password("timing-equalizer-Aa1")  # used only to equalize login response time
@@ -52,6 +59,10 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
     if not verify_captcha_token(payload.captcha_token, payload.captcha_answer):
         raise HTTPException(status_code=400, detail="Incorrect captcha. Please try again.")
 
+    ip = client_ip(request)
+    if _login_ip_throttle.is_blocked(ip):
+        raise HTTPException(status_code=429, detail=f"Too many failed sign-in attempts from this network. Please try again in {LOCKOUT_MINUTES} minutes.")
+
     email = payload.email.lower().strip()
     doctor = db.query(Doctor).filter(Doctor.email == email).first()
 
@@ -59,6 +70,10 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
         # Burn the same time a real password check takes, so response time doesn't
         # reveal whether this email has an account.
         verify_password(payload.password, _TIMING_HASH)
+        _login_ip_throttle.record_failure(ip)
+        record_login_failure()
+        log_action(db, None, action="login_failed", target_type="doctor", target_label="unknown account",
+                   details=f"ip={ip}; reason=unknown_account", hospital_id=None)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Check if account is locked
@@ -74,17 +89,42 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
         doctor.failed_login_attempts = 0
         doctor.locked_until = None
 
-    # Wrong password
+    # Wrong password. Failures are counted per (account, network): after MAX_FAILED_ATTEMPTS wrong
+    # passwords from one network, only that network is locked out of the account for LOCKOUT_MINUTES.
+    pair_key = f"{doctor.id}:{ip}"
+    if _login_pair_throttle.is_blocked(pair_key):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed attempts. Please try again in {LOCKOUT_MINUTES} minutes."
+        )
     if not verify_password(payload.password, doctor.hashed_password):
-        doctor.failed_login_attempts += 1
-        if doctor.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
+        _login_pair_throttle.record_failure(pair_key)
+        _login_ip_throttle.record_failure(ip)
+        record_login_failure()
+        doctor.failed_login_attempts = (doctor.failed_login_attempts or 0) + 1
+        if doctor.failed_login_attempts >= ACCOUNT_FAILURE_CEILING:
             doctor.locked_until = now_ist_naive() + timedelta(minutes=LOCKOUT_MINUTES)
             db.commit()
+            record_lockout()
+            log_action(db, None, action="login_account_locked", target_type="doctor", target_id=doctor.id,
+                       target_label=doctor.email, details=f"ip={ip}; reason=too_many_failures_all_networks",
+                       hospital_id=doctor.hospital_id)
             raise HTTPException(
                 status_code=429,
                 detail=f"Too many failed attempts. Account locked for {LOCKOUT_MINUTES} minutes."
             )
         db.commit()
+        log_action(db, None, action="login_failed", target_type="doctor", target_id=doctor.id,
+                   target_label=doctor.email, details=f"ip={ip}; reason=wrong_password", hospital_id=doctor.hospital_id)
+        if _login_pair_throttle.is_blocked(pair_key):
+            record_lockout()
+            log_action(db, None, action="login_locked_out", target_type="doctor", target_id=doctor.id,
+                       target_label=doctor.email, details=f"ip={ip}; reason=too_many_failures_from_this_network",
+                       hospital_id=doctor.hospital_id)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many failed attempts. Please try again in {LOCKOUT_MINUTES} minutes."
+            )
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Deactivation is only revealed AFTER the password is proven, so the login form
@@ -104,6 +144,7 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
     doctor.failed_login_attempts = 0
     doctor.locked_until = None
     db.commit()
+    _login_pair_throttle.reset(pair_key)
 
     if doctor.role.value == "super_admin" and not _superadmin_2fa_skipped():
         return StaffLoginResultOut(
@@ -120,6 +161,8 @@ def login(request: Request, payload: DoctorLogin, db: Session = Depends(get_db))
         )
 
     token = create_access_token({"sub": str(doctor.id), "role": doctor.role.value})
+    log_action(db, doctor, action="login_success", target_type="doctor", target_id=doctor.id,
+               target_label=doctor.email, details=f"ip={ip}", hospital_id=doctor.hospital_id)
     return StaffLoginResultOut(status="success", access_token=token, doctor=doctor)
 
 def _superadmin_2fa_skipped() -> bool:
@@ -128,6 +171,11 @@ def _superadmin_2fa_skipped() -> bool:
 
 class TotpSetupIn(BaseModel):
     totp_token: str
+    enrolment_code: str = ""  # one-time code from scripts/issue_totp_enrolment_code.py, needed for first-time setup
+
+
+# Wrong enrolment codes are counted per (account, network).
+_enrol_throttle = FailureThrottle(max_failures=5, window_seconds=15 * 60, name="totp_enrol")
 
 
 class TotpCodeIn(BaseModel):
@@ -178,6 +226,19 @@ def totp_setup(request: Request, payload: TotpSetupIn, db: Session = Depends(get
     doctor = _totp_doctor(db, payload.totp_token)
     if doctor.totp_enabled:
         raise HTTPException(status_code=400, detail="Two-factor sign-in is already set up for this account.")
+    # First-time enrolment needs the one-time code issued for THIS account, so knowing the password alone is not enough.
+    ip = client_ip(request)
+    throttle_key = f"{doctor.id}:{ip}"
+    if _enrol_throttle.is_blocked(throttle_key):
+        raise HTTPException(status_code=429, detail="Too many attempts. Please try again in 15 minutes.")
+    if not totp_enrolment.claim_enrolment_code(db, doctor, payload.enrolment_code):
+        _enrol_throttle.record_failure(throttle_key)
+        log_action(db, doctor, action="totp_enrolment_failed", target_type="doctor", target_id=doctor.id,
+                   target_label=doctor.email, details=f"ip={ip}; stage=setup; reason=bad_or_missing_code", hospital_id=None)
+        raise HTTPException(status_code=400, detail="The enrolment code is missing, wrong, already used or expired. Ask the platform owner for a new one.")
+    _enrol_throttle.reset(throttle_key)
+    log_action(db, doctor, action="totp_enrolment_started", target_type="doctor", target_id=doctor.id,
+               target_label=doctor.email, details=f"ip={ip}", hospital_id=None)
     secret = totp_util.generate_secret()
     doctor.totp_secret_enc = totp_util.encrypt_secret(secret)
     db.commit()
@@ -190,9 +251,16 @@ def totp_confirm(request: Request, payload: TotpCodeIn, db: Session = Depends(ge
     doctor = _totp_doctor(db, payload.totp_token)
     if doctor.totp_enabled or not doctor.totp_secret_enc:
         raise HTTPException(status_code=400, detail="Start the two-factor setup again.")
+    enrolment = totp_enrolment.open_enrolment(db, doctor)
+    if enrolment is None:
+        raise HTTPException(status_code=400, detail="Start the two-factor setup again with an enrolment code.")
     step = totp_util.verify_code(_totp_secret(doctor), payload.code, doctor.totp_last_step)
     if step is None:
+        log_action(db, doctor, action="totp_enrolment_failed", target_type="doctor", target_id=doctor.id,
+                   target_label=doctor.email, details=f"ip={client_ip(request)}; stage=confirm; reason=wrong_code",
+                   hospital_id=None)
         _totp_fail(db, doctor)
+    enrolment.used_at = now_ist_naive()  # the enrolment code is now spent
     codes, hashes = totp_util.make_backup_codes()
     doctor.totp_enabled = True
     doctor.totp_last_step = step
@@ -232,7 +300,51 @@ def totp_login(request: Request, payload: TotpCodeIn, db: Session = Depends(get_
     if used_backup:
         log_action(db, doctor, action="totp_backup_code_used", target_type="doctor", target_id=doctor.id,
                    target_label=doctor.email, details=f"{len(remaining)} backup codes left", hospital_id=None)
+    log_action(db, doctor, action="login_success", target_type="doctor", target_id=doctor.id,
+               target_label=doctor.email, details=f"ip={client_ip(request)}; with_2fa=true", hospital_id=None)
     return _finish_superadmin_login(doctor)
+
+
+class RegenerateBackupCodesIn(BaseModel):
+    password: str
+    code: str  # a current 6-digit authenticator code (a backup code is not accepted here)
+
+
+_backup_regen_throttle = FailureThrottle(max_failures=5, window_seconds=15 * 60, name="backup_regen")
+
+
+@router.post("/totp/backup-codes/regenerate")
+@limiter.limit("5/minute")
+def regenerate_backup_codes(
+    request: Request,
+    payload: RegenerateBackupCodesIn,
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    """Replaces ALL backup codes with a new set (shown once). Needs the password and a current authenticator code."""
+    if current_doctor.role.value != "super_admin" or not current_doctor.totp_enabled or not current_doctor.totp_secret_enc:
+        raise HTTPException(status_code=400, detail="Two-factor sign-in is not set up for this account.")
+    key = str(current_doctor.id)
+    ip = client_ip(request)
+    if _backup_regen_throttle.is_blocked(key):
+        raise HTTPException(status_code=429, detail="Too many attempts. Please try again in 15 minutes.")
+    step = None
+    if verify_password(payload.password, current_doctor.hashed_password):
+        step = totp_util.verify_code(_totp_secret(current_doctor), payload.code, current_doctor.totp_last_step)
+    if step is None:
+        _backup_regen_throttle.record_failure(key)
+        log_action(db, current_doctor, action="totp_backup_codes_regen_failed", target_type="doctor",
+                   target_id=current_doctor.id, target_label=current_doctor.email, details=f"ip={ip}", hospital_id=None)
+        # 400, not 401: the front end signs the user out on any 401.
+        raise HTTPException(status_code=400, detail="Your password or code is incorrect.")
+    codes, hashes = totp_util.make_backup_codes()
+    current_doctor.totp_backup_codes = json.dumps(hashes)
+    current_doctor.totp_last_step = step
+    db.commit()
+    _backup_regen_throttle.reset(key)
+    log_action(db, current_doctor, action="totp_backup_codes_regenerated", target_type="doctor",
+               target_id=current_doctor.id, target_label=current_doctor.email, details=f"ip={ip}", hospital_id=None)
+    return {"backup_codes": codes}
 
 
 @router.post("/set-new-password", response_model=Token)
@@ -262,8 +374,7 @@ def set_new_password(request: Request, payload: SetNewPasswordIn, db: Session = 
         raise HTTPException(status_code=403, detail="Your temporary password has expired. Ask your admin (or the super admin) for a new one.")
 
     new_password = payload.new_password
-    if len(new_password) < 8 or not any(c.isdigit() for c in new_password) or not any(c.isupper() for c in new_password):
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters, with 1 number and 1 capital letter")
+    check_password_strength(new_password, doctor.email, doctor.name)
     if new_password == payload.old_password:
         raise HTTPException(status_code=400, detail="New password must be different from the temporary one")
 
@@ -328,7 +439,7 @@ def forgot_password_reset(request: Request, payload: StaffForgotPasswordResetIn,
     doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first() if doctor_id else None
     if not doctor or not is_eligible(doctor) or stamp != current_stamp(doctor.password_changed_at):
         raise HTTPException(status_code=400, detail="This reset session has expired. Please start again.")
-    check_password_strength(payload.new_password)
+    check_password_strength(payload.new_password, doctor.email, doctor.name)
     doctor.hashed_password = hash_password(payload.new_password)
     doctor.must_change_password = False
     doctor.temp_password_expires_at = None
@@ -357,7 +468,7 @@ def change_password(
     # as "session expired" and signs the user out.
     if not verify_password(payload.old_password, current_doctor.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    check_password_strength(payload.new_password)
+    check_password_strength(payload.new_password, current_doctor.email, current_doctor.name)
     if payload.new_password == payload.old_password:
         raise HTTPException(status_code=400, detail="New password must be different from the current one")
 
@@ -464,9 +575,13 @@ def refresh_session(
 
 @router.post("/logout")
 def logout(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     current_doctor: Doctor = Depends(get_current_doctor),
     db: Session = Depends(get_db)
 ):
     blacklist_token(credentials.credentials, db)
+    log_action(db, current_doctor, action="logout", target_type="doctor", target_id=current_doctor.id,
+               target_label=current_doctor.email, details=f"ip={client_ip(request)}",
+               hospital_id=current_doctor.hospital_id)
     return {"message": "Logged out successfully"}

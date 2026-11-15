@@ -43,7 +43,9 @@ from app.models.doctor import UserRole
 from app.utils.auth import get_current_doctor, ist_today
 from app.utils.tier_gate import require_tier
 from app.utils.timezone import now_ist_naive, ist_day_bounds, IST
-from app.utils.audit import log_action
+from app.utils.audit import log_action, stage_action, log_record_access
+from app.utils.roles import require_roles, ADMISSION_ROLES
+from app.utils import scoped
 from app.routers.patients import generate_patient_uid, generate_url_token
 from sqlalchemy.exc import IntegrityError
 from app.utils.inventory import deduct_stock_fefo, sellable_stock, restock_to_batches
@@ -218,26 +220,34 @@ def _received_via_referral_summary(db: Session, a: Admission):
 
 
 @router.get("/last-diagnosis/{patient_id}")
-def last_diagnosis(patient_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def last_diagnosis(patient_id: int, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     """Suggests a starting diagnosis from the patient's most recent consultation.
     Purely a convenience prefill — diagnosis is still required and freely editable on admit."""
-    last = db.query(Consultation).filter(
-        Consultation.patient_id == patient_id
+    last = db.query(Consultation).join(Patient, Consultation.patient_id == Patient.id).filter(
+        Consultation.patient_id == patient_id,
+        Patient.hospital_id == current_doctor.hospital_id,
     ).order_by(Consultation.created_at.desc()).first()
     return {"diagnosis": last.diagnosis if last and last.diagnosis else None}
 
 @router.patch("/{admission_id}/diagnosis")
 def update_diagnosis(admission_id: str, body: UpdateDiagnosisIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    require_roles("doctor", "nurse", "receptionist", "assistant", "admin", "sub_admin")(current_doctor)
     if not body.diagnosis.strip():
         raise HTTPException(status_code=400, detail="Diagnosis cannot be empty")
     admission = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    old_diagnosis = admission.diagnosis
     admission.diagnosis = body.diagnosis.strip()
+    stage_action(
+        db, current_doctor, action="admission_diagnosis_updated", target_type="admission", target_id=admission.id,
+        target_label=f"Admission {admission.public_token}",
+        details=json.dumps({"before": (old_diagnosis or "")[:300], "after": admission.diagnosis[:300]}),
+    )
     db.commit()
     return {"message": "Diagnosis updated", "diagnosis": admission.diagnosis}
 
 
 @router.post("")
-def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def admit_patient(body: AdmitPatientIn, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     patient = db.query(Patient).filter(Patient.id == body.patient_id, Patient.hospital_id == current_doctor.hospital_id).first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
@@ -675,7 +685,7 @@ def _expire_stale_admission_referrals(db: Session, hospital_id: int) -> None:
 
 
 @router.get("/referrals")
-def list_referrals(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def list_referrals(current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     """Reception's '+ Admit' list — ONLY patients a doctor has actually sent."""
     _expire_stale_admission_referrals(db, current_doctor.hospital_id)
     db.commit()
@@ -701,12 +711,19 @@ def list_referrals(current_doctor: Doctor = Depends(get_current_doctor), db: Ses
 
 @router.delete("/referrals/{referral_id}")
 def cancel_referral(referral_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+    require_roles("doctor", "receptionist", "admin", "sub_admin")(current_doctor)
     r = db.query(AdmissionReferral).filter(
         AdmissionReferral.id == referral_id, AdmissionReferral.hospital_id == current_doctor.hospital_id
     ).first()
     if not r:
         raise HTTPException(status_code=404, detail="Referral not found")
+    old_status = r.status
     r.status = "cancelled"
+    stage_action(
+        db, current_doctor, action="admission_referral_cancelled", target_type="admission_referral", target_id=r.id,
+        target_label=f"Referral {r.id}",
+        details=json.dumps({"before": old_status, "after": "cancelled", "patient_id": r.patient_id}),
+    )
     db.commit()
     return {"message": "Referral cancelled"}
 
@@ -850,7 +867,7 @@ def medicine_catalog_for_ward(dosage_form: str = "", current_doctor: Doctor = De
 
 
 @router.get("/ward-types/{ward_type_id}/beds")
-def list_ward_type_beds(ward_type_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def list_ward_type_beds(ward_type_id: int, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     """Auto-generated bed labels (e.g. GEN-1, GEN-2...) — admin only sets the bed COUNT,
     labels/numbering are computed, never manually entered."""
     wt = db.query(AdmissionWardType).filter(
@@ -869,7 +886,7 @@ def list_ward_type_beds(ward_type_id: int, current_doctor: Doctor = Depends(get_
 
 
 @router.get("/ward-types", response_model=list[WardTypeOut])
-def list_ward_types(current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def list_ward_types(current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     types = db.query(AdmissionWardType).filter(AdmissionWardType.hospital_id == current_doctor.hospital_id).order_by(AdmissionWardType.name).all()
     out = []
     for t in types:
@@ -1127,7 +1144,7 @@ def delete_room(ward_type_id: int, room_id: int, current_doctor: Doctor = Depend
 
 
 @router.get("/active")
-def list_active_admissions(search: str = "", ward_type_id: int = None, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def list_active_admissions(search: str = "", ward_type_id: int = None, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     query = db.query(Admission).filter(
         Admission.hospital_id == current_doctor.hospital_id, Admission.status == "admitted"
     )
@@ -1151,11 +1168,13 @@ def list_active_admissions(search: str = "", ward_type_id: int = None, current_d
             "status": a.status, "admission_date": a.admission_date.isoformat(), "days_admitted": _days_admitted(a),
             "is_emergency_ward": bool(ward_type and ward_type.is_emergency_ward),
         })
+    if out:
+        log_record_access(db, current_doctor, "admission_list_viewed", "admission_list", current_doctor.hospital_id, "Active admissions")
     return out
 
 
 @router.get("/history")
-def list_admission_history(search: str = "", ward_type_id: int = None, limit: int = 50, offset: int = 0, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def list_admission_history(search: str = "", ward_type_id: int = None, limit: int = 50, offset: int = 0, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     """Discharged admissions — the counterpart to /active. Newest discharge
     first, capped at `limit` (default 50) since this list only grows."""
     query = db.query(Admission).filter(
@@ -1186,8 +1205,9 @@ def list_admission_history(search: str = "", ward_type_id: int = None, limit: in
     return out
 
 @router.get("/{admission_id}")
-def get_admission(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def get_admission(admission_id: str, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    log_record_access(db, current_doctor, "admission_viewed", "admission", a.id, f"Admission {a.id}")
     try:
         _escalate_unacknowledged_critical_vitals(db, current_doctor.hospital_id)
     except Exception:
@@ -1853,7 +1873,7 @@ def add_admission_consent(admission_id: str, body: AdmissionConsentIn, current_d
 
 
 @router.get("/{admission_id}/consents")
-def list_admission_consents(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def list_admission_consents(admission_id: str, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     consents = db.query(AdmissionConsent).filter(AdmissionConsent.admission_id == a.id).order_by(AdmissionConsent.signed_at.desc()).all()
     return [{
@@ -2152,7 +2172,7 @@ def _settlement_summary(db: Session, a: Admission):
 
 
 @router.get("/{admission_id}/deposit-summary")
-def get_deposit_summary(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def get_deposit_summary(admission_id: str, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
     _, subtotal, gst_total, charges_total, deposit_total, balance = _settlement_summary(db, a)
     deposits = db.query(AdmissionDeposit).filter(AdmissionDeposit.admission_id == a.id).order_by(AdmissionDeposit.collected_at).all()
@@ -2249,9 +2269,10 @@ def collect_topup_request(admission_id: str, request_id: int, body: CollectTopup
     return {"message": "Top-up collected", "amount_collected": req.requested_amount}
 
 @router.get("/{admission_id}/discharge-preview")
-def discharge_preview(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def discharge_preview(admission_id: str, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     """Shows what's owed BEFORE committing discharge — reception collects this first."""
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    log_record_access(db, current_doctor, "admission_discharge_preview_viewed", "admission", a.id, f"Admission {a.id}")
     items, subtotal, gst_total, charges_total, deposit_total, balance = _settlement_summary(db, a)
     return {
         "items": items, "subtotal": subtotal, "gst_total": gst_total, "charges_total": charges_total,
@@ -2448,8 +2469,9 @@ def discharge_patient(admission_id: str, body: DischargeIn, current_doctor: Doct
 
 
 @router.get("/{admission_id}/invoice/pdf")
-def download_discharge_invoice(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def download_discharge_invoice(admission_id: str, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    log_record_access(db, current_doctor, "admission_invoice_downloaded", "admission", a.id, f"Admission {a.id}")
     if not a.discharge_invoice_id:
         raise HTTPException(status_code=404, detail="No discharge invoice yet")
     invoice = db.query(Invoice).filter(Invoice.id == a.discharge_invoice_id).first()
@@ -2669,17 +2691,14 @@ def token_for_vitals(vitals_id: int, current_doctor: Doctor = Depends(get_curren
     critical_vitals_escalation notification (keyed by the specific vitals
     reading, not the admission) into admission-detail.html — same
     token-for-admission navigation pattern as token_for_admission."""
-    v = db.query(AdmissionVitals).filter(AdmissionVitals.id == vitals_id).first()
-    if not v:
-        raise HTTPException(status_code=404, detail="Vitals reading not found")
-    a = db.query(Admission).filter(Admission.id == v.admission_id, Admission.hospital_id == current_doctor.hospital_id).first()
-    if not a:
-        raise HTTPException(status_code=404, detail="Admission not found")
+    v = scoped.get_vitals(db, vitals_id, current_doctor.hospital_id)
+    a = scoped.get_admission(db, v.admission_id, current_doctor.hospital_id)
     return {"token": a.public_token}
 
 @router.get("/{admission_id}/progress-notes")
-def list_progress_notes(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def list_progress_notes(admission_id: str, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     a = _get_admission_or_404(db, admission_id, current_doctor.hospital_id)
+    log_record_access(db, current_doctor, "admission_notes_viewed", "admission", a.id, f"Admission {a.id}")
     notes = db.query(AdmissionProgressNote).filter(AdmissionProgressNote.admission_id == a.id).order_by(AdmissionProgressNote.created_at.desc()).all()
     out = []
     for n in notes:

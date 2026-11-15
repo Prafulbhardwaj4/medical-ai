@@ -1,6 +1,8 @@
 """TOTP (RFC 6238) for Super Admin 2FA, with no extra dependency.
-Secrets are stored encrypted with a key derived from SECRET_KEY. If SECRET_KEY is ever
-rotated, stored secrets become unreadable: run scripts/reset_superadmin_2fa.py.
+Secrets are stored encrypted with TOTP_ENC_KEY (MultiFernet, newest first). Values written
+before TOTP_ENC_KEY existed use a key derived from SECRET_KEY; that key is always tried on read,
+so nothing breaks. If TOTP_ENC_KEY is unset, new writes use the SECRET_KEY-derived key as before.
+Run scripts/rotate_totp_keys.py to move every stored secret to the newest key.
 This is separate from, and does not touch, the QR verification hash derivation."""
 import base64
 import hashlib
@@ -12,7 +14,7 @@ import struct
 import time
 from urllib.parse import quote
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from app.config import settings
 
@@ -21,9 +23,18 @@ _STEP_SECONDS = 30
 _BACKUP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 
-def _fernet() -> Fernet:
+def _legacy_fernet() -> Fernet:
     key = base64.urlsafe_b64encode(hashlib.sha256(f"totp-secret-v1:{settings.SECRET_KEY}".encode()).digest())
     return Fernet(key)
+
+
+def _fernet() -> MultiFernet:
+    """Encrypts with the first key (TOTP_ENC_KEY if set, else the old SECRET_KEY-derived key).
+    Decrypts with any of them."""
+    from app.config import parse_key_list
+    fernets = [Fernet(k.encode()) for k in parse_key_list(settings.TOTP_ENC_KEY)]
+    fernets.append(_legacy_fernet())
+    return MultiFernet(fernets)
 
 
 def generate_secret() -> str:
@@ -39,6 +50,16 @@ def decrypt_secret(token):
         return None
     try:
         return _fernet().decrypt(token.encode()).decode()
+    except (InvalidToken, ValueError):
+        return None
+
+
+def rotate_secret_token(token):
+    """Re-encrypts a stored token with the newest key. Returns the new token, or None if it cannot be read."""
+    if not token:
+        return None
+    try:
+        return _fernet().rotate(token.encode()).decode()
     except (InvalidToken, ValueError):
         return None
 

@@ -768,6 +768,7 @@
     </div>
   </div>
 
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/whatsapp-messages.js"></script>
   <script src="../js/nav-admin.js"></script>
@@ -988,7 +989,7 @@
         populateVacancyWardFilter();
         renderVacancyOverview();
       } catch (e) {
-        document.getElementById("vacancy-overview").innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        document.getElementById("vacancy-overview").innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -1138,7 +1139,7 @@
         }
         // Room name/number is already shown in the Room dropdown above —
         // just show the bed number itself here, not the full "ROOM-BED" label.
-        bedSel.innerHTML = available.map(b => `<option value="${b.label}">${b.label.split('-').pop()}</option>`).join('');
+        bedSel.innerHTML = available.map(b => `<option value="${sanitize(b.label)}">${sanitize(b.label.split('-').pop())}</option>`).join('');
       }).catch(() => { bedSel.innerHTML = `<option value="">Could not load beds</option>`; });
     }
 
@@ -1597,7 +1598,7 @@
         list.innerHTML = demoCard + admissions.map(a => `
           <div class="ward-card" onclick="location.href='admission-detail.html?id=${a.id}'">
             <div class="ward-card-main">
-              <div class="ward-avatar">${a.patient_name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('')}</div>
+              <div class="ward-avatar">${a.patient_name.trim().split(/\s+/).slice(0, 2).map(w => sanitize(w[0].toUpperCase())).join('')}</div>
               <div style="min-width:0">
                 <div style="font-weight:700;color:var(--navy)">${sanitize(a.patient_name)}</div>
                 <div style="font-size:13px;color:var(--slate);margin-top:2px">${a.is_emergency_ward ? `<span style="color:#dc2626;font-weight:700">${sanitize(a.ward)}</span>` : sanitize(a.ward)} · Bed ${sanitize(a.bed_number)}${a.patient_uid ? ' · ' + sanitize(a.patient_uid) : ''}</div>
@@ -1611,7 +1612,7 @@
             </div>
           </div>`).join('');
       } catch (e) {
-        list.innerHTML = `<div class="card"><p class="err-msg" style="display:block">${e.message}</p></div>`;
+        list.innerHTML = `<div class="card"><p class="err-msg" style="display:block">${sanitize(e.message)}</p></div>`;
       }
     }
 
@@ -1633,7 +1634,7 @@
       try {
         referralsCache = await api("GET", "/admissions/referrals");
         renderReferralResults(referralsCache);
-      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+      } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
     }
 
     function renderReferralResults(referrals) {

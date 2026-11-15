@@ -515,10 +515,18 @@
   </div>
 
   <script src="../js/suggestion-widget.js"></script>
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/tutorial.js"></script>
   <script>
     if (!requireAuth()) { }
+    // Sign the patient out after 15 minutes without any activity.
+    (function () {
+      const IDLE_LIMIT_MS = 15 * 60 * 1000;
+      let lastActive = Date.now();
+      ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev => window.addEventListener(ev, () => { lastActive = Date.now(); }, { passive: true }));
+      setInterval(() => { if (Date.now() - lastActive > IDLE_LIMIT_MS) logout({ confirm: false }); }, 30000);
+    })();
     if (getDoctor()?.role !== 'patient') redirectByRole(getDoctor()?.role);
     fillTopbar();
     document.getElementById("profile-menu-name").textContent = getDoctor()?.name || "Patient";
@@ -538,7 +546,7 @@
 
     function initials(name) {
       if (!name) return "?";
-      return name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+      return name.trim().split(/\s+/).slice(0, 2).map(w => sanitize(w[0].toUpperCase())).join('');
     }
 
     let allVisits = [];
@@ -572,7 +580,7 @@
         document.getElementById("filter-patient").innerHTML = `<option value="">All profiles</option>` + patients.map(p => `<option value="${sanitize(p)}">${sanitize(p)}</option>`).join('');
         applyFilters();
       } catch (e) {
-        list.innerHTML = `<div class="card"><p class="err-msg" style="display:block">${e.message}</p></div>`;
+        list.innerHTML = `<div class="card"><p class="err-msg" style="display:block">${sanitize(e.message)}</p></div>`;
       }
     }
 
@@ -629,7 +637,7 @@
                 <div class="vc-meta">${sanitize(v.hospital_name)}${v.doctor_name ? ' · ' + sanitize(v.doctor_name) : ''}</div>
                 <div class="vc-date">
                   <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                  ${new Date(v.visit_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })} · Token ${v.token_number}
+                  ${new Date(v.visit_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })} · Token ${sanitize(v.token_number)}
                 </div>
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -720,14 +728,14 @@
             <div>
               <div style="font-weight:700;font-size:1.05rem;color:var(--navy)">${sanitize(v.patient_name)}</div>
               <div style="font-size:13px;color:var(--slate)">${sanitize(v.hospital_name)}${v.doctor_name ? ' · ' + sanitize(v.doctor_name) : ''}</div>
-              <div style="font-size:12px;color:var(--slate-light)">${new Date(v.visit_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })} · Token ${v.token_number}</div>
+              <div style="font-size:12px;color:var(--slate-light)">${new Date(v.visit_date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })} · Token ${sanitize(v.token_number)}</div>
             </div>
           </div>`;
         if (v.consultation_id) {
           html += `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--border)">
               <div><div style="font-weight:500">Prescription</div><div style="font-size:12px;color:var(--slate-light)">${sanitize(v.diagnosis || 'Consultation')}</div></div>
-              <button class="btn btn-outline btn-sm" onclick="downloadFile('/portal/dashboard/prescriptions/${v.consultation_id}/pdf', '${v.token_number}.pdf')">Download</button>
+              <button class="btn btn-outline btn-sm" onclick="downloadFile('/portal/dashboard/prescriptions/${v.consultation_id}/pdf', ${jsArg(v.token_number + '.pdf')})">Download</button>
             </div>`;
         }
         if (v.invoice_id) {
@@ -743,7 +751,7 @@
           html += `<div style="padding-top:12px;border-top:1px solid var(--border)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <div style="font-weight:500">Tests</div>
-              ${anyReleased ? `<button class="btn btn-outline btn-sm" onclick="downloadFile('/portal/dashboard/consultations/${v.consultation_id}/tests/report', 'test_report_${v.token_number}.pdf')">Download Report</button>` : ''}
+              ${anyReleased ? `<button class="btn btn-outline btn-sm" onclick="downloadFile('/portal/dashboard/consultations/${v.consultation_id}/tests/report', ${jsArg('test_report_' + v.token_number + '.pdf')})">Download Report</button>` : ''}
             </div>`;
           html += v.tests.map(t => `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px"><span>${sanitize(t.test_name)}</span><span class="badge badge-grey">${testStatusLabel[t.status] || sanitize(t.status)}</span></div>`).join('');
           html += `</div>`;
@@ -768,7 +776,7 @@
         body.innerHTML = html;
         if (!v.feedback_given && v.feedback_allowed) setupStarPicker(v.checkin_id);
       } catch (e) {
-        body.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        body.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -819,8 +827,8 @@
       const list = window._pendingProfiles || [];
       document.getElementById("pending-profiles-list").innerHTML = list.map(p => `
         <div style="border:1.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px">
-          <strong>${p.display_name}</strong>
-          <div style="font-size:12.5px;color:var(--slate);margin:2px 0 10px">${p.hospital_name}</div>
+          <strong>${sanitize(p.display_name)}</strong>
+          <div style="font-size:12.5px;color:var(--slate);margin:2px 0 10px">${sanitize(p.hospital_name)}</div>
           <p style="font-size:13px;margin-bottom:8px">Do you know this person?</p>
           <div style="display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" style="flex:1" onclick="confirmPendingProfile(${p.id}, this)">Yes</button>
@@ -1014,7 +1022,7 @@
         // dischargedAdmissions is populated, so they actually appear in Health Records.
         if (allVisits.length || dischargedAdmissions.length) applyFilters();
       } catch (e) {
-        list.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+        list.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
       }
     }
 
@@ -1117,7 +1125,7 @@
         }
         el.innerHTML = html;
       } catch (e) {
-        el.innerHTML = `<p style="color:var(--danger);font-size:12.5px">${e.message}</p>`;
+        el.innerHTML = `<p style="color:var(--danger);font-size:12.5px">${sanitize(e.message)}</p>`;
       }
     }
 

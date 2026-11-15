@@ -224,6 +224,7 @@
     </div>
 
     <div id="toast"></div>
+    <script src="../config.js"></script>
     <script src="../js/api.js"></script>
     <script src="../js/whatsapp-messages.js"></script>
     <script src="../js/nav-admin.js"></script>
@@ -356,9 +357,9 @@
             document.getElementById('attendance-list').innerHTML = list.length ? list.map(d => `
           <div class="att-staff-row" style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap">
             <div style="min-width:0">
-              <strong>${d.name}</strong>
-              <span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:#f1f5f9;color:#64748b;margin-left:6px">${roleLabels[d.role] || d.role}</span>
-              <div style="color:var(--slate);font-size:13px;margin-top:2px">${d.specialization}${d.room_number && d.room_number !== '—' ? ` · Room ${d.room_number}` : ''}</div>
+              <strong>${sanitize(d.name)}</strong>
+              <span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:#f1f5f9;color:#64748b;margin-left:6px">${roleLabels[d.role] || sanitize(d.role)}</span>
+              <div style="color:var(--slate);font-size:13px;margin-top:2px">${sanitize(d.specialization)}${d.room_number && d.room_number !== '—' ? ` · Room ${sanitize(d.room_number)}` : ''}</div>
             </div>
             ${badgeFor(d.status)}
           </div>
@@ -422,7 +423,7 @@
             const nameSel = document.getElementById('hist-doctor');
             const pool = role === 'all' ? histStaffCache : histStaffCache.filter(d => d.role === role);
             nameSel.innerHTML = '<option value="">All Names</option>' +
-                pool.map(d => `<option value="${d.id}">${d.title || ''} ${d.name}</option>`).join('');
+                pool.map(d => `<option value="${d.id}">${sanitize(d.title || '')} ${sanitize(d.name)}</option>`).join('');
             loadHistory();
         }
 
@@ -460,7 +461,7 @@
           </table>
         `;
             } catch (e) {
-                el.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+                el.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
             }
         }
     </script>

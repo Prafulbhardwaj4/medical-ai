@@ -1172,6 +1172,7 @@
     </div>
   </div>
 
+  <script src="../config.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/whatsapp-messages.js"></script>
   <script src="../js/nav-admin.js"></script>
@@ -1450,7 +1451,7 @@
         applyDischargedReadOnly();
         renderDischargeCard();
       } catch (e) {
-        document.getElementById("patient-header").innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+        document.getElementById("patient-header").innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
         return;
       }
 
@@ -1804,7 +1805,7 @@
         <div class="ph-info-grid">
           <div>
             <div class="ph-info-label">Patient</div>
-            <div class="ph-info-value">${p.age} yrs, ${p.gender}<br>${sanitize(p.phone)}${p.patient_uid ? ' · ' + sanitize(p.patient_uid) : ''}</div>
+            <div class="ph-info-value">${sanitize(p.age)} yrs, ${sanitize(p.gender)}<br>${sanitize(p.phone)}${p.patient_uid ? ' · ' + sanitize(p.patient_uid) : ''}</div>
           </div>
           <div>
             <div class="ph-info-label">Ward & Bed</div>

@@ -697,7 +697,7 @@ function askWriteOffReason(title = "Why is this stock being removed?") {
     wrap.innerHTML = `
       <div class="modal-overlay open" id="writeoff-modal">
         <div class="modal" style="max-width:380px">
-          <div class="modal-header"><h2>${title}</h2></div>
+          <div class="modal-header"><h2>${sanitize(title)}</h2></div>
           <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--slate)">Reason</label>
           <select class="form-control" id="wo-reason" style="margin-bottom:12px">
             <option value="expired">Expired</option>
@@ -813,10 +813,10 @@ function confirmDialog(message, confirmLabel = "Confirm") {
     overlay.innerHTML = `
       <div class="modal" style="max-width:380px">
         <div class="modal-header"><h2>Please Confirm</h2></div>
-        <p style="font-size:13px;color:var(--navy);margin-bottom:18px">${message}</p>
+        <p style="font-size:13px;color:var(--navy);margin-bottom:18px">${sanitize(message)}</p>
         <div style="display:flex;gap:10px">
           <button class="btn btn-outline" style="flex:1" id="cf-cancel">Cancel</button>
-          <button class="btn btn-primary" style="flex:1" id="cf-confirm">${confirmLabel}</button>
+          <button class="btn btn-primary" style="flex:1" id="cf-confirm">${sanitize(confirmLabel)}</button>
         </div>
       </div>
     `;
@@ -912,14 +912,14 @@ function _renderReportsVisitsHtml(visits, opts) {
       <button type="button" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'"
         style="width:100%;text-align:left;background:none;border:none;padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
         <span><strong>${v.date ? new Date(v.date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) : 'Date not recorded'}</strong>
-          ${v.token_number ? `<span style="color:var(--slate);font-size:13px"> · Token ${v.token_number}</span>` : ''}</span>
+          ${v.token_number ? `<span style="color:var(--slate);font-size:13px"> · Token ${sanitize(v.token_number)}</span>` : ''}</span>
         <span style="color:var(--slate)">${v.tests.length} test${v.tests.length > 1 ? 's' : ''} ▾</span>
       </button>
       <div style="display:${i === 0 ? '' : 'none'};padding:0 14px 14px">
         ${v.tests.map(t => `
           <div style="padding:10px 0;border-top:1px solid var(--border)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <strong>${t.test_name}</strong>
+              <strong>${sanitize(t.test_name)}</strong>
               ${t.is_critical ? '<span class="badge badge-red">Critical</span>' : ''}
             </div>
             ${t.results && t.results.length ? `
@@ -941,10 +941,10 @@ function _renderReportsVisitsHtml(visits, opts) {
                     const valueWeight = out ? "700" : "400";
                     return `
                     <tr style="border-top:1px solid var(--border)">
-                      <td style="padding:5px 8px 5px 0">${row.name}</td>
-                      <td style="padding:5px 8px;font-weight:${valueWeight};color:${valueColor}">${row.value}</td>
-                      <td style="padding:5px 8px;color:var(--slate)">${row.unit || '—'}</td>
-                      <td style="padding:5px 0 5px 8px;color:var(--slate)">${row.range || '—'}</td>
+                      <td style="padding:5px 8px 5px 0">${sanitize(row.name)}</td>
+                      <td style="padding:5px 8px;font-weight:${valueWeight};color:${valueColor}">${sanitize(row.value)}</td>
+                      <td style="padding:5px 8px;color:var(--slate)">${sanitize(row.unit || '—')}</td>
+                      <td style="padding:5px 0 5px 8px;color:var(--slate)">${sanitize(row.range || '—')}</td>
                     </tr>
                   `;
                   }).join('')}
@@ -965,7 +965,7 @@ function _createOverlayModal(title, maxWidth) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:${maxWidth || 760}px;width:92vw;max-height:88vh;overflow-y:auto">
       <div class="modal-header">
-        <h2>${title}</h2>
+        <h2>${sanitize(title)}</h2>
         <button class="modal-close" id="generic-modal-close-${Date.now()}">&times;</button>
       </div>
       <div class="generic-modal-body"><p style="color:var(--slate)">Loading…</p></div>
@@ -1239,7 +1239,7 @@ function openOffDutyTimeModal(confirmLabel) {
         </div>
         <div style="display:flex;gap:10px">
           <button type="button" class="btn btn-outline" style="flex:1" id="off-duty-cancel-btn">Cancel</button>
-          <button type="button" class="btn btn-primary" style="flex:1" id="off-duty-confirm-btn">${confirmLabel}</button>
+          <button type="button" class="btn btn-primary" style="flex:1" id="off-duty-confirm-btn">${sanitize(confirmLabel)}</button>
         </div>
       </div>
     `;

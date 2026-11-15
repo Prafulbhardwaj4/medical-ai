@@ -200,7 +200,10 @@ def _check_no_duplicate_active_booking(db: Session, account: PatientAccount, pro
 
 
 @router.post("", response_model=AppointmentOut)
+@limiter.limit("15/minute")
+@limiter.limit("60/hour")
 def book_appointment(
+    request: Request,
     body: BookAppointmentIn,
     account: PatientAccount = Depends(get_current_patient_account),
     db: Session = Depends(get_db),
@@ -365,6 +368,25 @@ def list_my_appointments(
 
     appts = sorted(account.appointments, key=lambda x: x.requested_time, reverse=True)
     return [_to_out(a, db) for a in appts]
+
+
+@router.get("/eta-today")
+@limiter.limit("120/minute")
+def expected_times_today(
+    request: Request,
+    account: PatientAccount = Depends(get_current_patient_account),
+    db: Session = Depends(get_db),
+):
+    """Expected consultation time for the patient's appointments today (shows only a time or a delay, never queue size)."""
+    from app.utils.queue_eta import etas_for_account
+    out = []
+    for e in etas_for_account(db, account):
+        if e["state"] in ("hidden", "in_consultation"):
+            continue
+        appt = next((a for a in account.appointments if a.id == e["appointment_id"]), None)
+        info = _to_out(appt, db)
+        out.append({**e, "doctor_name": info.doctor_name, "hospital_name": info.hospital_name, "patient_name": info.patient_name})
+    return out
 
 
 @router.post("/{appointment_id}/mark-paid", response_model=AppointmentOut)

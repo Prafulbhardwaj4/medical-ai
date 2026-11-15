@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Date
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.utils.field_crypto import EncryptedText
 from app.utils.timezone import now_ist_naive
 
 class Patient(Base):
@@ -9,7 +10,7 @@ class Patient(Base):
     id = Column(Integer, primary_key=True, index=True)
     patient_uid = Column(String, unique=True, index=True)
     url_token = Column(String, unique=True, index=True, nullable=False)
-    abha_number = Column(String, nullable=True)
+    abha_number = Column(EncryptedText, nullable=True)
     name = Column(String, nullable=False)
     phone = Column(String, nullable=False)
     age = Column(Integer, nullable=False)

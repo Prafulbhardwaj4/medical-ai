@@ -14,6 +14,7 @@ from app.models.radiology_template_section import RadiologyTemplateSection
 from app.models.consultation import Consultation
 from app.models.patient import Patient
 from app.utils.auth import get_current_doctor, ist_day_bounds
+from app.utils.roles import require_roles
 from app.utils.timezone import now_ist_naive
 from app.utils.audit import log_action
 from app.routers.attendance import require_present
@@ -429,7 +430,7 @@ def get_radiology_reports_history(
 def get_radiology_report_pdf(
     order_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("doctor", "nurse", "receptionist", "assistant", "admin", "sub_admin", "radiology"))
 ):
     order = db.query(RadiologyOrder).filter(
         RadiologyOrder.id == order_id,

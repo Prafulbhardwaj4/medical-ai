@@ -210,7 +210,7 @@
       mineCache = (await api("GET", `${sBase()}/mine`)) || [];
       renderMine();
     } catch (e) {
-      el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${e.message}</p>`;
+      el.innerHTML = `<p style="color:var(--red,#c0392b);font-size:13px">${sanitize(e.message)}</p>`;
     }
   }
 
@@ -231,7 +231,7 @@
       <div style="padding:12px;margin-bottom:10px;border:1px solid var(--border);border-radius:var(--radius-lg,10px)" id="sugg-row-${s.id}">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
           <span style="font-size:13px" id="sugg-text-${s.id}">${sanitize(s.message)}</span>
-          <span class="badge ${STATUS_CLASS[s.status] || 'badge-grey'}" style="flex-shrink:0">${STATUS_LABEL[s.status] || s.status}</span>
+          <span class="badge ${STATUS_CLASS[s.status] || 'badge-grey'}" style="flex-shrink:0">${STATUS_LABEL[s.status] || sanitize(s.status)}</span>
         </div>
         ${s.status === 'rejected' && s.rejection_reason ? `<div style="font-size:12px;color:var(--slate-light);margin-top:4px;background:#fef2f2;border-radius:6px;padding:6px 8px">${sanitize(s.rejection_reason)}</div>` : ''}
         ${isTerminal(s) ? '' : `
@@ -304,7 +304,7 @@
         </div>
       `;
     } catch (e) {
-      box.innerHTML = `<p style="color:var(--red,#c0392b);font-size:12px">${e.message}</p>`;
+      box.innerHTML = `<p style="color:var(--red,#c0392b);font-size:12px">${sanitize(e.message)}</p>`;
     }
   }
 

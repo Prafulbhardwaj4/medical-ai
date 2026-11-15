@@ -76,6 +76,7 @@ class AdmissionMedicationOrder(Base):
     the quantity was already paid for regardless of whether every unit in
     it ends up administered."""
     __tablename__ = "admission_medication_orders"
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)  # copied from the parent admission when the row is created
 
     id = Column(Integer, primary_key=True, index=True)
     admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)
@@ -115,6 +116,7 @@ class AdmissionMedicationAdministration(Base):
     paid pharmacy and collected the physical stock (see
     AdmissionMedicationDispense) before any dose is given from it."""
     __tablename__ = "admission_medication_administrations"
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)  # copied from the parent admission when the row is created
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("admission_medication_orders.id"), nullable=False)
@@ -131,6 +133,7 @@ class AdmissionMedicationDispense(Base):
     running admission bill for it. An order can be dispensed more than once
     over a stay (refills), so this is its own history, not a single flag."""
     __tablename__ = "admission_medication_dispenses"
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)  # copied from the parent admission when the row is created
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("admission_medication_orders.id"), nullable=False)
@@ -149,6 +152,7 @@ class AdmissionMedicationReturn(Base):
     stays intact. restocked defaults False (wastage) — stock is only put
     back on explicit confirmation at the point of return."""
     __tablename__ = "admission_medication_returns"
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)  # copied from the parent admission when the row is created
 
     id = Column(Integer, primary_key=True, index=True)
     admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)
@@ -167,6 +171,7 @@ class AdmissionCharge(Base):
     test ordered, procedure, misc). Room charges are NOT stored here — they're
     calculated on demand from days admitted × daily_room_charge."""
     __tablename__ = "admission_charges"
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)  # copied from the parent admission when the row is created
 
     id = Column(Integer, primary_key=True, index=True)
     admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)

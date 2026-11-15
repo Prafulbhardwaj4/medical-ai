@@ -228,23 +228,92 @@ async def lab_escalation_loop():
 
 async def midnight_close_loop():
     try:
-        run_midnight_close_for_all_hospitals()  # catch up on any day missed while the server was down
-        from app.utils.usage_history import finalize_usage_snapshots_for_all_hospitals
-        finalize_usage_snapshots_for_all_hospitals()  # store ended months/cycles not stored yet (add-only)
-        run_pilot_lifecycle_sweep_for_all_hospitals()  # catch up on a pilot deadline missed while the server was down
-        purge_generated_files()
+        from app.config import settings
+        if settings.DAY_END_CATCHUP_ON_BOOT:
+            # In a worker thread: the server keeps answering requests while this runs.
+            await asyncio.get_running_loop().run_in_executor(None, _startup_catchup)
+        else:
+            logger.info("DAY_END_CATCHUP_ON_BOOT is off: no catch-up at startup.")
     except Exception as e:
         logger.warning(f"Startup day-end catch-up failed: {e}")
     while True:
         try:
             wait_seconds = _seconds_until_next_midnight_ist()
             await asyncio.sleep(wait_seconds)
-            purge_generated_files()
-            run_midnight_close_for_all_hospitals()
-            run_billing_deactivation_sweep_for_all_hospitals()
-            run_pilot_lifecycle_sweep_for_all_hospitals()
-            from app.utils.usage_history import finalize_usage_snapshots_for_all_hospitals
-            finalize_usage_snapshots_for_all_hospitals()
+            await asyncio.get_running_loop().run_in_executor(None, _midnight_work)
         except Exception as e:
             logger.warning(f"Midnight scheduler loop error: {e}")
             await asyncio.sleep(60)  # avoid a tight crash loop if something above is broken
+
+
+def start_scheduler():
+    """Called once at app startup, inside the running event loop. SCHEDULER_ENABLED=false keeps this
+    instance from running any background loop (use it on web-only instances)."""
+    from app.config import settings
+    if not settings.SCHEDULER_ENABLED:
+        logger.info("SCHEDULER_ENABLED is off: this instance runs no background loops.")
+        return
+    asyncio.create_task(_scheduler_leader_main())
+
+
+def _startup_catchup():
+    """Runs in a worker thread at startup: catches up on whatever was missed while the server was down."""
+    run_midnight_close_for_all_hospitals()  # any day missed while the server was down
+    from app.utils.usage_history import finalize_usage_snapshots_for_all_hospitals
+    finalize_usage_snapshots_for_all_hospitals()  # store ended months/cycles not stored yet (add-only)
+    run_pilot_lifecycle_sweep_for_all_hospitals()  # a pilot deadline missed while the server was down
+    purge_generated_files()
+
+
+def run_retention_jobs():
+    """Runs the retention purges that are switched on (see app/utils/retention.py). Off by default except WhatsApp message cleanup."""
+    try:
+        from app.utils.retention import run_all
+        run_all()
+        from app.services import storage
+        storage.purge_older_than("generated/", GENERATED_PDF_MAX_AGE_DAYS, keep_name_prefixes=("radiology_report_",))
+    except Exception as e:
+        logger.warning(f"Retention jobs failed: {e}")
+
+
+def _midnight_work():
+    """The nightly jobs, run in a worker thread so the event loop keeps serving requests."""
+    purge_generated_files()
+    run_midnight_close_for_all_hospitals()
+    run_billing_deactivation_sweep_for_all_hospitals()
+    run_retention_jobs()
+    run_pilot_lifecycle_sweep_for_all_hospitals()
+    from app.utils.usage_history import finalize_usage_snapshots_for_all_hospitals
+    finalize_usage_snapshots_for_all_hospitals()
+
+
+async def _scheduler_leader_main():
+    """Only ONE instance at a time runs the background loops. The leader holds a Postgres advisory lock for
+    as long as its database connection lives; every other instance keeps checking and takes over if the leader
+    goes away. On SQLite (local dev) the single process is always the leader."""
+    from app.config import settings
+    from app.database import engine
+    from app.utils.boot import LeaderLock
+
+    retry = max(int(settings.SCHEDULER_LEADER_RETRY_SECONDS), 1)
+    loop = asyncio.get_running_loop()
+    while True:
+        lock = LeaderLock(engine, "scheduler")
+        if not await loop.run_in_executor(None, lock.try_acquire):
+            await asyncio.sleep(retry)
+            continue
+        logger.info("This instance is the scheduler leader: the background loops run here.")
+        tasks = [asyncio.create_task(midnight_close_loop()), asyncio.create_task(lab_escalation_loop())]
+        try:
+            while True:
+                await asyncio.sleep(retry)
+                if not await loop.run_in_executor(None, lock.still_held):
+                    logger.error("Lost the scheduler leader lock (database connection dropped): stopping the loops here and re-electing.")
+                    break
+                if any(t.done() for t in tasks):
+                    logger.error("A scheduler loop stopped unexpectedly: restarting leader election.")
+                    break
+        finally:
+            for t in tasks:
+                t.cancel()
+            await loop.run_in_executor(None, lock.release)

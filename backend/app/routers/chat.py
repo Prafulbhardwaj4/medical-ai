@@ -3,12 +3,14 @@ import uuid
 
 import re as _re
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from fastapi.responses import FileResponse
+from app.utils.route_limits import per_ip_limit
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.doctor import Doctor, UserRole
 from app.models.chat_message import ChatMessage
+from app.services import storage
 from app.utils.auth import get_current_doctor
 from app.utils.tier_gate import require_tier
 from app.utils.timezone import now_ist_naive
@@ -28,6 +30,56 @@ os.makedirs(CHAT_UPLOAD_DIR, exist_ok=True)
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10MB
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_EXTENSIONS = IMAGE_EXTENSIONS | {".pdf", ".doc", ".docx"}
+_READ_CHUNK_BYTES = 64 * 1024
+
+
+def _read_capped(upload_file, cap: int = MAX_ATTACHMENT_BYTES) -> bytes:
+    """Reads the upload in small chunks and stops as soon as it goes over the cap, so an oversized
+    file is never fully loaded into memory."""
+    buf = bytearray()
+    while True:
+        chunk = upload_file.file.read(_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        buf.extend(chunk)
+        if len(buf) > cap:
+            raise HTTPException(status_code=400, detail="File is too large (10MB max)")
+    return bytes(buf)
+
+
+def _signature_matches(ext: str, content: bytes) -> bool:
+    """True when the real file bytes match the extension the user gave (the name alone proves nothing)."""
+    if ext in (".jpg", ".jpeg"):
+        return content[:3] == b"\xff\xd8\xff"
+    if ext == ".png":
+        return content[:8] == b"\x89PNG\r\n\x1a\n"
+    if ext == ".gif":
+        return content[:6] in (b"GIF87a", b"GIF89a")
+    if ext == ".webp":
+        return content[:4] == b"RIFF" and content[8:12] == b"WEBP"
+    if ext == ".pdf":
+        return b"%PDF-" in content[:1024]
+    if ext == ".doc":
+        return content[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+    if ext == ".docx":
+        if content[:4] != b"PK\x03\x04":
+            return False
+        try:
+            import io
+            import zipfile
+            with zipfile.ZipFile(io.BytesIO(content)) as z:
+                names = z.namelist()
+            return "[Content_Types].xml" in names and any(n.startswith("word/") for n in names)
+        except Exception:
+            return False
+    return False
+
+
+def scan_upload(path: str) -> None:
+    """MALWARE SCANNER HOOK. Called with the path of every saved chat upload, before the upload is accepted.
+    Default: does nothing. To plug in a scanner (for example ClamAV), run it here on `path` and raise
+    ValueError if the file is infected; the upload is then deleted and refused."""
+    return None
 
 
 def _serialize(m: ChatMessage, current_doctor: Doctor):
@@ -51,7 +103,8 @@ def _hospital_scope(current_doctor: Doctor, hospital_id: int | None):
 @router.post("/upload")
 def upload_chat_attachment(
     file: UploadFile = File(...),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(get_current_doctor),
+    _limit: None = Depends(per_ip_limit("chat_upload", "30/minute", "300/hour")),
 ):
     if current_doctor.role.value not in ADMIN_ROLES + STAFF_ROLES:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -61,13 +114,27 @@ def upload_chat_attachment(
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Unsupported file type — images, PDF, or Word documents only")
 
-    content = file.file.read()
-    if len(content) > MAX_ATTACHMENT_BYTES:
-        raise HTTPException(status_code=400, detail="File is too large (10MB max)")
+    content = _read_capped(file)
+    if not content:
+        raise HTTPException(status_code=400, detail="The file is empty")
+    if not _signature_matches(ext, content):
+        raise HTTPException(status_code=400, detail="This file does not look like a real " + ext.lstrip(".").upper() + " file")
 
     stored_filename = f"{uuid.uuid4().hex}{ext}"
-    with open(os.path.join(CHAT_UPLOAD_DIR, stored_filename), "wb") as f:
-        f.write(content)
+    import tempfile
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext)
+    try:
+        with os.fdopen(tmp_fd, "wb") as f:
+            f.write(content)
+        scan_upload(tmp_path)
+    except Exception:
+        raise HTTPException(status_code=400, detail="This file could not be accepted")
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+    storage.save_chat_file(stored_filename, content)
 
     return {
         "attachment_filename": stored_filename,
@@ -100,10 +167,20 @@ def get_chat_attachment(
     msg = db.query(ChatMessage).filter(ChatMessage.attachment_filename == filename).first()
     if not msg or msg.hospital_id != current_doctor.hospital_id:
         raise HTTPException(status_code=404, detail="File not found")
-    path = os.path.join(CHAT_UPLOAD_DIR, filename)
-    if not os.path.exists(path):
+    data = storage.read_chat_file(filename)
+    if data is None:
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(path, filename=msg.attachment_name or filename)
+    import mimetypes
+    from urllib.parse import quote
+    name = (msg.attachment_name or filename)
+    safe = name.replace('"', "_").replace("\\", "_").replace("\r", "_").replace("\n", "_")
+    try:
+        safe.encode("ascii")
+        disposition = f'attachment; filename="{safe}"'
+    except UnicodeEncodeError:
+        disposition = "attachment; filename*=utf-8''" + quote(safe)
+    return Response(content=data, media_type=mimetypes.guess_type(safe)[0] or "application/octet-stream",
+                    headers={"Content-Disposition": disposition, "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/threads")

@@ -696,6 +696,7 @@
     </div>
 
     <div id="toast"></div>
+    <script src="../config.js"></script>
     <script src="../js/api.js"></script>
     <script src="../js/whatsapp-messages.js"></script>
     <script src="../js/nav-admin.js"></script>
@@ -867,13 +868,13 @@
                 grid.innerHTML = data.by_doctor.map(d => `
                     <div class="card" style="display:flex;justify-content:space-between;align-items:center">
                         <div>
-                            <div style="font-weight:600;color:var(--navy)">${d.doctor_name}</div>
+                            <div style="font-weight:600;color:var(--navy)">${sanitize(d.doctor_name)}</div>
                             <div style="font-size:12px;color:var(--slate-light)">Last 45 days</div>
                         </div>
                         <div style="font-size:1.8rem;font-weight:800;color:var(--teal)">${d.appointment_count}</div>
                     </div>`).join('');
             } catch (e) {
-                grid.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`;
+                grid.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`;
             }
         }
         document.getElementById("appt-analytics-doctor-filter")?.addEventListener("change", loadAppointmentAnalytics);
@@ -883,7 +884,7 @@
             if (sel.dataset.loaded) return;
             try {
                 const doctors = await api("GET", "/patients/hospital-doctors");
-                sel.innerHTML = '<option value="">All Doctors</option>' + doctors.map(d => `<option value="${d.id}">${d.title} ${d.name}</option>`).join('');
+                sel.innerHTML = '<option value="">All Doctors</option>' + doctors.map(d => `<option value="${d.id}">${sanitize(d.title)} ${sanitize(d.name)}</option>`).join('');
                 sel.dataset.loaded = "1";
             } catch (e) { }
         }
@@ -960,7 +961,7 @@
                             <button class="btn btn-outline btn-sm" onclick="resolveWaiver(${w.id}, 'reject')">Reject</button>
                         </div>
                     </div>`).join('');
-            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
         }
 
         async function resolveWaiver(id, action) {
@@ -1044,7 +1045,7 @@
                             <button class="btn btn-outline btn-sm" onclick="cancelMergeRequest(${r.id})">Cancel</button>
                         </div>
                     </div>`).join('');
-            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${e.message}</p>`; }
+            } catch (e) { el.innerHTML = `<p class="err-msg" style="display:block">${sanitize(e.message)}</p>`; }
         }
 
         let activeMergeRequestId = null;
@@ -2027,7 +2028,7 @@
                     );
                 }
             } catch (e) {
-                listEl.innerHTML = `<p style="color:var(--danger)">${e.message}</p>`;
+                listEl.innerHTML = `<p style="color:var(--danger)">${sanitize(e.message)}</p>`;
             }
         }
 

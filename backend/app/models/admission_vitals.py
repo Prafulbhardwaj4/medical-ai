@@ -12,6 +12,7 @@ class AdmissionVitals(Base):
     Pressure", "SpO2"), not abbreviations — plus an optional freeform extra
     field a nurse can add, which is never threshold-checked below."""
     __tablename__ = "admission_vitals"
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)  # copied from the parent admission when the row is created
 
     id = Column(Integer, primary_key=True, index=True)
     admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)

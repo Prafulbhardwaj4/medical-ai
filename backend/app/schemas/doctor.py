@@ -1,8 +1,9 @@
 from pydantic import BaseModel, EmailStr
+from app.utils.text_safety import SafeTextModel
 from datetime import datetime
 from typing import Optional
 
-class DoctorCreate(BaseModel):
+class DoctorCreate(SafeTextModel):
     title: str = "Dr."
     name: str
     email: EmailStr
@@ -58,7 +59,7 @@ class StaffForgotPasswordResetIn(BaseModel):
     reset_token: str
     new_password: str
 
-class EditMeIn(BaseModel):
+class EditMeIn(SafeTextModel):
     name: str
     phone: str
     registration_number: Optional[str] = ""

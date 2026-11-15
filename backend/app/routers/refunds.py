@@ -141,7 +141,10 @@ class SettleRefundIn(BaseModel):
     channel: str
 
 
-class DismissRefundIn(BaseModel):
+from app.utils.text_safety import SafeTextModel
+
+
+class DismissRefundIn(SafeTextModel):
     reason: str
 
 

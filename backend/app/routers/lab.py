@@ -17,8 +17,9 @@ from app.models.hospital import Hospital
 from app.models.notifiable_disease import NotifiableDisease
 from app.models.admission import AdmissionCharge
 from app.utils.auth import get_current_doctor, ist_today, ist_day_bounds
+from app.utils.roles import require_roles
 from app.utils.timezone import now_ist_naive
-from app.utils.audit import log_action
+from app.utils.audit import log_action, log_record_access
 from app.utils.order_lifecycle import is_order_expired
 from app.routers.attendance import require_present
 from app.services.pdf_service import generate_test_report_pdf, generate_combined_test_report_pdf
@@ -30,6 +31,7 @@ import os
 
 router = APIRouter(prefix="/lab", tags=["lab"])
 from app.utils.rate_limit import limiter
+from app.utils.qr_hash import hash_equals
 
 VALID_TRANSITIONS = {"sample_collected", "processing", "result_entered"}
 
@@ -1322,7 +1324,7 @@ def verify_and_release_result(
 def get_tat_trace(
     order_id: int,
     db: Session = Depends(get_db),
-    current_doctor: Doctor = Depends(get_current_doctor)
+    current_doctor: Doctor = Depends(require_roles("lab", "admin", "sub_admin"))
 ):
     """Stage-by-stage handoff timestamps so a delay is traceable to a
     specific stage rather than one opaque total (Phase 5 item 16)."""
@@ -1442,6 +1444,7 @@ def get_test_report(
         report_created_by=report_creator,
     )
 
+    log_record_access(db, current_doctor, "lab_report_downloaded", "test_order", order.id, f"Test order {order.id}")
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
 
 
@@ -1755,6 +1758,7 @@ def get_combined_test_report(
         report_created_by=report_creator,
     )
 
+    log_record_access(db, current_doctor, "lab_report_downloaded", "test_order", orders[0].id, "Test orders " + ",".join(str(o.id) for o in orders))
     return FileResponse(filepath, media_type="application/pdf", filename=os.path.basename(filepath))
 
 
@@ -1766,7 +1770,7 @@ def verify_lab_report(request: Request, order_id: int, hash: str, db: Session = 
     order = db.query(TestOrder).filter(TestOrder.id == order_id).first()
     if not order:
         return {"valid": False, "reason": "Report not found"}
-    if not order.verify_hash or order.verify_hash != hash:
+    if not hash_equals(order.verify_hash, hash):
         return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
 
     patient = db.query(Patient).filter(Patient.id == order.patient_id).first()
@@ -1776,10 +1780,11 @@ def verify_lab_report(request: Request, order_id: int, hash: str, db: Session = 
     if len(name_parts) > 1:
         masked_name += f" {name_parts[1][0]}."
 
+    from app.utils.sensitive_tests import public_test_name
     return {
         "valid": True,
         "report_reference": order.report_reference,
-        "test_name": order.test_name,
+        "test_name": public_test_name(db, order),
         "hospital_name": hospital.name if hospital else None,
         "patient_name": masked_name,
         "date": order.verified_at.isoformat() if order.verified_at else None,
@@ -1801,8 +1806,8 @@ def verify_combined_lab_report(request: Request, ids: str, hash: str, db: Sessio
     if len(hospital_ids) != 1:
         return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
     hospital_id = hospital_ids.pop()
-    expected_hash = generate_verify_hash("-".join(str(i) for i in order_ids), hospital_id, kind="combined_lab_report")
-    if expected_hash != hash:
+    from app.utils.qr_hash import qr_hash_matches
+    if not qr_hash_matches(f"combined_lab_report-{'-'.join(str(i) for i in order_ids)}-{hospital_id}", hash):
         return {"valid": False, "reason": "Verification code mismatch — possible tampering"}
 
     patient = db.query(Patient).filter(Patient.id == orders[0].patient_id).first()
@@ -1813,9 +1818,10 @@ def verify_combined_lab_report(request: Request, ids: str, hash: str, db: Sessio
         masked_name += f" {name_parts[1][0]}."
     latest_verified = max((o.verified_at for o in orders if o.verified_at), default=None)
 
+    from app.utils.sensitive_tests import public_test_name
     return {
         "valid": True,
-        "test_names": [o.test_name for o in orders],
+        "test_names": [public_test_name(db, o) for o in orders],
         "hospital_name": hospital.name if hospital else None,
         "patient_name": masked_name,
         "date": latest_verified.isoformat() if latest_verified else None,

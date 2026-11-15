@@ -19,6 +19,7 @@ from app.models.test_order import TestOrder
 from app.models.radiology_order import RadiologyOrder
 from app.schemas.cross_hospital_referral import RejectReferralIn, RejectAndForwardIn
 from app.utils.auth import get_current_doctor
+from app.utils.roles import require_roles, ADMISSION_ROLES
 from app.utils.audit import log_action
 from app.utils.timezone import now_ist_naive
 from app.utils.notify import (
@@ -197,7 +198,7 @@ def my_hospital_location(current_doctor: Doctor = Depends(get_current_doctor), d
 
 
 @router.get("/{referral_id}")
-def get_referral(referral_id: int, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def get_referral(referral_id: int, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     r = db.query(CrossHospitalReferral).filter(CrossHospitalReferral.id == referral_id).first()
     if not r or current_doctor.hospital_id not in (r.from_hospital_id, r.to_hospital_id):
         raise HTTPException(status_code=404, detail="Referral not found")
@@ -343,7 +344,7 @@ def reject_and_forward_referral(referral_id: int, body: RejectAndForwardIn, curr
 
 
 @router.get("/records/for-admission/{admission_id}")
-def get_referral_chain_for_admission(admission_id: str, current_doctor: Doctor = Depends(get_current_doctor), db: Session = Depends(get_db)):
+def get_referral_chain_for_admission(admission_id: str, current_doctor: Doctor = Depends(require_roles(*ADMISSION_ROLES)), db: Session = Depends(get_db)):
     admission = db.query(Admission).filter(Admission.public_token == admission_id, Admission.hospital_id == current_doctor.hospital_id).first()
     if not admission or not admission.received_via_referral_id:
         raise HTTPException(status_code=404, detail="This admission did not arrive via referral")

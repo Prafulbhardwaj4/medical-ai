@@ -14,7 +14,7 @@ import logging
 import re
 from datetime import timedelta
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from sqlalchemy.orm import Session
 
 from app.config import settings, _is_production
@@ -304,13 +304,16 @@ class SecretKeyMissing(RuntimeError):
     pass
 
 
-def _fernet() -> Fernet:
-    key = (settings.WHATSAPP_MESSAGES_KEY or "").strip()
-    if key:
+def _fernet():
+    # WHATSAPP_MESSAGES_KEYS (comma-separated, newest first) is tried first; the single
+    # WHATSAPP_MESSAGES_KEY is still read, so secrets already stored stay readable.
+    from app.config import parse_key_list
+    keys = parse_key_list(settings.WHATSAPP_MESSAGES_KEYS, settings.WHATSAPP_MESSAGES_KEY)
+    if keys:
         try:
-            return Fernet(key.encode())
+            return MultiFernet([Fernet(k.encode()) for k in keys])
         except (ValueError, TypeError):
-            raise SecretKeyMissing("WHATSAPP_MESSAGES_KEY is not a valid Fernet key")
+            raise SecretKeyMissing("WHATSAPP_MESSAGES_KEYS / WHATSAPP_MESSAGES_KEY is not a valid Fernet key")
     if _is_production(settings):
         raise SecretKeyMissing("WHATSAPP_MESSAGES_KEY is not set")
     # LOCAL DEV ONLY (never reached in production): derive a key from SECRET_KEY.

@@ -11,6 +11,7 @@ class AdmissionWardStay(Base):
     today's rate to the whole stay — so moving wards mid-stay doesn't
     retroactively re-bill already-completed days."""
     __tablename__ = "admission_ward_stays"
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)  # copied from the parent admission when the row is created
 
     id = Column(Integer, primary_key=True, index=True)
     admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)

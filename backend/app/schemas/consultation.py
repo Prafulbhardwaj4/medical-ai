@@ -36,7 +36,6 @@ class ConsultationOut(BaseModel):
     token_number: Optional[str] = None
     patient_id: int
     doctor_id: int
-    raw_transcript: Optional[str] = None
     chief_complaint: Optional[str] = None
     diagnosis: Optional[str] = None
     medicines: Optional[str] = None
