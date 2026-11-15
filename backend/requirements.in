@@ -5,7 +5,7 @@
 fastapi
 uvicorn[standard]
 # SQLAlchemy 2.1 makes "postgresql://" mean the psycopg 3 driver; this project uses psycopg2.
-sqlalchemy<2.1
+sqlalchemy<2.2
 python-dotenv
 passlib[bcrypt]
 bcrypt==4.0.1
