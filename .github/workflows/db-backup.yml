@@ -28,7 +28,7 @@ jobs:
       BACKUP_S3_REGION: ${{ secrets.BACKUP_S3_REGION }}
       BACKUP_S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check that every secret is set
         env:
