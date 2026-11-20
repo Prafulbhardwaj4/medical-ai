@@ -180,7 +180,7 @@
       if (!el) return;
       const a = el.getAttribute("data-action");
       if (a === "close") closeModal();
-      else if (a === "template") downloadFile("/admin/medicine-import/template", "MedScribe_Medicines_Template.xlsx");
+      else if (a === "template") downloadFile("/admin/medicine-import/template", "ScribeKare_Medicines_Template.xlsx");
       else if (a === "choose") $("xi-file").click();
       else if (a === "confirm") onConfirm();
       else if (a === "undo") onUndo(el.getAttribute("data-id"));

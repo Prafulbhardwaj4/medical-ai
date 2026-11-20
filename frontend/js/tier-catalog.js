@@ -1,5 +1,5 @@
 // tier-catalog.js
-// Single source of truth for MedScribe's tier/feature list.
+// Single source of truth for ScribeKare's tier/feature list.
 // Mirrors frontend/pages/home.html's #pricing section exactly — home.html
 // renders its pricing cards FROM this file (see the render script at the
 // bottom of home.html), and the shared Upgrade Modal (upgrade-gate.js)

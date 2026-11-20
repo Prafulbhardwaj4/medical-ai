@@ -1,4 +1,4 @@
-# MedScribe Runbook
+# ScribeKare Runbook
 
 For the person on call. Plain steps, in the order you need them. Times are Indian time (IST).
 
@@ -156,6 +156,8 @@ Also read straight from the environment: `RENDER` (set by Render) and `ENVIRONME
 | `SUPER_ADMIN_KEY` | `(empty)` | Header key for creating a super admin. Leave EMPTY in production: the route then does not exist. |
 | `DEV_CAPTCHA_ANSWER` | `(empty)` | Local development only. The app refuses to start in production if set. |
 | `DEV_SKIP_SUPERADMIN_2FA` | `False` | Local development only. The app refuses to start in production if true. |
+| `BRAND_NAME` | `ScribeKare` | Product name shown in PDFs, messages, API title and the authenticator app label. |
+| `COMPANY_LEGAL_NAME` | `ScribeKare` | Registered company name for invoices, terms and privacy. Change after incorporation. |
 | `DATABASE_URL` | `sqlite:///./medscribe.db` | Database address. SQLite for development, PostgreSQL in production. |
 | `SARVAM_API_KEY` | `(empty)` | Speech-to-text provider key (live scribe). |
 | `GROQ_API_KEY` | `(empty)` | AI structuring provider key. |

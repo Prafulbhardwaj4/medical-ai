@@ -443,7 +443,7 @@
       else if (a === "p-up" && i > 0) { const t = st.params[i]; st.params[i] = st.params[i - 1]; st.params[i - 1] = t; renderParams(); }
       else if (a === "p-down" && i < st.params.length - 1) { const t = st.params[i]; st.params[i] = st.params[i + 1]; st.params[i + 1] = t; renderParams(); }
       else if (a === "up-close") $("mc-upload-modal").classList.remove("open");
-      else if (a === "up-template") downloadFile(`${BASE}/template/${st.upKind}`, st.upKind === "tests" ? "MedScribe_Master_Tests_Template.xlsx" : "MedScribe_Master_Medicines_Template.xlsx");
+      else if (a === "up-template") downloadFile(`${BASE}/template/${st.upKind}`, st.upKind === "tests" ? "ScribeKare_Master_Tests_Template.xlsx" : "ScribeKare_Master_Medicines_Template.xlsx");
       else if (a === "up-choose") $("mc-up-file").click();
       else if (a === "up-confirm") onUploadConfirm();
     });

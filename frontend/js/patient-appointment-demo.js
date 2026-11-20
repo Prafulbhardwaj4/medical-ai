@@ -56,7 +56,7 @@ async function runAppointmentDemoTour(isReplay) {
       title: "Select State & City", description: "Pick your state and city to find nearby hospitals.",
       onNext: () => { _renderDemoHospitalStep(); } },
     { target_selector: "#wizard-hospital-lead-btn", placement: "bottom", device: "both",
-      title: "Can't Find Your Hospital?", description: "Tell us which hospital you'd like to see on MedScribe, and we'll reach out to them.",
+      title: "Can't Find Your Hospital?", description: "Tell us which hospital you'd like to see on ScribeKare, and we'll reach out to them.",
       onBack: () => { setStep("location", false); } },
     { target_selector: "[data-tutorial-id='demo-hospital-card']", placement: "top", device: "both", nextLabel: "Next",
       title: "Hospital", description: "Pick a hospital from the list — we've added a demo one here so you can see what comes next.",

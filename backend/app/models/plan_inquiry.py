@@ -9,7 +9,7 @@ class PlanInquiry(Base):
     point, this is a fully public/unauthenticated lead. Deliberately
     separate from UpgradeRequest (an existing paying hospital's admin
     asking to move up a tier) and HospitalLead (a patient saying their
-    hospital isn't on MedScribe yet) — three different sources feeding
+    hospital isn't on ScribeKare yet) — three different sources feeding
     three different super admin tabs."""
     __tablename__ = "plan_inquiries"
 

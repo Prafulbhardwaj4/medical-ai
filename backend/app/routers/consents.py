@@ -185,7 +185,7 @@ def portal_data_request(
         purpose=purpose, notice_version="requested",
     ))
     db.commit()
-    return {"message": "Request received. The MedScribe team will contact you on your registered phone number."}
+    return {"message": f"Request received. The {settings.BRAND_NAME} team will contact you on your registered phone number."}
 
 
 # ---------------------------------------------------------------- super admin

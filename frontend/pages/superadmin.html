@@ -4,8 +4,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Super Admin — MedScribe</title>
+  <title>Super Admin — ScribeKare</title>
   <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/superadmin-shell.css" />
+  <link rel="stylesheet" href="../css/superadmin-360.css" />
+  <link rel="stylesheet" href="../css/superadmin-links.css" />
   <script src="../js/custom-select.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js" integrity="sha384-dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG" crossorigin="anonymous"></script>
   <style>
@@ -227,7 +230,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div class="topbar-brand">Med<span>Scribe</span> <span
+        <div class="topbar-brand">Scribe<span>Kare</span> <span
             style="color:var(--slate);font-size:0.75rem;margin-left:8px">Super Admin</span></div>
       </div>
       <div class="topbar-doctor">
@@ -840,7 +843,7 @@
       <div id="section-hospital-leads" style="display:none">
         <div class="page-header">
           <h1>Hospital Leads</h1>
-          <p>Patients asking for a hospital that isn't on MedScribe yet, from the booking wizard — follow up and onboard them</p>
+          <p>Patients asking for a hospital that isn't on ScribeKare yet, from the booking wizard — follow up and onboard them</p>
         </div>
         <div class="hospitals-filter-bar" style="margin-bottom:16px">
           <input class="form-control" id="lead-search" placeholder="Search by hospital or contact name…" style="flex:1;min-width:200px" oninput="renderHospitalLeads()" />
@@ -1233,7 +1236,7 @@
           <div class="card" style="margin-bottom:12px">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
               <div>
-                <div style="font-weight:700;font-size:16px">${sanitize(r.hospital_name)}</div>
+                <div style="font-weight:700;font-size:16px" data-rec="upgrade_request:${r.id}" data-status="${sanitize(r.status)}" data-follow="${sanitize(r.next_follow_up_at || '')}" data-hospital="${Number(r.hospital_id) || ''}"><a class="sa-link" href="#/hospital/${Number(r.hospital_id)}">${sanitize(r.hospital_name)}</a></div>
                 <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">
                   <span class="badge badge-teal">${typeof tierLabel === 'function' ? tierLabel(r.requested_tier) : r.requested_tier}</span>
                 </div>
@@ -1400,7 +1403,7 @@
           <div class="card" style="margin-bottom:12px">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
               <div>
-                <div style="font-weight:700;font-size:16px">${sanitize(l.hospital_name)}</div>
+                <div style="font-weight:700;font-size:16px" data-rec="hospital_lead:${l.id}" data-status="${sanitize(l.status)}" data-follow="${sanitize(l.next_follow_up_at || '')}" data-hospital="${Number(l.converted_hospital_id) || ''}">${l.converted_hospital_id ? `<a class="sa-link" href="#/hospital/${Number(l.converted_hospital_id)}">${sanitize(l.hospital_name)}</a>` : sanitize(l.hospital_name)}</div>
                 <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">
                   ${l.location ? `<span class="badge badge-grey">${sanitize(l.location)}</span>` : ''}
                   <span class="badge badge-grey">${sanitize(l.city)}, ${sanitize(l.state)}</span>
@@ -1457,7 +1460,7 @@
           <div class="card" style="margin-bottom:12px">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
               <div>
-                <div style="font-weight:700;font-size:16px">${sanitize(i.hospital_name)}</div>
+                <div style="font-weight:700;font-size:16px" data-rec="plan_inquiry:${i.id}" data-status="${sanitize(i.status)}">${sanitize(i.hospital_name)}</div>
                 <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">
                   <span class="badge badge-teal">${typeof tierLabel === 'function' ? tierLabel(i.requested_tier) : i.requested_tier}</span>
                   <span class="badge badge-grey" style="text-transform:capitalize">${sanitize(i.billing_period)}</span>
@@ -1530,7 +1533,7 @@
           return;
         }
         body.innerHTML = data.notifications.map(n => `
-          <div class="notif-item ${n.unread ? 'unread' : ''}" onclick="onNotifClick('${n.nav_section}', ${n.hospital_id || 'null'}, '${n.computed ? n.id : ''}')">
+          <div class="notif-item ${n.unread ? 'unread' : ''}" onclick="onNotifClick('${n.nav_section}', ${n.hospital_id || 'null'}, '${n.computed ? n.id : ''}', '${sanitize(n.id)}')">
             <div class="notif-item-title">
               <span class="notif-dot ${NOTIF_ICON[n.severity] || 'info'}"></span>
               ${sanitize(n.title)}
@@ -1544,11 +1547,13 @@
       }
     }
 
-    async function onNotifClick(navSection, hospitalId, alertId) {
+    async function onNotifClick(navSection, hospitalId, alertId, notifId) {
       if (alertId) {
         try { await api('POST', '/admin/notifications-feed/seen', { alert_id: alertId }); loadNotifUnreadCount(); } catch (e) { }
       }
       closeNotifPanel();
+      // Open the exact record (or the hospital tab) when the notification names one.
+      if (window.SA && SA.openNotification && SA.openNotification(navSection, hospitalId, notifId)) return;
       showSection(navSection);
       if (hospitalId) openDetail(hospitalId);
     }
@@ -1603,7 +1608,7 @@
         container.innerHTML = details.map(h => `
           <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)">
             <div>
-              <div style="font-weight:600">${sanitize(h.name)}</div>
+              <div style="font-weight:600"><a class="sa-link" href="#/hospital/${Number(h.id)}">${sanitize(h.name)}</a></div>
               <div style="color:var(--slate);font-size:13px">${sanitize(h.city)} · ${h.doctor_count} doctor${h.doctor_count !== 1 ? 's' : ''}</div>
             </div>
             <div style="text-align:right">
@@ -1804,7 +1809,7 @@
               <div class="cap-row" onclick="showSection('hospitals'); openDetail(${h.hospital_id})">
                 <div style="flex:1;min-width:0">
                   <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-                    <span style="font-weight:600">${sanitize(h.hospital_name)}</span>
+                    <span style="font-weight:600"><a class="sa-link" href="#/hospital/${Number(h.hospital_id)}" onclick="event.stopPropagation()">${sanitize(h.hospital_name)}</a></span>
                     ${badge}
                   </div>
                   <div style="font-size:12px;color:var(--slate);margin-top:2px">${h.used}/${h.cap} used (${h.percent_used}%)${topupNote}</div>
@@ -1863,7 +1868,7 @@
         el.innerHTML = data.hospitals.map(h => `
           <div class="data-row clickable" onclick="showSection('hospitals'); openDetail(${h.hospital_id})">
             <div class="data-row-main">
-              <div class="data-row-title">${sanitize(h.hospital_name)}</div>
+              <div class="data-row-title"><a class="sa-link" href="#/hospital/${Number(h.hospital_id)}" onclick="event.stopPropagation()">${sanitize(h.hospital_name)}</a></div>
               <div class="data-row-sub">${h.online} online · ${h.walk_in} walk-in</div>
             </div>
             <div class="data-row-value">${h.total}</div>
@@ -1964,7 +1969,7 @@
           return `
             <div class="data-row clickable" onclick="openTierTrailModal(${c.hospital_id})">
               <div class="data-row-main">
-                <div class="data-row-title">${sanitize(c.hospital_name)}</div>
+                <div class="data-row-title"><a class="sa-link" href="#/hospital/${Number(c.hospital_id)}" onclick="event.stopPropagation()">${sanitize(c.hospital_name)}</a></div>
                 <div class="data-row-sub">${sanitize(addr)}</div>
                 <div class="tier-pill" style="margin-top:4px">
                   ${TIER_ICON[c.from_tier] || ''} ${TIER_LABEL[c.from_tier] || c.from_tier}
@@ -3044,7 +3049,7 @@
           <div class="card" style="margin-bottom:12px;cursor:pointer" onclick="openSuggestionModal(${s.id})">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
               <div>
-                <div style="font-weight:700;font-size:16px">${s.submitted_by_role === 'patient' ? 'Patient' : sanitize(s.hospital_name)}</div>
+                <div style="font-weight:700;font-size:16px" data-rec="suggestion:${s.id}" data-status="${sanitize(s.status)}">${s.submitted_by_role === 'patient' ? 'Patient' : sanitize(s.hospital_name)}</div>
                 ${s.follow_up_requested_at ? '<div style="margin-top:4px"><span class="badge badge-red">Follow-up requested</span></div>' : ''}
               </div>
               <span class="badge ${sanitize(SUGG_STATUS_CLASS[s.status] || 'badge-grey')}">${sanitize(SUGG_STATUS_LABEL[s.status] || s.status)}</span>
@@ -3264,6 +3269,11 @@
     setInterval(refreshHospitalLeadsBadge, 30000);
     setInterval(refreshPlanInquiriesBadge, 30000);
   </script>
+  <script src="../js/superadmin-shell.js"></script>
+  <script src="../js/superadmin-home.js"></script>
+  <script src="../js/superadmin-hospital.js"></script>
+  <script src="../js/superadmin-search.js"></script>
+  <script src="../js/superadmin-links.js"></script>
 </body>
 
 </html>

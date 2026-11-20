@@ -4,7 +4,7 @@ from app.utils.timezone import now_ist_naive
 
 
 class HospitalLead(Base):
-    """A patient telling us their hospital isn't on MedScribe yet, from the
+    """A patient telling us their hospital isn't on ScribeKare yet, from the
     'Can't find your hospital?' link in the booking wizard's hospital-select
     step. Feeds the super admin's Hospital Leads tab so sales can follow up
     and onboard that hospital — a business-development lead, deliberately

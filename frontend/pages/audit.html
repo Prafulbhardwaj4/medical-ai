@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MedScribe — Audit Log</title>
+  <title>ScribeKare — Audit Log</title>
   <link rel="stylesheet" href="../css/style.css" />
   <script src="../js/custom-select.js" defer></script>
   <style>
@@ -135,7 +135,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div class="topbar-brand">Med<span>Scribe</span></div>
+        <div class="topbar-brand">Scribe<span>Kare</span></div>
       </div>
       <div class="topbar-doctor">
         <span><strong id="topbar-doctor-name"></strong></span>
@@ -567,7 +567,7 @@
       if (cat) p.append("category", cat);
       if (from) p.append("from_date", from);
       if (to) p.append("to_date", to);
-      await downloadFile(`/audit/export?${p.toString()}`, `medscribe-audit-${new Date().toISOString().slice(0, 10)}.csv`);
+      await downloadFile(`/audit/export?${p.toString()}`, `scribekare-audit-${new Date().toISOString().slice(0, 10)}.csv`);
     }
 
     function exportCSVPageOnly() {
@@ -587,7 +587,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `medscribe-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `scribekare-audit-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     }

@@ -270,7 +270,7 @@ def get_current_doctor(
         if not hospital or not hospital.is_active or pilot_expired:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="This hospital's account is deactivated. Please contact MedScribe support.",
+                detail=f"This hospital's account is deactivated. Please contact {settings.BRAND_NAME} support.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
     return doctor

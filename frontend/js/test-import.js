@@ -169,7 +169,7 @@
       if (!el) return;
       const a = el.getAttribute("data-action");
       if (a === "close") closeModal();
-      else if (a === "template") downloadFile("/admin/test-import/template", "MedScribe_Tests_Template.xlsx");
+      else if (a === "template") downloadFile("/admin/test-import/template", "ScribeKare_Tests_Template.xlsx");
       else if (a === "choose") $("xt-file").click();
       else if (a === "confirm") onConfirm();
       else if (a === "undo") onUndo(el.getAttribute("data-id"));

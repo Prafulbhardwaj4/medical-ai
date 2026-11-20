@@ -72,7 +72,7 @@ _DIV = "\u2501" * 14
 
 TEMPLATE_BODIES = {
     T_WELCOME: (
-        "*Welcome to MedScribe*\n"
+        f"*Welcome to {settings.BRAND_NAME}*\n"
         "\n"
         "Hello {{1}},\n"
         "\n"
@@ -170,7 +170,7 @@ ROLE_LINES = {
     "radiology": "You can manage radiology orders and reports from your dashboard.",
     "patient": "You can view your visits, prescriptions, bills and reports and book appointments on the patient portal.",
 }
-DEFAULT_ROLE_LINE = "You can do your daily work from your MedScribe dashboard."
+DEFAULT_ROLE_LINE = f"You can do your daily work from your {settings.BRAND_NAME} dashboard."
 
 CANCEL_LINE_RESCHEDULED = "Details of your new appointment will be provided shortly through another message."
 CANCEL_LINE_CANCELLED = "We are sorry for the inconvenience."

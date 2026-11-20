@@ -95,7 +95,7 @@ function startDoctorProductTour() {
       title: "More", description: "Patients, your stats, and My Availability all live here on mobile." },
     { target_selector: "#suggestion-header-btn", placement: "bottom", device: "both",
       guard_message: DEMO_TOAST,
-      title: "Suggest", description: "Have an idea to improve MedScribe? Send it here." },
+      title: "Suggest", description: "Have an idea to improve ScribeKare? Send it here." },
     { target_selector: "#chat-header-btn", placement: "bottom", device: "both",
       guard_message: DEMO_TOAST,
       title: "Chat", description: "Message your hospital admin directly from here." },
@@ -115,7 +115,7 @@ function startDoctorProductTour() {
 
 // ── patient.html ────────────────────────────────────────────────
 function renderDoctorDemoPatientPage() {
-  document.title = "MedScribe — Rina Kumari (Demo)";
+  document.title = "ScribeKare — Rina Kumari (Demo)";
   document.getElementById("p-name").textContent = DEMO_PATIENT.name;
   document.getElementById("p-uid").textContent = DEMO_PATIENT.uid;
   document.getElementById("p-age").textContent = DEMO_PATIENT.age + " yrs";
@@ -220,7 +220,7 @@ function runDoctorDemoPatientTour() {
       title: "Continue Consultation", description: "If a patient returns the same day, pick up their consultation right where it was left off instead of starting fresh." },
     { target_selector: "#btn-new-consult", placement: "bottom", device: "both", tooltipWidth: 340,
       title: "Start the Consultation", nextLabel: "New Consultation →",
-      description: "This is where a real consultation begins. Click New Consultation to see how MedScribe helps you record and structure a visit.",
+      description: "This is where a real consultation begins. Click New Consultation to see how ScribeKare helps you record and structure a visit.",
       onNext: () => { window.location.href = "/pages/consultation.html?demo=1"; return false; } },
   ];
   startLocalTour(steps, { onSkip: exitDoctorDemo });
@@ -291,7 +291,7 @@ function _runDemoTopTour() {
     { target_selector: "#btn-structure", placement: "top", device: "both",
       guard_message: "Use the button in the tutorial card below to continue.",
       title: "Analyse with AI", nextLabel: "Analyse with AI →",
-      description: "This is the core of MedScribe — click here and AI turns the raw transcript into a structured prescription: complaint, diagnosis, medicines, and advice.",
+      description: "This is the core of ScribeKare — click here and AI turns the raw transcript into a structured prescription: complaint, diagnosis, medicines, and advice.",
       onNext: () => { _demoAnalyseClick(); return false; } },
   ];
   startLocalTour(steps, { onSkip: exitDoctorDemo });
@@ -317,7 +317,7 @@ function _fillDemoReviewPanel() {
 
 function _runDemoReviewTour(cameFromRecording) {
   const introDescription = cameFromRecording
-    ? "MedScribe just structured the whole consultation from that transcript — vitals, complaint, diagnosis, and medicines, all filled in automatically."
+    ? "ScribeKare just structured the whole consultation from that transcript — vitals, complaint, diagnosis, and medicines, all filled in automatically."
     : "On the Foundation plan, AI Scribe isn't included, so consultations are entered directly here instead of via recording — same fields, just typed in by hand.";
   const steps = [
     { target_selector: "#vitals-section", placement: "bottom", scrollBlock: "start", device: "both",

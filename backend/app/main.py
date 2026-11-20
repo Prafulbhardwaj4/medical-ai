@@ -17,6 +17,8 @@ from app.routers import patients as patients_router
 from app.routers import checkins as checkins_router
 from app.routers import consultations as consultations_router
 from app.routers import admin as admin_router
+from app.routers import superadmin_overview as superadmin_overview_router
+from app.routers import superadmin_hospital360 as superadmin_hospital360_router
 from app.routers import audit as audit_router
 from app.routers import nurses as nurses_router
 from app.routers import attendance as attendance_router
@@ -279,7 +281,7 @@ from app.utils.rate_limit import limiter
 log_proxy_settings()
 
 app = FastAPI(
-    title="MedScribe API",
+    title=f"{settings.BRAND_NAME} API",
     version="0.1.0",
     swagger_ui_parameters={"persistAuthorization": True},
     docs_url=None if _is_production(settings) else "/docs",
@@ -389,6 +391,8 @@ app.include_router(patients_router.router)
 app.include_router(checkins_router.router)
 app.include_router(consultations_router.router)
 app.include_router(admin_router.router)
+app.include_router(superadmin_overview_router.router)
+app.include_router(superadmin_hospital360_router.router)
 app.include_router(audit_router.router)
 app.include_router(nurses_router.router)
 app.include_router(attendance_router.router)
@@ -429,7 +433,7 @@ os.makedirs("prescriptions", exist_ok=True)
 
 @app.get("/")
 def root():
-    return {"status": "MedScribe API running"}
+    return {"status": f"{settings.BRAND_NAME} API running"}
 
 @app.get("/health/live")
 def health_live():

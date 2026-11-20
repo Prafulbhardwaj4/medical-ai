@@ -1,4 +1,5 @@
 import io
+from app.config import settings
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
@@ -24,7 +25,7 @@ def download_medicine_template(request: Request, current_doctor: Doctor = Depend
     data = build_medicine_template()
     return StreamingResponse(
         io.BytesIO(data), media_type=XLSX_MIME,
-        headers={"Content-Disposition": 'attachment; filename="MedScribe_Medicines_Template.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="{settings.BRAND_NAME}_Medicines_Template.xlsx"'},
     )
 
 

@@ -3,6 +3,7 @@ admin, sub_admin and pharmacy for their own hospital (same roles as the medicine
 of a hospital (passes hospital_id). Not tier-gated. Pharmacy flows are not touched: the hospital just gets normal
 medicine rows with stock 0, exactly like the manual Add Medicine / Add Brand screens create them."""
 import io
+from app.config import settings
 import logging
 from datetime import date
 from typing import Optional
@@ -102,7 +103,7 @@ def add_selected_medicines(request: Request, body: AddIn, hospital_id: Optional[
 def download_select_template(request: Request, db: Session = Depends(get_db), current_doctor: Doctor = Depends(_roles)):
     data = svc.build_select_template(db)
     return StreamingResponse(io.BytesIO(data), media_type=XLSX_MIME,
-                             headers={"Content-Disposition": 'attachment; filename="MedScribe_Select_Medicines_Template.xlsx"'})
+                             headers={"Content-Disposition": f'attachment; filename="{settings.BRAND_NAME}_Select_Medicines_Template.xlsx"'})
 
 
 @router.post("/preview")

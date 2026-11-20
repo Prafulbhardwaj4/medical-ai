@@ -284,7 +284,7 @@
       }
       else if (a === "close") closePanel();
       else if (a === "add") addSelected();
-      else if (a === "template") downloadFile(`${BASE}/template`, "MedScribe_Select_Tests_Template.xlsx");
+      else if (a === "template") downloadFile(`${BASE}/template`, "ScribeKare_Select_Tests_Template.xlsx");
       else if (a === "choose") $("ms-file").click();
       else if (a === "confirm") onConfirm();
       else if (a === "accept") onAccept(el.getAttribute("data-row"), el.getAttribute("data-mid"));

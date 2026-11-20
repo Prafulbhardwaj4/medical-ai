@@ -30,5 +30,5 @@ class Invoice(Base):
     irn_ack_no = Column(String, nullable=True)  # IRP acknowledgement number
     irn_ack_date = Column(DateTime, nullable=True)  # IRP acknowledgement timestamp
     einvoice_qr_data = Column(Text, nullable=True)  # signed QR payload string returned by the IRP
-    einvoice_status = Column(String, nullable=True)  # "not_applicable" | "pending" | "generated" | "failed" — null today since nothing sets it yet. NOTE: verify_hash/QR above is MedScribe's own authenticity check, NOT this — don't conflate the two when talking to a CA or in a pitch deck.
+    einvoice_status = Column(String, nullable=True)  # "not_applicable" | "pending" | "generated" | "failed" — null today since nothing sets it yet. NOTE: verify_hash/QR above is ScribeKare's own authenticity check, NOT this — don't conflate the two when talking to a CA or in a pitch deck.
     place_of_supply = Column(String, nullable=True)  # GST-mandatory invoice field — state name, snapshotted from the hospital's own state at generation time (see app.utils.gst's documented intra-state assumption)

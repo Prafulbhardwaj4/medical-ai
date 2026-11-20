@@ -5,6 +5,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # Brand. BRAND_NAME is the product name; COMPANY_LEGAL_NAME is the registered company
+    # name (used in invoices, terms, privacy, agreements, PDF legal footers).
+    # Change COMPANY_LEGAL_NAME after incorporation (env var COMPANY_LEGAL_NAME).
+    BRAND_NAME: str = "ScribeKare"
+    COMPANY_LEGAL_NAME: str = "ScribeKare"
+
     SUPER_ADMIN_KEY: str = ""
 
     # LOCAL DEV ONLY. When set, this fixed text is accepted as the captcha answer on

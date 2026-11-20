@@ -18,7 +18,7 @@ from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from app.config import settings
 
-TOTP_ISSUER = "MedScribe"
+TOTP_ISSUER = settings.BRAND_NAME
 _STEP_SECONDS = 30
 _BACKUP_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 

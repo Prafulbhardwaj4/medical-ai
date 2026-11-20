@@ -4,7 +4,7 @@ from app.utils.timezone import now_ist_naive
 
 class RadiologyFormF(Base):
     """Statutory record under the PCPNDT Act, 1994 (Form F — see proviso to
-    Section 4(3), rule 9(4) and rule 10(1A)). MedScribe only performs
+    Section 4(3), rule 9(4) and rule 10(1A)). ScribeKare only performs
     non-invasive imaging, so this covers Section A (identification, common
     to all procedures) and Section B (non-invasive procedures) of the real
     form — Section C (invasive: amniocentesis, CVS, cordocentesis, etc.)

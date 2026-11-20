@@ -7,12 +7,13 @@ from app.models.audit_log import AuditLog
 from app.models.doctor import Doctor
 from app.utils.auth import get_current_doctor
 from datetime import datetime
+from app.config import settings
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
-# Actions taken by MedScribe staff on this hospital's data are shown to the
+# Actions taken by ScribeKare staff on this hospital's data are shown to the
 # hospital admin, but only under this generic label (never a name or email).
-PLATFORM_SUPPORT_LABEL = "MedScribe platform support"
+PLATFORM_SUPPORT_LABEL = f"{settings.BRAND_NAME} platform support"
 
 
 def _is_platform(l):

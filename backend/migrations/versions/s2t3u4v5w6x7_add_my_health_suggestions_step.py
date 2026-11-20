@@ -34,11 +34,11 @@ tutorial_steps_table = sa.table(
 NEW_STEPS = [
     {"page": "my-health", "device": "desktop", "step_order": 5,
      "target_selector": "#my-health-suggestions-btn", "title": "Suggestions",
-     "description": "Have an idea to improve MedScribe? Send it here.",
+     "description": "Have an idea to improve ScribeKare? Send it here.",
      "placement": "bottom"},
     {"page": "my-health", "device": "mobile", "step_order": 5,
      "target_selector": "#my-health-suggestions-btn", "title": "Suggestions",
-     "description": "Have an idea to improve MedScribe? Send it here.",
+     "description": "Have an idea to improve ScribeKare? Send it here.",
      "placement": "bottom"},
 ]
 

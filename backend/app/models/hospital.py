@@ -50,3 +50,4 @@ class Hospital(Base):
     pilot_weekly_cap = Column(Integer, nullable=True)  # AI Scribe consultations per pilot week; NULL = default 150
     pilot_result_note = Column(String(300), nullable=True)  # one-line pilot result the Super Admin keeps as a reference
     created_at = Column(DateTime, default=now_ist_naive)
+    internal_notes = Column(Text, nullable=True)  # Super Admin's private notes about this hospital (never shown to hospital staff)

@@ -3,6 +3,7 @@ Same logic as the hospital-side imports (plan -> preview -> confirm -> undo); th
 the hospital id comes from the URL and only a super_admin may use it. Hospital staff have their own
 endpoints (/admin/medicine-import, /admin/test-import) that always use the caller's own hospital."""
 import io
+from app.config import settings
 import json as _json
 import logging
 
@@ -64,7 +65,7 @@ def _audit(db, actor, hospital: Hospital, action: str, kind: str, batch_id: int,
 def super_template(request: Request, kind: str, current_doctor: Doctor = Depends(require_super_admin)):
     _kind(kind)
     data = build_medicine_template() if kind == "medicines" else build_test_template()
-    name = "MedScribe_Medicines_Template.xlsx" if kind == "medicines" else "MedScribe_Tests_Template.xlsx"
+    name = f"{settings.BRAND_NAME}_Medicines_Template.xlsx" if kind == "medicines" else f"{settings.BRAND_NAME}_Tests_Template.xlsx"
     return StreamingResponse(io.BytesIO(data), media_type=XLSX_MIME,
                              headers={"Content-Disposition": f'attachment; filename="{name}"'})
 

@@ -2,6 +2,7 @@
 admin and sub_admin for their own hospital; super_admin on behalf of a hospital (passes hospital_id).
 Not tier-gated. Pharmacy/lab/ordering flows are not touched: the hospital just gets normal test rows."""
 import io
+from app.config import settings
 import logging
 from typing import Optional
 
@@ -81,7 +82,7 @@ def add_selected_tests(request: Request, body: AddIn, hospital_id: Optional[int]
 def download_select_template(request: Request, db: Session = Depends(get_db), current_doctor: Doctor = Depends(_roles)):
     data = svc.build_select_template(db)
     return StreamingResponse(io.BytesIO(data), media_type=XLSX_MIME,
-                             headers={"Content-Disposition": 'attachment; filename="MedScribe_Select_Tests_Template.xlsx"'})
+                             headers={"Content-Disposition": f'attachment; filename="{settings.BRAND_NAME}_Select_Tests_Template.xlsx"'})
 
 
 @router.post("/preview")

@@ -1,4 +1,5 @@
 import io
+from app.config import settings
 import json as _json
 import logging
 
@@ -46,7 +47,7 @@ def download_test_template(request: Request, current_doctor: Doctor = Depends(ge
     require_admin(current_doctor)
     return StreamingResponse(
         io.BytesIO(build_test_template()), media_type=XLSX_MIME,
-        headers={"Content-Disposition": 'attachment; filename="MedScribe_Tests_Template.xlsx"'})
+        headers={"Content-Disposition": f'attachment; filename="{settings.BRAND_NAME}_Tests_Template.xlsx"'})
 
 
 def _build_preview(db: Session, doctor: Doctor, file_name: str, content: bytes):

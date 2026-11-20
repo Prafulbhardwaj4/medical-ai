@@ -1,0 +1,50 @@
+/* Super Admin part 3: status chips, record focus, shortcuts help, consistent states, phone polish.
+   Uses only the variables from style.css. */
+.sa-status-bar { margin-bottom: 14px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.sa-status-bar .sa-chip { flex: 0 0 auto; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; }
+.sa-status-bar .sa-chip[aria-pressed="true"] { background: var(--teal); border-color: var(--teal); color: #fff; }
+.sa-status-bar .sa-chip:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+.sa-next { margin-top: 6px; font-size: 12.5px; font-weight: 600; color: var(--slate); }
+.card .sa-link { font-weight: 700; }
+.card[data-sa-focus], .sa-flash { scroll-margin-top: 90px; }
+.sa-flash { animation: sa-flash 3.5s ease-out; }
+@keyframes sa-flash {
+  0%, 35% { box-shadow: 0 0 0 3px var(--teal); background: var(--teal-subtle); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .sa-flash { animation: none; box-shadow: 0 0 0 3px var(--teal); } }
+
+/* Old list sections: the same empty and error look as the new ones */
+#upgrade-requests-list > p, #hospital-leads-list > p, #plan-inquiries-list > p, #suggestions-list > p { padding: 14px 4px; font-size: 13.5px; }
+.card[tabindex="-1"]:focus { outline: none; }
+
+/* Shortcuts help */
+.sa-help-btn { margin-right: 10px; padding: 6px 11px; font-weight: 700; }
+.sa-help-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.sa-help-title { margin: 0; font-size: 16px; }
+.sa-help-grid { display: grid; grid-template-columns: auto 1fr; gap: 10px 18px; padding: 16px 18px; overflow-y: auto; font-size: 14px; color: var(--navy); }
+.sa-keys { white-space: nowrap; color: var(--slate); }
+.sa-keys .sa-kbd { margin: 0 2px; }
+@media (max-width: 700px) { .sa-help-btn { display: none; } }
+
+/* Phones */
+@media (max-width: 900px) {
+  .bottom-nav { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .bottom-nav::-webkit-scrollbar { display: none; }
+  .bottom-nav-item { flex: 0 0 auto; min-width: 70px; }
+}
+@media (max-width: 700px) {
+  .sa-table { min-width: 640px; }
+  .sa-table td:first-child, .sa-table th:first-child { position: sticky; left: 0; background: var(--white); z-index: 1; box-shadow: 1px 0 0 var(--border); }
+  .sa-table th:first-child { background: var(--smoke); z-index: 2; }
+  .sa-table-scroll { max-height: 62vh; }
+  #sa-hosp-ui .sa-filters .form-control, #sa-hosp-ui .sa-filters .cs-wrapper { width: 100%; flex: 1 1 100%; }
+  .sa-filters { gap: 8px; }
+  .sa-pager { flex-wrap: wrap; justify-content: center; }
+  .sa-head .btn { align-self: flex-start; }
+  .notif-panel { width: 100%; max-width: 100vw; }
+}
+@media (pointer: coarse) {
+  .sa-actions .btn-sm, .sa-pager .btn, .sa-status-bar .sa-chip, .sa-card-foot .btn { min-height: 40px; }
+}

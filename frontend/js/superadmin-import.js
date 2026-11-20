@@ -4,8 +4,8 @@
    buttons use data-action / data-kind with one delegated listener (no inline onclick). */
 (function () {
   const KINDS = {
-    medicines: { title: "Medicines and stock", file: "MedScribe_Medicines_Template.xlsx" },
-    tests: { title: "Lab tests", file: "MedScribe_Tests_Template.xlsx" },
+    medicines: { title: "Medicines and stock", file: "ScribeKare_Medicines_Template.xlsx" },
+    tests: { title: "Lab tests", file: "ScribeKare_Tests_Template.xlsx" },
   };
   const MAX_LIST = 200;
   const previews = { medicines: null, tests: null };

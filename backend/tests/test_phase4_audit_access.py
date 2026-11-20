@@ -73,7 +73,7 @@ def test_admin_sees_platform_actions_with_generic_label(env):
     assert r.status_code == 200
     rows = {x["action"]: x for x in r.json()["logs"]}
     plat = rows["hospital_updated"]
-    assert plat["actor_name"] == "MedScribe platform support"
+    assert plat["actor_name"] == "ScribeKare platform support"
     assert plat["actor_role"] == "platform_support"
     assert plat["details"] is None
     assert "Real Person" not in r.text and "real@person.in" not in r.text
@@ -84,10 +84,10 @@ def test_platform_label_in_summary_actions_and_export(env):
     db, state, client, users, p, h = env
     s = client.get("/audit/summary").json()
     assert s["total_events"] == 2
-    assert any(x["actor_name"] == "MedScribe platform support" for x in s["recent"])
+    assert any(x["actor_name"] == "ScribeKare platform support" for x in s["recent"])
     assert "hospital_updated" in client.get("/audit/actions").json()
     e = client.get("/audit/export")
-    assert "MedScribe platform support" in e.text
+    assert "ScribeKare platform support" in e.text
     assert "Real Person" not in e.text and "real@person.in" not in e.text
 
 

@@ -1,4 +1,4 @@
-# MedScribe — AI Medical Scribe Assistant
+# ScribeKare — AI Medical Scribe Assistant
 
 Hospital management software for Indian hospitals and nursing homes: OPD tokens and queue, consultations with an AI scribe (record a consultation → AI structures the prescription → PDF), pharmacy, lab, GST billing, online appointment booking, a patient portal, admissions and chat. Patient messages are prepared in a WhatsApp messages list that staff send by hand.
 

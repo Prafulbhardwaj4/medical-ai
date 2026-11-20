@@ -284,7 +284,7 @@ def seed_superadmin(db):
         return
     db.add(Doctor(
         title="Mr.", name="Local Super Admin", email=email, phone="9000000000",
-        specialization="Platform", clinic_name="MedScribe Platform",
+        specialization="Platform", clinic_name="ScribeKare Platform",
         hashed_password=hash_password(PASSWORD),
         role=UserRole.super_admin, hospital_id=None, is_active=True, must_change_password=False,
     ))

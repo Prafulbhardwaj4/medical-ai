@@ -1,6 +1,7 @@
 """Super Admin only: the platform-wide MASTER lists of tests and medicines (no price, never deleted,
 only deactivated). Hospitals copy items out of these lists; later edits here never change a hospital's rows."""
 import io
+from app.config import settings
 import logging
 from typing import Optional
 
@@ -245,7 +246,7 @@ def set_master_medicine_active(medicine_id: int, body: ActiveIn, db: Session = D
 def master_template(request: Request, kind: str, current_doctor: Doctor = Depends(require_super_admin)):
     _kind(kind)
     data = build_medicine_template() if kind == "medicines" else build_test_template()
-    name = "MedScribe_Master_Medicines_Template.xlsx" if kind == "medicines" else "MedScribe_Master_Tests_Template.xlsx"
+    name = f"{settings.BRAND_NAME}_Master_Medicines_Template.xlsx" if kind == "medicines" else f"{settings.BRAND_NAME}_Master_Tests_Template.xlsx"
     return StreamingResponse(io.BytesIO(data), media_type=XLSX_MIME,
                              headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
