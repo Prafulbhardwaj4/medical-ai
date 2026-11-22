@@ -84,9 +84,9 @@ class Settings(BaseSettings):
     # One portal account may not sit on more than this many unpaid, future slot holds at once.
     PORTAL_MAX_UNPAID_HOLDS_PER_ACCOUNT: int = 3
 
-    # Refund tiers for patient-initiated cancellation — placeholder values
-    # pending legal sign-off, kept as named constants so they're easy to
-    # adjust later rather than scattered magic numbers.
+    # Refund tiers for patient-initiated cancellation. They are named constants so they are
+    # easy to adjust rather than scattered magic numbers.
+    # The patient Terms of Service describe these rules in general terms (frontend/js/legal-content.js).
     PORTAL_CANCEL_FULL_REFUND_HOURS: int = 24            # cancel within this many hours of booking -> 100% refund
     PORTAL_CANCEL_PARTIAL_REFUND_PERCENT: int = 30       # cancel after that (but still outside the block window) -> this %
     PORTAL_CANCEL_BLOCK_HOURS_BEFORE_CONSULT: int = 24   # inside this many hours of consultation time -> cancellation blocked
@@ -178,7 +178,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Consent notice version (put the lawyer-approved version here, no code change needed)
     # ------------------------------------------------------------------
-    CONSENT_NOTICE_VERSION: str = "v0-PENDING-LEGAL-REVIEW"
+    CONSENT_NOTICE_VERSION: str = "2026-12-01"   # keep equal to `version` in frontend/js/legal-content.js
 
     # ------------------------------------------------------------------
     # Retention. 0 = OFF (nothing is deleted). Medical records and audit rows are never auto-deleted.
@@ -327,8 +327,8 @@ def log_startup_warnings(s) -> None:
                  or _front_host in ("localhost", "127.0.0.1")):
         log.warning("PUBLIC_FRONTEND_URL points at %s, a platform host: every prescription and invoice QR code "
                     "carries this address. Set PUBLIC_FRONTEND_URL to your own domain before the AWS move.", _front_host)
-    if "PENDING" in (s.CONSENT_NOTICE_VERSION or "").upper():
-        log.warning("CONSENT_NOTICE_VERSION still contains PENDING: the consent notice text has not been approved by legal review.")
+    if not (s.CONSENT_NOTICE_VERSION or "").strip():
+        log.warning("CONSENT_NOTICE_VERSION is empty: nobody can be asked to accept the Terms and Privacy Policy.")
     if (s.CORS_ORIGIN_REGEX or "").strip():
         import re as _re
         log.warning("CORS_ORIGIN_REGEX is set to: %s", s.CORS_ORIGIN_REGEX)

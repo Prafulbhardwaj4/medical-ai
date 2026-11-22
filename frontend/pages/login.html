@@ -5,513 +5,727 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ScribeKare — Login</title>
+  <meta name="description" content="Sign in to ScribeKare, the hospital management system for Indian hospitals and nursing homes." />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f9fb" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#08111f" />
   <link rel="stylesheet" href="../css/style.css" />
-  <script src="../js/custom-select.js" defer></script>
+  <link rel="stylesheet" href="../css/login.css" />
+  <!-- Design notes: glassmorphism in the home page theme. The old side panel claimed "under 30 seconds" and
+       "Trusted by doctors across Haryana"; neither is a fact we can prove, so the copy now only uses real product facts.
+       Staff sign in with email, patients with their 10-digit mobile number (same rules as before).
+       Two-step verification, first-login password and "signed in" all happen in glass modals. -->
 </head>
 
 <body>
-  <div class="auth-page">
+  <!-- Icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="lg-grad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#14b8a6" />
+        <stop offset="1" stop-color="#0f766e" />
+      </linearGradient>
+    </defs>
+    <symbol id="i-mark" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="9" fill="url(#lg-grad)" />
+      <path d="M16 8v16M8 16h16" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none" />
+    </symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></g></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="3" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></g></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></g></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18" /><path d="M10.6 6.1A10.7 10.7 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.7C3.8 8.5 2 12 2 12s4 7 10 7c1.5 0 2.9-.4 4.1-1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></g></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></g></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /><path d="M9 12l2 2 4-4" /></g></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" /></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></g></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h8l4 4v14H7z" /><path d="M15 3v4h4M10 12h6M10 16h6" /></g></symbol>
+    <symbol id="i-session" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></g></symbol>
+  </svg>
 
-    <!-- Left panel -->
-    <div class="auth-left">
-      <div class="auth-left-inner">
-        <div class="auth-logo">Scribe<span>Kare</span></div>
-        <div style="font-size:0.8rem;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--teal-light);margin-bottom:14px">Vande Mataram 🇮🇳</div>
-        <div class="auth-tagline">Your clinic's <em>AI scribe</em>, always ready.</div>
-        <p class="auth-sub">Record consultations in Hindi or English. ScribeKare transcribes, structures, and sends the
-          prescription — in seconds.</p>
-        <div class="auth-features">
-          <div class="auth-feature">
-            <div class="auth-feature-dot"></div>Voice-to-prescription in under 30 seconds
-          </div>
-          <div class="auth-feature">
-            <div class="auth-feature-dot"></div>Hindi + English code-switching supported
-          </div>
-          <div class="auth-feature">
-            <div class="auth-feature-dot"></div>PDF sent to patient via WhatsApp instantly
-          </div>
-          <div class="auth-feature">
-            <div class="auth-feature-dot"></div>Full patient history at a glance
-          </div>
+  <a class="lg-skip" href="#login-id">Skip to sign in</a>
+
+  <div class="lg-bg" aria-hidden="true">
+    <span class="lg-orb o1"></span><span class="lg-orb o2"></span><span class="lg-orb o3"></span>
+  </div>
+
+  <main class="lg">
+
+    <!-- Left: brand + product story -->
+    <section class="lg-hero" aria-label="About ScribeKare">
+      <div class="lg-brand"><svg class="lg-mark" aria-hidden="true"><use href="#i-mark" /></svg><span>Scribe<b>Kare</b></span></div>
+      <span class="lg-chip"><i></i>Made for Indian hospitals</span>
+      <p class="lg-h">One sign-in for your <em>whole hospital.</em></p>
+      <p class="lg-lead">OPD, pharmacy, lab, billing and the patient portal, connected in one system.</p>
+      <ul class="lg-points">
+        <li><svg aria-hidden="true"><use href="#i-check" /></svg>On the Growth plan, the AI scribe drafts the note and the doctor reviews and confirms.</li>
+        <li><svg aria-hidden="true"><use href="#i-check" /></svg>Speak in Hindi, English or a mix of both.</li>
+        <li><svg aria-hidden="true"><use href="#i-check" /></svg>GST invoices and Schedule H1 and X registers.</li>
+        <li><svg aria-hidden="true"><use href="#i-check" /></svg>Each hospital's data is kept separate.</li>
+      </ul>
+
+      <!-- CSS-built preview with fake, anonymous data -->
+      <div class="lg-stage" aria-hidden="true">
+        <div class="lg-mini m1">
+          <div class="lg-mini-k">Token queue</div>
+          <div class="lg-token">Token 14</div>
+          <div class="lg-mini-s">Dr. Sharma · OPD</div>
+          <span class="lg-live">Now consulting</span>
         </div>
-        <div class="auth-badge">
-          <div class="auth-badge-dot"></div>
-          Trusted by doctors across Haryana
+        <div class="lg-mini m2">
+          <div class="lg-mini-k"><svg><use href="#i-mic" /></svg>AI scribe</div>
+          <div class="lg-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="lg-mini-s">Draft ready. The doctor reviews and confirms.</div>
         </div>
+        <div class="lg-mini m3">
+          <div class="lg-mini-k"><svg><use href="#i-doc" /></svg>Prescription</div>
+          <div class="lg-rx"><div class="lg-qrm"></div><div class="lg-mini-s">Scan the QR code to verify it.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: login card -->
+    <section class="lg-side" aria-label="Sign in">
+      <div class="lg-card glass">
+        <div class="lg-brand lg-card-logo"><svg class="lg-mark" aria-hidden="true"><use href="#i-mark" /></svg><span>Scribe<b>Kare</b></span></div>
+        <h1>Welcome back</h1>
+        <p class="lg-sub">Staff sign in with their email. Patients sign in with their 10-digit mobile number.</p>
+
+        <form id="form-login" novalidate>
+          <div class="lg-field">
+            <label class="lg-label" for="login-id">Email or mobile number</label>
+            <div class="lg-iw">
+              <svg class="lg-ico" aria-hidden="true"><use href="#i-user" /></svg>
+              <input class="lg-input no-r" id="login-id" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="you@hospital.in or 9876543210" />
+            </div>
+          </div>
+          <div class="lg-field">
+            <label class="lg-label" for="login-password">Password</label>
+            <div class="lg-iw">
+              <svg class="lg-ico" aria-hidden="true"><use href="#i-lock" /></svg>
+              <input class="lg-input" id="login-password" type="password" autocomplete="current-password" placeholder="••••••••" />
+              <button type="button" class="lg-eye" data-eye="login-password" aria-label="Show password" aria-pressed="false">
+                <svg class="e-on" aria-hidden="true"><use href="#i-eye" /></svg><svg class="e-off" aria-hidden="true"><use href="#i-eye-off" /></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="lg-captcha" id="login-captcha-group">
+            <label class="lg-label" for="login-captcha-answer">Type the code shown below</label>
+            <div class="lg-cap-img" id="captcha-image-box">Loading captcha…</div>
+            <div class="lg-cap-row">
+              <input class="lg-input" id="login-captcha-answer" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Type the code" />
+              <button type="button" class="lg-icon-btn" id="captcha-refresh" title="Get a new code" aria-label="Get a new code"><svg aria-hidden="true"><use href="#i-refresh" /></svg></button>
+            </div>
+          </div>
+
+          <p class="lg-err" id="login-err" role="alert"></p>
+          <button class="lg-btn" id="btn-login" type="submit">Sign in <svg aria-hidden="true"><use href="#i-arrow" /></svg></button>
+          <div class="lg-row-end" id="fp-link-box"><button type="button" class="lg-link" id="fp-open">Forgot password?</button></div>
+        </form>
+
+        <div class="lg-foot">New hospital? <a class="lg-link" href="/pages/home.html#contact">Book a demo</a></div>
+      </div>
+      <p class="lg-legal"><a href="/pages/home.html">Home</a><a href="/pages/privacy.html">Privacy</a><a href="/pages/terms.html">Terms</a></p>
+    </section>
+  </main>
+
+  <!-- ═══ MODAL: two-step verification (Super Admin) ═══ -->
+  <div class="lg-modal" id="tfa-modal" hidden role="dialog" aria-modal="true" aria-labelledby="tfa-title" aria-describedby="tfa-sub">
+    <div class="lg-mcard glass">
+      <button type="button" class="lg-x" id="tfa-x" data-close aria-label="Close"><svg aria-hidden="true"><use href="#i-x" /></svg></button>
+      <div class="lg-badge" aria-hidden="true"><svg><use href="#i-shield" /></svg></div>
+      <h2 class="lg-mtitle" id="tfa-title">Two-step verification</h2>
+      <p class="lg-msub" id="tfa-sub"></p>
+
+      <!-- first-time setup: one-time enrolment code -->
+      <form class="lg-panel" id="form-totp-enrol" novalidate hidden>
+        <label class="lg-label" for="totp-enrol-code">Enrolment code</label>
+        <input class="lg-input no-l no-r lg-center" id="totp-enrol-code" type="text" autocomplete="off" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" />
+        <p class="lg-err" id="totp-enrol-err" role="alert"></p>
+        <button class="lg-btn" id="btn-totp-enrol" type="submit">Continue <svg aria-hidden="true"><use href="#i-arrow" /></svg></button>
+      </form>
+
+      <!-- code entry (login and setup confirm) -->
+      <form class="lg-panel" id="form-totp" novalidate hidden>
+        <div id="totp-qr-box" hidden>
+          <img class="lg-qr" id="totp-qr" alt="QR code for your authenticator app" width="176" height="176" />
+          <p class="lg-fine">Can't scan? Enter this key manually:<br /><strong class="lg-pill" id="totp-secret"></strong></p>
+          <div style="height:14px"></div>
+        </div>
+        <div id="totp-otp"></div>
+        <div class="lg-field" id="totp-backup-wrap" hidden>
+          <label class="lg-label" for="totp-backup-input">Backup code</label>
+          <input class="lg-input no-l no-r lg-center" id="totp-backup-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" placeholder="XXXXX-XXXXX" />
+        </div>
+        <p class="lg-err" id="totp-err" role="alert"></p>
+        <button class="lg-btn" id="btn-totp" type="submit" disabled>Verify &amp; sign in</button>
+        <div style="text-align:center;margin-top:8px"><button type="button" class="lg-link" id="totp-switch">Use a backup code instead</button></div>
+      </form>
+
+      <!-- backup codes shown once after setup -->
+      <div class="lg-panel" id="form-totp-backup" hidden>
+        <pre class="lg-codes" id="totp-backup-list"></pre>
+        <button class="lg-btn" id="btn-totp-saved" type="button">I have saved these codes</button>
       </div>
     </div>
+  </div>
 
-    <!-- Right panel -->
-    <div class="auth-right">
-      <div class="auth-box">
-        <div style="text-align:center;margin-bottom:28px">
-          <div style="font-size:1.5rem;font-weight:700;color:var(--navy, #0f1f3d);margin-bottom:6px">
-            Scribe<span style="color:var(--teal, #14b8a6)">Kare</span>
+  <!-- ═══ MODAL: first-login password (staff and patients) ═══ -->
+  <div class="lg-modal" id="pw-modal" hidden role="dialog" aria-modal="true" aria-labelledby="pw-title" aria-describedby="pw-sub">
+    <div class="lg-mcard glass">
+      <button type="button" class="lg-x" data-close aria-label="Close"><svg aria-hidden="true"><use href="#i-x" /></svg></button>
+      <div class="lg-badge" aria-hidden="true"><svg><use href="#i-lock" /></svg></div>
+      <h2 class="lg-mtitle" id="pw-title">Set your password</h2>
+      <p class="lg-msub" id="pw-sub"></p>
+
+      <form class="lg-panel" id="form-staff-newpw" novalidate hidden>
+        <div class="lg-field">
+          <label class="lg-label" for="staff-new-password">New password</label>
+          <div class="lg-iw">
+            <svg class="lg-ico" aria-hidden="true"><use href="#i-lock" /></svg>
+            <input class="lg-input" id="staff-new-password" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
+            <button type="button" class="lg-eye" data-eye="staff-new-password" aria-label="Show password" aria-pressed="false"><svg class="e-on" aria-hidden="true"><use href="#i-eye" /></svg><svg class="e-off" aria-hidden="true"><use href="#i-eye-off" /></svg></button>
           </div>
-          <div style="color:var(--slate);font-size:14px">Sign in to your account</div>
+          <ul class="lg-rules">
+            <li id="staff-pw-check-length" style="color:var(--slate-light)">○ At least 8 characters</li>
+            <li id="staff-pw-check-number" style="color:var(--slate-light)">○ At least 1 number</li>
+            <li id="staff-pw-check-upper" style="color:var(--slate-light)">○ At least 1 capital letter</li>
+          </ul>
         </div>
-
-        <!-- LOGIN FORM -->
-        <div id="form-login">
-          <div class="form-group">
-            <label class="form-label">Email/Number</label>
-            <input class="form-control" id="login-id" type="text" placeholder="Email/Number" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Password</label>
-            <div style="position:relative">
-              <input class="form-control" id="login-password" type="password" placeholder="••••••••"
-                style="padding-right:40px" />
-              <span onclick="toggleLoginPasswordVisibility()"
-                style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px"
-                id="login-eye-icon">👁</span>
-            </div>
-          </div>
-
-          <div class="form-group" id="login-captcha-group">
-            <label class="form-label">Enter the code shown below</label>
-            <div id="captcha-image-box" style="margin-bottom:8px;line-height:0">Loading captcha…</div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input class="form-control" id="login-captcha-answer" type="text" autocapitalize="characters" placeholder="Type the code" />
-              <span onclick="loadCaptcha()" style="cursor:pointer;font-size:20px;padding:0 4px" title="Get a new code">🔄</span>
-            </div>
-          </div>
-
-          <div class="err-msg" id="login-err"></div>
-          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-login" onclick="doLogin()">
-            Sign In
-          </button>
-
-          <div style="text-align:right;margin-top:14px" id="fp-link-box">
-            <a href="#" onclick="openForgotPasswordModal();return false;" style="font-size:13px;color:var(--teal, #0d9488)">Forgot password?</a>
+        <div class="lg-field">
+          <label class="lg-label" for="staff-new-password-confirm">Confirm password</label>
+          <div class="lg-iw">
+            <svg class="lg-ico" aria-hidden="true"><use href="#i-lock" /></svg>
+            <input class="lg-input no-r" id="staff-new-password-confirm" type="password" autocomplete="new-password" placeholder="Re-enter password" />
           </div>
         </div>
+        <p class="lg-err" id="staff-newpw-err" role="alert"></p>
+        <button class="lg-btn" id="btn-staff-newpw" type="submit">Set password &amp; sign in</button>
+      </form>
 
-        <!-- SET PASSWORD FORM (staff, first login only) -->
-        <div id="form-staff-newpw" style="display:none">
-          <div style="text-align:center;margin-bottom:20px">
-            <p style="color:var(--slate);font-size:13px">This is your first time signing in. Choose a new password to finish setting up your account.</p>
+      <form class="lg-panel" id="form-register" novalidate hidden>
+        <div class="lg-field">
+          <label class="lg-label" for="reg-password">New password</label>
+          <div class="lg-iw">
+            <svg class="lg-ico" aria-hidden="true"><use href="#i-lock" /></svg>
+            <input class="lg-input" id="reg-password" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
+            <button type="button" class="lg-eye" data-eye="reg-password" aria-label="Show password" aria-pressed="false"><svg class="e-on" aria-hidden="true"><use href="#i-eye" /></svg><svg class="e-off" aria-hidden="true"><use href="#i-eye-off" /></svg></button>
           </div>
-          <div class="form-group">
-            <label class="form-label">New Password</label>
-            <div style="position:relative">
-              <input class="form-control" id="staff-new-password" type="password" placeholder="At least 8 characters"
-                style="padding-right:40px" oninput="renderPasswordStrength(this.value, 'staff-pw')" />
-              <span onclick="togglePwVisibility('staff-new-password', 'staff-pw-eye-icon')"
-                style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px"
-                id="staff-pw-eye-icon">👁</span>
-            </div>
-            <ul style="list-style:none;padding:0;margin:8px 0 0;font-size:12.5px">
-              <li id="staff-pw-check-length" style="color:var(--slate-light)">○ At least 8 characters</li>
-              <li id="staff-pw-check-number" style="color:var(--slate-light)">○ At least 1 number</li>
-              <li id="staff-pw-check-upper" style="color:var(--slate-light)">○ At least 1 capital letter</li>
-            </ul>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Confirm Password</label>
-            <input class="form-control" id="staff-new-password-confirm" type="password" placeholder="Re-enter password" />
-          </div>
-          <div class="err-msg" id="staff-newpw-err"></div>
-          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-staff-newpw" onclick="doStaffSetPassword()">
-            Set Password &amp; Sign In
-          </button>
+          <ul class="lg-rules" id="pw-strength-list">
+            <li id="pw-check-length" style="color:var(--slate-light)">○ At least 8 characters</li>
+            <li id="pw-check-number" style="color:var(--slate-light)">○ At least 1 number</li>
+            <li id="pw-check-upper" style="color:var(--slate-light)">○ At least 1 capital letter</li>
+          </ul>
         </div>
+        <div class="lg-field">
+          <label class="lg-label" for="reg-password-confirm">Confirm password</label>
+          <div class="lg-iw">
+            <svg class="lg-ico" aria-hidden="true"><use href="#i-lock" /></svg>
+            <input class="lg-input no-r" id="reg-password-confirm" type="password" autocomplete="new-password" placeholder="Re-enter password" />
+          </div>
+        </div>
+        <p class="lg-err" id="register-err" role="alert"></p>
+        <button class="lg-btn" id="btn-register" type="submit">Register</button>
+      </form>
+    </div>
+  </div>
 
-        <!-- SUPER ADMIN TWO-FACTOR -->
-        <div id="form-totp" style="display:none">
-          <div id="totp-enrol-box" style="display:none;margin-bottom:16px">
-            <p style="color:var(--slate);font-size:13px;text-align:center;margin-bottom:12px">First-time setup needs a one-time enrolment code from the platform owner. It works once and expires in 24 hours.</p>
-            <div class="form-group">
-              <label class="form-label">Enrolment code</label>
-              <input class="form-control" id="totp-enrol-code" type="text" autocomplete="off" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" />
-            </div>
-            <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-totp-enrol" onclick="startTotpSetup()">Continue</button>
-          </div>
-          <div id="totp-setup-box" style="display:none;text-align:center;margin-bottom:16px">
-            <p style="color:var(--slate);font-size:13px">Set up two-factor sign-in. Scan this QR code with an authenticator app (Google Authenticator, Authy, Microsoft Authenticator), then enter the 6-digit code it shows.</p>
-            <img id="totp-qr" alt="QR code" style="width:200px;height:200px;margin:8px auto;display:block" />
-            <p style="font-size:12px;color:var(--slate-light);word-break:break-all">Can't scan? Enter this key manually: <strong id="totp-secret"></strong></p>
-          </div>
-          <p id="totp-login-hint" style="color:var(--slate);font-size:13px;text-align:center;margin-bottom:12px">Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
-          <div class="form-group" id="totp-code-group">
-            <label class="form-label">Authentication code</label>
-            <input class="form-control" id="totp-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="123456" />
-          </div>
-          <div class="err-msg" id="totp-err"></div>
-          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-totp" onclick="doTotpSubmit()">Verify &amp; Sign In</button>
-        </div>
-
-        <div id="form-totp-backup" style="display:none">
-          <p style="color:var(--slate);font-size:13px;margin-bottom:12px">Save these backup codes somewhere safe now. Each works once if you lose your phone. They will not be shown again.</p>
-          <pre id="totp-backup-list" style="background:var(--smoke);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:14px;line-height:1.7;text-align:center"></pre>
-          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" onclick="finishTotpSetup()">I have saved these codes</button>
-        </div>
-
-        <!-- SET PASSWORD / REGISTER FORM (patients, first login only) -->
-        <div id="form-register" style="display:none">
-          <div style="text-align:center;margin-bottom:20px">
-            <p style="color:var(--slate);font-size:13px">This is your first time signing in. Choose a new password to finish registering.</p>
-          </div>
-          <div class="form-group">
-            <label class="form-label">New Password</label>
-            <div style="position:relative">
-              <input class="form-control" id="reg-password" type="password" placeholder="At least 8 characters"
-                style="padding-right:40px" oninput="renderPasswordStrength(this.value)" />
-              <span onclick="toggleRegPasswordVisibility()"
-                style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--slate-light);font-size:14px"
-                id="reg-eye-icon">👁</span>
-            </div>
-            <ul id="pw-strength-list" style="list-style:none;padding:0;margin:8px 0 0;font-size:12.5px">
-              <li id="pw-check-length" style="color:var(--slate-light)">○ At least 8 characters</li>
-              <li id="pw-check-number" style="color:var(--slate-light)">○ At least 1 number</li>
-              <li id="pw-check-upper" style="color:var(--slate-light)">○ At least 1 capital letter</li>
-            </ul>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Confirm Password</label>
-            <input class="form-control" id="reg-password-confirm" type="password" placeholder="Re-enter password" />
-          </div>
-          <div class="err-msg" id="register-err"></div>
-          <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="btn-register" onclick="doRegister()">
-            Register
-          </button>
-        </div>
+  <!-- ═══ MODAL: signed in ═══ -->
+  <div class="lg-modal" id="ok-modal" hidden role="dialog" aria-modal="true" aria-labelledby="ok-title" aria-describedby="ok-name">
+    <div class="lg-mcard glass">
+      <div class="lg-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path class="lg-tick" d="M5 12.5l4.5 4.5L19 7.5" /></svg></div>
+      <h2 class="lg-mtitle" id="ok-title">You're signed in</h2>
+      <p class="lg-msub" id="ok-name">Welcome back.</p>
+      <div class="lg-row">
+        <svg aria-hidden="true"><use href="#i-shield" /></svg>
+        <div><b>Credentials confirmed</b><small>Your sign-in details were accepted</small></div>
+        <svg class="tick" aria-hidden="true"><use href="#i-check" /></svg>
       </div>
+      <div class="lg-row">
+        <svg aria-hidden="true"><use href="#i-session" /></svg>
+        <div><b>Session started</b><small>This browser is signed in</small></div>
+        <svg class="tick" aria-hidden="true"><use href="#i-check" /></svg>
+      </div>
+      <button class="lg-btn" id="ok-continue" type="button">Continue <svg aria-hidden="true"><use href="#i-arrow" /></svg></button>
+      <div class="lg-prog" aria-hidden="true"><i></i></div>
     </div>
   </div>
 
   <script src="../js/brand.js"></script>
   <script src="../config.js"></script>
   <script src="../js/api.js"></script>
+  <script src="../js/login-otp.js"></script>
   <script src="../js/password-reset.js" defer></script>
   <script>
     // Redirect if already logged in
     if (getToken()) redirectByRole(getDoctor()?.role);
     else { try { if (localStorage.getItem("ms_portal_token")) redirectByRole("patient"); } catch (e) { } }
 
-    let pendingPatientPhone = null;
-    let currentCaptchaToken = null;
-    let pendingStaffEmail = null;
-    let pendingStaffOldPassword = null;
-    let pendingSetupToken = null;
-    let pendingRegistrationToken = null;
-    let pendingTotpToken = null;
-    let totpMode = null;
-    let totpSession = null;
+    (function () {
+      "use strict";
+      var $ = function (id) { return document.getElementById(id); };
+      var SPIN = '<span class="lg-spin" aria-hidden="true"></span>';
+      var ARROW = '<svg aria-hidden="true"><use href="#i-arrow"/></svg>';
+      var LOGIN_HTML = $("btn-login").innerHTML;
 
-    async function loadCaptcha() {
-      const box = document.getElementById("captcha-image-box");
-      const answerInput = document.getElementById("login-captcha-answer");
-      box.innerHTML = "Loading captcha…";
-      answerInput.value = "";
-      try {
-        const res = await fetch(`${BASE}/auth/captcha`);
-        const json = await res.json();
-        box.innerHTML = '<img alt="captcha" draggable="false" style="display:block;user-select:none;-webkit-user-select:none;pointer-events:none" src="data:image/svg+xml;utf8,' + encodeURIComponent(json.svg) + '">';
-        currentCaptchaToken = json.token;
-      } catch (e) {
-        box.innerHTML = "Couldn't load captcha — tap 🔄 to retry";
-        currentCaptchaToken = null;
+      var pendingPatientPhone = null;
+      var currentCaptchaToken = null;
+      var pendingStaffEmail = null;
+      var pendingStaffOldPassword = null;
+      var pendingSetupToken = null;
+      var pendingRegistrationToken = null;
+      var pendingTotpToken = null;
+      var totpMode = null;
+      var totpBackupMode = false;
+      var totpSession = null;
+      var signedRole = null;
+      var redirected = false;
+
+      function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+      function reduced() { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+      function errText(json, fallback) { return json && typeof json.detail === "string" ? json.detail : fallback; }
+
+      /* ── Modal helpers ── */
+      var openStack = [];
+      var lastFocus = null;
+
+      function openModal(id) {
+        var m = $(id);
+        clearTimeout(m._t);
+        if (!openStack.length) lastFocus = document.activeElement;
+        m.hidden = false;
+        document.body.classList.add("lg-lock");
+        requestAnimationFrame(function () { m.classList.add("open"); });
+        if (openStack.indexOf(id) < 0) openStack.push(id);
       }
-    }
 
-    loadCaptcha(); 
-
-    function toggleLoginPasswordVisibility() {
-      const input = document.getElementById("login-password");
-      const icon = document.getElementById("login-eye-icon");
-      if (input.type === "password") {
-        input.type = "text";
-        icon.textContent = "🙈";
-      } else {
-        input.type = "password";
-        icon.textContent = "👁";
-      }
-    }
-
-    function toggleRegPasswordVisibility() {
-      const input = document.getElementById("reg-password");
-      const icon = document.getElementById("reg-eye-icon");
-      if (input.type === "password") {
-        input.type = "text";
-        icon.textContent = "🙈";
-      } else {
-        input.type = "password";
-        icon.textContent = "👁";
-      }
-    }
-
-    function isEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
-    function isPhone(v) { return /^\d{10}$/.test(v); }
-
-    async function doLogin() {
-      const btn = document.getElementById("btn-login");
-      const err = document.getElementById("login-err");
-      err.textContent = "";
-
-      const identifier = document.getElementById("login-id").value.trim();
-      const password = document.getElementById("login-password").value;
-
-      if (!identifier) { err.textContent = "Enter your email or mobile number"; return; }
-      if (!password) { err.textContent = "Please enter your password."; return; }
-
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span>';
-
-      try {
-        if (isEmail(identifier)) {
-          if (!currentCaptchaToken) { err.textContent = "Please wait for the captcha to load."; return; }
-          const captchaAnswer = document.getElementById("login-captcha-answer").value.trim();
-          if (!captchaAnswer) { err.textContent = "Please answer the captcha question."; return; }
-          const res = await fetch(`${BASE}/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: identifier, password, captcha_token: currentCaptchaToken, captcha_answer: captchaAnswer })
-          });
-          const json = await res.json();
-          if (!res.ok) {
-            throw new Error(json.detail || "Login failed");
-          }
-          if (json.status === "totp_required" || json.status === "totp_setup_required") {
-            await showTotpStep(json.status, json.totp_token);
-            return;
-          }
-          if (json.status === "needs_password_change") {
-            pendingStaffEmail = identifier;
-            pendingStaffOldPassword = password;
-            pendingSetupToken = json.setup_token;
-            document.getElementById("form-login").style.display = "none";
-            document.getElementById("form-staff-newpw").style.display = "block";
-            return;
-          }
-          saveSession(json.access_token, json.doctor);
-          redirectByRole(json.doctor.role);
-        } else if (isPhone(identifier)) {
-          if (!currentCaptchaToken) { err.textContent = "Please wait for the captcha to load."; return; }
-          const captchaAnswer = document.getElementById("login-captcha-answer").value.trim();
-          if (!captchaAnswer) { err.textContent = "Please answer the captcha question."; return; }
-          const res = await fetch(`${BASE}/portal/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ phone: identifier, password, captcha_token: currentCaptchaToken, captcha_answer: captchaAnswer })
-          });
-          const json = await res.json();
-          if (!res.ok) {
-            throw new Error(json.detail || "Login failed");
-          }
-
-          if (json.status === "needs_registration") {
-            pendingPatientPhone = identifier;
-            pendingRegistrationToken = json.registration_token;
-            document.getElementById("form-login").style.display = "none";
-            document.getElementById("form-register").style.display = "block";
-            document.getElementById("auth-subtitle").textContent = "Set your password";
-          } else {
-            saveSession(json.access_token, json.doctor);
-            redirectByRole(json.doctor.role);
-          }
-        } else {
-          throw new Error("Enter a valid email address or a 10-digit mobile number");
+      function closeModal(id) {
+        var m = $(id);
+        m.classList.remove("open");
+        var i = openStack.indexOf(id);
+        if (i >= 0) openStack.splice(i, 1);
+        m._t = setTimeout(function () { m.hidden = true; }, reduced() ? 0 : 220);
+        if (!openStack.length) {
+          document.body.classList.remove("lg-lock");
+          if (lastFocus && lastFocus.focus) lastFocus.focus();
         }
-      } catch (e) {
-        err.textContent = e.message;
-        loadCaptcha();  // captcha is single-use - every failed attempt needs a fresh one
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "Sign In";
       }
-    }
 
-    async function doRegister() {
-      const btn = document.getElementById("btn-register");
-      const err = document.getElementById("register-err");
-      err.textContent = "";
-
-      const pw = document.getElementById("reg-password").value;
-      const cpw = document.getElementById("reg-password-confirm").value;
-
-      if (pw.length < 6) { err.textContent = "Password must be at least 6 characters"; return; }
-      if (pw !== cpw) { err.textContent = "Passwords do not match"; return; }
-      if (pw === "Test1234") { err.textContent = "Please choose a different password than the temporary one"; return; }
-
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span>';
-      try {
-        const res = await fetch(`${BASE}/portal/auth/register/complete`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: pendingPatientPhone, new_password: pw, registration_token: pendingRegistrationToken })
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.detail || "Registration failed");
-        saveSession(json.access_token, json.doctor);
-        // The one moment we can be certain this is a genuine first login —
-        // registration/password-reset only ever runs once per account.
-        // Consumed once on my-health.html's very next load, then removed —
-        // never fires again regardless of whether the tutorial itself was
-        // actually finished or skipped.
-        localStorage.setItem("ms_just_registered", "1");
-        redirectByRole(json.doctor.role);
-      } catch (e) {
-        err.textContent = e.message;
-        btn.disabled = false;
-        btn.textContent = "Register";
+      function showPanel(modalId, panelId) {
+        var panels = $(modalId).querySelectorAll(".lg-panel");
+        for (var i = 0; i < panels.length; i++) panels[i].hidden = panels[i].id !== panelId;
       }
-    }
 
-    async function doStaffSetPassword() {
-      const btn = document.getElementById("btn-staff-newpw");
-      const err = document.getElementById("staff-newpw-err");
-      err.textContent = "";
+      function focusSoon(el) { setTimeout(function () { if (el && el.focus) el.focus(); }, 60); }
 
-      const pw = document.getElementById("staff-new-password").value;
-      const cpw = document.getElementById("staff-new-password-confirm").value;
-
-      if (pw.length < 8 || !/\d/.test(pw) || !/[A-Z]/.test(pw)) {
-        err.textContent = "Password must be at least 8 characters, with 1 number and 1 capital letter.";
-        return;
+      function closeAndReset(id) {
+        if (id === "tfa-modal") { pendingTotpToken = null; totpSession = null; }
+        if (id === "pw-modal") { pendingSetupToken = null; pendingRegistrationToken = null; }
+        closeModal(id);
+        loadCaptcha(); // a captcha is single-use, so the card needs a fresh one
       }
-      if (pw !== cpw) { err.textContent = "Passwords do not match."; return; }
-      if (pw === pendingStaffOldPassword) { err.textContent = "Please choose a different password than the temporary one."; return; }
 
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span>';
-      try {
-        const res = await fetch(`${BASE}/auth/set-new-password`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: pendingStaffEmail,
-            old_password: pendingStaffOldPassword,
-            new_password: pw,
-            setup_token: pendingSetupToken
-          })
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.detail || "Could not set new password");
-        saveSession(json.access_token, json.doctor);
-        // One-time flag, consumed by the landing page — the tutorial should
-        // only ever auto-show right after this exact moment (first login)
-        // or when the Tutorial button is pressed, never on a plain reload.
-        sessionStorage.setItem("ms_just_set_password", "1");
-        redirectByRole(json.doctor.role);
-      } catch (e) {
-        err.textContent = e.message;
-        btn.disabled = false;
-        btn.textContent = "Set Password & Sign In";
+      document.addEventListener("click", function (e) {
+        var x = e.target.closest("[data-close]");
+        if (x) { var m = x.closest(".lg-modal"); if (m && !m.dataset.locked) closeAndReset(m.id); return; }
+        var eye = e.target.closest("[data-eye]");
+        if (eye) {
+          var inp = $(eye.getAttribute("data-eye"));
+          var show = inp.type === "password";
+          inp.type = show ? "text" : "password";
+          eye.classList.toggle("is-on", show);
+          eye.setAttribute("aria-pressed", show ? "true" : "false");
+          eye.setAttribute("aria-label", show ? "Hide password" : "Show password");
+        }
+      });
+
+      document.addEventListener("keydown", function (e) {
+        var id = openStack[openStack.length - 1];
+        if (!id) return;
+        var m = $(id);
+        if (e.key === "Escape") { if (!m.dataset.locked) closeAndReset(id); return; }
+        if (e.key !== "Tab") return;
+        var list = m.querySelectorAll("button:not([disabled]), input:not([disabled]), a[href]");
+        var f = Array.prototype.filter.call(list, function (el) { return el.offsetParent !== null; });
+        if (!f.length) return;
+        var first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      });
+
+      /* ── Signed-in modal, then redirect ── */
+      function goNow() { if (redirected) return; redirected = true; redirectByRole(signedRole); }
+
+      function finishSignIn(doctor) {
+        signedRole = doctor && doctor.role;
+        $("ok-name").textContent = doctor && doctor.name ? "Welcome back, " + doctor.name + "." : "Welcome back.";
+        $("ok-modal").dataset.locked = "1";
+        openModal("ok-modal");
+        focusSoon($("ok-continue"));
+        setTimeout(goNow, reduced() ? 400 : 1500);
       }
-    }
+      $("ok-continue").addEventListener("click", goNow);
 
-    async function showTotpStep(status, token) {
-      pendingTotpToken = token;
-      totpMode = status === "totp_setup_required" ? "setup" : "login";
-      document.getElementById("form-login").style.display = "none";
-      document.getElementById("form-totp").style.display = "block";
-      document.getElementById("totp-err").textContent = "";
-      document.getElementById("totp-code").value = "";
-      const box = document.getElementById("totp-setup-box");
-      const hint = document.getElementById("totp-login-hint");
-      document.getElementById("totp-enrol-box").style.display = "none";
-      document.getElementById("totp-code-group").style.display = "";
-      document.getElementById("btn-totp").style.display = "";
-      if (totpMode === "setup") {
-        // First-time setup needs the one-time enrolment code before the QR code is shown.
-        box.style.display = "none";
-        hint.style.display = "none";
-        document.getElementById("totp-code-group").style.display = "none";
-        document.getElementById("btn-totp").style.display = "none";
-        document.getElementById("totp-enrol-code").value = "";
-        document.getElementById("totp-enrol-box").style.display = "block";
-        document.getElementById("totp-enrol-code").focus();
-        return;
-      } else {
-        box.style.display = "none";
-        hint.style.display = "block";
+      /* ── Captcha ── */
+      async function loadCaptcha() {
+        var box = $("captcha-image-box");
+        var answerInput = $("login-captcha-answer");
+        box.textContent = "Loading captcha…";
+        answerInput.value = "";
+        try {
+          var res = await fetch(BASE + "/auth/captcha");
+          var json = await res.json();
+          var img = document.createElement("img");
+          img.alt = "captcha";
+          img.draggable = false;
+          img.style.cssText = "display:block;max-width:100%;user-select:none;-webkit-user-select:none;pointer-events:none";
+          img.src = "data:image/svg+xml;utf8," + encodeURIComponent(json.svg);
+          box.textContent = "";
+          box.appendChild(img);
+          currentCaptchaToken = json.token;
+        } catch (e) {
+          box.textContent = "Couldn't load the captcha. Use the refresh button to retry.";
+          currentCaptchaToken = null;
+        }
       }
-      document.getElementById("totp-code").focus();
-    }
+      $("captcha-refresh").addEventListener("click", loadCaptcha);
+      loadCaptcha();
 
-    async function startTotpSetup() {
-      const err = document.getElementById("totp-err");
-      err.textContent = "";
-      const enrolment = document.getElementById("totp-enrol-code").value.trim();
-      if (!enrolment) { err.textContent = "Enter the enrolment code."; return; }
-      try {
-        const res = await fetch(`${BASE}/auth/totp/setup`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ totp_token: pendingTotpToken, enrolment_code: enrolment })
-        });
-        const json = await res.json();
-        if (!res.ok) { err.textContent = json.detail || "Could not start two-factor setup."; return; }
-        document.getElementById("totp-enrol-box").style.display = "none";
-        document.getElementById("totp-setup-box").style.display = "block";
-        document.getElementById("totp-code-group").style.display = "";
-        document.getElementById("btn-totp").style.display = "";
-        document.getElementById("totp-qr").src = json.qr_data_uri;
-        document.getElementById("totp-secret").textContent = json.secret;
-        document.getElementById("totp-code").focus();
-      } catch (e) {
-        err.textContent = "Could not start two-factor setup. Please try again.";
+      function isEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+      function isPhone(v) { return /^\d{10}$/.test(v); }
+
+      /* ── Login ── */
+      $("form-login").addEventListener("submit", function (e) { e.preventDefault(); doLogin(); });
+      $("fp-open").addEventListener("click", function () { openForgotPasswordModal(); });
+
+      async function doLogin() {
+        var btn = $("btn-login");
+        var err = $("login-err");
+        err.textContent = "";
+
+        var identifier = $("login-id").value.trim();
+        var password = $("login-password").value;
+
+        if (!identifier) { err.textContent = "Enter your email or mobile number"; return; }
+        if (!password) { err.textContent = "Please enter your password."; return; }
+
+        btn.disabled = true;
+        btn.innerHTML = SPIN;
+
+        try {
+          if (isEmail(identifier)) {
+            if (!currentCaptchaToken) { err.textContent = "Please wait for the captcha to load."; return; }
+            var captchaAnswer = $("login-captcha-answer").value.trim();
+            if (!captchaAnswer) { err.textContent = "Please answer the captcha question."; return; }
+            var res = await fetch(BASE + "/auth/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email: identifier, password: password, captcha_token: currentCaptchaToken, captcha_answer: captchaAnswer })
+            });
+            var json = await res.json();
+            if (!res.ok) throw new Error(errText(json, "Login failed"));
+            if (json.status === "totp_required" || json.status === "totp_setup_required") {
+              showTotpStep(json.status, json.totp_token);
+              return;
+            }
+            if (json.status === "needs_password_change") {
+              pendingStaffEmail = identifier;
+              pendingStaffOldPassword = password;
+              pendingSetupToken = json.setup_token;
+              openPwPanel("form-staff-newpw");
+              return;
+            }
+            saveSession(json.access_token, json.doctor);
+            finishSignIn(json.doctor);
+          } else if (isPhone(identifier)) {
+            if (!currentCaptchaToken) { err.textContent = "Please wait for the captcha to load."; return; }
+            var captchaAnswer2 = $("login-captcha-answer").value.trim();
+            if (!captchaAnswer2) { err.textContent = "Please answer the captcha question."; return; }
+            var res2 = await fetch(BASE + "/portal/auth/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ phone: identifier, password: password, captcha_token: currentCaptchaToken, captcha_answer: captchaAnswer2 })
+            });
+            var json2 = await res2.json();
+            if (!res2.ok) throw new Error(errText(json2, "Login failed"));
+
+            if (json2.status === "needs_registration") {
+              pendingPatientPhone = identifier;
+              pendingRegistrationToken = json2.registration_token;
+              openPwPanel("form-register");
+            } else {
+              saveSession(json2.access_token, json2.doctor);
+              finishSignIn(json2.doctor);
+            }
+          } else {
+            throw new Error("Enter a valid email address or a 10-digit mobile number");
+          }
+        } catch (e) {
+          err.textContent = e.message;
+          loadCaptcha(); // captcha is single-use: every failed attempt needs a fresh one
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = LOGIN_HTML;
+        }
       }
-    }
 
-    async function doTotpSubmit() {
-      const err = document.getElementById("totp-err");
-      const btn = document.getElementById("btn-totp");
-      err.textContent = "";
-      const code = document.getElementById("totp-code").value.trim();
-      if (!code) { err.textContent = "Enter the code from your authenticator app."; return; }
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span>';
-      try {
-        const res = await fetch(`${BASE}${totpMode === "setup" ? "/auth/totp/confirm" : "/auth/login/totp"}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ totp_token: pendingTotpToken, code })
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.detail || "Verification failed");
-        if (json.backup_codes && json.backup_codes.length) {
-          totpSession = json;
-          document.getElementById("totp-backup-list").textContent = json.backup_codes.join("\n");
-          document.getElementById("form-totp").style.display = "none";
-          document.getElementById("form-totp-backup").style.display = "block";
+      /* ── First-login password modal ── */
+      function openPwPanel(panelId) {
+        $("pw-title").textContent = panelId === "form-register" ? "Set your password" : "Set your new password";
+        $("pw-sub").textContent = panelId === "form-register"
+          ? "This is your first time signing in. Choose a new password to finish registering."
+          : "This is your first time signing in. Choose a new password to finish setting up your account.";
+        $("staff-newpw-err").textContent = "";
+        $("register-err").textContent = "";
+        showPanel("pw-modal", panelId);
+        openModal("pw-modal");
+        focusSoon($(panelId === "form-register" ? "reg-password" : "staff-new-password"));
+      }
+
+      $("staff-new-password").addEventListener("input", function (e) { renderPasswordStrength(e.target.value, "staff-pw"); });
+      $("reg-password").addEventListener("input", function (e) { renderPasswordStrength(e.target.value); });
+      $("form-register").addEventListener("submit", function (e) { e.preventDefault(); doRegister(); });
+      $("form-staff-newpw").addEventListener("submit", function (e) { e.preventDefault(); doStaffSetPassword(); });
+
+      async function doRegister() {
+        var btn = $("btn-register");
+        var err = $("register-err");
+        err.textContent = "";
+
+        var pw = $("reg-password").value;
+        var cpw = $("reg-password-confirm").value;
+
+        if (pw.length < 6) { err.textContent = "Password must be at least 6 characters"; return; }
+        if (pw !== cpw) { err.textContent = "Passwords do not match"; return; }
+        if (pw === "Test1234") { err.textContent = "Please choose a different password than the temporary one"; return; }
+
+        btn.disabled = true;
+        btn.innerHTML = SPIN;
+        try {
+          var res = await fetch(BASE + "/portal/auth/register/complete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: pendingPatientPhone, new_password: pw, registration_token: pendingRegistrationToken })
+          });
+          var json = await res.json();
+          if (!res.ok) throw new Error(errText(json, "Registration failed"));
+          saveSession(json.access_token, json.doctor);
+          // The one moment we can be certain this is a genuine first login:
+          // registration/password-reset only ever runs once per account.
+          // Consumed once on my-health.html's very next load, then removed.
+          localStorage.setItem("ms_just_registered", "1");
+          closeModal("pw-modal");
+          finishSignIn(json.doctor);
+        } catch (e) {
+          err.textContent = e.message;
+          btn.disabled = false;
+          btn.textContent = "Register";
+        }
+      }
+
+      async function doStaffSetPassword() {
+        var btn = $("btn-staff-newpw");
+        var err = $("staff-newpw-err");
+        err.textContent = "";
+
+        var pw = $("staff-new-password").value;
+        var cpw = $("staff-new-password-confirm").value;
+
+        if (pw.length < 8 || !/\d/.test(pw) || !/[A-Z]/.test(pw)) {
+          err.textContent = "Password must be at least 8 characters, with 1 number and 1 capital letter.";
           return;
         }
-        proceedAfterTotp(json);
-      } catch (e) {
-        err.textContent = e.message;
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "Verify & Sign In";
+        if (pw !== cpw) { err.textContent = "Passwords do not match."; return; }
+        if (pw === pendingStaffOldPassword) { err.textContent = "Please choose a different password than the temporary one."; return; }
+
+        btn.disabled = true;
+        btn.innerHTML = SPIN;
+        try {
+          var res = await fetch(BASE + "/auth/set-new-password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: pendingStaffEmail,
+              old_password: pendingStaffOldPassword,
+              new_password: pw,
+              setup_token: pendingSetupToken
+            })
+          });
+          var json = await res.json();
+          if (!res.ok) throw new Error(errText(json, "Could not set new password"));
+          saveSession(json.access_token, json.doctor);
+          // One-time flag, consumed by the landing page: the tutorial auto-shows only right after this moment.
+          sessionStorage.setItem("ms_just_set_password", "1");
+          closeModal("pw-modal");
+          finishSignIn(json.doctor);
+        } catch (e) {
+          err.textContent = e.message;
+          btn.disabled = false;
+          btn.textContent = "Set password & sign in";
+        }
       }
-    }
 
-    function proceedAfterTotp(json) {
-      if (json.status === "needs_password_change") {
-        pendingStaffEmail = document.getElementById("login-id").value.trim();
-        pendingStaffOldPassword = document.getElementById("login-password").value;
-        pendingSetupToken = json.setup_token;
-        document.getElementById("form-totp").style.display = "none";
-        document.getElementById("form-totp-backup").style.display = "none";
-        document.getElementById("form-staff-newpw").style.display = "block";
-        return;
+      /* ── Super Admin two-step verification modal ── */
+      var totpOtp = window.OtpBoxes.create($("totp-otp"), {
+        length: 6,
+        groupLabel: "6-digit authentication code",
+        onChange: function () { updateTotpBtn(); },
+        onComplete: function () { setTimeout(doTotpSubmit, 140); }
+      });
+
+      function totpReady() {
+        return totpBackupMode
+          ? $("totp-backup-input").value.replace(/[\s-]/g, "").length >= 10
+          : totpOtp.value().length === 6;
       }
-      saveSession(json.access_token, json.doctor);
-      redirectByRole(json.doctor.role);
-    }
+      function updateTotpBtn() { var b = $("btn-totp"); if (!b.dataset.busy && !b.classList.contains("is-ok")) b.disabled = !totpReady(); }
+      function resetTotpBtn() {
+        var b = $("btn-totp");
+        delete b.dataset.busy;
+        b.classList.remove("is-ok");
+        b.textContent = "Verify & sign in";
+        b.disabled = true;
+      }
+      function setTfaHead(title, sub) { $("tfa-title").textContent = title; $("tfa-sub").textContent = sub; }
 
-    function finishTotpSetup() { proceedAfterTotp(totpSession); }
+      function setBackupMode(on) {
+        totpBackupMode = on;
+        $("totp-otp").hidden = on;
+        $("totp-backup-wrap").hidden = !on;
+        $("totp-switch").textContent = on ? "Use authenticator code instead" : "Use a backup code instead";
+        $("totp-err").textContent = "";
+        if (on) { $("totp-backup-input").value = ""; $("totp-backup-input").focus(); }
+        else { totpOtp.clear(); totpOtp.focus(); }
+        updateTotpBtn();
+      }
+      $("totp-switch").addEventListener("click", function () { setBackupMode(!totpBackupMode); });
+      $("totp-backup-input").addEventListener("input", updateTotpBtn);
 
-    document.addEventListener("keydown", e => {
-      if (e.key !== "Enter") return;
-      if (document.getElementById("form-register").style.display !== "none") doRegister();
-      else if (document.getElementById("form-totp-backup").style.display !== "none") finishTotpSetup();
-      else if (document.getElementById("form-totp").style.display !== "none") doTotpSubmit();
-      else if (document.getElementById("form-staff-newpw").style.display !== "none") doStaffSetPassword();
-      else doLogin();
-    });
+      function showTotpStep(status, token) {
+        pendingTotpToken = token;
+        totpMode = status === "totp_setup_required" ? "setup" : "login";
+        totpBackupMode = false;
+        $("totp-err").textContent = "";
+        $("totp-enrol-err").textContent = "";
+        $("tfa-x").hidden = false;
+        delete $("tfa-modal").dataset.locked;
+        $("totp-qr-box").hidden = true;
+        $("totp-switch").hidden = totpMode === "setup";
+        $("totp-otp").hidden = false;
+        $("totp-backup-wrap").hidden = true;
+        totpOtp.setState("");
+        totpOtp.clear();
+        resetTotpBtn();
+        openModal("tfa-modal");
+        if (totpMode === "setup") {
+          setTfaHead("Set up two-step verification", "Enter the one-time enrolment code from the platform owner. It works once and expires in 24 hours.");
+          $("totp-enrol-code").value = "";
+          showPanel("tfa-modal", "form-totp-enrol");
+          focusSoon($("totp-enrol-code"));
+        } else {
+          setTfaHead("Two-step verification", "Enter the 6-digit code from your authenticator app.");
+          showPanel("tfa-modal", "form-totp");
+          focusSoon(null);
+          setTimeout(function () { totpOtp.focus(); }, 80);
+        }
+      }
+
+      $("form-totp-enrol").addEventListener("submit", function (e) { e.preventDefault(); startTotpSetup(); });
+      async function startTotpSetup() {
+        var err = $("totp-enrol-err");
+        err.textContent = "";
+        var enrolment = $("totp-enrol-code").value.trim();
+        if (!enrolment) { err.textContent = "Enter the enrolment code."; return; }
+        var btn = $("btn-totp-enrol");
+        btn.disabled = true;
+        btn.innerHTML = SPIN;
+        try {
+          var res = await fetch(BASE + "/auth/totp/setup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ totp_token: pendingTotpToken, enrolment_code: enrolment })
+          });
+          var json = await res.json();
+          if (!res.ok) { err.textContent = errText(json, "Could not start two-factor setup."); return; }
+          $("totp-qr").src = json.qr_data_uri;
+          $("totp-secret").textContent = json.secret;
+          $("totp-qr-box").hidden = false;
+          setTfaHead("Scan and confirm", "Scan the QR code with Google Authenticator, Authy or Microsoft Authenticator, then enter the 6-digit code it shows.");
+          showPanel("tfa-modal", "form-totp");
+          setTimeout(function () { totpOtp.focus(); }, 80);
+        } catch (e) {
+          err.textContent = "Could not start two-factor setup. Please try again.";
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = "Continue " + ARROW;
+        }
+      }
+
+      $("form-totp").addEventListener("submit", function (e) { e.preventDefault(); doTotpSubmit(); });
+      async function doTotpSubmit() {
+        var err = $("totp-err");
+        var btn = $("btn-totp");
+        if (btn.dataset.busy || btn.classList.contains("is-ok")) return;
+        err.textContent = "";
+        var code = totpBackupMode ? $("totp-backup-input").value.trim() : totpOtp.value();
+        if (!code) { err.textContent = "Enter the code from your authenticator app."; return; }
+        if (!totpBackupMode && code.length !== 6) { err.textContent = "Enter all 6 digits."; return; }
+        btn.dataset.busy = "1";
+        btn.disabled = true;
+        btn.innerHTML = SPIN + "<span>Verifying…</span>";
+        if (!totpBackupMode) totpOtp.setState("verifying");
+        var done = false;
+        try {
+          var res = await fetch(BASE + (totpMode === "setup" ? "/auth/totp/confirm" : "/auth/login/totp"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ totp_token: pendingTotpToken, code: code })
+          });
+          var json = await res.json();
+          if (!res.ok) throw new Error(errText(json, "Verification failed"));
+          if (!totpBackupMode) totpOtp.setState("success");
+          if (json.backup_codes && json.backup_codes.length) {
+            totpSession = json;
+            $("totp-backup-list").textContent = json.backup_codes.join("\n");
+            await wait(reduced() ? 0 : 450);
+            setTfaHead("Save your backup codes", "Each code works once if you lose your phone. They will not be shown again.");
+            $("tfa-modal").dataset.locked = "1";
+            $("tfa-x").hidden = true;
+            showPanel("tfa-modal", "form-totp-backup");
+            return;
+          }
+          done = true;
+          btn.classList.add("is-ok");
+          btn.innerHTML = '<svg aria-hidden="true"><use href="#i-check"/></svg><span>Verified</span>';
+          await wait(reduced() ? 0 : 650);
+          proceedAfterTotp(json);
+        } catch (e) {
+          err.textContent = e.message;
+          if (!totpBackupMode) { totpOtp.setState("error"); totpOtp.clear(); totpOtp.focus(); }
+        } finally {
+          delete btn.dataset.busy;
+          if (!done) { btn.innerHTML = "Verify &amp; sign in"; btn.disabled = !totpReady(); }
+        }
+      }
+
+      function proceedAfterTotp(json) {
+        delete $("tfa-modal").dataset.locked;
+        if (json.status === "needs_password_change") {
+          pendingStaffEmail = $("login-id").value.trim();
+          pendingStaffOldPassword = $("login-password").value;
+          pendingSetupToken = json.setup_token;
+          closeModal("tfa-modal");
+          openPwPanel("form-staff-newpw");
+          return;
+        }
+        saveSession(json.access_token, json.doctor);
+        closeModal("tfa-modal");
+        finishSignIn(json.doctor);
+      }
+
+      $("btn-totp-saved").addEventListener("click", function () { proceedAfterTotp(totpSession); });
+    })();
   </script>
 </body>
 

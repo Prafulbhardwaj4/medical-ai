@@ -13,6 +13,9 @@
   let fpId = null;
   let fpIsStaff = false;
   let fpResetToken = null;
+  let fpOtp = null;
+  let fpResendLeft = 0;
+  let fpResendTimer = null;
 
   const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
   const isPhone = (v) => /^\d{10}$/.test(v);
@@ -52,7 +55,7 @@
             <p style="color:var(--slate);font-size:13px;margin-bottom:14px">Enter the 6-digit code sent to your WhatsApp. It is valid for 10 minutes.</p>
             <div class="form-group">
               <label class="form-label">6-digit code</label>
-              <input class="form-control" id="fp-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" />
+              <div class="otp" id="fp-otp"></div>
             </div>
             <div class="err-msg" id="fp-otp-err"></div>
             <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="fp-btn-otp">Verify</button>
@@ -95,10 +98,35 @@
     $("fp-btn-send").addEventListener("click", requestCode);
     $("fp-btn-otp").addEventListener("click", verifyCode);
     $("fp-btn-pw").addEventListener("click", setPassword);
-    $("fp-back").addEventListener("click", (e) => { e.preventDefault(); showStep("id"); loadCaptcha(); });
+    $("fp-back").addEventListener("click", (e) => { e.preventDefault(); if (fpResendLeft > 0) return; showStep("id"); loadCaptcha(); });
     $("fp-new-password").addEventListener("input", (e) => renderPasswordStrength(e.target.value, "fp-pw"));
     $("fp-pw-eye-icon").addEventListener("click", () => togglePwVisibility("fp-new-password", "fp-pw-eye-icon"));
-    $("fp-code").addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6); });
+    fpOtp = window.OtpBoxes.create($("fp-otp"), {
+      length: 6,
+      groupLabel: "6-digit code sent to your WhatsApp",
+      onChange: function (v) { $("fp-btn-otp").disabled = v.length < 6; },
+      onComplete: function () { setTimeout(verifyCode, 140); },
+    });
+    $("fp-btn-otp").disabled = true;
+  }
+
+  function startResendTimer() {
+    clearInterval(fpResendTimer);
+    fpResendLeft = 30;
+    const link = $("fp-back");
+    const tick = function () {
+      if (fpResendLeft > 0) {
+        link.textContent = "Ask for a new code in 0:" + String(fpResendLeft).padStart(2, "0");
+        link.classList.add("is-wait");
+        fpResendLeft--;
+      } else {
+        clearInterval(fpResendTimer);
+        link.textContent = "Did not get a code? Ask for a new one";
+        link.classList.remove("is-wait");
+      }
+    };
+    tick();
+    fpResendTimer = setInterval(tick, 1000);
   }
 
   function showStep(name) {
@@ -173,9 +201,12 @@
           ? { email: id, captcha_token: fpCaptchaToken, captcha_answer: answer }
           : { phone: id, captcha_token: fpCaptchaToken, captcha_answer: answer });
       fpId = id;
-      $("fp-code").value = "";
+      fpOtp.clear();
+      fpOtp.setState("");
       $("fp-otp-err").textContent = "";
       showStep("otp");
+      startResendTimer();
+      fpOtp.focus();
     } catch (e) {
       loadCaptcha();  // a captcha works once
       err.textContent = e.message;
@@ -189,8 +220,10 @@
     const err = $("fp-otp-err");
     const btn = $("fp-btn-otp");
     err.textContent = "";
-    const code = $("fp-code").value.trim();
+    const code = fpOtp.value();
     if (!/^\d{6}$/.test(code)) { err.textContent = "Enter the 6-digit code."; return; }
+    if (btn.querySelector(".spinner")) return;
+    fpOtp.setState("verifying");
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';
     try {
@@ -212,6 +245,8 @@
     } finally {
       btn.disabled = false;
       btn.textContent = "Verify";
+      if ($("fp-otp-err").textContent) { fpOtp.setState("error"); fpOtp.clear(); fpOtp.focus(); }
+      btn.disabled = fpOtp.value().length < 6;
     }
   }
 

@@ -1,5 +1,23 @@
 const BASE = window.MEDSCRIBE_API_BASE || (["localhost", "127.0.0.1"].includes(window.location.hostname) ? "http://localhost:8000" : "https://medical-ai-mvv1.onrender.com");
 
+// Legal documents: the Settings > Privacy / Terms reader in the profile menu and the first sign-in Terms and Privacy
+// dialog. Loaded here so every page that uses api.js gets it without a per-page edit (see js/legal.js).
+(function () {
+  if (window.__legalLoader) return;
+  window.__legalLoader = true;
+  const css = document.createElement("link");
+  css.rel = "stylesheet";
+  css.href = "/css/legal.css";
+  document.head.appendChild(css);
+  ["/js/legal-content.js", "/js/legal.js"].forEach(function (src) {
+    if (document.querySelector('script[src$="' + src.split("/").pop() + '"]')) return;
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = false;   // keeps the order: content first, then the interface
+    document.head.appendChild(s);
+  });
+})();
+
 function setRealVhUnit() {
   document.documentElement.style.setProperty('--real-vh', (window.innerHeight * 0.01) + 'px');
 }

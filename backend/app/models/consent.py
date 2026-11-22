@@ -11,10 +11,19 @@ from app.utils.audit import log_action
 
 router = APIRouter(prefix="/consent", tags=["consent"])
 
-# Notice versions are placeholders until a lawyer approves the real wording.
+# Versions and wording of the recording and test-specific patient notices.
 NOTICE_VERSIONS = {
-    "ai_recording": "ai_recording-v0-PENDING-LEGAL-REVIEW",
-    "hiv_test": "hiv_test-v0-PENDING-LEGAL-REVIEW",
+    "ai_recording": "ai_recording-2026-12-01",
+    "hiv_test": "hiv_test-2026-12-01",
+}
+
+
+NOTICE_TEXT = {
+    "ai_recording": "Your doctor would like to record this consultation so that an AI tool can draft the consultation note. "
+                    "The audio is turned into text while you speak and is not kept as a recording. The doctor checks and "
+                    "confirms the note. You can say no, and your consultation will go ahead without it.",
+    "hiv_test": "An HIV test is done only with your specific agreement. The result is confidential and is shared only with "
+                "you and the staff directly involved in your care. You may refuse the test.",
 }
 
 
@@ -29,7 +38,7 @@ def get_notice(purpose: str, current_doctor: Doctor = Depends(get_current_doctor
     return {
         "purpose": purpose,
         "version": NOTICE_VERSIONS[purpose],
-        "text": "PENDING LEGAL REVIEW. The hospital's patient notice for this purpose will appear here.",
+        "text": NOTICE_TEXT[purpose],
     }
 
 

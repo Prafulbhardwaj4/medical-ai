@@ -6,7 +6,7 @@ from app.utils.timezone import now_ist_naive
 class ConsentRecord(Base):
     """Who agreed to / was informed of what, under which notice version, when, recorded by whom.
     subject_type: patient | portal_account | staff. purpose: portal_signup | ai_recording | hiv_test | terms | privacy.
-    Notice TEXT lives in the frontend / legal documents (PENDING LEGAL REVIEW); only its version is stored here."""
+    Notice TEXT lives in frontend/js/legal-content.js; only its version is stored here."""
     __tablename__ = "consent_records"
 
     id = Column(Integer, primary_key=True, index=True)

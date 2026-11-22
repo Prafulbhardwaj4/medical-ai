@@ -1,7 +1,7 @@
 """Consent capture mechanisms (Phase C).
 
-Mechanism only. The notice TEXT is placeholder and marked PENDING LEGAL REVIEW in the
-pages; bump NOTICE_VERSION whenever the approved wording changes so patients are asked again.
+Consent capture for staff, patients and portal accounts. The Terms and Privacy text lives in
+frontend/js/legal-content.js; bump CONSENT_NOTICE_VERSION whenever it changes so everyone is asked to accept again.
 """
 from datetime import timedelta
 from typing import Optional
@@ -153,6 +153,47 @@ def portal_accept_terms(
             db.add(ConsentRecord(
                 hospital_id=None, subject_type="portal_account", subject_id=account.id,
                 purpose=purpose, notice_version=NOTICE_VERSION,
+            ))
+    db.commit()
+    return {"accepted": True, "notice_version": NOTICE_VERSION}
+
+
+# ------------------------------------------------- staff: Terms and Privacy acceptance on first sign-in
+
+LEGAL_PURPOSES = ("terms", "privacy")
+
+
+def _staff_accepted_purposes(db: Session, doctor_id: int) -> set:
+    return {
+        r[0] for r in db.query(ConsentRecord.purpose).filter(
+            ConsentRecord.subject_type == "staff",
+            ConsentRecord.subject_id == doctor_id,
+            ConsentRecord.notice_version == NOTICE_VERSION,
+            ConsentRecord.purpose.in_(LEGAL_PURPOSES),
+        ).all()
+    }
+
+
+@router.get("/legal/consent-status")
+def staff_consent_status(
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    done = _staff_accepted_purposes(db, current_doctor.id)
+    return {"accepted": all(p in done for p in LEGAL_PURPOSES), "notice_version": NOTICE_VERSION}
+
+
+@router.post("/legal/consent")
+def staff_accept_terms(
+    current_doctor: Doctor = Depends(get_current_doctor),
+    db: Session = Depends(get_db),
+):
+    done = _staff_accepted_purposes(db, current_doctor.id)
+    for purpose in LEGAL_PURPOSES:
+        if purpose not in done:
+            db.add(ConsentRecord(
+                hospital_id=current_doctor.hospital_id, subject_type="staff", subject_id=current_doctor.id,
+                purpose=purpose, notice_version=NOTICE_VERSION, recorded_by=current_doctor.id,
             ))
     db.commit()
     return {"accepted": True, "notice_version": NOTICE_VERSION}
