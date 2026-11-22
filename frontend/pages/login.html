@@ -10,23 +10,23 @@
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#08111f" />
   <link rel="stylesheet" href="../css/style.css" />
   <link rel="stylesheet" href="../css/login.css" />
-  <!-- Design notes: glassmorphism in the home page theme. The old side panel claimed "under 30 seconds" and
-       "Trusted by doctors across Haryana"; neither is a fact we can prove, so the copy now only uses real product facts.
-       Staff sign in with email, patients with their 10-digit mobile number (same rules as before).
-       Two-step verification, first-login password and "signed in" all happen in glass modals. -->
+  <!-- Design notes: glassmorphism in the home page theme.
+       All classes use the sk- prefix because css/legal.css (loaded by js/api.js on every page) owns .lg-*.
+       The copy only uses real product facts. Two-step verification, first-login password and "signed in"
+       all happen in glass modals. Desktop fits one screen (sizes follow viewport height). -->
 </head>
 
 <body>
   <!-- Icon sprite -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
-      <linearGradient id="lg-grad" x1="0" y1="0" x2="1" y2="1">
+      <linearGradient id="sk-grad" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="#14b8a6" />
         <stop offset="1" stop-color="#0f766e" />
       </linearGradient>
     </defs>
     <symbol id="i-mark" viewBox="0 0 32 32">
-      <rect width="32" height="32" rx="9" fill="url(#lg-grad)" />
+      <rect width="32" height="32" rx="9" fill="url(#sk-grad)" />
       <path d="M16 8v16M8 16h16" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none" />
     </symbol>
     <symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></g></symbol>
@@ -43,212 +43,212 @@
     <symbol id="i-session" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></g></symbol>
   </svg>
 
-  <a class="lg-skip" href="#login-id">Skip to sign in</a>
+  <a class="sk-skip" href="#login-id">Skip to sign in</a>
 
-  <div class="lg-bg" aria-hidden="true">
-    <span class="lg-orb o1"></span><span class="lg-orb o2"></span><span class="lg-orb o3"></span>
+  <div class="sk-bg" aria-hidden="true">
+    <span class="sk-orb o1"></span><span class="sk-orb o2"></span><span class="sk-orb o3"></span>
   </div>
 
-  <main class="lg">
+  <main class="sk">
 
     <!-- Left: brand + product story -->
-    <section class="lg-hero" aria-label="About ScribeKare">
-      <div class="lg-brand"><svg class="lg-mark" aria-hidden="true"><use href="#i-mark" /></svg><span>Scribe<b>Kare</b></span></div>
-      <span class="lg-chip"><i></i>Made for Indian hospitals</span>
-      <p class="lg-h">One sign-in for your <em>whole hospital.</em></p>
-      <p class="lg-lead">OPD, pharmacy, lab, billing and the patient portal, connected in one system.</p>
-      <ul class="lg-points">
+    <section class="sk-hero" aria-label="About ScribeKare">
+      <div class="sk-brand sk-rise"><svg class="sk-mark" aria-hidden="true"><use href="#i-mark" /></svg><span>Scribe<b>Kare</b></span></div>
+      <span class="sk-chip sk-rise" style="--d:.05s"><i></i>Made for Indian hospitals</span>
+      <p class="sk-h sk-rise" style="--d:.1s">One sign-in for your <em>whole hospital.</em></p>
+      <p class="sk-lead sk-rise" style="--d:.15s">OPD, pharmacy, lab, billing and the patient portal, connected in one system.</p>
+      <ul class="sk-points sk-rise" style="--d:.2s">
         <li><svg aria-hidden="true"><use href="#i-check" /></svg>On the Growth plan, the AI scribe drafts the note and the doctor reviews and confirms.</li>
         <li><svg aria-hidden="true"><use href="#i-check" /></svg>Speak in Hindi, English or a mix of both.</li>
         <li><svg aria-hidden="true"><use href="#i-check" /></svg>GST invoices and Schedule H1 and X registers.</li>
         <li><svg aria-hidden="true"><use href="#i-check" /></svg>Each hospital's data is kept separate.</li>
       </ul>
 
-      <!-- CSS-built preview with fake, anonymous data -->
-      <div class="lg-stage" aria-hidden="true">
-        <div class="lg-mini m1">
-          <div class="lg-mini-k">Token queue</div>
-          <div class="lg-token">Token 14</div>
-          <div class="lg-mini-s">Dr. Sharma · OPD</div>
-          <span class="lg-live">Now consulting</span>
+      <!-- CSS-built preview with fake, anonymous data (hidden on short screens so the page fits) -->
+      <div class="sk-stage sk-rise" style="--d:.3s" aria-hidden="true">
+        <div class="sk-mini m1">
+          <div class="sk-mini-k">Token queue</div>
+          <div class="sk-token">Token 14</div>
+          <div class="sk-mini-s">Dr. Sharma · OPD</div>
+          <span class="sk-live">Now consulting</span>
         </div>
-        <div class="lg-mini m2">
-          <div class="lg-mini-k"><svg><use href="#i-mic" /></svg>AI scribe</div>
-          <div class="lg-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-          <div class="lg-mini-s">Draft ready. The doctor reviews and confirms.</div>
+        <div class="sk-mini m2">
+          <div class="sk-mini-k"><svg><use href="#i-mic" /></svg>AI scribe</div>
+          <div class="sk-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="sk-mini-s">Draft ready. The doctor reviews and confirms.</div>
         </div>
-        <div class="lg-mini m3">
-          <div class="lg-mini-k"><svg><use href="#i-doc" /></svg>Prescription</div>
-          <div class="lg-rx"><div class="lg-qrm"></div><div class="lg-mini-s">Scan the QR code to verify it.</div></div>
+        <div class="sk-mini m3">
+          <div class="sk-mini-k"><svg><use href="#i-doc" /></svg>Prescription</div>
+          <div class="sk-rx"><div class="sk-qrm"></div><div class="sk-mini-s">Scan the QR code to verify it.</div></div>
         </div>
       </div>
     </section>
 
     <!-- Right: login card -->
-    <section class="lg-side" aria-label="Sign in">
-      <div class="lg-card glass">
-        <div class="lg-brand lg-card-logo"><svg class="lg-mark" aria-hidden="true"><use href="#i-mark" /></svg><span>Scribe<b>Kare</b></span></div>
-        <h1>Welcome back</h1>
-        <p class="lg-sub">Staff sign in with their email. Patients sign in with their 10-digit mobile number.</p>
+    <section class="sk-side" aria-label="Sign in">
+      <div class="sk-card glass sk-rise" style="--d:.12s" id="sk-card">
+        <div class="sk-brand sk-card-logo"><svg class="sk-mark" aria-hidden="true"><use href="#i-mark" /></svg><span>Scribe<b>Kare</b></span></div>
+        <h1>Welcome</h1>
 
         <form id="form-login" novalidate>
-          <div class="lg-field">
-            <label class="lg-label" for="login-id">Email or mobile number</label>
-            <div class="lg-iw">
-              <svg class="lg-ico" aria-hidden="true"><use href="#i-user" /></svg>
-              <input class="lg-input no-r" id="login-id" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="you@hospital.in or 9876543210" />
+          <div class="sk-field">
+            <label class="sk-label" for="login-id">Email or mobile number</label>
+            <div class="sk-iw">
+              <svg class="sk-ico" aria-hidden="true"><use href="#i-user" /></svg>
+              <input class="sk-input no-r" id="login-id" type="text" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="you@hospital.in or 9876543210" />
             </div>
           </div>
-          <div class="lg-field">
-            <label class="lg-label" for="login-password">Password</label>
-            <div class="lg-iw">
-              <svg class="lg-ico" aria-hidden="true"><use href="#i-lock" /></svg>
-              <input class="lg-input" id="login-password" type="password" autocomplete="current-password" placeholder="••••••••" />
-              <button type="button" class="lg-eye" data-eye="login-password" aria-label="Show password" aria-pressed="false">
+          <div class="sk-field">
+            <label class="sk-label" for="login-password">Password</label>
+            <div class="sk-iw">
+              <svg class="sk-ico" aria-hidden="true"><use href="#i-lock" /></svg>
+              <input class="sk-input" id="login-password" type="password" autocomplete="current-password" placeholder="••••••••" />
+              <button type="button" class="sk-eye" data-eye="login-password" aria-label="Show password" aria-pressed="false">
                 <svg class="e-on" aria-hidden="true"><use href="#i-eye" /></svg><svg class="e-off" aria-hidden="true"><use href="#i-eye-off" /></svg>
               </button>
             </div>
+            <p class="sk-hint" id="caps-hint" hidden>Caps Lock is on</p>
           </div>
 
-          <div class="lg-captcha" id="login-captcha-group">
-            <label class="lg-label" for="login-captcha-answer">Type the code shown below</label>
-            <div class="lg-cap-img" id="captcha-image-box">Loading captcha…</div>
-            <div class="lg-cap-row">
-              <input class="lg-input" id="login-captcha-answer" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Type the code" />
-              <button type="button" class="lg-icon-btn" id="captcha-refresh" title="Get a new code" aria-label="Get a new code"><svg aria-hidden="true"><use href="#i-refresh" /></svg></button>
+          <div class="sk-field" id="login-captcha-group">
+            <label class="sk-label" for="login-captcha-answer">Type the code shown</label>
+            <div class="sk-cap-row">
+              <div class="sk-cap-img" id="captcha-image-box">Loading…</div>
+              <input class="sk-input" id="login-captcha-answer" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Code" />
+              <button type="button" class="sk-icon-btn" id="captcha-refresh" title="Get a new code" aria-label="Get a new code"><svg aria-hidden="true"><use href="#i-refresh" /></svg></button>
             </div>
           </div>
 
-          <p class="lg-err" id="login-err" role="alert"></p>
-          <button class="lg-btn" id="btn-login" type="submit">Sign in <svg aria-hidden="true"><use href="#i-arrow" /></svg></button>
-          <div class="lg-row-end" id="fp-link-box"><button type="button" class="lg-link" id="fp-open">Forgot password?</button></div>
+          <p class="sk-err" id="login-err" role="alert"></p>
+          <button class="sk-btn" id="btn-login" type="submit">Sign in <svg aria-hidden="true"><use href="#i-arrow" /></svg></button>
+          <div class="sk-row-end" id="fp-link-box"><button type="button" class="sk-link" id="fp-open">Forgot password?</button></div>
         </form>
 
-        <div class="lg-foot">New hospital? <a class="lg-link" href="/pages/home.html#contact">Book a demo</a></div>
+        <div class="sk-foot">New hospital? <a class="sk-link" href="/pages/home.html#contact">Book a demo</a></div>
       </div>
-      <p class="lg-legal"><a href="/pages/home.html">Home</a><a href="/pages/privacy.html">Privacy</a><a href="/pages/terms.html">Terms</a></p>
+      <p class="sk-legal"><a href="/pages/home.html">Home</a><a href="/pages/privacy.html">Privacy Policy</a><a href="/pages/terms.html">Terms of Service</a></p>
     </section>
   </main>
 
   <!-- ═══ MODAL: two-step verification (Super Admin) ═══ -->
-  <div class="lg-modal" id="tfa-modal" hidden role="dialog" aria-modal="true" aria-labelledby="tfa-title" aria-describedby="tfa-sub">
-    <div class="lg-mcard glass">
-      <button type="button" class="lg-x" id="tfa-x" data-close aria-label="Close"><svg aria-hidden="true"><use href="#i-x" /></svg></button>
-      <div class="lg-badge" aria-hidden="true"><svg><use href="#i-shield" /></svg></div>
-      <h2 class="lg-mtitle" id="tfa-title">Two-step verification</h2>
-      <p class="lg-msub" id="tfa-sub"></p>
+  <div class="sk-modal" id="tfa-modal" hidden role="dialog" aria-modal="true" aria-labelledby="tfa-title" aria-describedby="tfa-sub">
+    <div class="sk-mcard glass">
+      <button type="button" class="sk-x" id="tfa-x" data-close aria-label="Close"><svg aria-hidden="true"><use href="#i-x" /></svg></button>
+      <div class="sk-badge" aria-hidden="true"><svg><use href="#i-shield" /></svg></div>
+      <h2 class="sk-mtitle" id="tfa-title">Two-step verification</h2>
+      <p class="sk-msub" id="tfa-sub"></p>
 
       <!-- first-time setup: one-time enrolment code -->
-      <form class="lg-panel" id="form-totp-enrol" novalidate hidden>
-        <label class="lg-label" for="totp-enrol-code">Enrolment code</label>
-        <input class="lg-input no-l no-r lg-center" id="totp-enrol-code" type="text" autocomplete="off" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" />
-        <p class="lg-err" id="totp-enrol-err" role="alert"></p>
-        <button class="lg-btn" id="btn-totp-enrol" type="submit">Continue <svg aria-hidden="true"><use href="#i-arrow" /></svg></button>
+      <form class="sk-panel" id="form-totp-enrol" novalidate hidden>
+        <label class="sk-label" for="totp-enrol-code">Enrolment code</label>
+        <input class="sk-input no-l no-r sk-center" id="totp-enrol-code" type="text" autocomplete="off" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" />
+        <p class="sk-err" id="totp-enrol-err" role="alert"></p>
+        <button class="sk-btn" id="btn-totp-enrol" type="submit">Continue <svg aria-hidden="true"><use href="#i-arrow" /></svg></button>
       </form>
 
       <!-- code entry (login and setup confirm) -->
-      <form class="lg-panel" id="form-totp" novalidate hidden>
+      <form class="sk-panel" id="form-totp" novalidate hidden>
         <div id="totp-qr-box" hidden>
-          <img class="lg-qr" id="totp-qr" alt="QR code for your authenticator app" width="176" height="176" />
-          <p class="lg-fine">Can't scan? Enter this key manually:<br /><strong class="lg-pill" id="totp-secret"></strong></p>
+          <img class="sk-qr" id="totp-qr" alt="QR code for your authenticator app" width="176" height="176" />
+          <p class="sk-fine">Can't scan? Enter this key manually:<br /><strong class="sk-pill" id="totp-secret"></strong></p>
           <div style="height:14px"></div>
         </div>
         <div id="totp-otp"></div>
-        <div class="lg-field" id="totp-backup-wrap" hidden>
-          <label class="lg-label" for="totp-backup-input">Backup code</label>
-          <input class="lg-input no-l no-r lg-center" id="totp-backup-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" placeholder="XXXXX-XXXXX" />
+        <div class="sk-field" id="totp-backup-wrap" hidden>
+          <label class="sk-label" for="totp-backup-input">Backup code</label>
+          <input class="sk-input no-l no-r sk-center" id="totp-backup-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" placeholder="XXXXX-XXXXX" />
         </div>
-        <p class="lg-err" id="totp-err" role="alert"></p>
-        <button class="lg-btn" id="btn-totp" type="submit" disabled>Verify &amp; sign in</button>
-        <div style="text-align:center;margin-top:8px"><button type="button" class="lg-link" id="totp-switch">Use a backup code instead</button></div>
+        <p class="sk-err" id="totp-err" role="alert"></p>
+        <button class="sk-btn" id="btn-totp" type="submit" disabled>Verify &amp; sign in</button>
+        <div style="text-align:center;margin-top:8px"><button type="button" class="sk-link" id="totp-switch">Use a backup code instead</button></div>
       </form>
 
       <!-- backup codes shown once after setup -->
-      <div class="lg-panel" id="form-totp-backup" hidden>
-        <pre class="lg-codes" id="totp-backup-list"></pre>
-        <button class="lg-btn" id="btn-totp-saved" type="button">I have saved these codes</button>
+      <div class="sk-panel" id="form-totp-backup" hidden>
+        <pre class="sk-codes" id="totp-backup-list"></pre>
+        <button class="sk-btn" id="btn-totp-saved" type="button">I have saved these codes</button>
       </div>
     </div>
   </div>
 
   <!-- ═══ MODAL: first-login password (staff and patients) ═══ -->
-  <div class="lg-modal" id="pw-modal" hidden role="dialog" aria-modal="true" aria-labelledby="pw-title" aria-describedby="pw-sub">
-    <div class="lg-mcard glass">
-      <button type="button" class="lg-x" data-close aria-label="Close"><svg aria-hidden="true"><use href="#i-x" /></svg></button>
-      <div class="lg-badge" aria-hidden="true"><svg><use href="#i-lock" /></svg></div>
-      <h2 class="lg-mtitle" id="pw-title">Set your password</h2>
-      <p class="lg-msub" id="pw-sub"></p>
+  <div class="sk-modal" id="pw-modal" hidden role="dialog" aria-modal="true" aria-labelledby="pw-title" aria-describedby="pw-sub">
+    <div class="sk-mcard glass">
+      <button type="button" class="sk-x" data-close aria-label="Close"><svg aria-hidden="true"><use href="#i-x" /></svg></button>
+      <div class="sk-badge" aria-hidden="true"><svg><use href="#i-lock" /></svg></div>
+      <h2 class="sk-mtitle" id="pw-title">Set your password</h2>
+      <p class="sk-msub" id="pw-sub"></p>
 
-      <form class="lg-panel" id="form-staff-newpw" novalidate hidden>
-        <div class="lg-field">
-          <label class="lg-label" for="staff-new-password">New password</label>
-          <div class="lg-iw">
-            <svg class="lg-ico" aria-hidden="true"><use href="#i-lock" /></svg>
-            <input class="lg-input" id="staff-new-password" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
-            <button type="button" class="lg-eye" data-eye="staff-new-password" aria-label="Show password" aria-pressed="false"><svg class="e-on" aria-hidden="true"><use href="#i-eye" /></svg><svg class="e-off" aria-hidden="true"><use href="#i-eye-off" /></svg></button>
+      <form class="sk-panel" id="form-staff-newpw" novalidate hidden>
+        <div class="sk-field">
+          <label class="sk-label" for="staff-new-password">New password</label>
+          <div class="sk-iw">
+            <svg class="sk-ico" aria-hidden="true"><use href="#i-lock" /></svg>
+            <input class="sk-input" id="staff-new-password" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
+            <button type="button" class="sk-eye" data-eye="staff-new-password" aria-label="Show password" aria-pressed="false"><svg class="e-on" aria-hidden="true"><use href="#i-eye" /></svg><svg class="e-off" aria-hidden="true"><use href="#i-eye-off" /></svg></button>
           </div>
-          <ul class="lg-rules">
+          <ul class="sk-rules">
             <li id="staff-pw-check-length" style="color:var(--slate-light)">○ At least 8 characters</li>
             <li id="staff-pw-check-number" style="color:var(--slate-light)">○ At least 1 number</li>
             <li id="staff-pw-check-upper" style="color:var(--slate-light)">○ At least 1 capital letter</li>
           </ul>
         </div>
-        <div class="lg-field">
-          <label class="lg-label" for="staff-new-password-confirm">Confirm password</label>
-          <div class="lg-iw">
-            <svg class="lg-ico" aria-hidden="true"><use href="#i-lock" /></svg>
-            <input class="lg-input no-r" id="staff-new-password-confirm" type="password" autocomplete="new-password" placeholder="Re-enter password" />
+        <div class="sk-field">
+          <label class="sk-label" for="staff-new-password-confirm">Confirm password</label>
+          <div class="sk-iw">
+            <svg class="sk-ico" aria-hidden="true"><use href="#i-lock" /></svg>
+            <input class="sk-input no-r" id="staff-new-password-confirm" type="password" autocomplete="new-password" placeholder="Re-enter password" />
           </div>
         </div>
-        <p class="lg-err" id="staff-newpw-err" role="alert"></p>
-        <button class="lg-btn" id="btn-staff-newpw" type="submit">Set password &amp; sign in</button>
+        <p class="sk-err" id="staff-newpw-err" role="alert"></p>
+        <button class="sk-btn" id="btn-staff-newpw" type="submit">Set password &amp; sign in</button>
       </form>
 
-      <form class="lg-panel" id="form-register" novalidate hidden>
-        <div class="lg-field">
-          <label class="lg-label" for="reg-password">New password</label>
-          <div class="lg-iw">
-            <svg class="lg-ico" aria-hidden="true"><use href="#i-lock" /></svg>
-            <input class="lg-input" id="reg-password" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
-            <button type="button" class="lg-eye" data-eye="reg-password" aria-label="Show password" aria-pressed="false"><svg class="e-on" aria-hidden="true"><use href="#i-eye" /></svg><svg class="e-off" aria-hidden="true"><use href="#i-eye-off" /></svg></button>
+      <form class="sk-panel" id="form-register" novalidate hidden>
+        <div class="sk-field">
+          <label class="sk-label" for="reg-password">New password</label>
+          <div class="sk-iw">
+            <svg class="sk-ico" aria-hidden="true"><use href="#i-lock" /></svg>
+            <input class="sk-input" id="reg-password" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
+            <button type="button" class="sk-eye" data-eye="reg-password" aria-label="Show password" aria-pressed="false"><svg class="e-on" aria-hidden="true"><use href="#i-eye" /></svg><svg class="e-off" aria-hidden="true"><use href="#i-eye-off" /></svg></button>
           </div>
-          <ul class="lg-rules" id="pw-strength-list">
+          <ul class="sk-rules" id="pw-strength-list">
             <li id="pw-check-length" style="color:var(--slate-light)">○ At least 8 characters</li>
             <li id="pw-check-number" style="color:var(--slate-light)">○ At least 1 number</li>
             <li id="pw-check-upper" style="color:var(--slate-light)">○ At least 1 capital letter</li>
           </ul>
         </div>
-        <div class="lg-field">
-          <label class="lg-label" for="reg-password-confirm">Confirm password</label>
-          <div class="lg-iw">
-            <svg class="lg-ico" aria-hidden="true"><use href="#i-lock" /></svg>
-            <input class="lg-input no-r" id="reg-password-confirm" type="password" autocomplete="new-password" placeholder="Re-enter password" />
+        <div class="sk-field">
+          <label class="sk-label" for="reg-password-confirm">Confirm password</label>
+          <div class="sk-iw">
+            <svg class="sk-ico" aria-hidden="true"><use href="#i-lock" /></svg>
+            <input class="sk-input no-r" id="reg-password-confirm" type="password" autocomplete="new-password" placeholder="Re-enter password" />
           </div>
         </div>
-        <p class="lg-err" id="register-err" role="alert"></p>
-        <button class="lg-btn" id="btn-register" type="submit">Register</button>
+        <p class="sk-err" id="register-err" role="alert"></p>
+        <button class="sk-btn" id="btn-register" type="submit">Register</button>
       </form>
     </div>
   </div>
 
   <!-- ═══ MODAL: signed in ═══ -->
-  <div class="lg-modal" id="ok-modal" hidden role="dialog" aria-modal="true" aria-labelledby="ok-title" aria-describedby="ok-name">
-    <div class="lg-mcard glass">
-      <div class="lg-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path class="lg-tick" d="M5 12.5l4.5 4.5L19 7.5" /></svg></div>
-      <h2 class="lg-mtitle" id="ok-title">You're signed in</h2>
-      <p class="lg-msub" id="ok-name">Welcome back.</p>
-      <div class="lg-row">
+  <div class="sk-modal" id="ok-modal" hidden role="dialog" aria-modal="true" aria-labelledby="ok-title" aria-describedby="ok-name">
+    <div class="sk-mcard glass">
+      <div class="sk-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path class="sk-tick" d="M5 12.5l4.5 4.5L19 7.5" /></svg></div>
+      <h2 class="sk-mtitle" id="ok-title">You're signed in</h2>
+      <p class="sk-msub" id="ok-name">Welcome.</p>
+      <div class="sk-row">
         <svg aria-hidden="true"><use href="#i-shield" /></svg>
         <div><b>Credentials confirmed</b><small>Your sign-in details were accepted</small></div>
         <svg class="tick" aria-hidden="true"><use href="#i-check" /></svg>
       </div>
-      <div class="lg-row">
+      <div class="sk-row">
         <svg aria-hidden="true"><use href="#i-session" /></svg>
         <div><b>Session started</b><small>This browser is signed in</small></div>
         <svg class="tick" aria-hidden="true"><use href="#i-check" /></svg>
       </div>
-      <button class="lg-btn" id="ok-continue" type="button">Continue <svg aria-hidden="true"><use href="#i-arrow" /></svg></button>
-      <div class="lg-prog" aria-hidden="true"><i></i></div>
+      <button class="sk-btn" id="ok-continue" type="button">Continue <svg aria-hidden="true"><use href="#i-arrow" /></svg></button>
+      <div class="sk-prog" aria-hidden="true"><i></i></div>
     </div>
   </div>
 
@@ -265,7 +265,7 @@
     (function () {
       "use strict";
       var $ = function (id) { return document.getElementById(id); };
-      var SPIN = '<span class="lg-spin" aria-hidden="true"></span>';
+      var SPIN = '<span class="sk-spin" aria-hidden="true"></span>';
       var ARROW = '<svg aria-hidden="true"><use href="#i-arrow"/></svg>';
       var LOGIN_HTML = $("btn-login").innerHTML;
 
@@ -286,6 +286,26 @@
       function reduced() { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
       function errText(json, fallback) { return json && typeof json.detail === "string" ? json.detail : fallback; }
 
+      /* ── Glass spotlight that follows the pointer (fine pointers only) ── */
+      (function () {
+        var card = $("sk-card");
+        if (!card || reduced() || !window.matchMedia("(pointer: fine)").matches) return;
+        card.addEventListener("pointermove", function (e) {
+          var r = card.getBoundingClientRect();
+          card.style.setProperty("--mx", (e.clientX - r.left) + "px");
+          card.style.setProperty("--my", (e.clientY - r.top) + "px");
+        });
+      })();
+
+      /* ── Caps Lock hint on the password box ── */
+      (function () {
+        var pw = $("login-password");
+        function caps(e) { if (e.getModifierState) $("caps-hint").hidden = !e.getModifierState("CapsLock"); }
+        pw.addEventListener("keydown", caps);
+        pw.addEventListener("keyup", caps);
+        pw.addEventListener("blur", function () { $("caps-hint").hidden = true; });
+      })();
+
       /* ── Modal helpers ── */
       var openStack = [];
       var lastFocus = null;
@@ -295,7 +315,7 @@
         clearTimeout(m._t);
         if (!openStack.length) lastFocus = document.activeElement;
         m.hidden = false;
-        document.body.classList.add("lg-lock");
+        document.body.classList.add("sk-lock");
         requestAnimationFrame(function () { m.classList.add("open"); });
         if (openStack.indexOf(id) < 0) openStack.push(id);
       }
@@ -307,13 +327,13 @@
         if (i >= 0) openStack.splice(i, 1);
         m._t = setTimeout(function () { m.hidden = true; }, reduced() ? 0 : 220);
         if (!openStack.length) {
-          document.body.classList.remove("lg-lock");
+          document.body.classList.remove("sk-lock");
           if (lastFocus && lastFocus.focus) lastFocus.focus();
         }
       }
 
       function showPanel(modalId, panelId) {
-        var panels = $(modalId).querySelectorAll(".lg-panel");
+        var panels = $(modalId).querySelectorAll(".sk-panel");
         for (var i = 0; i < panels.length; i++) panels[i].hidden = panels[i].id !== panelId;
       }
 
@@ -328,7 +348,7 @@
 
       document.addEventListener("click", function (e) {
         var x = e.target.closest("[data-close]");
-        if (x) { var m = x.closest(".lg-modal"); if (m && !m.dataset.locked) closeAndReset(m.id); return; }
+        if (x) { var m = x.closest(".sk-modal"); if (m && !m.dataset.locked) closeAndReset(m.id); return; }
         var eye = e.target.closest("[data-eye]");
         if (eye) {
           var inp = $(eye.getAttribute("data-eye"));
@@ -359,7 +379,7 @@
 
       function finishSignIn(doctor) {
         signedRole = doctor && doctor.role;
-        $("ok-name").textContent = doctor && doctor.name ? "Welcome back, " + doctor.name + "." : "Welcome back.";
+        $("ok-name").textContent = doctor && doctor.name ? "Welcome, " + doctor.name + "." : "Welcome.";
         $("ok-modal").dataset.locked = "1";
         openModal("ok-modal");
         focusSoon($("ok-continue"));
@@ -371,7 +391,7 @@
       async function loadCaptcha() {
         var box = $("captcha-image-box");
         var answerInput = $("login-captcha-answer");
-        box.textContent = "Loading captcha…";
+        box.textContent = "Loading…";
         answerInput.value = "";
         try {
           var res = await fetch(BASE + "/auth/captcha");
@@ -379,13 +399,13 @@
           var img = document.createElement("img");
           img.alt = "captcha";
           img.draggable = false;
-          img.style.cssText = "display:block;max-width:100%;user-select:none;-webkit-user-select:none;pointer-events:none";
+          img.style.cssText = "user-select:none;-webkit-user-select:none;pointer-events:none";
           img.src = "data:image/svg+xml;utf8," + encodeURIComponent(json.svg);
           box.textContent = "";
           box.appendChild(img);
           currentCaptchaToken = json.token;
         } catch (e) {
-          box.textContent = "Couldn't load the captcha. Use the refresh button to retry.";
+          box.textContent = "Could not load. Tap refresh.";
           currentCaptchaToken = null;
         }
       }
@@ -626,7 +646,6 @@
         } else {
           setTfaHead("Two-step verification", "Enter the 6-digit code from your authenticator app.");
           showPanel("tfa-modal", "form-totp");
-          focusSoon(null);
           setTimeout(function () { totpOtp.focus(); }, 80);
         }
       }
