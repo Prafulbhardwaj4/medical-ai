@@ -13,7 +13,7 @@
   <!-- Design notes: glassmorphism in the home page theme.
        All classes use the sk- prefix because css/legal.css (loaded by js/api.js on every page) owns .lg-*.
        The copy only uses real product facts. Two-step verification, first-login password and "signed in"
-       all happen in glass modals. Desktop fits one screen (sizes follow viewport height). -->
+       all happen in glass modals. The signed-in modal is brief (about 0.65s) so sign-in stays fast. -->
 </head>
 
 <body>
@@ -40,7 +40,7 @@
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" /></symbol>
     <symbol id="i-mic" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></g></symbol>
     <symbol id="i-doc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h8l4 4v14H7z" /><path d="M15 3v4h4M10 12h6M10 16h6" /></g></symbol>
-    <symbol id="i-session" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></g></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /></g></symbol>
   </svg>
 
   <a class="sk-skip" href="#login-id">Skip to sign in</a>
@@ -64,7 +64,7 @@
         <li><svg aria-hidden="true"><use href="#i-check" /></svg>Each hospital's data is kept separate.</li>
       </ul>
 
-      <!-- CSS-built preview with fake, anonymous data (hidden on short screens so the page fits) -->
+      <!-- CSS-built preview with fake, anonymous data (shown only on tall screens so the page fits) -->
       <div class="sk-stage sk-rise" style="--d:.3s" aria-hidden="true">
         <div class="sk-mini m1">
           <div class="sk-mini-k">Token queue</div>
@@ -160,7 +160,7 @@
         </div>
         <p class="sk-err" id="totp-err" role="alert"></p>
         <button class="sk-btn" id="btn-totp" type="submit" disabled>Verify &amp; sign in</button>
-        <div style="text-align:center;margin-top:8px"><button type="button" class="sk-link" id="totp-switch">Use a backup code instead</button></div>
+        <div style="text-align:center;margin-top:10px"><button type="button" class="sk-link" id="totp-switch">Use a backup code instead</button></div>
       </form>
 
       <!-- backup codes shown once after setup -->
@@ -231,9 +231,9 @@
     </div>
   </div>
 
-  <!-- ═══ MODAL: signed in ═══ -->
+  <!-- ═══ MODAL: signed in (brief, no buttons) ═══ -->
   <div class="sk-modal" id="ok-modal" hidden role="dialog" aria-modal="true" aria-labelledby="ok-title" aria-describedby="ok-name">
-    <div class="sk-mcard glass">
+    <div class="sk-mcard sk-mcard-ok glass">
       <div class="sk-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path class="sk-tick" d="M5 12.5l4.5 4.5L19 7.5" /></svg></div>
       <h2 class="sk-mtitle" id="ok-title">You're signed in</h2>
       <p class="sk-msub" id="ok-name">Welcome.</p>
@@ -243,12 +243,10 @@
         <svg class="tick" aria-hidden="true"><use href="#i-check" /></svg>
       </div>
       <div class="sk-row">
-        <svg aria-hidden="true"><use href="#i-session" /></svg>
-        <div><b>Session started</b><small>This browser is signed in</small></div>
-        <svg class="tick" aria-hidden="true"><use href="#i-check" /></svg>
+        <svg aria-hidden="true"><use href="#i-grid" /></svg>
+        <div><b>Opening your workspace</b><small>Just a moment</small></div>
+        <span class="sk-spin" aria-hidden="true"></span>
       </div>
-      <button class="sk-btn" id="ok-continue" type="button">Continue <svg aria-hidden="true"><use href="#i-arrow" /></svg></button>
-      <div class="sk-prog" aria-hidden="true"><i></i></div>
     </div>
   </div>
 
@@ -374,7 +372,7 @@
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       });
 
-      /* ── Signed-in modal, then redirect ── */
+      /* ── Signed-in modal (brief), then redirect ── */
       function goNow() { if (redirected) return; redirected = true; redirectByRole(signedRole); }
 
       function finishSignIn(doctor) {
@@ -382,10 +380,8 @@
         $("ok-name").textContent = doctor && doctor.name ? "Welcome, " + doctor.name + "." : "Welcome.";
         $("ok-modal").dataset.locked = "1";
         openModal("ok-modal");
-        focusSoon($("ok-continue"));
-        setTimeout(goNow, reduced() ? 400 : 1500);
+        setTimeout(goNow, reduced() ? 200 : 650);
       }
-      $("ok-continue").addEventListener("click", goNow);
 
       /* ── Captcha ── */
       async function loadCaptcha() {
@@ -717,7 +713,7 @@
           done = true;
           btn.classList.add("is-ok");
           btn.innerHTML = '<svg aria-hidden="true"><use href="#i-check"/></svg><span>Verified</span>';
-          await wait(reduced() ? 0 : 650);
+          await wait(reduced() ? 0 : 400);
           proceedAfterTotp(json);
         } catch (e) {
           err.textContent = e.message;

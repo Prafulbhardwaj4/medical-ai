@@ -59,7 +59,7 @@
             </div>
             <div class="err-msg" id="fp-otp-err"></div>
             <button class="btn btn-primary btn-lg" style="width:100%;margin-top:8px" id="fp-btn-otp">Verify</button>
-            <div style="text-align:center;margin-top:12px"><a href="#" id="fp-back" style="font-size:13px;color:var(--teal, #0d9488)">Did not get a code? Ask for a new one</a></div>
+            <div style="text-align:center;margin-top:12px"><span id="fp-resend-text"></span><button type="button" id="fp-back" class="sk-resend-btn" hidden>Resend</button></div>
           </div>
 
           <div id="fp-step-pw" style="display:none">
@@ -113,15 +113,18 @@
   function startResendTimer() {
     clearInterval(fpResendTimer);
     fpResendLeft = 30;
-    const link = $("fp-back");
+    const link = $("fp-resend-text");
+    const btn = $("fp-back");
     const tick = function () {
       if (fpResendLeft > 0) {
-        link.textContent = "Ask for a new code in 0:" + String(fpResendLeft).padStart(2, "0");
+        link.textContent = "Didn't get a code? Resend in 0:" + String(fpResendLeft).padStart(2, "0");
+        btn.hidden = true;
         link.classList.add("is-wait");
         fpResendLeft--;
       } else {
         clearInterval(fpResendTimer);
-        link.textContent = "Did not get a code? Ask for a new one";
+        link.textContent = "Didn't get a code?";
+        btn.hidden = false;
         link.classList.remove("is-wait");
       }
     };

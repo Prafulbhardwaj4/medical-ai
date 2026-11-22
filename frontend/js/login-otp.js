@@ -31,6 +31,7 @@
     function sync() {
       for (var k = 0; k < cells.length; k++) cells[k].classList.toggle("is-filled", cells[k].value !== "");
       var v = value();
+      root.classList.toggle("is-complete", v.length === len);
       if (opts.onChange) opts.onChange(v);
       if (v.length === len && opts.onComplete) opts.onComplete(v);
     }
@@ -55,6 +56,7 @@
       inp.spellcheck = false;
       inp.setAttribute("autocapitalize", "off");
       inp.setAttribute("aria-label", "Digit " + (i + 1) + " of " + len);
+      inp.style.setProperty("--i", i);
 
       inp.addEventListener("focus", function () { inp.select(); });
       inp.addEventListener("click", function () { inp.select(); });
