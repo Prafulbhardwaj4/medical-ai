@@ -184,6 +184,7 @@
       head.append(t, chev);
       head.addEventListener("click", function () {
         var open = panel.hidden;
+        if (root.parentNode) root.parentNode.classList.toggle("has-open", open);   // hides the intro line so the text gets the room
         rows.forEach(function (r) { r.panel.hidden = true; r.head.setAttribute("aria-expanded", "false"); r.item.classList.remove("open"); });
         if (open) {
           if (!panel.firstChild) panel.append(renderDoc(k, aud));   // built only when opened
@@ -229,7 +230,7 @@
     if (opts.dismissible) ov.addEventListener("mousedown", function (e) { if (e.target === ov) api.close(); });
     function onKey(e) {
       if (e.key === "Escape" && opts.dismissible) { e.preventDefault(); api.close(); return; }
-      if (e.key !== "Tab") return;
+      if (e.key !== "Tab" || !box.contains(document.activeElement)) return;   // focus is in the sign-out confirmation: leave it alone
       var f = box.querySelectorAll("button:not([disabled]), a[href], input, [tabindex=\"0\"]");
       if (!f.length) return;
       var first = f[0], last = f[f.length - 1];
@@ -312,7 +313,12 @@
     var err = el("div", "lg-err");
     err.setAttribute("role", "alert");
     var m;
-    var signOut = btn("Sign out", "lg-btn lg-btn-ghost", function () { if (typeof logout === "function") logout(); });
+    var signOut = btn("Sign out", "lg-btn lg-btn-ghost", function () {
+      if (typeof logout !== "function") return;
+      logout();   // opens the "Sign out?" confirmation straight away; lift it above this dialog
+      var ovs = document.querySelectorAll(".modal-overlay");
+      if (ovs.length) ovs[ovs.length - 1].style.zIndex = "7000";
+    });
     var go = btn("Accept and continue", "lg-btn lg-btn-primary", function () {
       go.disabled = true;
       err.textContent = "";

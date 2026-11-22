@@ -442,15 +442,20 @@
 
 /* first sign-in: two collapsed options */
 .lg-acc {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  align-content: start;
-  padding: 14px 20px 6px;
+  flex: 1;
+  padding: 14px 20px 14px;
   min-height: 0;
   overflow-y: auto;
 }
 
 .lg-acc-item {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  min-height: 0;
   border: 1.5px solid var(--lg-line2);
   border-radius: 14px;
   background: var(--lg-bg);
@@ -458,6 +463,7 @@
 }
 
 .lg-acc-item.open {
+  flex: 1 1 auto;
   border-color: var(--lg-accent);
 }
 
@@ -509,14 +515,109 @@
 }
 
 .lg-acc-panel {
-  max-height: 38vh;
+  flex: 1 1 auto;
+  min-height: min(300px, 42vh);
   overflow-y: auto;
-  padding: 4px 16px 14px;
+  padding: 8px 24px 24px;
   border-top: 1px solid var(--lg-line);
+  font-size: 1.02rem;
+  line-height: 1.8;
+}
+
+.lg-acc-panel .lg-doc,
+.lg-acc-panel p {
+  line-height: 1.8;
+}
+
+.lg-acc-panel p {
+  margin: 0 0 16px;
+}
+
+.lg-acc-panel .lg-lead {
+  margin-top: 14px;
+  font-size: 1.08rem;
+}
+
+.lg-acc-panel .lg-glance {
+  margin: 18px 0 8px;
+  padding: 16px 20px;
+}
+
+.lg-acc-panel .lg-glance li {
+  margin: 8px 0;
+}
+
+.lg-acc-panel .lg-sec {
+  padding: 22px 0 6px;
+  border-top: 1px solid var(--lg-line);
+  margin-top: 22px;
+}
+
+.lg-acc-panel .lg-h {
+  margin: 0 0 12px;
+  font-size: 1.15rem;
+}
+
+.lg-acc-panel .lg-sub {
+  margin: 20px 0 8px;
+}
+
+.lg-acc-panel .lg-list {
+  margin: 0 0 16px;
+  padding-left: 24px;
+}
+
+.lg-acc-panel .lg-list li {
+  margin: 8px 0;
+}
+
+.lg-acc-panel .lg-tablewrap {
+  margin: 12px 0 20px;
 }
 
 .lg-acc-panel[hidden] {
   display: none;
+}
+
+.lg-acceptwrap.has-open .lg-intro {
+  display: none;
+}
+
+.lg-acceptwrap .lg-err:empty {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .lg-acceptwrap.has-open .lg-acc-item:not(.open) {
+    display: none;
+  }
+
+  .lg-acc-panel {
+    padding: 6px 18px 20px;
+    font-size: 1rem;
+  }
+}
+
+@media (min-width: 640px) {
+  .lg-mfoot-col {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .lg-mfoot-col .lg-check {
+    flex: 1 1 320px;
+  }
+
+  .lg-mfoot-col .lg-err {
+    flex: 1 1 100%;
+    order: 3;
+  }
+
+  .lg-mfoot-col .lg-row {
+    flex: 0 0 auto;
+    gap: 12px;
+  }
 }
 
 .lg-mailtext {
