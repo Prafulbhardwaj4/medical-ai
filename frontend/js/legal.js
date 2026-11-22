@@ -45,13 +45,9 @@
     tx.append(el("strong", "", c.name ? "Grievance Officer, " + c.name : "Grievance Officer"), el("span", "", COMPANY));
     if (c.address) tx.append(el("span", "", c.address));
     var line = el("span", "", "Email: ");
-    var a = el("a", "", email);
-    a.href = "mailto:" + email + "?subject=" + encodeURIComponent(subject);
-    line.append(a);
+    line.append(el("strong", "lg-mailtext", email));   // plain text on purpose: no link, no button
     tx.append(line);
-    var w = el("a", "lg-btn lg-btn-primary", "Write to us");
-    w.href = "mailto:" + email + "?subject=" + encodeURIComponent(subject);
-    box.append(ic, tx, w);
+    box.append(ic, tx);
     return box;
   }
 
@@ -159,10 +155,50 @@
       scroll.append(renderDoc(state.doc, state.aud));
       scroll.scrollTop = 0;
     }
-    bar.append(docTabs, audTabs);
+    bar.append(docTabs);   // the dialog shows only the part for this person (staff or patient)
     root.append(bar, meta, scroll);
     paint();
     return { el: root, firstFocus: dBtns[docKey] };
+  }
+
+  // ------------------------------------------------------------------ first sign-in: two collapsed options, one opens at a time
+  function Accordion(aud) {
+    var root = el("div", "lg-acc");
+    var rows = [], firstHead = null;
+    ["terms", "privacy"].forEach(function (k) {
+      var item = el("div", "lg-acc-item");
+      var head = el("button", "lg-acc-head");
+      head.type = "button";
+      head.setAttribute("aria-expanded", "false");
+      var panel = el("div", "lg-acc-panel lg-doc");
+      panel.id = "lg-acc-" + k;
+      panel.hidden = true;
+      panel.tabIndex = 0;
+      panel.setAttribute("role", "region");
+      panel.setAttribute("aria-label", DOC_TITLE[k]);
+      head.setAttribute("aria-controls", panel.id);
+      var t = el("span", "lg-acc-t");
+      t.append(el("strong", "", DOC_TITLE[k]), el("span", "", D.audiences[aud].label + " \u00B7 Effective " + D.effective));
+      var chev = el("span", "lg-acc-chev");
+      chev.innerHTML = CHEV;
+      head.append(t, chev);
+      head.addEventListener("click", function () {
+        var open = panel.hidden;
+        rows.forEach(function (r) { r.panel.hidden = true; r.head.setAttribute("aria-expanded", "false"); r.item.classList.remove("open"); });
+        if (open) {
+          if (!panel.firstChild) panel.append(renderDoc(k, aud));   // built only when opened
+          panel.hidden = false;
+          head.setAttribute("aria-expanded", "true");
+          item.classList.add("open");
+          panel.scrollTop = 0;
+        }
+      });
+      item.append(head, panel);
+      root.append(item);
+      rows.push({ item: item, head: head, panel: panel });
+      if (!firstHead) firstHead = head;
+    });
+    return { el: root, firstFocus: firstHead };
   }
 
   // ------------------------------------------------------------------ modal helper
@@ -263,9 +299,9 @@
 
   function showAccept(ep) {
     var wrap = el("div", "lg-acceptwrap");
-    wrap.append(el("p", "lg-intro", "Before you continue, please read and accept our Terms of Service and Privacy Policy. They explain how " + BRAND + " works, how information is used and protected, and the choices you have."));
-    var viewer = Viewer("terms", DEFAULT_AUD);
-    wrap.append(viewer.el);
+    wrap.append(el("p", "lg-intro", "Before you continue, please read and accept our Terms of Service and Privacy Policy. They explain how " + BRAND + " works, how information is used and protected, and the choices you have. Tap either one to read it."));
+    var acc = Accordion(DEFAULT_AUD);   // only the part for this person: staff see the hospital version, patients the patient version
+    wrap.append(acc.el);
 
     var foot = el("div", "lg-mfoot lg-mfoot-col");
     var label = el("label", "lg-check");
@@ -294,7 +330,7 @@
     row.append(signOut, go);
     foot.append(label, err, row);
     m = openModal({ title: "Terms of Service and Privacy Policy", body: wrap, footer: foot, dismissible: false });
-    viewer.firstFocus.focus();
+    acc.firstFocus.focus();
   }
 
   function runConsent() {

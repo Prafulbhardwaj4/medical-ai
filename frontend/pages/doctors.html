@@ -239,7 +239,7 @@
       <div id="doctor-only-fields">
         <input class="form-control" id="d-specialization" placeholder="Specialization (optional)"
           style="margin-bottom:14px" />
-        <input class="form-control" id="d-reg" placeholder="Registration Number (optional)"
+        <input class="form-control" id="d-reg" placeholder="Medical registration number (required for doctors)"
           style="margin-bottom:14px" />
         <input class="form-control" id="d-fee" type="number" min="0" step="1"
           placeholder="Consultation Fee (Rs., optional)" style="margin-bottom:14px;display:none" />
@@ -584,6 +584,7 @@
       const role = document.getElementById('d-role').value;
       const isDoctorRole = (role === 'doctor' || role === 'sub_admin');
       document.getElementById('doctor-only-fields').style.display = isDoctorRole ? '' : 'none';
+      document.getElementById('d-reg').placeholder = role === 'doctor' ? 'Medical registration number (required)' : 'Registration number (optional)';
       document.getElementById('d-fee').style.display = (isDoctorRole && getDoctor()?.billing_enabled) ? '' : 'none';
     }
 
@@ -618,6 +619,9 @@
       }
       if (phone.length !== 10 || !/^\d{10}$/.test(phone)) {
         err.textContent = 'Enter a valid 10-digit phone number.'; return;
+      }
+      if (role === 'doctor' && !reg) {
+        err.textContent = 'Medical registration number is required for doctors (it is printed on prescriptions).'; return;
       }
 
       btn.disabled = true;

@@ -440,6 +440,96 @@
   word-break: break-all;
 }
 
+/* first sign-in: two collapsed options */
+.lg-acc {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 14px 20px 6px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.lg-acc-item {
+  border: 1.5px solid var(--lg-line2);
+  border-radius: 14px;
+  background: var(--lg-bg);
+  overflow: hidden;
+}
+
+.lg-acc-item.open {
+  border-color: var(--lg-accent);
+}
+
+.lg-acc-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  padding: 12px 16px;
+  text-align: left;
+  border: 0;
+  background: var(--lg-alt);
+  color: var(--lg-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lg-acc-head:hover,
+.lg-acc-item.open .lg-acc-head {
+  background: var(--lg-accent-bg);
+}
+
+.lg-acc-t {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lg-acc-t strong {
+  font-size: 1rem;
+}
+
+.lg-acc-t span {
+  font-size: .82rem;
+  color: var(--lg-muted);
+}
+
+.lg-acc-chev {
+  flex: none;
+  display: grid;
+  color: var(--lg-accent);
+  transition: transform .2s;
+}
+
+.lg-acc-item.open .lg-acc-chev {
+  transform: rotate(180deg);
+}
+
+.lg-acc-panel {
+  max-height: 38vh;
+  overflow-y: auto;
+  padding: 4px 16px 14px;
+  border-top: 1px solid var(--lg-line);
+}
+
+.lg-acc-panel[hidden] {
+  display: none;
+}
+
+.lg-mailtext {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+@media (max-width: 480px) {
+  .lg-cta .lg-btn-primary {
+    display: none;
+  }
+}
+
 /* ================================================================ full pages */
 .lg-page {
   color-scheme: light;
@@ -906,7 +996,20 @@ html[data-theme="dark"] .lg-hero h1 span {
   color: var(--muted);
 }
 
+/* keeps the long contents list inside its card (it used to spill over the footer) */
+.lg-side-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.lg-side {
+  overflow: hidden;
+}
+
 .lg-navlist {
+  min-height: 0;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1083,6 +1186,7 @@ html[data-theme="dark"] .lg-hero h1 span {
     position: static;
     max-height: none;
     padding: 10px;
+    overflow: hidden;
   }
 
   .lg-side-toggle {
@@ -1164,13 +1268,79 @@ html[data-theme="dark"] .lg-hero h1 span {
 }
 
 .lg-fgrid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px 28px;
-  align-items: center;
-  justify-content: space-between;
-  padding-block: 24px;
+  display: grid;
+  gap: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  padding-block: 46px 34px;
   font-size: .92rem;
+}
+
+.lg-fgrid .lg-fbrand {
+  grid-column: 1/-1;
+}
+
+@media (min-width: 900px) {
+  .lg-fgrid {
+    grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)) minmax(190px, 1.2fr);
+  }
+
+  .lg-fgrid .lg-fbrand {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 899px) {
+  .lg-fgrid .lg-fcontact {
+    grid-column: 1/-1;
+  }
+}
+
+.lg-fgrid ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lg-fgrid li a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+}
+
+.lg-fgrid h4 {
+  margin: 0 0 12px;
+  font-size: .78rem;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.lg-flogo {
+  display: inline-flex;
+  font-weight: 800;
+  font-size: 1.28rem;
+  letter-spacing: -.03em;
+  color: #fff !important;
+}
+
+.lg-flogo b {
+  color: #5eead4;
+}
+
+.lg-fbrand p {
+  margin: 14px 0 0;
+  max-width: 340px;
+}
+
+.lg-fmail {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 900px) {
+  .lg-fmail {
+    white-space: nowrap;
+  }
 }
 
 .lg-fgrid a {

@@ -1614,6 +1614,23 @@
       startDoctorProductTour();
     }
 
+    // First sign-in: the doctor tour starts by itself once. The "seen" flag is saved per account (same endpoints the
+    // other roles use), so it never comes back on its own; Profile > Tutorial still replays it.
+    (async function () {
+      if (!doc || (doc.role !== 'doctor' && doc.role !== 'sub_admin')) return;
+      if (urlParams.get('tutorial') === '1' || isDoctorDemoMode()) return;
+      try {
+        if (window.Legal && Legal.whenAccepted) await Legal.whenAccepted();   // never on top of the Terms and Privacy dialog
+        const s = await api('GET', '/tutorials/status/staff?page=doctor-home', null, false, true);
+        if (!s || s.completed) return;
+        api('POST', '/tutorials/status/staff/complete?page=doctor-home', null, false, true).catch(function () { });   // marked as soon as it shows
+        setTimeout(function () {
+          if (window.innerWidth >= 901) switchDesktopTab('home'); else showMobileSection('home');
+          startDoctorProductTour();
+        }, 700);
+      } catch (e) { /* a failed check must never block the dashboard */ }
+    })();
+
   </script>
 </body>
 

@@ -1957,6 +1957,23 @@
       position: relative
     }
 
+    .eb-bharat {
+      text-transform: none;
+      letter-spacing: .01em;
+      font-size: .86rem;
+      line-height: 1.4;
+      border-radius: 16px;
+      text-align: left
+    }
+
+    .eb-flag {
+      width: 22px;
+      height: 15px;
+      flex: none;
+      border-radius: 2px;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, .18)
+    }
+
     .contact .eyebrow {
       background: rgba(94, 234, 212, .14);
       color: #99f6e4
@@ -1973,16 +1990,21 @@
       align-items: start
     }
 
-    @media (min-width:960px) {
-      .c-grid {
-        grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr)
-      }
+    .contact .lead {
+      max-width: 680px
     }
 
     .next {
       margin-top: 28px;
       display: grid;
       gap: 16px
+    }
+
+    @media (min-width:760px) {
+      .next {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 24px
+      }
     }
 
     .next li {
@@ -2044,7 +2066,19 @@
     .fg {
       display: grid;
       gap: 14px;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr))
+      grid-template-columns: minmax(0, 1fr)
+    }
+
+    @media (min-width:600px) {
+      .fg {
+        grid-template-columns: repeat(2, minmax(0, 1fr))
+      }
+    }
+
+    @media (min-width:960px) {
+      .fg {
+        grid-template-columns: repeat(4, minmax(0, 1fr))
+      }
     }
 
     .fld {
@@ -2087,7 +2121,7 @@
     }
 
     .fld textarea {
-      min-height: 92px;
+      min-height: 72px;
       resize: vertical
     }
 
@@ -2180,12 +2214,39 @@
     .f-grid {
       display: grid;
       gap: 32px;
-      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       padding-block: 46px 34px
     }
 
     .f-grid .f-brand {
-      grid-column: span 2
+      grid-column: 1/-1
+    }
+
+    @media (min-width:900px) {
+      .f-grid {
+        grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)) minmax(190px, 1.2fr)
+      }
+
+      .f-grid .f-brand {
+        grid-column: auto
+      }
+
+      .f-mail {
+        white-space: nowrap
+      }
+    }
+
+    @media (max-width:899px) {
+      .f-contact {
+        grid-column: 1/-1
+      }
+    }
+
+    .f-mail {
+      margin: 0;
+      color: rgba(255, 255, 255, .78);
+      overflow-wrap: anywhere;
+      font-size: .92rem
     }
 
     @media (max-width:560px) {
@@ -3191,9 +3252,7 @@
     <section class="hero" id="top" aria-labelledby="h-hero">
       <div class="wrap hero-grid">
         <div>
-          <span class="eyebrow"><svg class="ic" aria-hidden="true">
-              <use href="#i-building" />
-            </svg>Hospital management for India</span>
+          <span class="eyebrow eb-bharat"><svg class="eb-flag" viewBox="0 0 36 24" role="img" aria-label="Flag of India"><rect width="36" height="8" fill="#FF9933"/><rect y="8" width="36" height="8" fill="#fff"/><rect y="16" width="36" height="8" fill="#138808"/><circle cx="18" cy="12" r="3" fill="none" stroke="#000080" stroke-width=".9"/><g stroke="#000080" stroke-width=".5"><line x1="18" y1="9" x2="18" y2="15"/><line x1="15" y1="12" x2="21" y2="12"/><line x1="15.9" y1="9.9" x2="20.1" y2="14.1"/><line x1="20.1" y1="9.9" x2="15.9" y2="14.1"/></g></svg>Vande Mataram — Proudly built in Bharat, for Hospitals of Bharat</span>
           <h1 id="h-hero">Run your whole hospital on <span class="grad">one connected system.</span></h1>
           <p class="lead">OPD, pharmacy, pathology lab, billing, admissions and a patient portal, working together.
             Built for Indian hospitals and nursing homes.</p>
@@ -4385,7 +4444,6 @@
       <nav aria-label="Company">
         <h4>Company</h4>
         <ul>
-          <li><a href="#contact">Contact</a></li>
           <li><a href="#contact">Book a demo</a></li>
           <li><a href="login.html">Login</a></li>
           <li><a href="#faq">FAQ</a></li>
@@ -4395,10 +4453,13 @@
         <h4>Legal</h4>
         <ul>
           <li><a href="privacy.html">Privacy Policy</a></li>
-          <li><a href="mailto:support@scribekare.com">support@scribekare.com</a></li>
           <li><a href="terms.html">Terms of Service</a></li>
         </ul>
       </nav>
+      <div class="f-contact">
+        <h4>Contact</h4>
+        <p class="f-mail">support@scribekare.com</p>
+      </div>
     </div>
     <div class="wrap f-bot">
       <span>© <span id="yr">2026</span> <span data-company-legal>ScribeKare</span>. All rights reserved.</span>
