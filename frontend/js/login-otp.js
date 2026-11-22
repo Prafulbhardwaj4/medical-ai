@@ -32,13 +32,22 @@
       for (var k = 0; k < cells.length; k++) cells[k].classList.toggle("is-filled", cells[k].value !== "");
       var v = value();
       root.classList.toggle("is-complete", v.length === len);
+      root.style.setProperty("--p", (v.length / len).toFixed(3));   // drives the progress line under the boxes
       if (opts.onChange) opts.onChange(v);
       if (v.length === len && opts.onComplete) opts.onComplete(v);
     }
 
+    // Each typed digit drops in with a small glow. A pasted code ripples across the boxes, one after another.
+    function pulse(c, delay) {
+      c.style.setProperty("--d", (delay || 0) + "ms");
+      c.classList.remove("typed");
+      void c.offsetWidth;
+      c.classList.add("typed");
+    }
+
     function fill(from, digits) {
       var i = from;
-      for (var k = 0; k < digits.length && i < len; k++, i++) cells[i].value = digits[k];
+      for (var k = 0; k < digits.length && i < len; k++, i++) { cells[i].value = digits[k]; pulse(cells[i], k * 45); }
       cells[Math.min(i, len - 1)].focus();
     }
 
@@ -60,6 +69,7 @@
 
       inp.addEventListener("focus", function () { inp.select(); });
       inp.addEventListener("click", function () { inp.select(); });
+      inp.addEventListener("animationend", function (e) { if (e.animationName === "skdigit") inp.classList.remove("typed"); });
 
       inp.addEventListener("input", function () {
         var d = inp.value.replace(/\D/g, "");
@@ -67,6 +77,7 @@
         if (!d) { inp.value = ""; sync(); return; }
         if (d.length === 1) {
           inp.value = d;
+          pulse(inp, 0);
           if (i < len - 1) cells[i + 1].focus();
         } else {
           inp.value = "";
