@@ -55,6 +55,7 @@ from app.routers import plan_inquiries as plan_inquiries_router
 from app.routers import consents as consents_router
 from app.routers import data_rights as data_rights_router
 from app.routers import whatsapp_messages as whatsapp_messages_router
+from app.routers import whatsapp_webhook as whatsapp_webhook_router
 from app.models.hospital import Hospital
 from app.models.blacklisted_token import BlacklistedToken
 import app.utils.hospital_stamp  # noqa: F401  (stamps hospital_id on admission child rows)
@@ -428,6 +429,7 @@ app.include_router(plan_inquiries_router.router)
 app.include_router(consents_router.router)
 app.include_router(data_rights_router.router)
 app.include_router(whatsapp_messages_router.router)
+app.include_router(whatsapp_webhook_router.router)
 
 os.makedirs("prescriptions", exist_ok=True)
 

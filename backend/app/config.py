@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     # After "Mark as sent" / "Cancel" the stored secret stays this long so Undo can restore it, then it is deleted.
     WHATSAPP_UNDO_WINDOW_SECONDS: int = 90
 
+    # --- WhatsApp Cloud API (Meta) webhook ---
+    WHATSAPP_VERIFY_TOKEN: str = ""   # any long random string; you type the same one in Meta's webhook form
+    WHATSAPP_APP_SECRET: str = ""     # Meta app dashboard > App settings > Basic > App secret
+
     # CORS. Bearer tokens live in localStorage (no cookies), so credentials are
     # never sent cross-origin. Allowed origins = PUBLIC_FRONTEND_URL + the two
     # below. Add more with CORS_EXTRA_ORIGINS (comma-separated exact origins).
